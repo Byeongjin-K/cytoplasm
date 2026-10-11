@@ -34,7 +34,13 @@ from automation.interop import owner_proxy_watch
 from automation.interop.owner_message import discord_link
 from automation.interop.owner_proxy_io import DiscordOriginReader, FileLedger
 
-_HEADER: Final = re.compile(r"\[[^\]\n]{1,40}? 대리 · 소유자 요청 ([^\]\n]*)\]")
+_HEADER: Final = re.compile(r"\[([^\]\n]{1,40}?) 대리 · 소유자 요청 ([^\]\n]*)\]")
+#: 대리 봇이 쓰는 접두어(2026-10-11 소유자 지시 "오토파지 대리 접두어는 항상 도리 대리").
+#: 이름은 표시일 뿐이고 신원은 봇 id 가 정하므로 파서는 이름을 가리지 않는다 — 이름은 로그의
+#: `prefix=` 로만 구분해 옛 이름이 언제 끊겼는지 보이게 한다.
+PROXY_NAME: Final = "도리"
+#: 비권장 — 전환 기간 동안 이미 보낸 요청과 재전송을 깨지 않으려고 계속 받는다.
+LEGACY_PROXY_NAMES: Final = frozenset({"오모냥"})
 LOGGER: Final = logging.getLogger("autophagy.interop")
 MAX_AGE_SECONDS: Final = 24 * 60 * 60
 #: 원문 시각이 미래로 찍힌 것처럼 보이는 시계 오차 허용치.
@@ -112,7 +118,7 @@ def verify(
     if header is None:
         return Rejected("no_prefix")
     links = _LINK.findall(message.text)
-    if len(links) != 1 or _LINK.fullmatch(header.group(1).strip()) is None:
+    if len(links) != 1 or _LINK.fullmatch(header.group(2).strip()) is None:
         return Rejected("link_count")
     guild_id, channel_id, origin_id = links[0]
     body = message.text[header.end() :].strip()
@@ -176,6 +182,17 @@ def admit(
     )
 
 
+def prefix_kind(text: str) -> str:
+    """접두어 이름의 종류 — `current`(도리) · `legacy`(비권장 옛 이름) · `other` · `none`."""
+    header = _HEADER.match(text)
+    if header is None:
+        return "none"
+    name = header.group(1).strip()
+    if name == PROXY_NAME:
+        return "current"
+    return "legacy" if name in LEGACY_PROXY_NAMES else "other"
+
+
 def _origin_via(origin: Mapping[str, object], channel_id: str, config: ProxyConfig) -> str | None:
     """원문 작성 주체 — 소유자 본인, 또는 원문 채널 **자체**에 쓴 등록 웹훅(스레드는 받지 않는다).
 
@@ -212,8 +229,8 @@ def gateway_text(
         owner_proxy_watch.on_rejected(message, verdict.reason)
         return None
     LOGGER.warning(
-        "interop owner proxy accepted origin=%s via=%s origin_check=%s",
-        verdict.origin_message_id, verdict.via, verdict.origin_failure or "ok",
+        "interop owner proxy accepted origin=%s via=%s origin_check=%s prefix=%s",
+        verdict.origin_message_id, verdict.via, verdict.origin_failure or "ok", prefix_kind(message.text),
     )
     owner_proxy_watch.on_accepted(message, verdict)
     return dispatch_text(verdict, message)
