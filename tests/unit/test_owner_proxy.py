@@ -25,15 +25,19 @@ ORIGIN_CHANNEL = "100000000000000030"
 ORIGIN_THREAD = "100000000000000031"
 UNRELATED_CHANNEL = "100000000000000040"
 NOW = 1_790_000_000.0
-PREFIX = "[오모냥 대리 · 소유자 요청 "
+PREFIX = "[도리 대리 · 소유자 요청 "
+#: 비권장 옛 접두어 — 전환 기간 동안 이미 보낸 요청과 재전송을 계속 받는다.
+LEGACY_PREFIX = "[오모냥 대리 · 소유자 요청 "
 
 
 def snowflake(at: float, sequence: int = 0) -> str:
     return str(((int(at * 1000) - 1420070400000) << 22) | sequence)
 
 
-def proxy_text(guild: str, channel: str, message: str, body: str = "내일 오후 3시 회의 일정 등록해줘") -> str:
-    return f"{PREFIX}https://discord.com/channels/{guild}/{channel}/{message}] {body}"
+def proxy_text(
+    guild: str, channel: str, message: str, body: str = "내일 오후 3시 회의 일정 등록해줘", prefix: str = PREFIX
+) -> str:
+    return f"{prefix}https://discord.com/channels/{guild}/{channel}/{message}] {body}"
 
 
 @dataclass
@@ -80,9 +84,10 @@ def verify(msg: owner_proxy.ProxyMessage, reader: FakeReader, tmp_path: Path, no
     return owner_proxy.verify(msg, CONFIG, reader, owner_proxy.FileLedger(tmp_path / "ledger.json"), now)
 
 
-def test_a_verified_proxy_request_is_accepted(tmp_path: Path) -> None:
+@pytest.mark.parametrize("prefix", [PREFIX, LEGACY_PREFIX], ids=["dori", "legacy"])
+def test_a_verified_proxy_request_is_accepted(tmp_path: Path, prefix: str) -> None:
     origin = snowflake(NOW - 60)
-    verdict = verify(message(proxy_text(GUILD, ORIGIN_CHANNEL, origin)), reader_with(origin), tmp_path)
+    verdict = verify(message(proxy_text(GUILD, ORIGIN_CHANNEL, origin, prefix=prefix)), reader_with(origin), tmp_path)
 
     assert isinstance(verdict, owner_proxy.Accepted)
     assert verdict.origin_message_id == origin
@@ -297,6 +302,49 @@ def test_the_hook_hands_a_verified_request_to_the_agent_with_its_origin(plugin: 
     assert f"원문: https://discord.com/channels/{GUILD}/{ORIGIN_CHANNEL}/{origin}" in result["text"]
     assert result["text"].endswith("내일 오후 3시 회의 일정 등록해줘")
     assert f"<@{PROXY_BOT}>" not in result["text"]
+
+
+@pytest.mark.parametrize(("prefix", "kind"), [(PREFIX, "current"), (LEGACY_PREFIX, "legacy")])
+def test_the_dori_and_legacy_prefixes_hand_over_the_same_request_and_log_which_was_used(
+    plugin: dict[str, FakeReader], caplog: pytest.LogCaptureFixture, prefix: str, kind: str
+) -> None:
+    origin = snowflake(time.time() - 60)
+    plugin["reader"] = reader_with(origin)
+
+    with caplog.at_level("WARNING", logger="autophagy.interop"):
+        result = _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin, prefix=prefix), PROXY_BOT)
+
+    assert result is not None and result["action"] == "rewrite"
+    assert "[소유자 대리 요청 · 출처 검증됨]" in result["text"]
+    assert result["text"].endswith("내일 오후 3시 회의 일정 등록해줘")
+    assert "오모냥" not in result["text"] and "도리 대리" not in result["text"]
+    assert f"origin={origin} via=owner origin_check=ok prefix={kind}" in caplog.text
+
+
+@pytest.mark.parametrize("prefix", [PREFIX, LEGACY_PREFIX], ids=["dori", "legacy"])
+def test_another_bot_using_the_proxy_prefix_is_still_dropped(plugin: dict[str, FakeReader], prefix: str) -> None:
+    origin = snowflake(time.time() - 60)
+    plugin["reader"] = reader_with(origin)
+
+    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin, prefix=prefix), OTHER_BOT) == {
+        "action": "skip", "reason": "interop_bot_prose"
+    }
+    assert plugin["reader"].calls == []
+
+
+def test_a_dori_prefix_whose_origin_is_not_the_owner_is_rejected_by_verify(tmp_path: Path) -> None:
+    origin = snowflake(NOW - 60)
+    verdict = verify(message(proxy_text(GUILD, ORIGIN_CHANNEL, origin)), reader_with(origin, author=OTHER_BOT), tmp_path)
+
+    assert verdict == owner_proxy.Rejected("origin_author")
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [(PREFIX + "x] y", "current"), (LEGACY_PREFIX + "x] y", "legacy"), ("[누군가 대리 · 소유자 요청 x] y", "other"), ("그냥 글", "none")],
+)
+def test_prefix_kind_separates_the_dori_name_from_the_deprecated_one(text: str, kind: str) -> None:
+    assert owner_proxy.prefix_kind(text) == kind
 
 
 def test_the_hook_still_drops_other_bots(plugin: dict[str, FakeReader]) -> None:
