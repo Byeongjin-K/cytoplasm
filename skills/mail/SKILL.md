@@ -1,7 +1,7 @@
 ---
 name: mail
-description: "기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일)."
-version: 1.9.0
+description: "기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
+version: 1.10.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -173,6 +173,24 @@ cha가 새 메일 발송을 지시하면, 이중 승인 없이 그 요청 전용
    - **답장에 승인 스레드 링크를 싣는다 (2026-09-23, 소유자 지시)**: `compose`·`draft` 는 게시에 성공하면 `COMPOSED`/`DRAFTED` 바로 다음 줄에 `APPROVAL-THREAD draft=<id> url=<링크>` 를 낸다. 소유자에게 "승인 스레드에 게시했다"고 답할 때는 **그 `url=` 값을 그대로 붙여** 어느 스레드인지 바로 열 수 있게 한다 — "승인 스레드에서 ✅" 만 쓰면 소유자가 스레드를 직접 찾아야 한다. `url=unavailable search=<id>` 이면 링크를 지어내지 말고 "draft `<id>` 로 검색" 이라고 적는다. 줄이 없으면(`posted=0`) 게시되지 않은 것이므로 게시했다고 말하지 않는다.
 3. 회신 초안과 완전히 동일한 게이트를 재사용한다(동결 argv·sha256 해시 바인딩·소유자 전용·⛔ 우선). 승인 채널은 draft 레코드의 검증된 `channel_id`로 바인딩되며, 해석 실패 시 다른 채널로 폴백하지 않는다(fail-closed — 전문 유출 방지).
 
+### 4-1. 메일 전달 (FW — compose 의 한 형태, 2026-10-12 소유자 지시)
+
+cha 가 "전달해줘"·"FW"·"포워드"·"내 Gmail 로 보내줘" 처럼 **이미 받은(또는 보낸) 메일을 원문·첨부 그대로** 누군가에게 보내라고 하면 새 메일을 쓰지 말고 전달 경로를 쓴다. 새 승인 경로가 아니라 위 compose 와 같은 초안·같은 승인 카드·같은 watch 발송이다:
+
+```bash
+# 기관메일 uid 를 전달 (list/get 으로 uid 를 먼저 찾는다 — 지어내지 않는다)
+python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --forward <uid> --to <주소> [--body "<메모>"] [--subject "<제목>"] --origin-channel-id <채널ID> --origin-message-id <메시지ID>
+# Gmail 메시지를 전달 (message id 는 gws gmail +triage / users messages list 로 찾는다)
+python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --forward-gmail <message-id> --to <주소> [--body "<메모>"]
+```
+
+- **무엇이 나가나**: 발송 본문 = `--body` 메모(생략 가능) + 빈 줄 + `-----원본 메시지-----` 헤더(보낸 사람·날짜·받는 사람·참조·제목) + 원문 본문(회신 인용과 같은 `mail_quote`, 20,000자 상한). 제목을 주지 않으면 `FW: <원 제목>`. 원 첨부는 비공개 폴더(`~/.hermes/mail-triage/forward/`, 0700)에 **바이트 그대로 복사**되어 기존 첨부 manifest(파일명·크기·MIME·sha256)로 승인에 묶이고, 승인 뒤 한 바이트라도 바뀌면 발송이 거부된다. 발송은 지금과 같이 기관메일(mailon) 계정에서 나간다 — Gmail 원본도 기관메일 계정이 전달한다.
+- **승인 카드**: 제목 줄이 `메일 전달(FW) 발송 승인 요청` 이고 To·Cc·제목·메모, `전달 원문: <기관메일|Gmail> 원문(헤더+본문) … 원 첨부 N개가 바이트 그대로`, 첨부마다 `이름 · 바이트 · MIME` 이 표시된다. ✅/⛔ 규칙·`APPROVAL-THREAD` 링크 답장은 compose 와 같다. 게시 성공 시 `COMPOSED` 다음에 `FORWARD draft=<id> source=<kimm|gmail> attachments=<N>` 이 나온다.
+- **수신자는 새 메일과 똑같이 엄격하다**: 받는 사람은 `--to`/`--cc` 로 cha 가 지시한 주소뿐이다. 원문의 보낸 사람·받는 사람·참조는 **인용만 되고 수신자로 들어가지 않는다**. 첨부 10개·25 MiB 한도도 새 메일과 같아서 넘으면 `ATTACHMENT-REFUSED`(exit 2).
+- **원 첨부가 하나라도 온전하지 않으면 전달하지 않는다**: 기관메일 첨부가 아직 내려받아지지 않았거나(`status≠ok`) 파일이 없거나, Gmail 첨부 크기가 선언과 다르거나 gws 읽기가 실패하면 `GATE-REFUSED FORWARD-REFUSED reason=<attachment-incomplete|attachment-missing|attachment-size-mismatch|gmail-read-failed|…>`(exit 2), 초안·복사본을 남기지 않는다. 첨부 빠진 전달을 대신 보내지 말고 사유를 그대로 보고한다(기관메일은 `list --sync` 후 재시도).
+- **대리 요청(`[도리 대리 · 소유자 요청 <link>]`)도 같다**: 대리 봇의 글은 승인이 아니므로 위 명령으로 카드만 올리고, 대리 요청 본문이 알려 준 id 를 `--origin-channel-id`/`--origin-message-id` 에 넘긴다. 승인은 카드의 cha ✅ 뿐이다.
+- `--forward`·`--forward-gmail`·`--in-reply-to` 는 함께 쓸 수 없다. 추가 파일은 `--attachment` 로 원 첨부 뒤에 붙일 수 있다.
+
 #### 세미나 출장 신청 안내 표준 (cha 실제 발송본 기준)
 
 cha가 세미나/워크샵 **출장 신청 안내** 또는 그에 딸린 정산·배차 안내를 요청하면 **가장 최근의 유사한 cha 보낸메일을 먼저 조회**하고 아래 형식을 기본값으로 사용한다. 일반 증빙 안내에는 이 템플릿을 적용하지 않는다. 2026-07-27 실제 발송본 `재난농업건설 필드AI 워크샵 출장 신청 및 배차 안내`가 대표 표본이다.
@@ -221,6 +239,9 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --to <주�
 
 # 첨부 포함 새 메일 (여러 파일은 --attachment 반복)
 python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --to <주소> --subject "<제목>" --body "<본문>" --attachment /private/report.pdf
+
+# 메일 전달(FW) — 원문 인용 + 원 첨부 바이트 그대로 (Gmail 원본은 --forward-gmail <message-id>)
+python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --forward <uid> --to <주소> [--body "<메모>"]
 
 # 프로덕션 watch (10분 cron)
 python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py watch
