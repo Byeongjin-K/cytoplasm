@@ -19,7 +19,7 @@ from automation.interop.delegation import InteropEnvelope, format_envelope, pars
 from automation.interop.external_effect_gate import ApprovalContext, DenylistConfigurationError, ToolCall, evaluate_tool_call, load_denylist
 from automation.interop.injection_adapter import InboundEvent, accept_test_event
 from automation.interop.killswitch import PauseStore
-from automation.interop import chat_approval_guard, owner_proxy, owner_proxy_watch
+from automation.interop import chat_approval_guard, owner_proxy, owner_proxy_watch, voice_transcript
 from automation.interop.loop_guard import LoopGuard
 from automation.interop.report import ReportStatus, TaskReport, format_report, parse_report
 
@@ -89,6 +89,10 @@ def pre_gateway_dispatch(event, gateway, session_store, **kwargs):
     if pause_store.is_paused():
         LOGGER.warning("interop paused inbound skipped")
         return {"action": "skip", "reason": "interop_paused"}
+
+    voice = voice_transcript.gateway_voice(event, _config()["owner_id"])
+    if voice is not None:
+        return voice
 
     source = event.source
     envelope = parse_envelope(text)
