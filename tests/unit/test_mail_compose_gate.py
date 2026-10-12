@@ -462,6 +462,49 @@ def test_real_send_failure_still_increments_failure_counter(
     assert triage_store.consecutive_send_failures(tmp_path / "triage.db") == 1
 
 
+@pytest.mark.parametrize(
+    ("cause", "kept"),
+    [("mailbox_list_unavailable", True), ("could not resolve folder uid", False)],
+)
+def test_send_failure_keeps_the_mailon_cause_code(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, cause: str, kept: bool,
+) -> None:
+    """2026-10-12: the failed draft said only send_failed, so nobody could tell a
+    login failure from a webmail page that never rendered."""
+    approval_log = tmp_path / "approvals.jsonl"
+    monkeypatch.setenv("TRIAGE_APPROVAL_LOG", str(approval_log))
+    _compose_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(triage_mode, "effective_mode", lambda: "full-go")
+    payload = json.dumps({
+        "status": "error", "error_code": "send_failed", "stage": "send",
+        "retryable": True, "cause": cause, "message": "safe provider-neutral message",
+    })
+    monkeypatch.setattr(triage_gate, "_run_send", lambda argv: (2, payload, ""))
+    draft = _compose_draft()
+    draft_path = tmp_path / "gate" / "drafts" / f"{draft['id']}.json"
+    triage_mode.write_json(draft_path, draft)
+
+    with pytest.raises(triage_gate.GateError) as caught:
+        triage_gate.execute_draft(
+            draft,
+            triage_gate.Approval(
+                ref=f"reaction:{MESSAGE_ID}", method="manual_reaction", owner=OWNER_ID,
+            ),
+        )
+
+    stored = json.loads(draft_path.read_text(encoding="utf-8"))
+    records = [json.loads(line) for line in approval_log.read_text(encoding="utf-8").splitlines()]
+    audit = next(item for item in records if item.get("action") == "mail.compose_send")
+    if kept:
+        assert stored["last_error"]["cause"] == cause
+        assert audit["result"]["cause"] == cause
+        assert f"cause={cause}" in str(caught.value)
+    else:  # free text is not a cause code and must not reach the records
+        assert "cause" not in stored["last_error"]
+        assert "cause" not in audit["result"]
+        assert cause not in str(caught.value)
+
+
 def test_cli_compose_blocked_in_no_go(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: the effective mail mode forbids any outbound compose
     monkeypatch.setattr(triage_mode, "effective_mode", lambda: "no-go")

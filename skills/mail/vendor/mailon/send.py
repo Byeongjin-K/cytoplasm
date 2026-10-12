@@ -32,11 +32,20 @@ class SendValidationError(ValueError):
 
 
 class SendSafetyError(RuntimeError):
-    """Fail-closed refusal while preparing, sending, or verifying a mail."""
+    """Fail-closed refusal while preparing, sending, or verifying a mail.
+
+    ``cause`` is a fixed code naming the check that refused. It is safe to
+    record (unlike the message) so a failed send says why it stopped."""
 
     error_code = "send_failed"
     stage = "send"
     retryable = True
+    cause = "unclassified"
+
+    def __init__(self, message: str = "", *, cause: str | None = None) -> None:
+        super().__init__(message)
+        if cause is not None:
+            self.cause = cause
 
 
 class AttachmentValidationError(SendValidationError):
@@ -152,7 +161,7 @@ class ComposeSender:
                         network_post_count=0, verified=True,
                     )
             except send_verify.SendVerifyError as error:
-                raise SendSafetyError(str(error)) from error
+                raise SendSafetyError(str(error), cause=error.cause) from error
 
         send_trigger.open_compose_when_ready(self._browser, clock=self._clock)
         # The retry proves only that _tbar.compose() became callable (~1.9s
@@ -172,7 +181,8 @@ class ComposeSender:
         )
         csrf = compose_metadata.get("csrf") if isinstance(compose_metadata, dict) else None
         if not csrf:
-            raise SendSafetyError("compose page did not expose send CSRF token")
+            raise SendSafetyError("compose page did not expose send CSRF token",
+                                  cause="compose_csrf_missing")
 
         self._browser.eval_js(_field_fill_script(
             ",".join(request.recipients), ",".join(request.cc), request.subject,
@@ -182,7 +192,8 @@ class ComposeSender:
         post_count = self._browser.network_post_count()
         if dry_run:
             if post_count:
-                raise SendSafetyError(f"dry-run observed {post_count} POST request(s)")
+                raise SendSafetyError(f"dry-run observed {post_count} POST request(s)",
+                                      cause="dry_run_posted")
             return SendResult(
                 status="dry_run",
                 csrf_present=True,
@@ -198,11 +209,14 @@ class ComposeSender:
                 if isinstance(compose_metadata, dict) else None
             )
             if not file_input:
-                raise AttachmentUnsupportedError("compose page did not expose an attachment file input")
+                raise AttachmentUnsupportedError(
+                    "compose page did not expose an attachment file input",
+                    cause="attachment_input_missing")
             try:
                 self._browser.upload(file_input, request.attachments)
             except BrowserError as error:
-                raise AttachmentUploadError("attachment upload could not be started") from error
+                raise AttachmentUploadError("attachment upload could not be started",
+                                            cause="attachment_upload_not_started") from error
             queue_state = self._browser.eval_json(
                 """JSON.stringify((function(expected) {
                   if (!window._compose || !window.uploader ||
@@ -217,9 +231,12 @@ class ComposeSender:
                 })(""" + str(len(request.attachments)) + "))"
             )
             if not isinstance(queue_state, dict) or not queue_state.get("ready"):
-                raise AttachmentUnsupportedError("mail attachment uploader API is unavailable")
+                raise AttachmentUnsupportedError("mail attachment uploader API is unavailable",
+                                                 cause="attachment_uploader_missing")
             if queue_state.get("queued") != len(request.attachments):
-                raise AttachmentUploadError("not all attachment files entered the upload queue")
+                raise AttachmentUploadError(
+                    "not all attachment files entered the upload queue",
+                    cause="attachment_queue_incomplete")
             self._browser.eval_js(
                 "window._compose.command=''; window.uploader.upload(); 'upload-started';"
             )
@@ -239,7 +256,7 @@ class ComposeSender:
         if not form_ok:
             raise SendSafetyError(
                 "compose form missing body/recipients (would send garbage) — "
-                "form dump logged")
+                "form dump logged", cause="compose_form_incomplete")
         baseline_ids = send_verify.request_ids(self._browser.network_requests())
         send_started_ms = self._now_ms()
         triggered = (send_trigger.call_compose_send(self._browser)
@@ -247,7 +264,8 @@ class ComposeSender:
         if not triggered:
             raise SendSafetyError(
                 "no send trigger available (_compose.send missing AND button "
-                "not found) — discovery logged; refusing to fire blind")
+                "not found) — discovery logged; refusing to fire blind",
+                cause="send_trigger_missing")
         self._browser.wait_ms(500)
         send_verify.log_network_forensics(self._browser, baseline_ids)
         try:
@@ -263,9 +281,9 @@ class ComposeSender:
             ):
                 raise send_verify.SendVerifyError(
                     "send not confirmed in mailbox (allFolder) within "
-                    f"{self._verify_timeout_s:.0f}s")
+                    f"{self._verify_timeout_s:.0f}s", cause="sent_mail_unconfirmed")
         except send_verify.SendVerifyError as error:
-            raise SendSafetyError(str(error)) from error
+            raise SendSafetyError(str(error), cause=error.cause) from error
         return SendResult(
             status="submitted",
             csrf_present=True,
@@ -308,7 +326,8 @@ def _verify_attachment_upload(
                 return
         browser.wait_ms(1000)
     raise AttachmentUploadError(
-        "attachment upload did not receive verified server file IDs — refusing to send"
+        "attachment upload did not receive verified server file IDs — refusing to send",
+        cause="attachment_upload_unverified",
     )
 
 

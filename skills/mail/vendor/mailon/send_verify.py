@@ -24,6 +24,8 @@ import time
 from typing import Callable, Protocol, Sequence
 from urllib.parse import urlencode
 
+from .folders import inbox_uid_from_label
+
 log = logging.getLogger(__name__)
 
 LIST_ENDPOINT = "/mail/list_async.json"
@@ -62,7 +64,14 @@ _ROW_HARVEST_JS = r"""
 
 
 class SendVerifyError(RuntimeError):
-    """Raised when a send cannot be positively confirmed (fail-closed)."""
+    """Raised when a send cannot be positively confirmed (fail-closed).
+
+    ``cause`` is a fixed code naming WHICH check failed; it travels to the
+    caller's records where the free-text message must not."""
+
+    def __init__(self, message: str, *, cause: str) -> None:
+        super().__init__(message)
+        self.cause = cause
 
 
 class VerifyBrowser(Protocol):
@@ -99,8 +108,10 @@ def resolve_current_folder_uid(
     2026-07-19: 90s of retries, zero hits), so folder verification uses
     allFolder=true instead — all it needs is ANY valid folderUid, harvested
     from a mail row's onclick (the only pattern proven in production sync).
-    The SPA renders rows tens of seconds after login: poll until deadline,
-    then fail closed WITH page diagnostics for the post-mortem."""
+    The SPA renders rows tens of seconds after login: poll until deadline.
+    If rows never render, take the inbox uid from the sidebar label once the
+    list API confirms it (the fallback sync already uses); otherwise fail
+    closed WITH page diagnostics for the post-mortem."""
     deadline = clock() + timeout_s
     attempts = 0
     while True:
@@ -111,14 +122,40 @@ def resolve_current_folder_uid(
         if clock() >= deadline:
             log.warning("mail-list rows never appeared; page diag: %s",
                         _page_diag(browser))
+            uid = inbox_uid_from_label(browser, lambda c: _list_confirms(browser, c))
+            if uid:
+                log.warning("current folder uid resolved from the sidebar label: %s "
+                            "(list rows never rendered after %d attempt(s))",
+                            uid, attempts)
+                return uid
             raise SendVerifyError(
-                f"could not resolve current folder uid after {attempts} attempt(s)")
+                f"could not resolve current folder uid after {attempts} attempt(s)",
+                cause="mailbox_list_unavailable")
         browser.wait_ms(int(poll_interval_s * 1000))
+
+
+def _list_confirms(browser: VerifyBrowser, folder_uid: str) -> bool:
+    try:
+        data = _post_list(browser, folder_uid, all_folders=False)
+    except Exception as error:  # a failed check is a refusal, never a pass
+        log.warning("list_async check for folderUid %s failed: %s",
+                    folder_uid, str(error)[:150])
+        return False
+    folder = data.get("folder") or {}
+    return bool(data.get("result")) and str(folder.get("folderUid")) == folder_uid
 
 
 def _fetch_list_page(
     browser: VerifyBrowser, folder_uid: str, *, all_folders: bool,
 ) -> list[dict]:
+    data = _post_list(browser, folder_uid, all_folders=all_folders)
+    if not data.get("result"):
+        log.warning("list_async returned result=false (allFolder=%s)", all_folders)
+        return []
+    return list(data.get("contents") or [])
+
+
+def _post_list(browser: VerifyBrowser, folder_uid: str, *, all_folders: bool) -> dict:
     body = urlencode({
         "tenant": "", "value": "0", "longValue": "0",
         "listCountPerPage": str(PAGE_SIZE), "currentPage": "1",
@@ -141,10 +178,7 @@ def _fetch_list_page(
         "})()"
     )
     data = json.loads(_unwrap(browser.eval_js(js)))
-    if not data.get("result"):
-        log.warning("list_async returned result=false (allFolder=%s)", all_folders)
-        return []
-    return list(data.get("contents") or [])
+    return data if isinstance(data, dict) else {}
 
 
 def _normalize_millis(value: object) -> int | None:
@@ -249,13 +283,15 @@ def check_network_fast_fail(
             new_posts.append((parsed.group("url"), int(status) if status else None))
         for url, status in new_posts:
             if status is not None and status >= 400:
-                raise SendVerifyError(f"send POST failed: HTTP {status} {url[:120]}")
+                raise SendVerifyError(f"send POST failed: HTTP {status} {url[:120]}",
+                                      cause="send_post_http_error")
         if any(status is not None and status < 400 for _, status in new_posts):
             return
         if clock() >= deadline:
             if not new_posts:
                 raise SendVerifyError(
-                    "no send POST observed after the send trigger — nothing was sent")
+                    "no send POST observed after the send trigger — nothing was sent",
+                    cause="send_post_missing")
             return  # POST fired, status unknown -> defer to Sent-folder verify
         browser.wait_ms(int(poll_interval_s * 1000))
 

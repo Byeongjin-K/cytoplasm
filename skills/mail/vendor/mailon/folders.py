@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from typing import Protocol
+from typing import Callable, Protocol
 from urllib.parse import urlencode
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,20 @@ def _harvest_from_frames(browser: FolderBrowser, folder_name: str) -> str | None
         return None
     if uid and uid != "null":
         return uid
+    return None
+
+
+def inbox_uid_from_label(
+    browser: FolderBrowser, confirms: Callable[[str], bool],
+) -> str | None:
+    """Inbox folderUid when the mail list never renders (2026-10-06 sync,
+    2026-10-12 send: rows stayed at 0 while the sidebar was present). Sync and
+    send share this one fallback; a label-anchored uid counts only once the
+    caller's list API check confirms it is that folder."""
+    for name in ("받은메일함", "Inbox"):
+        uid = _harvest_from_frames(browser, name)
+        if uid and confirms(uid):
+            return uid
     return None
 
 
