@@ -39,6 +39,7 @@ import triage_digest
 import triage_gate
 import triage_llm
 import triage_mode
+import mail_forward
 import mail_quote
 import mail_runtime
 import triage_pipeline
@@ -111,36 +112,68 @@ def cmd_draft(args: argparse.Namespace) -> int:
     return 0
 
 
+def _forward_source(args: argparse.Namespace) -> mail_forward.ForwardSource | None:
+    """The forwarded original (FW) — a new mail plus the original's quote and files."""
+    uid = str(getattr(args, "forward", "") or "")
+    message_id = str(getattr(args, "forward_gmail", "") or "")
+    if uid:
+        return mail_forward.from_mailon(uid, _get_mail(uid))
+    if message_id:
+        return mail_forward.from_gmail(message_id)
+    return None
+
+
 def cmd_compose(args: argparse.Namespace) -> int:
     if triage_mode.effective_mode() == "no-go":
         raise triage_gate.GateError("mail-mode=no-go — W4-2 파이프라인 비활성(W4-1N 분기)", 3)
+    forwarding = bool(getattr(args, "forward", "") or getattr(args, "forward_gmail", ""))
+    if not forwarding and (args.subject is None or args.body is None):
+        raise triage_gate.GateError("새 메일에는 --subject 와 --body 가 필요합니다 (전달은 --forward)", 2)
+    forward = _forward_source(args)
+    try:
+        return _compose(args, forward)
+    except BaseException:
+        if forward is not None:
+            forward.discard()
+        raise
+
+
+def _compose(args: argparse.Namespace, forward: mail_forward.ForwardSource | None) -> int:
+    subject = args.subject if args.subject is not None else (forward.subject if forward else "")
+    body = args.body if args.body is not None else ""
     cc = ", ".join(getattr(args, "cc", ()) or ())
     pack = None
     if bool(getattr(args, "with_evidence", False)):
         pack = _collect_private_evidence(
             {
                 "id": "evidence:compose", "to": args.to, "cc": cc,
-                "subject": args.subject, "body": args.body,
+                "subject": subject, "body": body,
             },
-            args.to, args.subject, args.body,
+            args.to, subject, body,
         )
     in_reply_to = str(getattr(args, "in_reply_to", "") or "")
-    quote = (
-        mail_quote.render_quote(mail_quote.parse_original(_get_mail(in_reply_to)))
-        if in_reply_to else ""
-    )
+    if forward is not None:
+        quote = forward.quote
+    elif in_reply_to:
+        quote = mail_quote.render_quote(mail_quote.parse_original(_get_mail(in_reply_to)))
+    else:
+        quote = ""
+    extra = tuple(getattr(args, "attachment", ()) or ())
     draft = triage_pipeline.compose_and_post(
-        args.to, args.subject, args.body, post=not args.no_post,
-        attachments=tuple(getattr(args, "attachment", ()) or ()), cc=cc,
+        args.to, subject, body, post=not args.no_post,
+        attachments=(*forward.attachments, *extra) if forward else extra, cc=cc,
         evidence_pack=pack,
         origin_channel_id=str(getattr(args, "origin_channel_id", "") or ""),
         origin_message_id=str(getattr(args, "origin_message_id", "") or ""),
         quote=quote,
+        forward=forward.record() if forward else None,
     )
     if pack is not None:
         mail_evidence.write_sidecar(triage_gate.gate_dir(), str(draft["id"]), pack)
     posted = int(bool(draft.get("message_id")))
     print(f"COMPOSED draft={draft['id']} posted={posted}")
+    if forward is not None:
+        print(f"FORWARD draft={draft['id']} source={forward.origin} attachments={len(forward.attachments)}")
     _print_thread_line(draft)
     return 0
 
@@ -482,8 +515,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--cc", action="append", default=[], metavar="ADDRESS",
         help="참조 수신자 주소 (여러 번 지정 가능)",
     )
-    compose.add_argument("--subject", required=True)
-    compose.add_argument("--body", required=True)
+    compose.add_argument("--subject", default=None, help="새 메일은 필수 — 전달은 생략 시 'FW: <원 제목>'")
+    compose.add_argument("--body", default=None, help="새 메일은 필수 — 전달은 원문 위에 붙는 메모(생략 가능)")
     compose.add_argument(
         "--attachment", action="append", default=[], metavar="PATH",
         help="첨부할 로컬 파일 경로 (여러 번 지정 가능)",
@@ -498,9 +531,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--origin-message-id", default="",
         help="원 채널의 지시 메시지 id — 있으면 그 메시지에 결과 스레드를 앵커",
     )
-    compose.add_argument(
+    origin_mail = compose.add_mutually_exclusive_group()
+    origin_mail.add_argument(
         "--in-reply-to", default="", metavar="UID",
         help="후속 메일 — 이 uid 메일의 원문(헤더+본문)을 발송 본문 하단에 인용",
+    )
+    origin_mail.add_argument(
+        "--forward", default="", metavar="UID",
+        help="전달(FW) — 이 기관메일 uid 의 원문을 인용하고 원 첨부를 바이트 그대로 첨부",
+    )
+    origin_mail.add_argument(
+        "--forward-gmail", default="", metavar="MESSAGE_ID",
+        help="전달(FW) — 이 Gmail 메시지의 원문을 인용하고 원 첨부를 바이트 그대로 첨부",
     )
     compose.set_defaults(func=cmd_compose)
 

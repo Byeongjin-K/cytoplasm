@@ -106,8 +106,9 @@ def create_draft(
     cc: str = "",
     origin_channel_id: str = "", origin_message_id: str = "",
     quote: str = "",
+    forward: dict | None = None,
 ) -> dict:
-    """Persist a pending draft; ``quote`` (the answered mail) is sent below ``body``."""
+    """Persist a pending draft; ``quote`` (the answered or forwarded mail) is sent below ``body``."""
     directory = _public_drafts_dir()
     draft_id = secrets.token_hex(3)
     while (directory / f"{draft_id}.json").exists():
@@ -148,6 +149,8 @@ def create_draft(
         )
     if quote:  # absent on legacy/no-quote drafts so their hashes stay byte-identical
         record["quote"] = quote
+    if forward:  # mail_forward.ForwardSource.record(); absent on every non-forward draft
+        record["forward"] = forward
     record["sha256"] = triage_core.draft_sha256(record)
     write_json(directory / f"{draft_id}.json", record)
     return record

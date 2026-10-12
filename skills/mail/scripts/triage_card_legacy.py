@@ -36,8 +36,9 @@ def render_approvals_message(
             "```",
         ])
     elif draft.get("kind") == "compose":
+        title = "메일 전달(FW)" if draft.get("forward") else "새 메일"
         lines = [
-            "[mail-triage] 새 메일 발송 승인 요청 (DM 확정)",
+            f"[mail-triage] {title} 발송 승인 요청 (DM 확정)",
             f"- To: `{draft['to']}`",
         ]
         if draft.get("cc"):
@@ -66,7 +67,14 @@ def render_approvals_message(
             preview + ("…" if len(draft["body"]) > 600 else ""),
             "```",
         ])
-    if draft.get("quote"):
+    forward = draft.get("forward")
+    if isinstance(forward, dict):
+        source = {"kimm": "기관메일", "gmail": "Gmail"}.get(str(forward.get("source")), str(forward.get("source")))
+        lines.append(
+            f"- 전달 원문: {source} 원문(헤더+본문)이 발송 본문 하단에, "
+            f"원 첨부 {forward.get('attachment_count', 0)}개가 바이트 그대로 붙습니다"
+        )
+    elif draft.get("quote"):
         lines.append("- 원문 인용: 포함 (수신 메일 원문이 발송 본문 하단에 붙습니다)")
     attachments = draft.get("attachments") or []
     if attachments:
