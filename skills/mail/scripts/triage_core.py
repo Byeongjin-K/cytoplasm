@@ -254,6 +254,8 @@ def draft_sha256(record: dict) -> str:
         bound["cc"] = record["cc"]
     if "quote" in record:  # the answered mail sent below the body (mail_quote)
         bound["quote"] = record["quote"]
+    if "forward" in record:  # a forward's source marker (mail_forward)
+        bound["forward"] = record["forward"]
     # Keep legacy/no-attachment draft hashes byte-for-byte compatible while
     # binding every new attachment draft to its full manifest.
     if "attachments" in record:
