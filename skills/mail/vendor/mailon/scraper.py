@@ -59,7 +59,7 @@ from urllib.parse import urljoin, urlencode
 from bs4 import BeautifulSoup
 
 from .browser import AgentBrowser, BrowserError
-from .folders import _fetch_all_folder_page, _harvest_from_frames
+from .folders import _fetch_all_folder_page, inbox_uid_from_label
 from .state import StateDB
 from .writer import Attachment, Mail
 
@@ -349,11 +349,7 @@ class InboxScraper:
         """Fallback when the mail list never renders (2026-10-06: rows stayed
         at 0 while the sidebar and its folder data were present). Accept a
         label-anchored uid only if the list API confirms it is that folder."""
-        for name in ("받은메일함", "Inbox"):
-            uid = _harvest_from_frames(self.browser, name)
-            if uid and self._list_api_confirms(uid):
-                return uid
-        return None
+        return inbox_uid_from_label(self.browser, self._list_api_confirms)
 
     def _list_api_confirms(self, uid: str) -> bool:
         saved = (self.folder_uid, self.all_folders)

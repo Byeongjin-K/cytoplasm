@@ -26,6 +26,8 @@ DEFAULT_TIMEOUT_S: Final = 300.0
 class SendLockBusy(SendSafetyError):
     """Another send held the lock for the whole wait."""
 
+    cause = "send_lock_busy"
+
 
 def lock_path(data_dir: Path | str) -> Path:
     return Path(data_dir) / LOCK_NAME

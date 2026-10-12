@@ -661,9 +661,10 @@ class VerifyFakeBrowser(FakeComposeBrowser):
 
     def __init__(self, *, row_uid=SENT_FOLDER_UID, send_call_result="default",
                  click_result="default", form_dumps="default",
-                 list_responses=(), network_listings=()):
+                 list_responses=(), network_listings=(), frame_uid=None):
         super().__init__()
         self.row_uid_seq = row_uid if isinstance(row_uid, list) else [row_uid]
+        self.frame_uid = frame_uid
         self.send_call_result = ({"called": "_compose.send()"}
                                  if send_call_result == "default" else send_call_result)
         self.click_result = ({"clicked": "보내기", "scope": "form"}
@@ -715,6 +716,8 @@ class VerifyFakeBrowser(FakeComposeBrowser):
             return "events:3"
         if "compose_keys" in script:  # discovery dump
             return json.dumps(json.dumps({"compose_keys": ["beforeSend"]}))
+        if "contentDocument" in script:  # cross-frame sidebar harvest
+            return json.dumps(self.frame_uid) if self.frame_uid else "null"
         if "mail-metadata" in script and "folderUid" in script:
             self.row_harvest_count += 1
             uid = (self.row_uid_seq.pop(0) if len(self.row_uid_seq) > 1
@@ -1042,6 +1045,54 @@ def test_resolve_current_folder_fails_closed_with_page_diagnostics():
     assert browser.row_harvest_count >= 1
     # page diagnostics were captured for the post-mortem
     assert any("performance" in s for s in browser.javascript_calls)
+
+
+INBOX_CONFIRM_PAGE = {"result": True, "folder": {"folderUid": 49527}, "contents": []}
+
+
+def test_send_uses_sidebar_folder_when_rows_never_render():
+    """2026-10-12: an approved send stopped twice because the mail list never
+    rendered after login, while sync went on through the sidebar label. The
+    send path must take the same confirmed fallback and still verify."""
+    browser = VerifyFakeBrowser(
+        row_uid=[None], frame_uid="49527",
+        list_responses=[INBOX_CONFIRM_PAGE, NO_MATCH_PAGE, MATCH_PAGE],
+        network_listings=[BASELINE_LISTING, SEND_OK_LISTING],
+    )
+    browser.post_count = 1
+
+    result = _verify_sender(browser).send(_verify_request(), dry_run=False)
+
+    assert result.status == "submitted"
+    assert result.verified is True
+    assert any("allFolder=false" in s and "folderUid=49527" in s
+               for s in browser.javascript_calls if "list_async.json" in s)
+
+
+def test_resolve_current_folder_refuses_an_unconfirmed_sidebar_uid():
+    import pytest
+
+    from mailon import send_verify
+
+    browser = VerifyFakeBrowser(
+        row_uid=[None], frame_uid="12345", list_responses=[INBOX_CONFIRM_PAGE])
+
+    with pytest.raises(send_verify.SendVerifyError) as caught:
+        send_verify.resolve_current_folder_uid(browser, timeout_s=0, poll_interval_s=0)
+
+    assert caught.value.cause == "mailbox_list_unavailable"
+
+
+def test_send_error_payload_carries_the_cause_code_not_the_message():
+    from mailon.main import _send_error_payload
+    from mailon.send import SendSafetyError
+
+    payload = _send_error_payload(
+        SendSafetyError("private implementation detail", cause="mailbox_list_unavailable"))
+
+    assert payload["error_code"] == "send_failed"
+    assert payload["cause"] == "mailbox_list_unavailable"
+    assert "private implementation detail" not in json.dumps(payload, ensure_ascii=False)
 
 
 # ------------------------------------------------- sent-folder resolution

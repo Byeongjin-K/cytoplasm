@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 import triage_core
 import triage_gate
@@ -23,6 +24,10 @@ import triage_store
 from triage_mode import append_record as _append_record
 
 FAILURE_DOWNGRADE_THRESHOLD = 2
+
+# mailon's fixed cause codes (e.g. ``mailbox_list_unavailable``). Anything shaped
+# otherwise is free text and is dropped, so the record stays free of raw messages.
+_CAUSE_CODE = re.compile(r"[a-z][a-z0-9_]{2,47}")
 
 _NON_SEND_FAILURE_CODES = frozenset({
     "attachment_invalid",
@@ -66,7 +71,11 @@ def _error_info(payload: dict) -> dict:
         stage = "unknown"
     if not isinstance(retryable, bool):
         retryable = error_code not in _NON_SEND_FAILURE_CODES
-    return {"error_code": error_code, "stage": stage, "retryable": retryable}
+    info = {"error_code": error_code, "stage": stage, "retryable": retryable}
+    cause = payload.get("cause")
+    if isinstance(cause, str) and _CAUSE_CODE.fullmatch(cause):
+        info["cause"] = cause
+    return info
 
 
 def _record_draft_failure(draft: dict, error: dict) -> None:
@@ -130,6 +139,7 @@ def execute_mailon_draft(draft: dict, approval: triage_gate.Approval) -> None:
     if rc != 0 or status != "submitted" or not result_matches:
         if not error["error_code"]:
             error = {
+                **error,
                 "error_code": "send_failed",
                 "stage": error["stage"] if error["stage"] != "unknown" else "send",
                 "retryable": True,
@@ -151,7 +161,8 @@ def execute_mailon_draft(draft: dict, approval: triage_gate.Approval) -> None:
         raise triage_gate.GateError(
             f"{_safe_failure_message(error)} "
             f"(error_code={error['error_code']} stage={error['stage']} "
-            f"retryable={str(error['retryable']).lower()} consecutive={failures})",
+            f"retryable={str(error['retryable']).lower()} consecutive={failures}"
+            + (f" cause={error['cause']}" if error.get("cause") else "") + ")",
             exit_code,
         )
 

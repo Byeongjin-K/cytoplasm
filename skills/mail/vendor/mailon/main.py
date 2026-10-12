@@ -395,19 +395,23 @@ _SAFE_SEND_ERROR_MESSAGES = {
 
 def _send_error_payload(error: BaseException | str) -> dict:
     """Return a stable, provider-neutral error contract without raw details."""
+    cause = None
     if isinstance(error, str):
         error_code = error
         stage = "validation" if error == "confirmation_required" else "send"
         retryable = error != "confirmation_required"
     elif isinstance(error, LoginError):
         error_code, stage, retryable = "auth_error", "authentication", False
+        cause = "login_failed"
     elif isinstance(error, BrowserError):
         error_code, stage, retryable = "external_service_error", "provider", True
+        cause = "browser_command_failed"
     else:
         error_code = str(getattr(error, "error_code", "send_failed"))
         stage = str(getattr(error, "stage", "send"))
         retryable = bool(getattr(error, "retryable", True))
-    return {
+        cause = getattr(error, "cause", None)
+    payload = {
         "status": "error",
         "error_code": error_code,
         "stage": stage,
@@ -416,6 +420,12 @@ def _send_error_payload(error: BaseException | str) -> dict:
             error_code, _SAFE_SEND_ERROR_MESSAGES["send_failed"]
         ),
     }
+    # 2026-10-12: two approved sends stopped and the record could not say whether
+    # login or the webmail page failed. A fixed cause code names the check; the
+    # free-text message still never leaves the log file.
+    if isinstance(cause, str) and cause:
+        payload["cause"] = cause
+    return payload
 
 
 def _print_send_error(json_mode: bool, error: BaseException | str) -> None:
