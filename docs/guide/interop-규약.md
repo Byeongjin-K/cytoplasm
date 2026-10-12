@@ -221,6 +221,16 @@ roster principal로 해석하고 `sender_id`와 exact-match한다. 관리자 pri
 - **로그**: `interop owner proxy accepted origin=<id> via=<owner|owner-webhook>` 또는 `interop owner proxy rejected reason=<사유>` 뒤에 기존 `interop bot prose skipped` 가 이어진다. 안전망은 `interop owner proxy watch outcome=<answered|notified|claimed|rejected-notified>` 를 남긴다.
 - **강제**: `tests/unit/test_owner_proxy.py`, `tests/unit/test_owner_proxy_watch.py`.
 
+### 3.6. 소유자 음성 메시지 (Owner Voice)
+소유자의 Discord 음성 메시지는 게이트웨이 훅이 노드의 로컬 whisper.cpp 로 한국어 전사해 소유자가 친 글로 넘긴다(2026-10-12 소유자 지시). 판정과 실행은 `automation/interop/voice_transcript.py` 한 곳이고, `pre_gateway_dispatch` 는 일시정지 확인 직후에 그것을 부른다.
+- **대상**: 봇이 아니고 작성자 id 가 `owner_id` 인 사람의 음성 메시지(`MessageType.VOICE` 이거나 `audio/*` 첨부)뿐이다. 첨부 오디오 파일·문서 메시지와 다른 사람·봇의 오디오는 건드리지 않는다.
+- **도구**: speechtotext 스킬과 같은 `SPEECHTOTEXT_WHISPER_BIN`·`SPEECHTOTEXT_WHISPER_MODEL`(게이트웨이 env → 계정 `~/.env.secrets`). 언어는 `SPEECHTOTEXT_LANGUAGE`, 없으면 `ko` 다. 도구가 없으면 다른 모델로 대신하지 않는다.
+- **넘기는 글**: `[음성 메시지 · 로컬 전사] <전사문>` 이고, 소유자가 함께 쓴 글이 있으면 그 아래에 붙는다. 전사한 음성은 이벤트에서 빼고(같은 리스트를 고쳐 바쁜 경로도 같게 본다) 글 메시지로 바꾼다. 그래서 Hermes 기본 STT 는 다시 돌지 않는다.
+- **승인은 넓어지지 않는다**: 표식이 앞에 붙으므로 전사문은 kill-switch 명령이나 봉투로 읽히지 않는다. 외부효과는 여전히 소유자 ✅ 기록이 있어야 실행된다.
+- **실패**: 무음·모델 오류·시간 초과·10분 초과·도구 없음이면 `skip`(`voice_transcription_failed`)한다. 메시지가 온 스레드·DM, 채널이면 그 메시지에 단 스레드(`origin_notice.resolve_thread_id`)에 사유를 남긴다. 추측한 내용으로 턴을 열지 않는다.
+- **정리·로그**: 변환한 wav 와 Hermes 오디오 캐시 안의 원본 음성은 성공·실패 모두 지운다. 로그는 `interop voice transcribed clips=… chars=… elapsed_ms=…` 또는 `interop voice transcription failed reason=…` 이고 전사문은 남기지 않는다. 끄기: `AUTOPHAGY_VOICE_TRANSCRIBE=0`.
+- **강제**: `tests/unit/test_voice_transcript.py`, `tests/unit/test_voice_transcript_integration.py`.
+
 ---
 
 ## 4. 테스트 및 준수 (Compliance)
