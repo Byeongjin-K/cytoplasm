@@ -59,7 +59,7 @@ from urllib.parse import urljoin, urlencode
 from bs4 import BeautifulSoup
 
 from .browser import AgentBrowser, BrowserError
-from .folders import _fetch_all_folder_page, inbox_uid_from_label
+from .folders import _fetch_all_folder_page, recover_inbox_uid
 from .state import StateDB
 from .writer import Attachment, Mail
 
@@ -333,23 +333,24 @@ class InboxScraper:
                          self.folder_uid, attempts)
                 return self.folder_uid
             if time.monotonic() >= deadline:
-                uid = self._resolve_from_inbox_label()
-                if uid:
-                    self.folder_uid = uid
-                    log.warning("inbox folderUid resolved from the sidebar label: %s "
+                found = self._resolve_without_rows(poll_interval_s)
+                if found:
+                    self.folder_uid = found[0]
+                    log.warning("inbox folderUid %s resolved by %s "
                                 "(list rows never rendered after %d attempt(s))",
-                                uid, attempts)
-                    return uid
+                                found[0], found[1], attempts)
+                    return found[0]
                 raise RuntimeError(
                     "could not resolve inbox folderUid from DOM after "
                     f"{attempts} attempt(s)")
             self.browser.wait_ms(int(poll_interval_s * 1000))
 
-    def _resolve_from_inbox_label(self) -> str | None:
-        """Fallback when the mail list never renders (2026-10-06: rows stayed
-        at 0 while the sidebar and its folder data were present). Accept a
-        label-anchored uid only if the list API confirms it is that folder."""
-        return inbox_uid_from_label(self.browser, self._list_api_confirms)
+    def _resolve_without_rows(self, poll_interval_s: float) -> tuple[str, str] | None:
+        """Recovery when the mail list never renders (2026-10-06: rows stayed
+        at 0 while the sidebar and its folder data were present): reload, then
+        a label-anchored uid only if the list API confirms it is that folder."""
+        return recover_inbox_uid(self.browser, self._list_api_confirms,
+                                 poll_s=poll_interval_s)
 
     def _list_api_confirms(self, uid: str) -> bool:
         saved = (self.folder_uid, self.all_folders)

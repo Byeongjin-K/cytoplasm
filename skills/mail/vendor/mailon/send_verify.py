@@ -21,10 +21,10 @@ import json
 import logging
 import re
 import time
-from typing import Callable, Protocol, Sequence
+from typing import Callable, NamedTuple, Protocol, Sequence
 from urllib.parse import urlencode
 
-from .folders import inbox_uid_from_label
+from .folders import ROW_HARVEST_JS, recover_inbox_uid
 
 log = logging.getLogger(__name__)
 
@@ -53,14 +53,12 @@ JSON.stringify({
 })
 """
 
-_ROW_HARVEST_JS = r"""
-(() => {
-  const a = document.querySelector('a.mail-metadata[onclick*="folderUid"]');
-  if (!a) return null;
-  const m = (a.getAttribute('onclick')||'').match(/folderUid:'(\d+)'/);
-  return m ? m[1] : null;
-})()
-"""
+class CurrentFolder(NamedTuple):
+    """``path`` names how the uid was found: ``rows`` on first load,
+    ``reload-N`` after the Nth reload, ``sidebar`` from the confirmed label."""
+
+    uid: str
+    path: str
 
 
 class SendVerifyError(RuntimeError):
@@ -101,7 +99,7 @@ def resolve_current_folder_uid(
     timeout_s: float = 90.0,
     poll_interval_s: float = 3.0,
     clock: Callable[[], float] = time.monotonic,
-) -> str:
+) -> CurrentFolder:
     """Harvest the folderUid of the CURRENT mail list (inbox after login).
 
     The sidebar never exposes 보낸메일함 to DOM/AX queries (observed
@@ -109,25 +107,26 @@ def resolve_current_folder_uid(
     allFolder=true instead — all it needs is ANY valid folderUid, harvested
     from a mail row's onclick (the only pattern proven in production sync).
     The SPA renders rows tens of seconds after login: poll until deadline.
-    If rows never render, take the inbox uid from the sidebar label once the
-    list API confirms it (the fallback sync already uses); otherwise fail
-    closed WITH page diagnostics for the post-mortem."""
+    If rows never render, the recovery shared with sync reloads the page and
+    then falls back to the confirmed sidebar label; otherwise fail closed WITH
+    page diagnostics for the post-mortem."""
     deadline = clock() + timeout_s
     attempts = 0
     while True:
         attempts += 1
-        uid = _unwrap(browser.eval_js(_ROW_HARVEST_JS))
+        uid = _unwrap(browser.eval_js(ROW_HARVEST_JS))
         if uid and uid != "null":
-            return uid
+            return CurrentFolder(uid, "rows")
         if clock() >= deadline:
             log.warning("mail-list rows never appeared; page diag: %s",
                         _page_diag(browser))
-            uid = inbox_uid_from_label(browser, lambda c: _list_confirms(browser, c))
-            if uid:
-                log.warning("current folder uid resolved from the sidebar label: %s "
+            found = recover_inbox_uid(
+                browser, lambda c: _list_confirms(browser, c), poll_s=poll_interval_s)
+            if found:
+                log.warning("current folder uid %s resolved by %s "
                             "(list rows never rendered after %d attempt(s))",
-                            uid, attempts)
-                return uid
+                            found[0], found[1], attempts)
+                return CurrentFolder(*found)
             raise SendVerifyError(
                 f"could not resolve current folder uid after {attempts} attempt(s)",
                 cause="mailbox_list_unavailable")

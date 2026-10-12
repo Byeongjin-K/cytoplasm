@@ -113,8 +113,16 @@ class SendResult:
     network_post_count: int
     verified: bool = False
     attachment_manifest_sha256: str = _EMPTY_ATTACHMENT_MANIFEST_SHA256
+    # How the mail list was found before sending (rows/reload-N/sidebar).
+    # Only the attempt log records it; the stdout JSON contract stays fixed.
+    list_path: str = ""
 
     def to_json(self) -> str:
+        payload = asdict(self)
+        del payload["list_path"]
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+    def attempt_json(self) -> str:
         return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
 
 
@@ -140,10 +148,10 @@ class ComposeSender:
 
     def send(self, request: SendRequest, *, dry_run: bool) -> SendResult:
         attachment_manifest_sha256 = _attachment_manifest_sha256(request.attachments)
-        folder_uid = ""
+        folder_uid = list_path = ""
         if not dry_run:
             try:
-                folder_uid = send_verify.resolve_current_folder_uid(
+                folder_uid, list_path = send_verify.resolve_current_folder_uid(
                     self._browser, timeout_s=self._resolve_timeout_s,
                     poll_interval_s=self._verify_poll_s, clock=self._clock)
                 if send_verify.find_mail_match(
@@ -158,7 +166,7 @@ class ComposeSender:
                     return SendResult(
                         status="submitted", csrf_present=False,
                         attachment_count=len(request.attachments),
-                        network_post_count=0, verified=True,
+                        network_post_count=0, verified=True, list_path=list_path,
                     )
             except send_verify.SendVerifyError as error:
                 raise SendSafetyError(str(error), cause=error.cause) from error
@@ -291,6 +299,7 @@ class ComposeSender:
             network_post_count=self._browser.network_post_count(),
             verified=True,
             attachment_manifest_sha256=attachment_manifest_sha256,
+            list_path=list_path,
         )
 
 
@@ -411,4 +420,4 @@ def _field_fill_script(recipients: str, cc: str, subject: str) -> str:
 def record_send_result(logs_dir: Path, result: SendResult) -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     with (logs_dir / "send-attempts.jsonl").open("a", encoding="utf-8") as log_file:
-        log_file.write(result.to_json() + "\n")
+        log_file.write(result.attempt_json() + "\n")

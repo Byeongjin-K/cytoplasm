@@ -31,10 +31,26 @@ LIST_ENDPOINT = "/mail/list_async.json"
 PAGE_SIZE = 20
 _MAX_INFERENCE_PAGES = 3
 _MIN_HITS = 2
+# 2026-10-12 live probe: after a reload rows came back in 1.1-10.7 s (15 of 15),
+# so two reloads with a 30 s wait each bound the extra time near one minute.
+RELOAD_ATTEMPTS = 2
+RELOAD_WAIT_S = 30.0
+
+ROW_HARVEST_JS = r"""
+(() => {
+  const a = document.querySelector('a.mail-metadata[onclick*="folderUid"]');
+  if (!a) return null;
+  const m = (a.getAttribute('onclick')||'').match(/folderUid:'(\d+)'/);
+  return m ? m[1] : null;
+})()
+"""
+
+_RELOAD_JS = "setTimeout(() => location.reload(), 50); 'reload-scheduled'"
 
 
 class FolderBrowser(Protocol):
     def eval_js(self, script: str) -> str: ...
+    def wait_ms(self, milliseconds: int) -> None: ...
 
 
 def _unwrap(raw: str) -> str:
@@ -90,17 +106,49 @@ def _harvest_from_frames(browser: FolderBrowser, folder_name: str) -> str | None
     return None
 
 
-def inbox_uid_from_label(
-    browser: FolderBrowser, confirms: Callable[[str], bool],
-) -> str | None:
-    """Inbox folderUid when the mail list never renders (2026-10-06 sync,
-    2026-10-12 send: rows stayed at 0 while the sidebar was present). Sync and
-    send share this one fallback; a label-anchored uid counts only once the
-    caller's list API check confirms it is that folder."""
+def _row_uid(browser: FolderBrowser) -> str | None:
+    try:
+        uid = _unwrap(browser.eval_js(ROW_HARVEST_JS))
+    except Exception:  # the page is mid-reload; the next poll asks again
+        return None
+    return uid if uid and uid != "null" else None
+
+
+def recover_inbox_uid(
+    browser: FolderBrowser,
+    confirms: Callable[[str], bool],
+    *,
+    reloads: int = RELOAD_ATTEMPTS,
+    wait_s: float = RELOAD_WAIT_S,
+    poll_s: float = 3.0,
+) -> tuple[str, str] | None:
+    """Inbox folderUid and the path that found it, once the mail list did not
+    render after login (2026-10-06 sync, 2026-10-12 send). Sync and send share
+    this one recovery. First reload the page up to ``reloads`` times and read
+    the uid from the rows (path ``reload-N``); only then take the sidebar label,
+    whose uid counts once the caller's list API check confirms it (path
+    ``sidebar``). None when neither works."""
+    polls = max(1, int(wait_s // poll_s)) if poll_s > 0 else 1
+    for attempt in range(1, reloads + 1):
+        try:
+            browser.eval_js(_RELOAD_JS)
+        except Exception as error:
+            log.warning("mail list reload %d/%d could not start: %s",
+                        attempt, reloads, str(error)[:150])
+            break
+        for _ in range(polls):
+            browser.wait_ms(int(poll_s * 1000))
+            uid = _row_uid(browser)
+            if uid:
+                log.warning("mail list rendered after reload %d/%d: folderUid %s",
+                            attempt, reloads, uid)
+                return uid, f"reload-{attempt}"
+        log.warning("mail list still empty after reload %d/%d (%d poll(s))",
+                    attempt, reloads, polls)
     for name in ("받은메일함", "Inbox"):
         uid = _harvest_from_frames(browser, name)
         if uid and confirms(uid):
-            return uid
+            return uid, "sidebar"
     return None
 
 

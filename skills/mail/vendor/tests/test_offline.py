@@ -1024,11 +1024,12 @@ def test_resolve_current_folder_waits_for_late_row_render():
 
     browser = VerifyFakeBrowser(row_uid=[None, None, "49527"])
 
-    uid = send_verify.resolve_current_folder_uid(
+    found = send_verify.resolve_current_folder_uid(
         browser, timeout_s=30, poll_interval_s=0)
 
-    assert uid == "49527"
+    assert found == send_verify.CurrentFolder("49527", "rows")
     assert browser.row_harvest_count == 3  # kept retrying until rows rendered
+    assert not any("location.reload" in s for s in browser.javascript_calls)
 
 
 def test_resolve_current_folder_fails_closed_with_page_diagnostics():
@@ -1065,8 +1066,67 @@ def test_send_uses_sidebar_folder_when_rows_never_render():
 
     assert result.status == "submitted"
     assert result.verified is True
+    assert result.list_path == "sidebar"
     assert any("allFolder=false" in s and "folderUid=49527" in s
                for s in browser.javascript_calls if "list_async.json" in s)
+    # the bounded reloads ran first and only then the sidebar label was read
+    reloads = [i for i, s in enumerate(browser.javascript_calls) if "location.reload" in s]
+    sidebar = [i for i, s in enumerate(browser.javascript_calls) if "const NAME" in s]
+    assert len(reloads) == 2
+    assert reloads[-1] < sidebar[0]
+
+
+def test_send_reloads_the_page_when_rows_never_render():
+    """2026-10-12 owner question: does a page refresh draw the list? A reload
+    whose rows then render gives the uid from the rows, before any sidebar
+    read, and the attempt log records which path found it."""
+    browser = VerifyFakeBrowser(
+        row_uid=[None, None, "49527"], frame_uid="49527",
+        list_responses=[NO_MATCH_PAGE, MATCH_PAGE],
+        network_listings=[BASELINE_LISTING, SEND_OK_LISTING],
+    )
+    browser.post_count = 1
+
+    result = _verify_sender(browser).send(_verify_request(), dry_run=False)
+
+    assert result.status == "submitted"
+    assert result.list_path == "reload-2"
+    assert sum("location.reload" in s for s in browser.javascript_calls) == 2
+    assert not any("const NAME" in s for s in browser.javascript_calls)
+    assert json.loads(result.attempt_json())["list_path"] == "reload-2"
+    assert "list_path" not in json.loads(result.to_json())
+
+
+def test_reload_wait_covers_the_recorded_live_reloads():
+    """Recorded 2026-10-12 live behaviour: every reload loaded a new document
+    and its rows came back within the bounded wait; a miss after login had no
+    rows and no SPA hash, which the recovery must treat as missing."""
+    from mailon import folders, send_verify
+
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "webmail_reload_live.json").read_text())
+    runs = fixture["reload_runs"]
+
+    assert len(runs) >= 15
+    assert all(run["reload_new_document"] is not False for run in runs)
+    assert max(run["reload_rows_s"] for run in runs) < folders.RELOAD_WAIT_S
+
+    miss = fixture["miss_after_login"]
+    assert miss["rows"] == 0 and not miss["spa_hash"]
+    browser = VerifyFakeBrowser(row_uid=[None, "49527"])
+    found = send_verify.resolve_current_folder_uid(browser, timeout_s=0, poll_interval_s=0)
+    assert found == send_verify.CurrentFolder("49527", "reload-1")
+
+
+def test_reload_recovery_skips_the_sidebar_once_rows_render_on_the_first_reload():
+    from mailon.folders import recover_inbox_uid
+
+    browser = VerifyFakeBrowser(row_uid=["49527"], frame_uid="12345")
+
+    found = recover_inbox_uid(browser, lambda uid: True, poll_s=0)
+
+    assert found == ("49527", "reload-1")
+    assert not any("const NAME" in s for s in browser.javascript_calls)
 
 
 def test_resolve_current_folder_refuses_an_unconfirmed_sidebar_uid():
@@ -1413,6 +1473,33 @@ def test_resolve_inbox_folder_uid_fails_after_deadline():
     with patch("mailon.scraper.BrowserError", RuntimeError):
         with pytest.raises(RuntimeError, match="folderUid"):
             scraper.resolve_inbox_folder_uid(timeout_s=0, poll_interval_s=0)
+
+
+def test_resolve_inbox_folder_uid_reloads_before_the_sidebar():
+    """Sync shares the send recovery: rows that render after a reload give
+    the uid without reading the sidebar label."""
+    from mailon.scraper import InboxScraper
+
+    reloaded = []
+
+    def eval_js(script):
+        if "location.reload" in script:
+            reloaded.append(script)
+            return "reload-scheduled"
+        if "contentDocument" in script:
+            raise AssertionError("sidebar read although the reload rendered rows")
+        return json.dumps("49527") if reloaded else "null"
+
+    browser = MagicMock()
+    browser.eval_js.side_effect = eval_js
+    browser.find_click.side_effect = RuntimeError("no sidebar")
+
+    scraper = InboxScraper(browser, Path("/tmp"))
+    with patch("mailon.scraper.BrowserError", RuntimeError):
+        uid = scraper.resolve_inbox_folder_uid(timeout_s=0, poll_interval_s=0)
+
+    assert uid == "49527"
+    assert len(reloaded) == 1
 
 
 # --------------------------------------- recipient resolution (autocomplete)

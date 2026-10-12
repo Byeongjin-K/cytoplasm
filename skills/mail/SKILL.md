@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.10.1
+version: 1.10.2
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -308,6 +308,9 @@ MailOn 첨부파일은 Google Drive `autophagy/메일 첨부파일/<연도>/<월
    발송 전에 멈춤(메일은 나가지 않음), `send_post_http_error`·`send_post_missing`=발송
    요청 단계, `sent_mail_unconfirmed`=보낸 뒤 보낸메일함에서 확인 못 함(재시도 전에
    보낸메일함 확인). `cause` 가 없으면 옛 기록이다.
+   로그인 뒤 목록이 안 그려지면 mailon 이 먼저 페이지를 최대 2번 새로고침하고, 그래도 안 되면
+   메뉴 옆 받은메일함 번호(서버 확인 뒤)를 쓴다. 어느 길로 찾았는지는 `send-attempts.jsonl` 의
+   `list_path`(`rows`·`reload-1`·`reload-2`·`sidebar`)에 남는다 — 물으면 그 값을 그대로 말한다.
 6. **브라우저 세션은 요청마다 새로 만든다 (2026-09-07)**: mailon 을 부르는 프로세스는
    저마다 자기 agent-browser 세션(`<이름>-run-<pid>-<난수>`)을 열어 매번 새로 로그인한다.
    세션은 프로세스를 넘어 남지 않으므로 "세션 만료" 라는 실패 원인은 존재하지 않는다 —
