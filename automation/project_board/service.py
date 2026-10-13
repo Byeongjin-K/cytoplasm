@@ -124,6 +124,8 @@ def propose(
     )
     if proposal is None:
         return None, "unrelated"
+    if not proposal.todos:
+        return None, "nothing-new"
     record = new_record(
         proposal, created_at=utc_stamp(now), origin_channel_id=origin_channel_id,
         origin_message_id=origin_message_id,

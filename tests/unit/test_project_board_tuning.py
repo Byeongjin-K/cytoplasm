@@ -100,6 +100,23 @@ def test_pending_proposal_todos_count_as_already_there(tmp_path: Path) -> None:
     assert open_and_pending(board) == ("프로젝트A · 발표자료 제출 (검토 대기)",)
 
 
+def test_a_relevant_mail_with_nothing_new_to_do_posts_no_card(tmp_path: Path) -> None:
+    from automation.project_board.service import Board, propose
+
+    class _NothingNew:
+        name = "fake"
+
+        def complete(self, prompt: str) -> LlmAnswer:
+            return LlmAnswer('{"relevant": true, "project": "프로젝트A", "summary": "s", "todos": []}', "fake", "m")
+
+    board = Board(tmp_path / "board")
+    document = read_mail(_runtime(tmp_path), "u-1")
+    assert document is not None
+    posted: list[object] = []
+    record, outcome = propose(board, document, _NothingNew(), today=TODAY, post=posted.append)
+    assert (record, outcome, posted, board.proposals.all()) == (None, "nothing-new", [], ())
+
+
 def _config(tmp_path: Path) -> dict[str, str]:
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"owner": {"names": ["소유자1", "Owner One"]}, "team": {"names": ["팀원1"]}, "projects": [
