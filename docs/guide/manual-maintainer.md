@@ -272,6 +272,8 @@ ssh-keygen -lf ~/.ssh/autophagy_update_trust.pub
 
 > **이 저장소는 아직 한 번도 회전한 적이 없다.** 아래는 랜딩된 코드의 실제 거동에서
 > 역산한 절차이며, 첫 실수행 때 관측값으로 갱신한다.
+>
+> **첫 회전(2026-10-13, 진행 중)**: 릴리스 호스트를 옮기면서(루트 `AGENTS.md` 「릴리스 태그 규칙」) 키를 복사하지 않고 새 머신에서 새 키를 만들었다. 구 키 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA` → 신 키 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`(ED25519, `update-trust@autophagy`). 신 키 첫 릴리스의 노트가 신 지문을 공지한다. 병기 기간에는 두 지문이 모두 유효하고, 6단계(구 키 줄 제거)는 노드가 신 키 릴리스로 전진한 것을 확인한 뒤에 한다.
 
 ### 3.1 불변식 — 이것 하나만 지키면 된다
 
