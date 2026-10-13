@@ -39,6 +39,7 @@ _KNOWN_KINDS: Final = frozenset({
     "mail-reply", "mail-compose", "budget-mail", "patent-export", "repair", "calendar",
     "coordination", "wiki", "skill-deploy", "skill-attest", "skill-publish",
     "skill-submit", "managed-activate", "release", "obsidian-write", "todo",
+    "project-board",
 })
 
 _INJECTED_MARKERS: Final = ("e2e", "inject")

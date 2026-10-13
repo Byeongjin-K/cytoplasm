@@ -61,7 +61,7 @@ def uncovered(root: Path, package: str) -> tuple[str, ...]:
 def test_every_cron_deployer_guards_its_own_deployer_and_declaration() -> None:
     packages = cron_deployers(_REPO)
 
-    assert len(packages) == 24
+    assert len(packages) == 25
     assert {"automation/cost-report", "automation/doctor", "skills/mail"} <= set(packages)
     assert {package: uncovered(_REPO, package) for package in packages} == dict.fromkeys(packages, ())
 
