@@ -49,6 +49,8 @@ class BoardConfig:
     prompt_version: str = "v2"
     owner_names: tuple[str, ...] = ()
     team_names: tuple[str, ...] = ()
+    tailnet_origins: tuple[str, ...] = ()
+    tailnet_logins: tuple[str, ...] = ()
 
     def catalog_lines(self, stored: tuple[str, ...] = ()) -> tuple[str, ...]:
         """Configured projects first (with cues), then approved names the catalog lacks."""
@@ -122,7 +124,34 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         prompt_version=str(analyze.get("prompt") or "v2"),
         owner_names=_owner_names(raw.get("owner")),
         team_names=_owner_names(raw.get("team")),
+        tailnet_origins=_tailnet_origins(dashboard.get("tailnet")),
+        tailnet_logins=_tailnet_logins(dashboard.get("tailnet")),
     )
+
+
+def _tailnet_block(raw: object) -> dict[str, object]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ProjectBoardError("config dashboard.tailnet must be an object")
+    return raw
+
+
+def _tailnet_origins(raw: object) -> tuple[str, ...]:
+    origins = _tailnet_block(raw).get("origins") or []
+    if not isinstance(origins, list) or not all(isinstance(o, str) for o in origins):
+        raise ProjectBoardError("config dashboard.tailnet.origins must be https://host[:port] strings")
+    normalized = tuple(o.strip().lower() for o in origins)
+    if not all(o.startswith("https://") and o[len("https://"):] and "/" not in o[len("https://"):] for o in normalized):
+        raise ProjectBoardError("config dashboard.tailnet.origins must be https://host[:port] strings")
+    return normalized
+
+
+def _tailnet_logins(raw: object) -> tuple[str, ...]:
+    logins = _tailnet_block(raw).get("logins") or []
+    if not isinstance(logins, list) or not all(isinstance(x, str) and "@" in x for x in logins):
+        raise ProjectBoardError("config dashboard.tailnet.logins must be login names")
+    return tuple(x.strip().lower() for x in logins)
 
 
 def _owner_names(raw: object) -> tuple[str, ...]:
