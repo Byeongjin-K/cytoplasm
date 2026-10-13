@@ -199,6 +199,14 @@ class BoardStore:
             row = db.execute("SELECT * FROM todos WHERE todo_id = ?", (todo_id,)).fetchone()
         return None if row is None else _todo(row)
 
+    def open_todo_lines(self, limit: int = 40) -> tuple[str, ...]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT project, title, due FROM todos WHERE status != '완료' ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return tuple(f"{row['project']} · {row['title']}" + (f" ({row['due']})" if row["due"] else "") for row in rows)
+
     def project_names(self) -> tuple[str, ...]:
         with self._connect() as db:
             rows = db.execute("SELECT name FROM projects ORDER BY name").fetchall()

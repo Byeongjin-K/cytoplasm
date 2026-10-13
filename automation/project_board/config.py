@@ -24,6 +24,20 @@ DEFAULT_PORT: Final = 8810
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectEntry:
+    """One known project of the owner: the exact name the model must reuse, and its cues."""
+
+    name: str
+    aliases: tuple[str, ...] = ()
+    note: str = ""
+
+    def prompt_line(self) -> str:
+        aliases = f" (별칭: {', '.join(self.aliases)})" if self.aliases else ""
+        note = f" — {self.note}" if self.note else ""
+        return f"{self.name}{aliases}{note}"
+
+
+@dataclass(frozen=True, slots=True)
 class BoardConfig:
     llm: LlmConfig
     analyze_enabled: bool = False
@@ -31,6 +45,35 @@ class BoardConfig:
     port: int = DEFAULT_PORT
     digest_to: tuple[str, ...] = ()
     digest_subject: str = "프로젝트 현황 일일 요약"
+    projects: tuple[ProjectEntry, ...] = ()
+    prompt_version: str = "v2"
+
+    def catalog_lines(self, stored: tuple[str, ...] = ()) -> tuple[str, ...]:
+        """Configured projects first (with cues), then approved names the catalog lacks."""
+        named = {entry.name for entry in self.projects}
+        return (*(entry.prompt_line() for entry in self.projects), *(n for n in stored if n not in named))
+
+
+def _projects(raw: object) -> tuple[ProjectEntry, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ProjectBoardError("config projects must be a list")
+    entries = []
+    for item in raw:
+        if not isinstance(item, dict) or not str(item.get("name") or "").strip():
+            raise ProjectBoardError("each config project needs a name")
+        aliases = item.get("aliases") or []
+        if not isinstance(aliases, list):
+            raise ProjectBoardError("config project aliases must be a list")
+        entries.append(
+            ProjectEntry(
+                " ".join(str(item["name"]).split())[:60],
+                tuple(" ".join(str(a).split()) for a in aliases if str(a).strip()),
+                " ".join(str(item.get("note") or "").split())[:200],
+            )
+        )
+    return tuple(entries)
 
 
 def state_root(env: Mapping[str, str] | None = None) -> Path:
@@ -73,4 +116,6 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         port=port,
         digest_to=tuple(recipients),
         digest_subject=str(digest.get("subject") or "프로젝트 현황 일일 요약"),
+        projects=_projects(raw.get("projects")),
+        prompt_version=str(analyze.get("prompt") or "v2"),
     )

@@ -20,7 +20,7 @@ from .analysis import analyze
 from .board_store import BoardStore, utc_stamp
 from .config import BoardConfig, state_root
 from .dashboard import render_dashboard
-from .llm import LlmProvider
+from .llm import LlmConfig, LlmProvider
 from .models import PendingView, ProjectBoardError, Proposal, ProposedTodo, proposal_from_dict
 from .proposals import REVISABLE_STATUSES, ProposalRecord, ProposalStore, atomic_write, new_record
 from .sources import MailRuntime, SourceDocument, latest_saved_at, new_mail, read_mail
@@ -93,6 +93,7 @@ def propose(
     *,
     today: date,
     post: Poster | None,
+    config: BoardConfig | None = None,
     origin_channel_id: str = "",
     origin_message_id: str = "",
     now: datetime | None = None,
@@ -101,7 +102,11 @@ def propose(
     existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id)
     if existing is not None:
         return existing, f"already-proposed {existing.request_id} status={existing.status}"
-    proposal = analyze(document, provider, known_projects=board.store.project_names(), today=today)
+    settings = config or BoardConfig(llm=LlmConfig())
+    proposal = analyze(
+        document, provider, known_projects=settings.catalog_lines(board.store.project_names()), today=today,
+        open_todos=board.store.open_todo_lines(), version=settings.prompt_version,
+    )
     if proposal is None:
         return None, "unrelated"
     record = new_record(
@@ -163,7 +168,7 @@ def analyze_new_mail(
             write_watermark(board, saved_at)
             continue
         try:
-            record, outcome = propose(board, document, provider, today=today, post=post)
+            record, outcome = propose(board, document, provider, today=today, post=post, config=config)
         except ProjectBoardError as error:
             if error.retryable:
                 return AnalyzeTick(tuple(proposed), unrelated, skipped, deferred=f"{uid}: {error}")

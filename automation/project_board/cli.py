@@ -81,10 +81,11 @@ def _document(args: argparse.Namespace) -> sources.SourceDocument:
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     board = Board.default()
-    provider = provider_from_config(load_config().llm)
+    config = load_config()
+    provider = provider_from_config(config.llm)
     poster = None if args.no_post else (lambda record: post_card(board, record))
     record, outcome = propose(
-        board, _document(args), provider, today=today_kst(), post=poster,
+        board, _document(args), provider, today=today_kst(), post=poster, config=config,
         origin_channel_id=args.origin_channel_id, origin_message_id=args.origin_message_id,
     )
     if record is None:
@@ -203,6 +204,25 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_dryrun(args: argparse.Namespace) -> int:
+    from . import dryrun
+
+    config = load_config()
+    board = Board.default()
+    summary = dryrun.run(
+        sources.mail_runtime(), provider_from_config(config.llm), config, today=today_kst(), days=args.days,
+        limit=args.limit, out=Path(args.out).expanduser(), version=args.prompt,
+        stored_projects=board.store.project_names() if board.store.path.exists() else (), workers=args.workers,
+    )
+    print(
+        f"DRYRUN total={summary.total} relevant={summary.relevant} unrelated={summary.unrelated} "
+        f"errors={summary.errors} todos={summary.todos} out={summary.out}"
+    )
+    for name, count in sorted(summary.projects.items(), key=lambda item: -item[1]):
+        print(f"DRYRUN-PROJECT {count} {name}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     del args
     board = Board.default()
@@ -265,6 +285,14 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--request-mail", action="store_true")
     digest.add_argument("--to", action="append", default=[])
     digest.set_defaults(handler=cmd_digest)
+
+    dry = commands.add_parser("dryrun", help="read-only analysis of recent real mail (no card, no data, no dashboard)")
+    dry.add_argument("--days", type=int, default=28)
+    dry.add_argument("--limit", type=int, default=60)
+    dry.add_argument("--out", required=True, help="private JSONL path outside any checkout")
+    dry.add_argument("--prompt", choices=("v1", "v2"), default=None)
+    dry.add_argument("--workers", type=int, default=3)
+    dry.set_defaults(handler=cmd_dryrun)
 
     commands.add_parser("status", help="model, analysis switch, proposal counts").set_defaults(handler=cmd_status)
     return parser
