@@ -99,13 +99,13 @@ def propose(
     now: datetime | None = None,
 ) -> tuple[ProposalRecord | None, str]:
     """Analyse one source and (unless it is unrelated or already proposed) request its card."""
-    existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id)
+    existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id, document.ref.subject)
     if existing is not None:
         return existing, f"already-proposed {existing.request_id} status={existing.status}"
     settings = config or BoardConfig(llm=LlmConfig())
     proposal = analyze(
         document, provider, known_projects=settings.catalog_lines(board.store.project_names()), today=today,
-        open_todos=board.store.open_todo_lines(), version=settings.prompt_version,
+        open_todos=board.store.open_todo_lines(), version=settings.prompt_version, owner=settings.owner_names,
     )
     if proposal is None:
         return None, "unrelated"

@@ -57,8 +57,15 @@ class ProposalRecord:
     finished_at: str = ""
 
 
-def approval_key(kind: str, source_id: str) -> str:
-    return "project-board:" + hashlib.sha256(f"{kind}:{source_id}".encode()).hexdigest()[:24]
+def approval_key(kind: str, conversation: str) -> str:
+    """One approval key per conversation: a newer mail of a thread revises the same card thread."""
+    return "project-board:" + hashlib.sha256(f"{kind}:{conversation}".encode()).hexdigest()[:24]
+
+
+def conversation_of(kind: str, source_id: str, subject: str) -> str:
+    from .sources import thread_key
+
+    return thread_key(subject) if kind == "mail" and subject.strip() else source_id
 
 
 def new_record(
@@ -73,7 +80,7 @@ def new_record(
     source = proposal.source
     return ProposalRecord(
         request_id="pb-" + secrets.token_hex(6),
-        key=approval_key(source.kind, source.source_id),
+        key=approval_key(source.kind, conversation_of(source.kind, source.source_id, source.subject)),
         action_hash=proposal_hash(proposal),
         project=proposal.project,
         todo_count=len(proposal.todos),
@@ -136,9 +143,13 @@ class ProposalStore:
         with self._locked():
             return self._read().get(request_id)
 
-    def live_for_source(self, kind: str, source_id: str) -> ProposalRecord | None:
-        key = approval_key(kind, source_id)
-        live = [r for r in self.all() if r.key == key and r.status in LIVE_STATUSES | {"applied"}]
+    def live_for_source(self, kind: str, source_id: str, subject: str = "") -> ProposalRecord | None:
+        """An undecided card for this conversation, or any proposal already made from this very mail."""
+        key = approval_key(kind, conversation_of(kind, source_id, subject))
+        records = self.all()
+        same_mail = [r for r in records if r.source_kind == kind and r.source_id == source_id
+                     and r.status in LIVE_STATUSES | {"applied"}]
+        live = same_mail or [r for r in records if r.key == key and r.status in LIVE_STATUSES]
         return max(live, key=lambda r: r.revision) if live else None
 
     def create(self, record: ProposalRecord, proposal: Proposal) -> None:

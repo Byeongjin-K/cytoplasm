@@ -47,6 +47,7 @@ class BoardConfig:
     digest_subject: str = "프로젝트 현황 일일 요약"
     projects: tuple[ProjectEntry, ...] = ()
     prompt_version: str = "v2"
+    owner_names: tuple[str, ...] = ()
 
     def catalog_lines(self, stored: tuple[str, ...] = ()) -> tuple[str, ...]:
         """Configured projects first (with cues), then approved names the catalog lacks."""
@@ -118,4 +119,14 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         digest_subject=str(digest.get("subject") or "프로젝트 현황 일일 요약"),
         projects=_projects(raw.get("projects")),
         prompt_version=str(analyze.get("prompt") or "v2"),
+        owner_names=_owner_names(raw.get("owner")),
     )
+
+
+def _owner_names(raw: object) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    names = raw.get("names") if isinstance(raw, dict) else None
+    if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
+        raise ProjectBoardError("config owner.names must be a list of names")
+    return tuple(" ".join(name.split()) for name in names)

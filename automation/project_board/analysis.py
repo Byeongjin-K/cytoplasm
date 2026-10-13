@@ -32,6 +32,7 @@ def build_prompt(
     *,
     open_todos: tuple[str, ...] = (),
     version: str = DEFAULT_PROMPT,
+    owner: tuple[str, ...] = (),
 ) -> str:
     if version not in PROMPT_VERSIONS:
         raise ProjectBoardError(f"unknown analysis prompt version: {version}")
@@ -40,6 +41,7 @@ def build_prompt(
     values = {
         "{{TODAY}}": today.isoformat(),
         "{{KNOWN_PROJECTS}}": "\n".join(f"- {line}" for line in known_projects) or "(없음)",
+        "{{OWNER}}": " / ".join(owner) or "(설정 없음 — 받는 사람)",
         "{{OPEN_TODOS}}": "\n".join(f"- {line}" for line in open_todos) or "(없음)",
         "{{SOURCE_KIND}}": "기관 메일" if ref.kind == "mail" else "회의록",
         "{{SUBJECT}}": ref.subject or "(제목 없음)",
@@ -104,7 +106,8 @@ def analyze(
     today: date,
     open_todos: tuple[str, ...] = (),
     version: str = DEFAULT_PROMPT,
+    owner: tuple[str, ...] = (),
 ) -> Proposal | None:
-    prompt = build_prompt(document, known_projects, today, open_todos=open_todos, version=version)
+    prompt = build_prompt(document, known_projects, today, open_todos=open_todos, version=version, owner=owner)
     answer = provider.complete(prompt)
     return parse_answer(answer.text, document.ref, provider=answer.provider, model=answer.model)

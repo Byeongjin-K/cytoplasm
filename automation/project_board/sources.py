@@ -12,6 +12,7 @@ something a meeting decided, and that cut is not copied here.
 from __future__ import annotations
 
 import importlib
+import re
 import os
 import sqlite3
 import sys
@@ -23,8 +24,19 @@ from typing import Final
 from .models import ProjectBoardError, SourceRef
 
 MAX_TEXT: Final = 12_000
+_REPLY_PREFIX: Final = re.compile(r"^\s*(?:\[\s*)?(?:re|fw|fwd|회신|답장|전달)\s*(?:\]\s*)?[:：]?\s*", re.IGNORECASE)
 MEETING_DIR_ENV: Final = "PROJECT_BOARD_MEETING_DIR"
 _REPO: Final = Path(__file__).resolve().parents[2]
+
+
+def thread_key(subject: str) -> str:
+    """The conversation a mail belongs to: its subject without reply/forward prefixes, case-folded."""
+    text = " ".join(subject.split())
+    while True:
+        stripped = _REPLY_PREFIX.sub("", text, count=1)
+        if stripped == text:
+            return text.casefold()
+        text = stripped
 
 
 @dataclass(frozen=True, slots=True)

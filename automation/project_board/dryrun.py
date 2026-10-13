@@ -20,12 +20,13 @@ from .analysis import _json_object, build_prompt, parse_answer
 from .config import BoardConfig
 from .llm import LlmProvider
 from .models import ProjectBoardError
-from .sources import MailRuntime, read_mail, recent_mail
+from .sources import MailRuntime, read_mail, recent_mail, thread_key
 
 
 @dataclass(frozen=True, slots=True)
 class DryRunSummary:
     total: int
+    same_thread: int
     relevant: int
     unrelated: int
     errors: int
@@ -39,7 +40,8 @@ def _inside_checkout(path: Path) -> bool:
 
 
 def _one(
-    runtime: MailRuntime, uid: str, provider: LlmProvider, catalog: tuple[str, ...], today: date, version: str
+    runtime: MailRuntime, uid: str, provider: LlmProvider, catalog: tuple[str, ...], today: date, version: str,
+    owner: tuple[str, ...],
 ) -> dict[str, object]:
     document = read_mail(runtime, uid)
     if document is None:
@@ -50,7 +52,7 @@ def _one(
     }
     started = time.monotonic()
     try:
-        answer = provider.complete(build_prompt(document, catalog, today, version=version))
+        answer = provider.complete(build_prompt(document, catalog, today, version=version, owner=owner))
         proposal = parse_answer(answer.text, document.ref, provider=answer.provider, model=answer.model)
     except ProjectBoardError as error:
         row.update(error=str(error)[:300])
@@ -87,8 +89,21 @@ def run(
     uids = recent_mail(runtime, since=(today - timedelta(days=days)).isoformat(), limit=limit)
     catalog = config.catalog_lines(tuple(stored_projects))
     chosen = version or config.prompt_version
+    newest: dict[str, str] = {}
+    duplicates: list[dict[str, object]] = []
+    for uid in uids:
+        document = read_mail(runtime, uid)
+        thread = thread_key(document.ref.subject) if document is not None and document.ref.subject else uid
+        if thread in newest:
+            duplicates.append({"uid": uid, "relevant": None, "duplicate_of": newest[thread],
+                               "subject": document.ref.subject if document else ""})
+        else:
+            newest[thread] = uid
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        rows = list(pool.map(lambda uid: _one(runtime, uid, provider, catalog, today, chosen), uids))
+        rows = list(pool.map(
+            lambda uid: _one(runtime, uid, provider, catalog, today, chosen, config.owner_names), newest.values()
+        ))
+    rows += duplicates
     descriptor = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         for row in rows:
@@ -100,6 +115,7 @@ def run(
             projects[name] = projects.get(name, 0) + 1
     return DryRunSummary(
         total=len(rows),
+        same_thread=len(duplicates),
         relevant=sum(1 for r in rows if r.get("relevant") is True),
         unrelated=sum(1 for r in rows if r.get("relevant") is False),
         errors=sum(1 for r in rows if "error" in r),

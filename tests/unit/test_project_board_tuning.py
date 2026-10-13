@@ -18,7 +18,9 @@ from automation.project_board.analysis import build_prompt
 from automation.project_board.config import load_config
 from automation.project_board.llm import LlmAnswer
 from automation.project_board.models import ProjectBoardError
-from automation.project_board.sources import MailRuntime, mail_attachment, read_mail
+from automation.project_board.proposals import ProposalStore, new_record
+from automation.project_board.models import proposal_from_dict
+from automation.project_board.sources import MailRuntime, mail_attachment, read_mail, thread_key
 
 TODAY = date(2026, 10, 13)
 
@@ -66,9 +68,29 @@ def test_mail_behind_the_data_symlink_is_read_and_escapes_are_refused(tmp_path: 
     assert mail_attachment(runtime, "u-1", "../일정.txt") is None
 
 
+def test_reply_and_forward_prefixes_fold_into_one_thread() -> None:
+    base = thread_key("굴착기 3기관 원격회의")
+    assert thread_key("RE: Re: 굴착기 3기관  원격회의") == base
+    assert thread_key("[RE]Re: FW: 굴착기 3기관 원격회의") == base
+    assert thread_key("답장: 굴착기 3기관 원격회의") == base
+    assert thread_key("굴착기 3기관 원격회의 결과") != base
+
+
+def test_a_newer_mail_of_a_pending_thread_does_not_open_a_second_card(tmp_path: Path) -> None:
+    store = ProposalStore(tmp_path / "state")
+    first = proposal_from_dict({
+        "project": "프로젝트A", "summary": "s", "todos": [],
+        "source": {"kind": "mail", "source_id": "u-1", "subject": "굴착기 3기관 원격회의"},
+    })
+    record = new_record(first, created_at="2026-10-13T00:00:00Z")
+    store.create(record, first)
+    assert store.live_for_source("mail", "u-2", "Re: 굴착기 3기관 원격회의") == record
+    assert store.live_for_source("mail", "u-3", "다른 요청") is None
+
+
 def _config(tmp_path: Path) -> dict[str, str]:
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"projects": [
+    path.write_text(json.dumps({"owner": {"names": ["소유자1", "Owner One"]}, "projects": [
         {"name": "프로젝트A(굴착)", "aliases": ["굴착기", "HR"], "note": "실증 과제"},
         {"name": "사무처리"},
     ]}, ensure_ascii=False), encoding="utf-8")
@@ -82,6 +104,8 @@ def test_catalog_reaches_the_v2_prompt_with_its_cues(tmp_path: Path) -> None:
     prompt = build_prompt(document, config.catalog_lines(("프로젝트Z",)), TODAY, open_todos=("프로젝트Z · 보고",))
     assert "- 프로젝트A(굴착) (별칭: 굴착기, HR) — 실증 과제" in prompt and "- 프로젝트Z" in prompt
     assert "미분류" in prompt and "- 프로젝트Z · 보고" in prompt and "{{" not in prompt
+    owned = build_prompt(document, (), TODAY, owner=config.owner_names)
+    assert "소유자)은 소유자1 / Owner One 이다" in owned and "{{" not in owned
     with pytest.raises(ProjectBoardError):
         build_prompt(document, (), TODAY, version="v9")
 

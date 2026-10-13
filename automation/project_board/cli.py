@@ -215,7 +215,7 @@ def cmd_dryrun(args: argparse.Namespace) -> int:
         stored_projects=board.store.project_names() if board.store.path.exists() else (), workers=args.workers,
     )
     print(
-        f"DRYRUN total={summary.total} relevant={summary.relevant} unrelated={summary.unrelated} "
+        f"DRYRUN total={summary.total} same_thread={summary.same_thread} relevant={summary.relevant} unrelated={summary.unrelated} "
         f"errors={summary.errors} todos={summary.todos} out={summary.out}"
     )
     for name, count in sorted(summary.projects.items(), key=lambda item: -item[1]):
