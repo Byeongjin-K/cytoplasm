@@ -47,6 +47,21 @@ ROW_HARVEST_JS = r"""
 
 _RELOAD_JS = "setTimeout(() => location.reload(), 50); 'reload-scheduled'"
 
+# 2026-10-13: the mail page builds itself (_page.init: tab panel, mail list) from
+# callbacks queued with cr.onLoad, which its own window 'load' handler
+# (cr.ev.processOnLoad) drains. In slow windows 'load' never fires: readyState stays
+# 'interactive' for minutes, after a reload too, so the list stays empty and compose
+# throws "tabPanel._getMenuById is not a function". Measured live the same day:
+# running that handler ourselves built the page within 3 s (20 rows, compose opened).
+# The handler empties its queue, so a late real 'load' finds nothing left to run.
+BOOT_WAIT_S = 15.0
+_BOOT_STATE_JS = r"""
+JSON.stringify({ready: document.readyState,
+  init: !!(window._page && _page.config && _page.config.init),
+  runner: !!(window.cr && cr.ev && typeof cr.ev.processOnLoad === 'function')})
+"""
+_RUN_ONLOAD_JS = "cr.ev.processOnLoad(); 'onload-ran'"
+
 
 class FolderBrowser(Protocol):
     def eval_js(self, script: str) -> str: ...
@@ -114,6 +129,50 @@ def _row_uid(browser: FolderBrowser) -> str | None:
     return uid if uid and uid != "null" else None
 
 
+def _boot_state(browser: FolderBrowser) -> dict | None:
+    try:
+        state = json.loads(_unwrap(browser.eval_js(_BOOT_STATE_JS)))
+    except Exception:  # unreadable page: nothing to decide on
+        return None
+    return state if isinstance(state, dict) else None
+
+
+def finish_page_boot(
+    browser: FolderBrowser, *, wait_s: float = BOOT_WAIT_S, poll_s: float = 1.0,
+) -> str:
+    """Make sure the mail page has built itself, and say how.
+
+    ``booted`` when the page initialised on its own, ``onload-run`` when its load
+    handler had to be run for it, ``not-booted`` when neither worked, ``unknown``
+    when the page state cannot be read (the caller carries on as before)."""
+    polls = max(1, int(wait_s // poll_s)) if poll_s > 0 else 1
+    state = _boot_state(browser)
+    if state is None:
+        return "unknown"
+    for _ in range(polls):
+        if state.get("init"):
+            return "booted"
+        browser.wait_ms(int(poll_s * 1000))
+        state = _boot_state(browser) or {}
+    if state.get("init"):
+        return "booted"
+    if state.get("ready") != "interactive" or not state.get("runner"):
+        log.warning("mail page did not build itself (state %s)", state)
+        return "not-booted"
+    log.warning("page 'load' never fired after %.0fs; running the page's load handler",
+                wait_s)
+    try:
+        browser.eval_js(_RUN_ONLOAD_JS)
+    except Exception as error:
+        log.warning("page load handler failed: %s", str(error)[:150])
+        return "not-booted"
+    for _ in range(polls):
+        browser.wait_ms(int(poll_s * 1000))
+        if (_boot_state(browser) or {}).get("init"):
+            return "onload-run"
+    return "not-booted"
+
+
 def recover_inbox_uid(
     browser: FolderBrowser,
     confirms: Callable[[str], bool],
@@ -129,6 +188,12 @@ def recover_inbox_uid(
     whose uid counts once the caller's list API check confirms it (path
     ``sidebar``). None when neither works."""
     polls = max(1, int(wait_s // poll_s)) if poll_s > 0 else 1
+    if finish_page_boot(browser) == "onload-run":
+        uid = _row_uid(browser)
+        if uid:
+            log.warning("mail list rendered after the page load handler ran: "
+                        "folderUid %s", uid)
+            return uid, "onload"
     for attempt in range(1, reloads + 1):
         try:
             browser.eval_js(_RELOAD_JS)
@@ -136,6 +201,8 @@ def recover_inbox_uid(
             log.warning("mail list reload %d/%d could not start: %s",
                         attempt, reloads, str(error)[:150])
             break
+        browser.wait_ms(int(poll_s * 1000))
+        finish_page_boot(browser)
         for _ in range(polls):
             browser.wait_ms(int(poll_s * 1000))
             uid = _row_uid(browser)

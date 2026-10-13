@@ -37,6 +37,8 @@ from .send import (
     SendRequest,
     SendSafetyError,
     SendValidationError,
+    failure_details,
+    record_send_failure,
     record_send_result,
 )
 from .state import StateDB
@@ -352,6 +354,11 @@ def cmd_send(args) -> int:
         # file, because this branch only ever wrote to stdout/stderr.
         log.error("send failed [%s]: %s", type(error).__name__, error)
         _print_send_error(args.json, error)
+        if not args.dry_run:
+            try:
+                record_send_failure(cfg.logs_dir, _send_error_payload(error))
+            except OSError as record_error:
+                log.warning("send-attempts failure line not written: %s", record_error)
         return 2
 
 
@@ -403,7 +410,7 @@ def _send_error_payload(error: BaseException | str) -> dict:
     elif isinstance(error, LoginError):
         error_code, stage, retryable = "auth_error", "authentication", False
         cause = "login_failed"
-    elif isinstance(error, BrowserError):
+    elif isinstance(error, BrowserError) and not isinstance(error, SendSafetyError):
         error_code, stage, retryable = "external_service_error", "provider", True
         cause = "browser_command_failed"
     else:
@@ -425,6 +432,10 @@ def _send_error_payload(error: BaseException | str) -> dict:
     # free-text message still never leaves the log file.
     if isinstance(cause, str) and cause:
         payload["cause"] = cause
+    if isinstance(error, BaseException):
+        payload.update(failure_details(error))
+        if isinstance(error, LoginError):
+            payload["step"] = "login"
     return payload
 
 
