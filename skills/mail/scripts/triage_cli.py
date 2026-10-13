@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import os
 import sys
 from datetime import UTC, datetime
@@ -41,6 +42,7 @@ import triage_llm
 import triage_mode
 import mail_forward
 import mail_quote
+import mail_send_retry
 import mail_runtime
 import triage_pipeline
 import mail_preflight
@@ -312,6 +314,24 @@ def _notify_sent(draft: dict, method: str) -> None:
               f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
 
 
+def _notify_failed(draft: dict, error: triage_gate.GateError) -> None:
+    """Best-effort failure notice in the draft's approval thread; same rules as
+    _notify_sent. The stored record carries the step and cause the send recorded."""
+    stored = draft
+    path = triage_gate._draft_path(draft["id"])
+    if path is not None and path.exists():
+        try:
+            stored = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            stored = draft
+    try:
+        triage_confirm.notify_result(
+            stored, mail_send_retry.failure_text(stored, triage_core.redact(str(error))[:200]))
+    except Exception as notify_error:  # noqa: BLE001 — notification must never break the tick
+        print(f"NOTIFY-FAIL draft={draft['id']} "
+              f"err={triage_core.redact(str(notify_error))[:120]}", file=sys.stderr)
+
+
 def _notify_cancelled(draft: dict) -> None:
     """Best-effort cancel notice — the discard is already committed.
 
@@ -340,6 +360,7 @@ def cmd_watch(_args: argparse.Namespace) -> int:
         print(f"MODE-SKIP mode={mode} (W4-1N 분기 — 자동 발송 정지)")
         return 0
     owner = triage_confirm.owner_id()
+    failed_rc = 0
     for draft in triage_gate.list_drafts():
         if draft.get("status") != "pending":
             continue
@@ -372,13 +393,26 @@ def cmd_watch(_args: argparse.Namespace) -> int:
             continue
         if action != triage_confirm.APPROVE_EMOJI:
             continue
+        waiting = mail_send_retry.waiting_until(draft, datetime.now(UTC))
+        if waiting:
+            print(f"RETRY-WAIT draft={draft['id']} until={waiting}")
+            continue
         ref = f"reaction:{draft['message_id']}"
-        mail_preflight.execute_cli_draft(draft, triage_gate.Approval(
-            ref=ref, method="manual_reaction", owner=owner,
-        ))
+        try:
+            mail_preflight.execute_cli_draft(draft, triage_gate.Approval(
+                ref=ref, method="manual_reaction", owner=owner,
+            ))
+        except triage_gate.GateError as error:
+            # An approved send that failed is a failed tick, told in the draft's own
+            # thread; the other drafts still get their turn (2026-10-13).
+            failed_rc = max(failed_rc, error.exit_code)
+            _notify_failed(draft, error)
+            print(f"SEND-FAILED draft={draft['id']} rc={error.exit_code} {error}",
+                  file=sys.stderr)
+            continue
         _notify_sent(draft, "manual_reaction")
         print(f"SENT draft={draft['id']} method=manual_reaction ref={ref}")
-    return 0
+    return failed_rc
 
 
 def cmd_confirm(args: argparse.Namespace) -> int:
