@@ -63,9 +63,13 @@ def approval_key(kind: str, conversation: str) -> str:
 
 
 def conversation_of(kind: str, source_id: str, subject: str) -> str:
-    from .sources import thread_key
+    from .sources import meeting_key, thread_key
 
-    return thread_key(subject) if kind == "mail" and subject.strip() else source_id
+    if not subject.strip():
+        return source_id
+    if kind == "mail":
+        return thread_key(subject)
+    return (meeting_key(subject) or source_id) if kind == "meeting" else source_id
 
 
 def new_record(

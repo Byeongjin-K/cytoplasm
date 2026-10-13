@@ -28,7 +28,7 @@ from automation.project_board import sources  # noqa: E402
 from automation.project_board.cli import today_kst, post_card  # noqa: E402
 from automation.project_board.config import load_config  # noqa: E402
 from automation.project_board.llm import provider_from_config  # noqa: E402
-from automation.project_board.service import Board, analyze_new_mail  # noqa: E402
+from automation.project_board.service import Board, analyze_new_mail, analyze_new_minutes  # noqa: E402
 
 ENV_SECRETS = Path.home() / ".env.secrets"
 _LONG_DIGITS = re.compile(r"\d{5,}")
@@ -64,11 +64,23 @@ def main() -> int:
                 board, sources.mail_runtime(), provider_from_config(config.llm), config,
                 today=today_kst(), post=lambda record: post_card(board, record),
             )
-        if tick.proposed or tick.deferred:
-            print(
-                f"project-board-analyze: proposed={len(tick.proposed)} unrelated={tick.unrelated} "
-                f"skipped={tick.skipped}" + (f" deferred={tick.deferred[:160]}" if tick.deferred else "")
-            )
+            report = [("mail", tick)]
+            if config.analyze_minutes and os.environ.get("DRIVE_PUBLISH_ENABLED") == "1":
+                try:
+                    from automation.drive_outputs import client_from_environment
+
+                    report.append(("minutes", analyze_new_minutes(
+                        board, client_from_environment(), provider_from_config(config.llm), config,
+                        today=today_kst(), post=lambda record: post_card(board, record),
+                    )))
+                except Exception as error:  # noqa: BLE001 - a Drive outage defers minutes, never the mail tick
+                    print(f"project-board-analyze minutes deferred: {type(error).__name__}")
+        for label, done in report:
+            if done.proposed or done.deferred:
+                print(
+                    f"project-board-analyze {label}: proposed={len(done.proposed)} unrelated={done.unrelated} "
+                    f"skipped={done.skipped}" + (f" deferred={done.deferred[:160]}" if done.deferred else "")
+                )
     except Exception as error:  # noqa: BLE001 - final cron alert boundary
         message = _LONG_DIGITS.sub("[MASKED-NUM]", _SECRET_VALUE.sub(r"\1=[MASKED]", str(error)))
         print(f"project-board-analyze error: {message[:300]}", file=sys.stderr)

@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from automation.interop.approval_lifecycle import Outcome
 from automation.project_board.proposal_gate import discord_runtime, owner_id_from_config, request_approval
 
-from . import sources
+from . import minutes, sources
 from .config import load_config
 from .llm import describe, provider_from_config
 from .models import GRADES, STATUSES, ProjectBoardError
@@ -171,6 +171,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
         if kind == "mail":
             return sources.mail_markdown(runtime, source_id)
         if kind == "meeting":
+            cached = minutes.cache_path(board.root / "minutes", source_id)
+            if cached is not None:
+                return cached.read_text(encoding="utf-8") if cached.is_file() else None
             return sources.meeting_text(meetings, source_id)
         return None
 
@@ -219,12 +222,21 @@ def cmd_dryrun(args: argparse.Namespace) -> int:
 
     config = load_config()
     board = Board.default()
-    summary = dryrun.run(
-        sources.mail_runtime(), provider_from_config(config.llm), config, today=today_kst(), days=args.days,
-        limit=args.limit, out=Path(args.out).expanduser(), version=args.prompt,
-        stored_projects=board.store.project_names() if board.store.path.exists() else (), workers=args.workers,
-        sequential=args.sequential,
-    )
+    if args.minutes:
+        from automation.drive_outputs import client_from_environment
+
+        summary = dryrun.run_minutes(
+            client_from_environment(), provider_from_config(config.llm), config, today=today_kst(),
+            limit=args.minutes, out=Path(args.out).expanduser(), version=args.prompt,
+            stored_projects=board.store.project_names() if board.store.path.exists() else (),
+        )
+    else:
+            summary = dryrun.run(
+            sources.mail_runtime(), provider_from_config(config.llm), config, today=today_kst(), days=args.days,
+            limit=args.limit, out=Path(args.out).expanduser(), version=args.prompt,
+            stored_projects=board.store.project_names() if board.store.path.exists() else (), workers=args.workers,
+            sequential=args.sequential,
+        )
     print(
         f"DRYRUN total={summary.total} same_thread={summary.same_thread} relevant={summary.relevant} unrelated={summary.unrelated} "
         f"errors={summary.errors} todos={summary.todos} out={summary.out}"
@@ -310,6 +322,7 @@ def build_parser() -> argparse.ArgumentParser:
     dry.add_argument("--prompt", choices=("v1", "v2", "v3"), default=None)
     dry.add_argument("--workers", type=int, default=3)
     dry.add_argument("--sequential", action="store_true", help="oldest first, earlier todos count as already open")
+    dry.add_argument("--minutes", type=int, default=0, help="instead of mail: the N newest finalized minutes on Drive")
     dry.set_defaults(handler=cmd_dryrun)
 
     commands.add_parser("status", help="model, analysis switch, proposal counts").set_defaults(handler=cmd_status)

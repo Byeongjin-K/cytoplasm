@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 
+from . import minutes
 from .analysis import analyze
 from .board_store import BoardStore, task_key_of, utc_stamp
 from .config import BoardConfig, state_root
@@ -222,6 +223,46 @@ def analyze_new_mail(
         else:
             skipped += 1
         write_watermark(board, saved_at)
+    return AnalyzeTick(tuple(proposed), unrelated, skipped)
+
+
+def analyze_new_minutes(
+    board: Board,
+    drive: minutes.Drive,
+    provider: LlmProvider,
+    config: BoardConfig,
+    *,
+    today: date,
+    post: Poster | None,
+) -> AnalyzeTick:
+    """Finalized minutes that appeared since the first tick → proposals. The first tick only records what exists."""
+    from automation.drive_taxonomy import category_parts
+
+    state = board.root / "minutes-state.json"
+    files = minutes.scan(drive, category_parts("meeting"))
+    seen = minutes.read_seen(state)
+    if seen is None:
+        minutes.write_seen(state, frozenset(f.file_id for f in files))
+        return AnalyzeTick(initialised=True)
+    proposed: list[str] = []
+    unrelated = skipped = 0
+    for item in [f for f in files if f.file_id not in seen][: config.max_per_tick]:
+        try:
+            document = minutes.fetch(drive, item, board.root / "minutes")
+            record, outcome = propose(board, document, provider, today=today, post=post, config=config)
+        except ProjectBoardError as error:
+            if error.retryable:
+                return AnalyzeTick(tuple(proposed), unrelated, skipped, deferred=f"minutes {item.file_id}: {error}")
+            skipped += 1
+        else:
+            if outcome == "proposed" and record is not None:
+                proposed.append(record.request_id)
+            elif outcome == "unrelated":
+                unrelated += 1
+            else:
+                skipped += 1
+        seen = seen | {item.file_id}
+        minutes.write_seen(state, seen)
     return AnalyzeTick(tuple(proposed), unrelated, skipped)
 
 
