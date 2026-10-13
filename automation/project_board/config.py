@@ -53,6 +53,7 @@ class BoardConfig:
     team_names: tuple[str, ...] = ()
     tailnet_origins: tuple[str, ...] = ()
     tailnet_logins: tuple[str, ...] = ()
+    tailnet_token: bool = False
 
     def project_grade(self, project: str) -> str:
         """The configured default grade of a project (과제내부 when the catalog says nothing)."""
@@ -133,6 +134,7 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         team_names=_owner_names(raw.get("team")),
         tailnet_origins=_tailnet_origins(dashboard.get("tailnet")),
         tailnet_logins=_tailnet_logins(dashboard.get("tailnet")),
+        tailnet_token=_tailnet_token(dashboard.get("tailnet")),
     )
 
 
@@ -161,6 +163,13 @@ def _tailnet_origins(raw: object) -> tuple[str, ...]:
     if not all(o.startswith("https://") and o[len("https://"):] and "/" not in o[len("https://"):] for o in normalized):
         raise ProjectBoardError("config dashboard.tailnet.origins must be https://host[:port] strings")
     return normalized
+
+
+def _tailnet_token(raw: object) -> bool:
+    value = _tailnet_block(raw).get("token", False)
+    if not isinstance(value, bool):
+        raise ProjectBoardError("config dashboard.tailnet.token must be true or false")
+    return value
 
 
 def _tailnet_logins(raw: object) -> tuple[str, ...]:
