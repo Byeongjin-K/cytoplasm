@@ -37,6 +37,8 @@ border-bottom:1px solid var(--line)}
 nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:5px 11px;border-radius:999px;color:var(--text);text-decoration:none;font-size:14px}
 nav a:hover{background:var(--gray-bg)}
+nav a.on{background:var(--text);color:#fff}
+main>[hidden]{display:none}
 main{max-width:1180px;margin:0 auto;padding:18px 18px 64px}
 section{margin-top:30px}
 h2{font-size:21px;margin:0 0 12px}
@@ -77,7 +79,8 @@ li.done .todo-title{text-decoration:line-through;color:var(--text2)}
 .src .names{font-size:13px;color:var(--text2);overflow-wrap:anywhere}
 .empty{padding:28px;text-align:center;color:var(--text2)}
 .note{font-size:13px;color:var(--text2);margin:6px 0 0}
-@media (max-width:600px){.bar{padding:8px 12px}main{padding:12px 12px 48px}.chip{min-width:calc(50% - 4px)}
+@media (max-width:600px){.bar{padding:8px 12px;gap:6px}main{padding:12px 12px 48px}.chip{min-width:calc(50% - 4px)}
+nav{flex-wrap:nowrap;overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}nav a{flex:none;padding:7px 12px}
 h2{font-size:19px}}
 """
 
@@ -94,6 +97,30 @@ document.querySelectorAll('input[data-todo]').forEach(function(box){
   });
 });
 """
+
+_TABS_JS: Final = """
+(function(){
+  var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
+      names=[].map.call(links,function(a){return a.dataset.tab;});
+  function show(){
+    var hash=location.hash.slice(1),tab=hash.indexOf('todo-')===0?'todos':hash;
+    if(names.indexOf(tab)<0){tab='summary';}
+    panels.forEach(function(s){s.hidden=s.dataset.tab!==tab;});
+    links.forEach(function(a){var on=a.dataset.tab===tab;a.classList.toggle('on',on);
+      if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
+    var target=hash.indexOf('todo-')===0&&document.getElementById(hash);
+    if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
+  }
+  window.addEventListener('hashchange',show);show();
+})();
+"""
+
+TABS: Final = (("summary", "요약"), ("projects", "프로젝트"), ("todos", "할 일"), ("schedule", "일정"), ("sources", "근거"))
+_NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{label}</a>' for tab, label in TABS)
+
+EMPTY_SECTION: Final = (
+    '<div class="card empty">아직 없음 — 자동 분석이 새 메일에서 할 일을 찾고 카드에서 ✅ 하면 여기 나와요.</div>'
+)
 
 _FILTER_JS: Final = """
 (function(){
@@ -193,7 +220,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         else ""
     )
     return (
-        '<section id="summary"><h2>요약</h2>'
+        '<section id="summary" data-tab="summary"><h2>요약</h2>'
         f'<div class="chips">{chips}</div>{pending}{withheld}'
         f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
     )
@@ -218,8 +245,8 @@ def _project_card(view: ProjectView, today: date) -> str:
 
 def _projects(snapshot: BoardSnapshot, today: date) -> str:
     cards = "".join(_project_card(view, today) for view in snapshot.projects)
-    body = f'<div class="grid">{cards}</div>' if cards else '<div class="card empty">아직 승인된 프로젝트가 없습니다.</div>'
-    return f'<section id="projects"><h2>프로젝트</h2>{body}</section>'
+    body = f'<div class="grid">{cards}</div>' if cards else EMPTY_SECTION
+    return f'<section id="projects" data-tab="projects"><h2>프로젝트</h2>{body}</section>'
 
 
 def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
@@ -251,7 +278,7 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
 
 def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
     if not snapshot.todos:
-        return '<section id="todos"><h2>할 일</h2><div class="card empty">승인된 할 일이 없습니다.</div></section>'
+        return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{EMPTY_SECTION}</section>'
     groups: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in snapshot.todos:
         groups[todo.project].append(todo)
@@ -273,7 +300,7 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         'aria-label="할 일 검색"><select id="todo-s" aria-label="상태 필터"><option value="">전체 상태</option>'
         f'{options}</select><span id="todo-count" class="small muted"></span></div>'
     )
-    return f'<section id="todos"><h2>할 일</h2>{filters}{note}{"".join(blocks)}</section>'
+    return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{filters}{note}{"".join(blocks)}</section>'
 
 
 def _agenda(snapshot: BoardSnapshot, today: date) -> str:
@@ -297,8 +324,9 @@ def _agenda(snapshot: BoardSnapshot, today: date) -> str:
             )
         parts.append(f'<div class="card" style="margin-bottom:10px"><h3 style="margin-top:0">{name} '
                      f'<span class="badge d-none">{len(rows)}</span></h3><ul>{"".join(items)}</ul></div>')
-    body = "".join(parts) or '<div class="card empty">마감이 남은 할 일이 없습니다.</div>'
-    return f'<section id="schedule" class="agenda"><h2>일정</h2>{body}</section>'
+    fallback = '<div class="card empty">마감이 남은 할 일이 없습니다.</div>' if snapshot.todos else EMPTY_SECTION
+    body = "".join(parts) or fallback
+    return f'<section id="schedule" data-tab="schedule" class="agenda"><h2>일정</h2>{body}</section>'
 
 
 def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode) -> str:
@@ -328,8 +356,8 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
     for todo in snapshot.todos:
         by_proposal[todo.proposal_id].append(todo)
     cards = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in snapshot.sources)
-    body = cards or '<div class="card empty">승인된 근거가 없습니다.</div>'
-    return f'<section id="sources"><h2>근거</h2>{body}</section>'
+    body = cards or EMPTY_SECTION
+    return f'<section id="sources" data-tab="sources"><h2>근거</h2>{body}</section>'
 
 
 def _events(snapshot: BoardSnapshot) -> str:
@@ -341,7 +369,7 @@ def _events(snapshot: BoardSnapshot) -> str:
         f"{escape(e.project)} · {escape(e.detail)}</li>"
         for e in snapshot.events[:15]
     )
-    return f'<section id="events"><h2>최근 기록</h2><div class="card"><ul class="small">{items}</ul></div></section>'
+    return f'<section id="events" data-tab="summary"><h2>최근 기록</h2><div class="card"><ul class="small">{items}</ul></div></section>'
 
 
 def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") -> str:
@@ -349,19 +377,17 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
     empty = ""
     if not snapshot.todos and not snapshot.pending:
         empty = (
-            '<div class="card empty" style="margin-top:18px">아직 데이터가 없습니다. 메일·회의록 분석 제안을 '
+            '<div class="card empty" data-tab="summary" style="margin-top:18px">아직 데이터가 없습니다. 메일·회의록 분석 제안을 '
             "소유자가 승인(✅)하면 프로젝트와 할 일이 여기에 나타납니다.</div>"
         )
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
-    scripts = _FILTER_JS + (_SERVED_JS if mode == "served" else "")
+    scripts = _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"{meta}<title>프로젝트 대시보드</title><style>{_CSS}</style></head><body>"
-        '<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="섹션">'
-        '<a href="#summary">요약</a><a href="#projects">프로젝트</a><a href="#todos">할 일</a>'
-        '<a href="#schedule">일정</a><a href="#sources">근거</a></nav></div></header><main>'
+        f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_NAV}</nav></div></header><main>'
         f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
         f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_events(snapshot)}</main>"
-        f"<script>{scripts if snapshot.todos else ''}</script></body></html>"
+        f"<script>{scripts}</script></body></html>"
     )
