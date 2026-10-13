@@ -48,6 +48,7 @@ class BoardConfig:
     projects: tuple[ProjectEntry, ...] = ()
     prompt_version: str = "v2"
     owner_names: tuple[str, ...] = ()
+    team_names: tuple[str, ...] = ()
 
     def catalog_lines(self, stored: tuple[str, ...] = ()) -> tuple[str, ...]:
         """Configured projects first (with cues), then approved names the catalog lacks."""
@@ -120,6 +121,7 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         projects=_projects(raw.get("projects")),
         prompt_version=str(analyze.get("prompt") or "v2"),
         owner_names=_owner_names(raw.get("owner")),
+        team_names=_owner_names(raw.get("team")),
     )
 
 
@@ -128,5 +130,5 @@ def _owner_names(raw: object) -> tuple[str, ...]:
         return ()
     names = raw.get("names") if isinstance(raw, dict) else None
     if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
-        raise ProjectBoardError("config owner.names must be a list of names")
+        raise ProjectBoardError("config owner.names and team.names must be lists of names")
     return tuple(" ".join(name.split()) for name in names)

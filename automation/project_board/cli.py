@@ -213,6 +213,7 @@ def cmd_dryrun(args: argparse.Namespace) -> int:
         sources.mail_runtime(), provider_from_config(config.llm), config, today=today_kst(), days=args.days,
         limit=args.limit, out=Path(args.out).expanduser(), version=args.prompt,
         stored_projects=board.store.project_names() if board.store.path.exists() else (), workers=args.workers,
+        sequential=args.sequential,
     )
     print(
         f"DRYRUN total={summary.total} same_thread={summary.same_thread} relevant={summary.relevant} unrelated={summary.unrelated} "
@@ -292,6 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
     dry.add_argument("--out", required=True, help="private JSONL path outside any checkout")
     dry.add_argument("--prompt", choices=("v1", "v2"), default=None)
     dry.add_argument("--workers", type=int, default=3)
+    dry.add_argument("--sequential", action="store_true", help="oldest first, earlier todos count as already open")
     dry.set_defaults(handler=cmd_dryrun)
 
     commands.add_parser("status", help="model, analysis switch, proposal counts").set_defaults(handler=cmd_status)

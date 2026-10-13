@@ -80,6 +80,20 @@ def pending_views(board: Board) -> tuple[PendingView, ...]:
     return tuple(sorted(views, key=lambda v: v.created_at))
 
 
+def open_and_pending(board: Board, limit: int = 40) -> tuple[str, ...]:
+    """Approved open todos plus todos of proposals still waiting on a card — both count as 'already there'."""
+    pending: list[str] = []
+    for record in board.proposals.all():
+        if record.status not in {"proposed", "posted", "approved"}:
+            continue
+        try:
+            proposal = board.proposals.frozen(record)
+        except ProjectBoardError:
+            continue
+        pending += [f"{proposal.project} · {todo.title} (검토 대기)" for todo in proposal.todos]
+    return (*board.store.open_todo_lines(limit), *pending[:limit])
+
+
 def rebuild_dashboard(board: Board, *, today: date, now: datetime | None = None) -> Path:
     snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now)
     atomic_write(board.dashboard_path, render_dashboard(snapshot, mode="file"))
@@ -105,7 +119,8 @@ def propose(
     settings = config or BoardConfig(llm=LlmConfig())
     proposal = analyze(
         document, provider, known_projects=settings.catalog_lines(board.store.project_names()), today=today,
-        open_todos=board.store.open_todo_lines(), version=settings.prompt_version, owner=settings.owner_names,
+        open_todos=open_and_pending(board), version=settings.prompt_version, owner=settings.owner_names,
+        team=settings.team_names,
     )
     if proposal is None:
         return None, "unrelated"

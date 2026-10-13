@@ -88,9 +88,21 @@ def test_a_newer_mail_of_a_pending_thread_does_not_open_a_second_card(tmp_path: 
     assert store.live_for_source("mail", "u-3", "다른 요청") is None
 
 
+def test_pending_proposal_todos_count_as_already_there(tmp_path: Path) -> None:
+    from automation.project_board.service import Board, open_and_pending
+
+    board = Board(tmp_path / "board")
+    pending = proposal_from_dict({
+        "project": "프로젝트A", "summary": "s", "todos": [{"title": "발표자료 제출", "due": "2026-11-03"}],
+        "source": {"kind": "mail", "source_id": "u-9", "subject": "워크숍 안내"},
+    })
+    board.proposals.create(new_record(pending, created_at="2026-10-13T00:00:00Z"), pending)
+    assert open_and_pending(board) == ("프로젝트A · 발표자료 제출 (검토 대기)",)
+
+
 def _config(tmp_path: Path) -> dict[str, str]:
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"owner": {"names": ["소유자1", "Owner One"]}, "projects": [
+    path.write_text(json.dumps({"owner": {"names": ["소유자1", "Owner One"]}, "team": {"names": ["팀원1"]}, "projects": [
         {"name": "프로젝트A(굴착)", "aliases": ["굴착기", "HR"], "note": "실증 과제"},
         {"name": "사무처리"},
     ]}, ensure_ascii=False), encoding="utf-8")
@@ -104,8 +116,9 @@ def test_catalog_reaches_the_v2_prompt_with_its_cues(tmp_path: Path) -> None:
     prompt = build_prompt(document, config.catalog_lines(("프로젝트Z",)), TODAY, open_todos=("프로젝트Z · 보고",))
     assert "- 프로젝트A(굴착) (별칭: 굴착기, HR) — 실증 과제" in prompt and "- 프로젝트Z" in prompt
     assert "미분류" in prompt and "- 프로젝트Z · 보고" in prompt and "{{" not in prompt
-    owned = build_prompt(document, (), TODAY, owner=config.owner_names)
-    assert "소유자)은 소유자1 / Owner One 이다" in owned and "{{" not in owned
+    owned = build_prompt(document, (), TODAY, owner=config.owner_names, team=config.team_names)
+    assert "소유자)은 소유자1 / Owner One 이다" in owned and "팀원은 팀원1 이다" in owned
+    assert "{{" not in owned
     with pytest.raises(ProjectBoardError):
         build_prompt(document, (), TODAY, version="v9")
 
