@@ -38,7 +38,7 @@ CLI = Path("/srv/autophagy-skills/live/mail/scripts/triage_cli.py")
 _ENV_SECRETS = Path.home() / ".env.secrets"
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _LONG_DIGITS = re.compile(r"\d{5,}")
-_MARKER = re.compile(r"^DIGEST-FAIL stage=\S+ retry_safe=(true|false) code=\S+")
+_MARKER = re.compile(r"DIGEST-FAIL stage=\S+ retry_safe=(true|false) code=\S+")
 _RETRY_DELAYS_S = (20, 60, 120)
 
 # Deployed flat beside this wrapper (~/.hermes/scripts/) and sitting beside it in the
@@ -108,10 +108,16 @@ def _run_digest() -> subprocess.CompletedProcess[str]:
 
 
 def _child_marker(output: str) -> str | None:
-    """Return the child's single structured DIGEST-FAIL marker line, if any."""
+    """Return the child's single structured DIGEST-FAIL marker line, if any.
+
+    triage_cli prints every GateError as ``GATE-REFUSED <marker>``; anchoring at the
+    line start missed every real marker (2026-10-13 08:11: a DNS failure was reported
+    as ``stage=runner code=child_exit`` and a retry-safe one would never be retried).
+    """
     for line in output.splitlines():
-        if _MARKER.match(line.strip()):
-            return line.strip()
+        found = _MARKER.search(line)
+        if found:
+            return line[found.start():].strip()
     return None
 
 

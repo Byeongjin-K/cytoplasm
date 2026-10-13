@@ -39,6 +39,14 @@ if cmd == "sync":
     if mode == "crash3":
         print("FAIL: RuntimeError: inbox folderUid selector not found", file=sys.stderr)
         sys.exit(3)
+    if mode == "hang":
+        import signal, time
+        def _term(*_):
+            pathlib.Path("terminated.txt").write_text("sigterm")
+            sys.exit(3)
+        signal.signal(signal.SIGTERM, _term)
+        time.sleep(30)
+        sys.exit(0)
 if cmd == "status":
     if mode == "no_db":
         print("No database yet. Run a sync first."); sys.exit(0)
@@ -391,6 +399,21 @@ def test_status_no_db_variant(stub_repo: Path) -> None:
     set_mode(stub_repo, "no_db")
     rc, out = run_cli("status")
     assert rc == 0 and out["no_db"] is True and out["saved_mails"] == 0
+
+
+def test_sync_timeout_lets_mailon_finish_its_run_before_kill(
+    stub_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A timed-out sync gets SIGTERM first (2026-10-13 15:44 KST incident).
+
+    SIGKILL left the run row ``running`` forever and the browser alive for 15 hours;
+    a terminated mailon closes its browser and records the run as failed.
+    """
+    set_mode(stub_repo, "hang")
+    monkeypatch.setenv("MAIL_WRAPPER_TIMEOUT", "1")
+    rc, _out, err = mail_wrapper.run_mailon(mail_wrapper._cfg(), ["sync", "--limit", "1"])
+    assert rc == -7 and "timeout" in err
+    assert (stub_repo / "terminated.txt").read_text() == "sigterm"
 
 
 def test_env_allowlist_blocks_discord_token(stub_repo: Path, monkeypatch) -> None:

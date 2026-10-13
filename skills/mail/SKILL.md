@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.10.3
+version: 1.10.4
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -126,6 +126,9 @@ Hermes cron(`mail-triage-watch`, no_agent)이 `watch`를 돌린다. 이 루프�
 - 아직 게시되지 않은 대기 중인 초안을 draft 레코드에 바인딩된 채널에 게시한다. 새 회신·compose 초안은 `approval_surface.py`가 정한 표면에 **요청 하나당 스레드 하나**를 열어 게시한다 — 스레드 이름은 `메일 회신 · <제목>` / `메일 발신 · <제목>`이고, 지시가 승인 채널에서 왔고 `--origin-message-id`가 전달됐으면 그 지시 메시지에 스레드를 단다. 그 스레드 id는 draft 레코드의 `approval_thread_id`(승인 해시 밖)로 남아 결과 통지가 같은 자리로 돌아온다.
 - 게시된 승인 메시지의 ✅(확정) / ⛔(취소) 리액션을 확인하고 처리한다. 현재 정책에서 폐지된 표면에 남은 미결정 초안은 옛 메시지를 삭제한 뒤 `expired`로 종결하며, 승인·발송으로 간주하지 않는다. 이미 누른 소유자 결정은 항상 먼저 처리한다.
 - 승인된 초안의 실제 메일 발송.
+
+### 1b. 평일 매시 수집 (09:20~19:20 KST)
+cron `mail-sync-watch`(`20 9-19 * * 1-5`, no_agent)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 실패한 시각은 다음 시각이 다시 시도하고 놓친 메일은 증분 수집이 이어서 저장한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 새 메일 0건이 6회 이어지면(`MAIL_SYNC_QUIET_AFTER`) 소유자에게 한 번 알리고, 회복 시 한 번 더 알린다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-평일-매시-수집과-정지-알림.md)
 
 ### 2. 다이제스트 루프 (매일 08:00 KST)
 신규 cron `mail-daily-digest`(`0 8 * * *`, no_agent)가 `digest`를 실행한다.

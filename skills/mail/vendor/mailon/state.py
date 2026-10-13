@@ -23,6 +23,10 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+#: A run still ``running`` after this long died without finishing (the wrapper's
+#: timeout is 900 s). Closing it lets the runs table say whether collection is alive.
+STALE_RUN_SECONDS = 2 * 60 * 60
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -225,7 +229,14 @@ class StateDB:
     # ---------------------------------------------------------- runs
 
     def start_run(self) -> int:
+        now = int(time.time())
         with self._conn() as c:
+            c.execute(
+                """UPDATE runs SET status = 'fail', finished_at = ?,
+                   error = 'abandoned: the process ended before the run finished'
+                   WHERE status = 'running' AND started_at < ?""",
+                (now, now - STALE_RUN_SECONDS),
+            )
             cur = c.execute(
                 "INSERT INTO runs (started_at, status) VALUES (?, 'running')",
                 (int(time.time()),),
