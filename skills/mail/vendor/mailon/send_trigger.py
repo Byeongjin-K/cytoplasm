@@ -62,15 +62,18 @@ def open_compose_when_ready(
     active_clock = clock or time.monotonic
     deadline = active_clock() + timeout_s
     last = ""
+    command = ""
     while True:
         try:
             browser.eval_js(_COMPOSE_JS)
             return
         except BrowserError as error:
             last = str(error)
+            command = getattr(error, "command", "")
         if active_clock() >= deadline:
             raise BrowserError(
-                f"compose did not become callable within {timeout_s:.0f}s: {last}"
+                f"compose did not become callable within {timeout_s:.0f}s: {last}",
+                command=command,
             )
         browser.wait_ms(500)
 

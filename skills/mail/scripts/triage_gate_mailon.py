@@ -16,7 +16,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import UTC, datetime
 
+import mail_send_retry
 import triage_core
 import triage_gate
 import triage_mode
@@ -72,9 +74,10 @@ def _error_info(payload: dict) -> dict:
     if not isinstance(retryable, bool):
         retryable = error_code not in _NON_SEND_FAILURE_CODES
     info = {"error_code": error_code, "stage": stage, "retryable": retryable}
-    cause = payload.get("cause")
-    if isinstance(cause, str) and _CAUSE_CODE.fullmatch(cause):
-        info["cause"] = cause
+    for key in ("cause", *mail_send_retry.DETAIL_KEYS):
+        value = payload.get(key)
+        if isinstance(value, str) and _CAUSE_CODE.fullmatch(value):
+            info[key] = value
     return info
 
 
@@ -83,8 +86,8 @@ def _record_draft_failure(draft: dict, error: dict) -> None:
     path = triage_gate._draft_path(draft["id"])
     if path is None:
         return
-    status = "pending" if error["retryable"] else "blocked"
-    triage_gate.write_json(path, {**draft, "status": status, "last_error": error})
+    triage_gate.write_json(
+        path, mail_send_retry.after_failure(draft, error, datetime.now(UTC)))
 
 
 def _safe_failure_message(error: dict) -> str:
@@ -162,7 +165,8 @@ def execute_mailon_draft(draft: dict, approval: triage_gate.Approval) -> None:
             f"{_safe_failure_message(error)} "
             f"(error_code={error['error_code']} stage={error['stage']} "
             f"retryable={str(error['retryable']).lower()} consecutive={failures}"
-            + (f" cause={error['cause']}" if error.get("cause") else "") + ")",
+            + "".join(f" {key}={error[key]}" for key in ("cause", *mail_send_retry.DETAIL_KEYS)
+                      if error.get(key)) + ")",
             exit_code,
         )
 

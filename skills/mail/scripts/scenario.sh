@@ -267,6 +267,9 @@ mode=ok
 [ -f "$base/stub_send_mode.txt" ] && mode="$(cat "$base/stub_send_mode.txt")"
 if [ "$mode" = ok ]; then
   printf '{"attachment_count": 0, "csrf_present": true, "network_post_count": 1, "status": "submitted"}\n'
+elif [ "$mode" = compose ]; then
+  printf '{"status": "error", "error_code": "external_service_error", "stage": "provider", "retryable": true, "cause": "compose_not_ready", "step": "compose_open", "browser_command": "eval", "error_kind": "js_type_error", "message": "x"}\n'
+  exit 2
 else
   printf '{"status": "error", "error_code": "send_failed"}\n' >&2
   exit 1
@@ -523,6 +526,44 @@ else
   printf '{"decided_at": "x", "mode": "no-go", "source": "W4-2-runtime"}' > "$TRIAGE_MAIL_MODE_FILE"
 fi
 
+# --- 11b) an approved send stopped at compose: counted, told in its thread, waits --
+printf 'compose' > "$work/stub_send_mode.txt"
+calls_before_compose="$(send_calls)"
+python3 - "$script_dir" > "$work/compose-fail.out" 2>&1 <<'PY' || { cat "$work/compose-fail.out"; fail "compose failure leg failed"; }
+import argparse, json, sys
+sys.path.insert(0, sys.argv[1])
+import mail_preflight, triage_cli, triage_confirm, triage_gate, triage_mode
+
+draft = triage_gate.create_draft(
+    uid="u-compose-fail", sender="셀프 <self@example.invalid>", mail_subject="전달 실패",
+    to="self@example.invalid", subject="FW: 전달 실패", body="compose 단계 실패 검증",
+    category="important", flags=("reply_needed",))
+draft = {**draft, "message_id": "m-compose-fail"}
+notices = []
+triage_mode.effective_mode = lambda: "full-go"
+triage_confirm.owner_id = lambda: "owner-scenario"
+triage_confirm.resolve_reaction = lambda _d: triage_confirm.APPROVE_EMOJI
+triage_confirm.notify_result = lambda d, content, outcome="": notices.append(content)
+triage_cli._remind_pending = lambda *_a: None
+triage_cli.triage_approval.expire_retired_approval = lambda _d: False
+mail_preflight.guarded_execute_draft = triage_gate.execute_draft
+triage_gate.list_drafts = lambda: [draft]
+assert triage_cli.cmd_watch(argparse.Namespace()) == 6, "a failed approved send must fail the tick"
+stored = json.loads(triage_gate._draft_path(draft["id"]).read_text(encoding="utf-8"))
+assert stored["status"] == "pending" and stored["failed_attempts"] == 1, stored
+assert stored["last_error"]["step"] == "compose_open", stored["last_error"]
+assert len(notices) == 1 and notices[0].startswith("⚠️ 발송 실패"), notices
+assert "compose_not_ready" in notices[0] and "다음 자동 재시도" in notices[0], notices
+triage_gate.list_drafts = lambda: [stored]
+assert triage_cli.cmd_watch(argparse.Namespace()) == 0
+assert len(notices) == 1, "a draft waiting for its retry time must not be tried or told again"
+print("COMPOSE-FAIL-LEG-OK")
+PY
+grep -q '^COMPOSE-FAIL-LEG-OK' "$work/compose-fail.out" || fail "compose failure leg did not finish"
+grep -q '^RETRY-WAIT draft=' "$work/compose-fail.out" || fail "second tick did not wait for the retry time"
+[[ "$(send_calls)" == "$((calls_before_compose + 1))" ]] || fail "compose failure leg sent more than once"
+printf 'ok' > "$work/stub_send_mode.txt"
+
 # --- 12) watch refusals: E2E env + non-full-go mode ------------------------------
 calls_before_watch="$(send_calls)"
 rc=0; E2E_TEST_MODE=1 tri watch >/dev/null 2>&1 || rc=$?
@@ -531,4 +572,4 @@ tri watch > "$work/watch-mode.out" || fail "mode-skip watch tick failed"
 grep -q '^MODE-SKIP mode=no-go' "$work/watch-mode.out" || fail "watch did not skip on no-go"
 [[ "$(send_calls)" == "$calls_before_watch" ]] || fail "mode-skip watch sent mail"
 
-echo "SCENARIO-PASS mail wrapper+triage offline contract leg=$confirm_leg (common-model-route/no-send-before-approval/idempotent/no-go-downgrade+resolve)"
+echo "SCENARIO-PASS mail wrapper+triage offline contract leg=$confirm_leg (common-model-route/no-send-before-approval/idempotent/no-go-downgrade+resolve/compose-fail-notice+retry-wait)"

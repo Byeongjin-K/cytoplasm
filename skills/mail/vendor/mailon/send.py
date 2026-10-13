@@ -4,12 +4,13 @@ import hashlib
 import json
 import mimetypes
 import logging
+import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Protocol
 
-from . import send_trigger, send_verify
+from . import folders, send_trigger, send_verify
 from .browser import BrowserError
 
 log = logging.getLogger(__name__)
@@ -41,11 +42,64 @@ class SendSafetyError(RuntimeError):
     stage = "send"
     retryable = True
     cause = "unclassified"
+    step = ""
 
     def __init__(self, message: str = "", *, cause: str | None = None) -> None:
         super().__init__(message)
         if cause is not None:
             self.cause = cause
+
+
+class SendStepError(SendSafetyError, BrowserError):
+    """A browser command failed at ``step`` of the send (2026-10-13).
+
+    It stays a BrowserError for callers that catch that, and carries the failing
+    agent-browser subcommand and a fixed error kind, never the page's own text."""
+
+    error_code = "external_service_error"
+    stage = "provider"
+
+    def __init__(self, step: str, error: BrowserError) -> None:
+        super().__init__(
+            f"{step}: {error}",
+            cause="compose_not_ready" if step == "compose_open" else "browser_command_failed",
+        )
+        self.step = step
+        self.command = getattr(error, "command", "")
+        self.error_kind = browser_error_kind(str(error))
+
+
+_SAFE_CODE = re.compile(r"[a-z][a-z0-9_-]{2,47}")
+
+
+def failure_details(error: BaseException) -> dict[str, str]:
+    """Where a send stopped, as fixed codes safe to record (2026-10-13): the step,
+    the agent-browser subcommand that failed, and what kind of failure it was.
+    ``browser_command_failed`` alone could not say which command of the send failed."""
+    browser = isinstance(error, BrowserError)
+    details = {
+        "step": getattr(error, "step", "") or ("session" if browser else ""),
+        "browser_command": getattr(error, "command", ""),
+        "error_kind": getattr(error, "error_kind", "")
+        or (browser_error_kind(str(error)) if browser else ""),
+    }
+    return {key: value for key, value in details.items()
+            if isinstance(value, str) and _SAFE_CODE.fullmatch(value)}
+
+
+def browser_error_kind(message: str) -> str:
+    """Fixed name for what went wrong inside a failed browser command."""
+    if "CDP command timed out" in message:
+        return "cdp_timeout"
+    if "timed out after" in message:
+        return "command_timeout"
+    if "TypeError" in message:
+        return "js_type_error"
+    if "Evaluation error" in message:
+        return "js_error"
+    if "not found on PATH" in message:
+        return "browser_missing"
+    return "browser_error"
 
 
 class AttachmentValidationError(SendValidationError):
@@ -116,10 +170,13 @@ class SendResult:
     # How the mail list was found before sending (rows/reload-N/sidebar).
     # Only the attempt log records it; the stdout JSON contract stays fixed.
     list_path: str = ""
+    # How the mail page finished building itself (see folders.finish_page_boot).
+    page_boot: str = ""
 
     def to_json(self) -> str:
         payload = asdict(self)
         del payload["list_path"]
+        del payload["page_boot"]
         return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
     def attempt_json(self) -> str:
@@ -147,7 +204,22 @@ class ComposeSender:
         self._now_ms = now_ms or (lambda: int(time.time() * 1000))
 
     def send(self, request: SendRequest, *, dry_run: bool) -> SendResult:
+        """Send, naming the step that stopped it when it fails."""
+        self._step = "mailbox_check"
+        try:
+            return self._send(request, dry_run=dry_run)
+        except SendSafetyError as error:
+            if not error.step:
+                error.step = self._step
+            raise
+        except BrowserError as error:
+            raise SendStepError(self._step, error) from error
+
+    def _send(self, request: SendRequest, *, dry_run: bool) -> SendResult:
         attachment_manifest_sha256 = _attachment_manifest_sha256(request.attachments)
+        self._step = "page_boot"
+        page_boot = folders.finish_page_boot(self._browser)
+        self._step = "mailbox_check"
         folder_uid = list_path = ""
         if not dry_run:
             try:
@@ -167,17 +239,20 @@ class ComposeSender:
                         status="submitted", csrf_present=False,
                         attachment_count=len(request.attachments),
                         network_post_count=0, verified=True, list_path=list_path,
+                        page_boot=page_boot,
                     )
             except send_verify.SendVerifyError as error:
                 raise SendSafetyError(str(error), cause=error.cause) from error
 
-        send_trigger.open_compose_when_ready(self._browser, clock=self._clock)
+        self._step = "compose_open"
+        _open_compose_with_recovery(self._browser, clock=self._clock)
         # The retry proves only that _tbar.compose() became callable (~1.9s
         # measured). Nothing has measured when the compose form (CSRF token,
         # #adr-to-ipt_ta, editor iframe) finishes rendering, and every downstream
         # probe fails closed, so keep the settle wait rather than trade a measured
         # fix for an unmeasured race.
         self._browser.wait_ms(3000)
+        self._step = "compose_fields"
         self._browser.clear_network_requests()
         compose_metadata = self._browser.eval_json(
             """JSON.stringify((function() {
@@ -195,6 +270,7 @@ class ComposeSender:
         self._browser.eval_js(_field_fill_script(
             ",".join(request.recipients), ",".join(request.cc), request.subject,
         ))
+        self._step = "editor_fill"
         _fill_editor_when_ready(self._browser, request.body, clock=self._clock)
 
         post_count = self._browser.network_post_count()
@@ -209,9 +285,11 @@ class ComposeSender:
                 network_post_count=0,
                 verified=False,
                 attachment_manifest_sha256=attachment_manifest_sha256,
+                page_boot=page_boot,
             )
 
         if request.attachments:
+            self._step = "attachment_upload"
             file_input = (
                 compose_metadata.get("file_input")
                 if isinstance(compose_metadata, dict) else None
@@ -249,6 +327,7 @@ class ComposeSender:
                 "window._compose.command=''; window.uploader.upload(); 'upload-started';"
             )
             _verify_attachment_upload(self._browser, request.attachments)
+        self._step = "recipient_commit"
         send_trigger.commit_recipients(self._browser, request.recipients, request.cc)
         send_trigger.sync_field_events(self._browser)
         log.info("compose discovery: %s", send_trigger.discover_compose(self._browser))
@@ -265,6 +344,7 @@ class ComposeSender:
             raise SendSafetyError(
                 "compose form missing body/recipients (would send garbage) — "
                 "form dump logged", cause="compose_form_incomplete")
+        self._step = "send_trigger"
         baseline_ids = send_verify.request_ids(self._browser.network_requests())
         send_started_ms = self._now_ms()
         triggered = (send_trigger.call_compose_send(self._browser)
@@ -275,6 +355,7 @@ class ComposeSender:
                 "not found) — discovery logged; refusing to fire blind",
                 cause="send_trigger_missing")
         self._browser.wait_ms(500)
+        self._step = "sent_verify"
         send_verify.log_network_forensics(self._browser, baseline_ids)
         try:
             send_verify.check_network_fast_fail(
@@ -300,7 +381,38 @@ class ComposeSender:
             verified=True,
             attachment_manifest_sha256=attachment_manifest_sha256,
             list_path=list_path,
+            page_boot=page_boot,
         )
+
+
+def _open_compose_with_recovery(
+    browser: ComposeBrowser, *, clock: Callable[[], float],
+    reloads: int = folders.RELOAD_ATTEMPTS,
+) -> None:
+    """Open compose; when the page never built itself, reload it, finish its boot
+    and try again — the recovery the mail list already uses (2026-10-13)."""
+    try:
+        send_trigger.open_compose_when_ready(browser, clock=clock)
+        return
+    except BrowserError as error:
+        last = error
+    for attempt in range(1, reloads + 1):
+        log.warning("compose did not open (%s); reload %d/%d", str(last)[:200],
+                    attempt, reloads)
+        try:
+            browser.eval_js(folders._RELOAD_JS)
+        except BrowserError as error:
+            last = error
+            break
+        browser.wait_ms(3000)
+        folders.finish_page_boot(browser)
+        try:
+            send_trigger.open_compose_when_ready(browser, clock=clock)
+            log.warning("compose opened after reload %d/%d", attempt, reloads)
+            return
+        except BrowserError as error:
+            last = error
+    raise last
 
 
 def _verify_attachment_upload(
@@ -415,6 +527,16 @@ def _field_fill_script(recipients: str, cc: str, subject: str) -> str:
         "});"
         f"}})({encoded});"
     )
+
+
+def record_send_failure(logs_dir: Path, payload: dict) -> None:
+    """Failed attempts go to the same log as sent ones, with the safe error fields
+    only — before 2026-10-13 a failed send left no line there at all."""
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    line = {key: value for key, value in payload.items() if key != "message"}
+    line["at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with (logs_dir / "send-attempts.jsonl").open("a", encoding="utf-8") as log_file:
+        log_file.write(json.dumps(line, separators=(",", ":"), sort_keys=True) + "\n")
 
 
 def record_send_result(logs_dir: Path, result: SendResult) -> None:

@@ -69,7 +69,12 @@ def _resolve_agent_browser() -> str:
 
 
 class BrowserError(RuntimeError):
-    pass
+    """``command`` names the agent-browser subcommand that failed (``eval``, ``open``,
+    ...) so a failed send can say which command stopped it (2026-10-13)."""
+
+    def __init__(self, message: str = "", *, command: str = "") -> None:
+        super().__init__(message)
+        self.command = command
 
 
 class AgentBrowser:
@@ -210,7 +215,8 @@ class AgentBrowser:
             t_out.join(timeout=2)
             t_err.join(timeout=2)
             raise BrowserError(
-                f"agent-browser timed out after {timeout}s: {' '.join(args)}"
+                f"agent-browser timed out after {timeout}s: {' '.join(args)}",
+                command=args[0] if args else "",
             ) from e
 
         # Drain any remaining output
@@ -223,7 +229,8 @@ class AgentBrowser:
         if returncode != 0:
             raise BrowserError(
                 f"agent-browser failed ({returncode}): "
-                f"cmd={' '.join(args)} stderr={stderr.strip()}"
+                f"cmd={' '.join(args)} stderr={stderr.strip()}",
+                command=args[0] if args else "",
             )
         return stdout
 
