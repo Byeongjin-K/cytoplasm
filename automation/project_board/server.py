@@ -5,6 +5,12 @@ request needs the token from the private state root (``?t=`` once, then an HttpO
 SameSite=Strict cookie). A progress POST additionally needs the token in a header or form
 field and, when the browser sends one, a same-origin ``Origin`` — another local page
 cannot tick a todo through the owner's cookie.
+
+Tailnet access goes through ``tailscale serve`` on another host, which overwrites the
+``Tailscale-User-Login`` header with the caller's real identity. A request that arrives under a
+configured tailnet origin, or carries that header at all, must come from an allowlisted login
+*in addition to* the token: the header alone is forgeable by any local process that can reach
+the loopback port, so it narrows access but never replaces the secret.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ _CSP: Final = (
     "form-action 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
 _MAX_BODY: Final = 4096
+IDENTITY_HEADER: Final = "Tailscale-User-Login"
 
 logger = logging.getLogger("project_board.server")
 
@@ -46,6 +53,16 @@ class _Handler(BaseHTTPRequestHandler):
     read_source: Callable[[str, str], str | None]
     attachment_path: Callable[[str, str, str], Path | None]
     on_change: Callable[[], None]
+    tailnet_origins: frozenset[str] = frozenset()
+    tailnet_logins: frozenset[str] = frozenset()
+
+    def _identity_ok(self) -> bool:
+        login = self.headers.get(IDENTITY_HEADER)
+        host = (self.headers.get("Host") or "").strip().lower()
+        via_tailnet = login is not None or f"https://{host}" in self.tailnet_origins
+        if not via_tailnet:
+            return True
+        return login is not None and login.strip().lower() in self.tailnet_logins
 
     def _send(self, status: int, body: bytes, content_type: str, extra: dict[str, str] | None = None) -> None:
         self.send_response(status)
@@ -76,6 +93,9 @@ class _Handler(BaseHTTPRequestHandler):
         return morsel is not None and self._matches(morsel.value)
 
     def do_GET(self) -> None:  # noqa: N802 - http.server API
+        if not self._identity_ok():
+            self._text(403, "forbidden")
+            return
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         offered = query.get("t", [""])[0]
@@ -133,6 +153,9 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, data, "application/octet-stream", {"Content-Disposition": disposition})
 
     def do_POST(self) -> None:  # noqa: N802 - http.server API
+        if not self._identity_ok():
+            self._text(403, "forbidden")
+            return
         parts = [unquote(part) for part in urlparse(self.path).path.split("/") if part]
         if len(parts) != 2 or parts[0] != "todo":
             self._text(404, "not found")
@@ -147,7 +170,8 @@ class _Handler(BaseHTTPRequestHandler):
             return
         supplied = self.headers.get("X-PB-Token") or form.get("token", [""])[0]
         origin = self.headers.get("Origin")
-        allowed = {f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}", f"http://[::1]:{self.port}"}
+        allowed = {f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}", f"http://[::1]:{self.port}",
+                   *self.tailnet_origins}
         if not self._matches(supplied) or (origin is not None and origin not in allowed):
             self._text(403, "forbidden")
             return
@@ -186,6 +210,8 @@ def make_server(
     read_source: Callable[[str, str], str | None],
     attachment_path: Callable[[str, str, str], Path | None],
     on_change: Callable[[], None],
+    tailnet_origins: tuple[str, ...] = (),
+    tailnet_logins: tuple[str, ...] = (),
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -203,6 +229,8 @@ def make_server(
             "read_source": staticmethod(read_source),
             "attachment_path": staticmethod(attachment_path),
             "on_change": staticmethod(on_change),
+            "tailnet_origins": frozenset(o.lower() for o in tailnet_origins),
+            "tailnet_logins": frozenset(x.lower() for x in tailnet_logins),
         },
     )
     server = ThreadingHTTPServer((host, port), handler)
