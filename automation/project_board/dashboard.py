@@ -223,9 +223,10 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
     due = f"<span>{escape(todo.due)}</span>" if todo.due else ""
     progress = f"<span>{todo.progress}%</span>" if todo.status == "진행" else ""
     note = f'<div class="note">{escape(todo.note)}</div>' if todo.note else ""
+    done_class = ' class="done"' if done else ""
     return (
         f'<li id="todo-{escape(todo.todo_id, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
-        f'{" class=\"done\"" if done else ""}>{box}<div class="todo-main">'
+        f"{done_class}>{box}<div class=\"todo-main\">"
         f'<div class="todo-title">{escape(todo.title)}</div><div class="meta">'
         f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(todo.status)}</span>'
         f'<span class="badge {css}">{label}</span>{owner}{due}{progress}<span>{source}</span>'
