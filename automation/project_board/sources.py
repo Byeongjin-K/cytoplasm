@@ -12,6 +12,7 @@ something a meeting decided, and that cut is not copied here.
 from __future__ import annotations
 
 import importlib
+import re
 import os
 import sqlite3
 import sys
@@ -23,8 +24,19 @@ from typing import Final
 from .models import ProjectBoardError, SourceRef
 
 MAX_TEXT: Final = 12_000
+_REPLY_PREFIX: Final = re.compile(r"^\s*(?:\[\s*)?(?:re|fw|fwd|회신|답장|전달)\s*(?:\]\s*)?[:：]?\s*", re.IGNORECASE)
 MEETING_DIR_ENV: Final = "PROJECT_BOARD_MEETING_DIR"
 _REPO: Final = Path(__file__).resolve().parents[2]
+
+
+def thread_key(subject: str) -> str:
+    """The conversation a mail belongs to: its subject without reply/forward prefixes, case-folded."""
+    text = " ".join(subject.split())
+    while True:
+        stripped = _REPLY_PREFIX.sub("", text, count=1)
+        if stripped == text:
+            return text.casefold()
+        text = stripped
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +81,19 @@ def new_mail(runtime: MailRuntime, *, after_saved_at: int, limit: int) -> list[t
     return [(str(row["uid"]), int(row["saved_at"])) for row in rows]
 
 
+def recent_mail(runtime: MailRuntime, *, since: str, limit: int) -> list[str]:
+    """Inbox uids received on or after ``since`` (ISO date), newest first."""
+    connection = _connect(runtime)
+    try:
+        rows = connection.execute(
+            "SELECT uid FROM messages WHERE folder = 'inbox' AND recv_date >= ? ORDER BY recv_date DESC, uid LIMIT ?",
+            (since, limit),
+        ).fetchall()
+    finally:
+        connection.close()
+    return [str(row["uid"]) for row in rows]
+
+
 def latest_saved_at(runtime: MailRuntime) -> int:
     connection = _connect(runtime)
     try:
@@ -79,8 +104,14 @@ def latest_saved_at(runtime: MailRuntime) -> int:
 
 
 def _inside(root: Path, relative: str) -> Path | None:
+    """``relative`` under the runtime, allowing its ``data/`` symlink to the shared state directory.
+
+    A deployed MailOn release links ``data`` to ``mailon-runtime/state/data``, so every stored
+    mail resolves outside the release directory itself; anything resolving elsewhere is refused.
+    """
     candidate = (root / relative).resolve()
-    return candidate if candidate.is_relative_to(root.resolve()) and candidate.is_file() else None
+    allowed = (root.resolve(), (root / "data").resolve())
+    return candidate if any(candidate.is_relative_to(base) for base in allowed) and candidate.is_file() else None
 
 
 def mail_markdown(runtime: MailRuntime, uid: str) -> str | None:
@@ -136,9 +167,14 @@ def mail_attachment(runtime: MailRuntime, uid: str, name: str) -> Path | None:
         ).fetchone()
     finally:
         connection.close()
-    if row is None or row["status"] != "ok" or not row["local_path"]:
+    if row is None or row["status"] != "ok":
         return None
-    return _inside(runtime.repo, str(row["local_path"]))
+    stored = str(row["local_path"] or "")
+    if stored and not Path(stored).is_absolute():
+        found = _inside(runtime.repo, stored)
+        if found is not None:
+            return found
+    return _inside(runtime.repo, f"data/attachments/{uid}/{name}")
 
 
 def meeting_dir(env: Mapping[str, str] | None = None) -> Path:

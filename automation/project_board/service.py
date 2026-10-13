@@ -20,7 +20,7 @@ from .analysis import analyze
 from .board_store import BoardStore, utc_stamp
 from .config import BoardConfig, state_root
 from .dashboard import render_dashboard
-from .llm import LlmProvider
+from .llm import LlmConfig, LlmProvider
 from .models import PendingView, ProjectBoardError, Proposal, ProposedTodo, proposal_from_dict
 from .proposals import REVISABLE_STATUSES, ProposalRecord, ProposalStore, atomic_write, new_record
 from .sources import MailRuntime, SourceDocument, latest_saved_at, new_mail, read_mail
@@ -80,6 +80,20 @@ def pending_views(board: Board) -> tuple[PendingView, ...]:
     return tuple(sorted(views, key=lambda v: v.created_at))
 
 
+def open_and_pending(board: Board, limit: int = 40) -> tuple[str, ...]:
+    """Approved open todos plus todos of proposals still waiting on a card — both count as 'already there'."""
+    pending: list[str] = []
+    for record in board.proposals.all():
+        if record.status not in {"proposed", "posted", "approved"}:
+            continue
+        try:
+            proposal = board.proposals.frozen(record)
+        except ProjectBoardError:
+            continue
+        pending += [f"{proposal.project} · {todo.title} (검토 대기)" for todo in proposal.todos]
+    return (*board.store.open_todo_lines(limit), *pending[:limit])
+
+
 def rebuild_dashboard(board: Board, *, today: date, now: datetime | None = None) -> Path:
     snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now)
     atomic_write(board.dashboard_path, render_dashboard(snapshot, mode="file"))
@@ -93,17 +107,25 @@ def propose(
     *,
     today: date,
     post: Poster | None,
+    config: BoardConfig | None = None,
     origin_channel_id: str = "",
     origin_message_id: str = "",
     now: datetime | None = None,
 ) -> tuple[ProposalRecord | None, str]:
     """Analyse one source and (unless it is unrelated or already proposed) request its card."""
-    existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id)
+    existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id, document.ref.subject)
     if existing is not None:
         return existing, f"already-proposed {existing.request_id} status={existing.status}"
-    proposal = analyze(document, provider, known_projects=board.store.project_names(), today=today)
+    settings = config or BoardConfig(llm=LlmConfig())
+    proposal = analyze(
+        document, provider, known_projects=settings.catalog_lines(board.store.project_names()), today=today,
+        open_todos=open_and_pending(board), version=settings.prompt_version, owner=settings.owner_names,
+        team=settings.team_names,
+    )
     if proposal is None:
         return None, "unrelated"
+    if not proposal.todos:
+        return None, "nothing-new"
     record = new_record(
         proposal, created_at=utc_stamp(now), origin_channel_id=origin_channel_id,
         origin_message_id=origin_message_id,
@@ -163,7 +185,7 @@ def analyze_new_mail(
             write_watermark(board, saved_at)
             continue
         try:
-            record, outcome = propose(board, document, provider, today=today, post=post)
+            record, outcome = propose(board, document, provider, today=today, post=post, config=config)
         except ProjectBoardError as error:
             if error.retryable:
                 return AnalyzeTick(tuple(proposed), unrelated, skipped, deferred=f"{uid}: {error}")

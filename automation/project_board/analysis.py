@@ -16,15 +16,35 @@ from .llm import LlmProvider
 from .models import Proposal, ProjectBoardError, SourceRef, proposal_from_dict
 from .sources import SourceDocument
 
-PROMPT_PATH: Final = Path(__file__).resolve().parents[2] / "prompts" / "project-analysis-v1.md"
+_PROMPTS: Final = Path(__file__).resolve().parents[2] / "prompts"
+PROMPT_VERSIONS: Final = {
+    "v1": _PROMPTS / "project-analysis-v1.md",
+    "v2": _PROMPTS / "project-analysis-v2.md",
+}
+DEFAULT_PROMPT: Final = "v2"
+UNCLASSIFIED: Final = "미분류"
 
 
-def build_prompt(document: SourceDocument, known_projects: tuple[str, ...], today: date) -> str:
-    template = PROMPT_PATH.read_text(encoding="utf-8")
+def build_prompt(
+    document: SourceDocument,
+    known_projects: tuple[str, ...],
+    today: date,
+    *,
+    open_todos: tuple[str, ...] = (),
+    version: str = DEFAULT_PROMPT,
+    owner: tuple[str, ...] = (),
+    team: tuple[str, ...] = (),
+) -> str:
+    if version not in PROMPT_VERSIONS:
+        raise ProjectBoardError(f"unknown analysis prompt version: {version}")
+    template = PROMPT_VERSIONS[version].read_text(encoding="utf-8")
     ref = document.ref
     values = {
         "{{TODAY}}": today.isoformat(),
-        "{{KNOWN_PROJECTS}}": "\n".join(f"- {name}" for name in known_projects) or "(없음)",
+        "{{KNOWN_PROJECTS}}": "\n".join(f"- {line}" for line in known_projects) or "(없음)",
+        "{{OWNER}}": " / ".join(owner) or "(설정 없음 — 받는 사람)",
+        "{{TEAM}}": ", ".join(team) or "(설정 없음)",
+        "{{OPEN_TODOS}}": "\n".join(f"- {line}" for line in open_todos) or "(없음)",
         "{{SOURCE_KIND}}": "기관 메일" if ref.kind == "mail" else "회의록",
         "{{SUBJECT}}": ref.subject or "(제목 없음)",
         "{{SENDER}}": ref.sender or "(없음)",
@@ -81,7 +101,18 @@ def parse_answer(text: str, source: SourceRef, *, provider: str, model: str) -> 
 
 
 def analyze(
-    document: SourceDocument, provider: LlmProvider, *, known_projects: tuple[str, ...], today: date
+    document: SourceDocument,
+    provider: LlmProvider,
+    *,
+    known_projects: tuple[str, ...],
+    today: date,
+    open_todos: tuple[str, ...] = (),
+    version: str = DEFAULT_PROMPT,
+    owner: tuple[str, ...] = (),
+    team: tuple[str, ...] = (),
 ) -> Proposal | None:
-    answer = provider.complete(build_prompt(document, known_projects, today))
+    prompt = build_prompt(
+        document, known_projects, today, open_todos=open_todos, version=version, owner=owner, team=team
+    )
+    answer = provider.complete(prompt)
     return parse_answer(answer.text, document.ref, provider=answer.provider, model=answer.model)
