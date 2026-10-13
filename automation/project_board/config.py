@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Final
 
 from .llm import LlmConfig, llm_config
-from .models import ProjectBoardError
+from .models import DEFAULT_GRADE, GRADES, ProjectBoardError
 
 ROOT_ENV: Final = "PROJECT_BOARD_ROOT"
 CONFIG_ENV: Final = "PROJECT_BOARD_CONFIG"
@@ -30,11 +30,13 @@ class ProjectEntry:
     name: str
     aliases: tuple[str, ...] = ()
     note: str = ""
+    grade: str = ""
 
     def prompt_line(self) -> str:
         aliases = f" (별칭: {', '.join(self.aliases)})" if self.aliases else ""
         note = f" — {self.note}" if self.note else ""
-        return f"{self.name}{aliases}{note}"
+        grade = f" [기본 등급: {self.grade}]" if self.grade else ""
+        return f"{self.name}{aliases}{note}{grade}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,11 +48,15 @@ class BoardConfig:
     digest_to: tuple[str, ...] = ()
     digest_subject: str = "프로젝트 현황 일일 요약"
     projects: tuple[ProjectEntry, ...] = ()
-    prompt_version: str = "v2"
+    prompt_version: str = "v3"
     owner_names: tuple[str, ...] = ()
     team_names: tuple[str, ...] = ()
     tailnet_origins: tuple[str, ...] = ()
     tailnet_logins: tuple[str, ...] = ()
+
+    def project_grade(self, project: str) -> str:
+        """The configured default grade of a project (과제내부 when the catalog says nothing)."""
+        return next((entry.grade for entry in self.projects if entry.name == project and entry.grade), DEFAULT_GRADE)
 
     def catalog_lines(self, stored: tuple[str, ...] = ()) -> tuple[str, ...]:
         """Configured projects first (with cues), then approved names the catalog lacks."""
@@ -75,6 +81,7 @@ def _projects(raw: object) -> tuple[ProjectEntry, ...]:
                 " ".join(str(item["name"]).split())[:60],
                 tuple(" ".join(str(a).split()) for a in aliases if str(a).strip()),
                 " ".join(str(item.get("note") or "").split())[:200],
+                _project_grade(item.get("grade")),
             )
         )
     return tuple(entries)
@@ -121,12 +128,21 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         digest_to=tuple(recipients),
         digest_subject=str(digest.get("subject") or "프로젝트 현황 일일 요약"),
         projects=_projects(raw.get("projects")),
-        prompt_version=str(analyze.get("prompt") or "v2"),
+        prompt_version=str(analyze.get("prompt") or "v3"),
         owner_names=_owner_names(raw.get("owner")),
         team_names=_owner_names(raw.get("team")),
         tailnet_origins=_tailnet_origins(dashboard.get("tailnet")),
         tailnet_logins=_tailnet_logins(dashboard.get("tailnet")),
     )
+
+
+def _project_grade(raw: object) -> str:
+    if raw in (None, ""):
+        return ""
+    grade = str(raw).strip()
+    if grade not in GRADES:
+        raise ProjectBoardError(f"config project grade must be one of {', '.join(GRADES)}")
+    return grade
 
 
 def _tailnet_block(raw: object) -> dict[str, object]:

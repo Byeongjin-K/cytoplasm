@@ -17,11 +17,20 @@ from pathlib import Path
 from typing import Final
 
 from .analysis import analyze
-from .board_store import BoardStore, utc_stamp
+from .board_store import BoardStore, task_key_of, utc_stamp
 from .config import BoardConfig, state_root
 from .dashboard import render_dashboard
 from .llm import LlmConfig, LlmProvider
-from .models import PendingView, ProjectBoardError, Proposal, ProposedTodo, proposal_from_dict
+from .models import (
+    DEFAULT_GRADE,
+    PendingView,
+    ProjectBoardError,
+    Proposal,
+    ProposedTodo,
+    grade_rank,
+    proposal_from_dict,
+    stricter,
+)
 from .proposals import REVISABLE_STATUSES, ProposalRecord, ProposalStore, atomic_write, new_record
 from .sources import MailRuntime, SourceDocument, latest_saved_at, new_mail, read_mail
 
@@ -71,10 +80,14 @@ def pending_views(board: Board) -> tuple[PendingView, ...]:
         link = discord_link(
             space="guild", channel_id=record.approval_thread_id or None, guild_id=record.approval_guild_id or None
         )
+        try:
+            grade = board.proposals.frozen(record).grade or DEFAULT_GRADE
+        except ProjectBoardError:
+            grade = "기관지정"  # unreadable → treat as the strictest, so it can never be exported
         views.append(
             PendingView(
                 record.request_id, record.project, record.todo_count, record.source_subject,
-                record.created_at, link.url if link.status is LinkStatus.AVAILABLE and link.url else "",
+                record.created_at, link.url if link.status is LinkStatus.AVAILABLE and link.url else "", grade,
             )
         )
     return tuple(sorted(views, key=lambda v: v.created_at))
@@ -126,6 +139,7 @@ def propose(
         return None, "unrelated"
     if not proposal.todos:
         return None, "nothing-new"
+    proposal = replace(proposal, grade=task_grade_for(board, settings, proposal))
     record = new_record(
         proposal, created_at=utc_stamp(now), origin_channel_id=origin_channel_id,
         origin_message_id=origin_message_id,
@@ -134,6 +148,15 @@ def propose(
     if post is not None:
         post(record)
     return board.proposals.get(record.request_id) or record, "proposed"
+
+
+def task_grade_for(board: Board, config: BoardConfig, proposal: Proposal) -> str:
+    """An approved 업무 keeps its grade; otherwise the analysis may suggest, never below the project default."""
+    source = proposal.source
+    established = board.store.task_grade(task_key_of(source.kind, source.source_id, source.subject))
+    if established:
+        return established
+    return stricter(config.project_grade(proposal.project), proposal.grade)
 
 
 def _watermark_path(board: Board) -> Path:
@@ -213,6 +236,7 @@ class Revision:
     set_due: tuple[tuple[int, str], ...] = ()
     set_owner: tuple[tuple[int, str], ...] = ()
     set_title: tuple[tuple[int, str], ...] = ()
+    grade: str | None = None
 
 
 def revised_proposal(proposal: Proposal, change: Revision) -> Proposal:
@@ -233,6 +257,9 @@ def revised_proposal(proposal: Proposal, change: Revision) -> Proposal:
         {"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason}
         for t in (*kept, *change.add)
     ]
+    if change.grade is not None:
+        grade_rank(change.grade)
+        raw["grade"] = change.grade
     for name in ("project", "project_owner", "summary"):
         value = getattr(change, name)
         if value is not None:
@@ -282,7 +309,7 @@ def digest_snapshot(board: Board, *, today: date, now: datetime | None = None) -
     """A dated, never-overwritten copy — the mail approval binds the attachment's bytes."""
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
     path = board.root / "digests" / f"project-dashboard-{today.isoformat()}-{stamp}.html"
-    snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now)
+    snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now, exported=True)
     atomic_write(path, render_dashboard(snapshot, mode="file"))
     return path
 

@@ -14,7 +14,7 @@ from html import escape
 from typing import Final, Literal
 from urllib.parse import quote
 
-from .models import OPEN_STATUSES, BoardSnapshot, ProjectView, SourceRow, TodoRow
+from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, ProjectView, SourceRow, TodoRow
 
 Mode = Literal["served", "file"]
 
@@ -56,6 +56,8 @@ h3{font-size:16px;margin:18px 0 8px}
 .st-open{background:var(--gray-bg);color:var(--text)} .st-doing{background:#e1ecfb;color:#0b4a8f}
 .st-done{background:var(--green-bg);color:var(--green)} .st-held{background:var(--gray-bg);color:var(--text2)}
 .pending{border-left:4px solid var(--orange)}
+.g-0{background:var(--green-bg);color:var(--green)} .g-1{background:var(--gray-bg);color:var(--text2)}
+.g-2,.g-3{background:var(--red-bg);color:var(--red)}
 ul.todos{list-style:none;margin:0;padding:0}
 ul.todos li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
 ul.todos li:first-child{border-top:0}
@@ -150,6 +152,13 @@ def _source_href(mode: Mode, kind: str, source_id: str) -> str | None:
     return None if mode == "file" else f"/source/{quote(kind, safe='')}/{quote(source_id, safe='')}"
 
 
+def _grade_badge(grade: str) -> str:
+    """The 업무 security grade; 대외비·기관지정 also say they never leave this screen."""
+    css = f"g-{GRADES.index(grade)}" if grade in GRADES else "g-1"
+    hint = " · 외부 비공개" if grade in NEVER_EXPORTED else ""
+    return f'<span class="badge {css}" title="업무 보안 등급">{escape(grade)}{hint}</span>'
+
+
 def _summary(snapshot: BoardSnapshot, today: date) -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
@@ -170,16 +179,22 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
                 f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드</a>' if p.thread_url else ""
             )
             items.append(
-                f"<li><b>{title}</b> · 할 일 {p.todo_count}건 · 근거 「{escape(p.source_subject)}」{link}</li>"
+                f"<li><b>{title}</b> {_grade_badge(p.grade)} · 할 일 {p.todo_count}건 · "
+                f"근거 「{escape(p.source_subject)}」{link}</li>"
             )
         pending = (
             '<div class="card pending" style="margin-top:12px"><b>소유자 승인을 기다리는 제안</b>'
             '<p class="note">아직 프로젝트 데이터가 아닙니다 — 카드에서 ✅ 하면 반영됩니다.</p>'
             f'<ul class="small">{"".join(items)}</ul></div>'
         )
+    withheld = (
+        f'<p class="note">보안 등급(대외비·기관지정) 할 일 {snapshot.withheld}건은 이 사본에서 뺐습니다.</p>'
+        if snapshot.withheld
+        else ""
+    )
     return (
         '<section id="summary"><h2>요약</h2>'
-        f'<div class="chips">{chips}</div>{pending}'
+        f'<div class="chips">{chips}</div>{pending}{withheld}'
         f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
     )
 
@@ -229,7 +244,7 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
         f"{done_class}>{box}<div class=\"todo-main\">"
         f'<div class="todo-title">{escape(todo.title)}</div><div class="meta">'
         f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(todo.status)}</span>'
-        f'<span class="badge {css}">{label}</span>{owner}{due}{progress}<span>{source}</span>'
+        f'<span class="badge {css}">{label}</span>{_grade_badge(todo.grade)}{owner}{due}{progress}<span>{source}</span>'
         f"</div>{note}</div></li>"
     )
 
@@ -303,7 +318,7 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode) -> str:
     sender = f" · {escape(row.source_sender)}" if row.source_sender else ""
     return (
         f'<div class="card src"><div class="small muted">{escape(row.source_date[:10])} · {kind}{sender} · '
-        f'{escape(row.project)}</div><b>{title}</b><p class="small" style="margin:6px 0">{escape(row.summary)}</p>'
+        f'{escape(row.project)} {_grade_badge(row.grade)}</div><b>{title}</b><p class="small" style="margin:6px 0">{escape(row.summary)}</p>'
         f'{attachments}<div class="names">만든 할 일: {todos}</div></div>'
     )
 
@@ -320,7 +335,7 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
 def _events(snapshot: BoardSnapshot) -> str:
     if not snapshot.events:
         return ""
-    kinds = {"approved": "승인 반영", "progress": "진행 기록"}
+    kinds = {"approved": "승인 반영", "progress": "진행 기록", "grade": "보안 등급 변경"}
     items = "".join(
         f'<li><span class="muted">{escape(_kst(e.at))}</span> · {kinds.get(e.kind, escape(e.kind))} · '
         f"{escape(e.project)} · {escape(e.detail)}</li>"

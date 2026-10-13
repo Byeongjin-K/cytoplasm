@@ -13,15 +13,16 @@ from pathlib import Path
 from typing import Final
 
 from .llm import LlmProvider
-from .models import Proposal, ProjectBoardError, SourceRef, proposal_from_dict
+from .models import GRADES, Proposal, ProjectBoardError, SourceRef, proposal_from_dict
 from .sources import SourceDocument
 
 _PROMPTS: Final = Path(__file__).resolve().parents[2] / "prompts"
 PROMPT_VERSIONS: Final = {
     "v1": _PROMPTS / "project-analysis-v1.md",
     "v2": _PROMPTS / "project-analysis-v2.md",
+    "v3": _PROMPTS / "project-analysis-v3.md",
 }
-DEFAULT_PROMPT: Final = "v2"
+DEFAULT_PROMPT: Final = "v3"
 UNCLASSIFIED: Final = "미분류"
 
 
@@ -94,6 +95,7 @@ def parse_answer(text: str, source: SourceRef, *, provider: str, model: str) -> 
                 },
                 "provider": provider,
                 "model": model,
+                "grade": raw.get("grade") if raw.get("grade") in GRADES else "",
             }
         )
     except ProjectBoardError as error:

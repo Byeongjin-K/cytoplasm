@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Final
 
-from .models import Proposal
+from .models import DEFAULT_GRADE, NEVER_EXPORTED, Proposal
 from .proposals import ProposalRecord
 
-RENDER_VERSION: Final = "project-proposal-v1"
+RENDER_VERSION: Final = "project-proposal-v2"
+RENDER_VERSIONS: Final = ("project-proposal-v1", "project-proposal-v2")
 MAX_MESSAGE_CHARS: Final = 1900
 
 
@@ -26,7 +27,15 @@ def _todo_lines(proposal: Proposal, title_limit: int) -> list[str]:
     return lines or ["(할 일 없음 — 요약만 기록)"]
 
 
-def _fact(record: ProposalRecord, proposal: Proposal, summary_limit: int, title_limit: int) -> str:
+def _grade_line(proposal: Proposal) -> str:
+    grade = proposal.grade or DEFAULT_GRADE
+    outside = "밖으로 내보내지 않음" if grade in NEVER_EXPORTED else "요약 메일 등에 포함될 수 있음"
+    return f"보안 등급: {grade} — 이 업무의 할 일·이후 카드 전부에 같은 등급 · {outside} (바꾸려면 revise --grade)"
+
+
+def _fact(
+    record: ProposalRecord, proposal: Proposal, summary_limit: int, title_limit: int, version: str
+) -> str:
     source = proposal.source
     summary = proposal.summary if len(proposal.summary) <= summary_limit else proposal.summary[:summary_limit] + "…"
     kind = "기관 메일" if source.kind == "mail" else "회의록"
@@ -35,12 +44,13 @@ def _fact(record: ProposalRecord, proposal: Proposal, summary_limit: int, title_
     return "\n".join(
         (
             f"프로젝트: {proposal.project}" + (f" (담당 {proposal.project_owner})" if proposal.project_owner else ""),
+            *((_grade_line(proposal),) if version != "project-proposal-v1" else ()),
             f"요약: {summary}",
             "할 일:",
             *_todo_lines(proposal, title_limit),
             f"근거: {kind} 「{source.subject or '(제목 없음)'}」 {source.date[:10]}{attachments}",
             f"분석 모델: {model} · 제안 {record.request_id} · {record.revision}판",
-            f"판본: {RENDER_VERSION}",
+            f"판본: {version}",
         )
     )
 
@@ -48,16 +58,18 @@ def _fact(record: ProposalRecord, proposal: Proposal, summary_limit: int, title_
 def render_proposal_card(
     record: ProposalRecord, proposal: Proposal, *, render_version: str = RENDER_VERSION
 ) -> str:
-    if render_version != RENDER_VERSION:
+    if render_version not in RENDER_VERSIONS:
         raise RenderError(f"unsupported proposal render version: {render_version}")
     for summary_limit, title_limit in ((600, 120), (300, 80), (160, 50), (80, 30)):
-        content = _render_v1(record, proposal, summary_limit, title_limit)
+        content = _render_v1(record, proposal, summary_limit, title_limit, render_version)
         if len(content) <= MAX_MESSAGE_CHARS:
             return content
     raise RenderError("proposal card exceeds the postable length")
 
 
-def _render_v1(record: ProposalRecord, proposal: Proposal, summary_limit: int, title_limit: int) -> str:
+def _render_v1(
+    record: ProposalRecord, proposal: Proposal, summary_limit: int, title_limit: int, version: str
+) -> str:
     try:
         from automation.interop import owner_message as om
     except ImportError as error:
@@ -66,7 +78,7 @@ def _render_v1(record: ProposalRecord, proposal: Proposal, summary_limit: int, t
     message = om.OwnerMessage(
         subject_key=record.request_id,
         subject="프로젝트 제안 검토",
-        fact=_fact(record, proposal, summary_limit, title_limit),
+        fact=_fact(record, proposal, summary_limit, title_limit, version),
         location=here,
         owner=om.Action(
             "react", here, "✅ 반영 / ⛔ 취소 — 고칠 점은 이 스레드에 답글로 쓰면 수정안으로 다시 올립니다"
