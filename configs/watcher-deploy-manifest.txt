@@ -39,6 +39,10 @@ agent|automation/obsidian_write/cron/obsidian_note_watch.py|.hermes/scripts/obsi
 # --- automation/plaud_sync/deploy-manifest.txt ---
 agent|automation/plaud_sync/cron/plaud_sync_watch.py|.hermes/scripts/plaud_sync_watch.py|required
 
+# --- automation/project_board/deploy-manifest.txt ---
+agent|automation/project_board/cron/project_board_watch.py|.hermes/scripts/project_board_watch.py|required
+agent|automation/project_board/cron/project_board_analyze.py|.hermes/scripts/project_board_analyze.py|required
+
 # --- automation/rag_ingest/deploy-manifest.txt ---
 agent|automation/rag_ingest/cron/rag_ingest_watch.py|.hermes/scripts/rag_ingest_watch.py|required
 

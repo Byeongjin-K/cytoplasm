@@ -1,0 +1,16 @@
+[Unit]
+Description=Autophagy project dashboard (loopback 127.0.0.1 only, token required)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=PYTHONPATH=/srv/autophagy-agent-current
+ExecStart=/usr/bin/python3 -m automation.project_board serve --host 127.0.0.1
+Restart=always
+RestartSec=10
+# Picks up a newly converged release within the hour without a deploy-time restart hook.
+RuntimeMaxSec=3600
+
+[Install]
+WantedBy=default.target

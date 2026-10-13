@@ -80,6 +80,8 @@ PRODUCER_WATCHERS: Final[dict[str, tuple[str, str]]] = {
         "cards and their watchers", "tests/unit/test_obsidian_write_gate.py"),
     "automation/obsidian_write/note_request_cli.py::cmd_request": (
         "cron:obsidian-note-watch", "tests/unit/test_obsidian_note_request.py"),
+    "automation/project_board/cli.py::post_card": (
+        "cron:project-board-watch", "tests/unit/test_project_board_approval.py"),
     "automation/memory_relocate/approval_gate.py::request_approval": (
         "cron:memory-relocate-watch", "tests/unit/test_memory_relocate_approval_gate.py"),
     "automation/plaud_sync/approval_gate.py::request_approval": (

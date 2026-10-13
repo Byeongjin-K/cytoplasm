@@ -38,6 +38,7 @@ APPROVAL_PRODUCERS: Final[Mapping[str, str]] = {
     "automation/plaud_sync/approval_gate.py::request_approval": "automation/plaud_sync/approval_gate.py",
     "skills/todo/scripts/todo_cli.py::_cmd_request": "skills/todo/scripts/todo_approval.py",
     "automation/release_approval.py::cmd_request": "automation/skill_gate_approval.py",
+    "automation/project_board/cli.py::post_card": "automation/project_board/proposal_gate.py",
 }
 
 _LIFECYCLE_HOSTS: Final[Mapping[str, str]] = {
@@ -55,6 +56,7 @@ _LIFECYCLE_HOSTS: Final[Mapping[str, str]] = {
     "automation/memory_relocate/approval_gate.py": "automation/memory_relocate/approval_gate.py",
     "automation/plaud_sync/approval_gate.py": "automation/plaud_sync/approval_gate.py",
     "skills/todo/scripts/todo_approval.py": "skills/todo/scripts/todo_approval.py",
+    "automation/project_board/proposal_gate.py": "automation/project_board/proposal_gate.py",
 }
 
 _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
@@ -71,6 +73,7 @@ _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
     "automation/obsidian_write/note_request_gate.py::NoteApprovalGate.post",
     "automation/plaud_sync/approval_gate.py::PlaudApprovalGate.post",
     "skills/todo/scripts/todo_approval.py::TodoApprovalGate.post",
+    "automation/project_board/proposal_gate.py::ProposalApprovalGate.post",
 })
 
 _POSTING_PRIMITIVE_IMPLEMENTATIONS: Final[frozenset[str]] = frozenset({
@@ -132,6 +135,7 @@ APPROVAL_KINDS: Final[Mapping[str, str]] = {
     "automation/plaud_sync/approval_gate.py::request_approval": "obsidian-write",
     "skills/todo/scripts/todo_cli.py::_cmd_request": "todo",
     "automation/release_approval.py::cmd_request": "release",
+    "automation/project_board/cli.py::post_card": "project-board",
 }
 
 # Commit surface (the ONLY writer of a flow's message_id) → the module that
@@ -150,6 +154,7 @@ _RECORD_WRITERS: Final[Mapping[str, str]] = {
     "automation/obsidian_write/note_request_gate.py::NoteApprovalGate.commit": "automation/obsidian_write/note_request.py",
     "automation/plaud_sync/approval_gate.py::PlaudApprovalGate.commit": "automation/plaud_sync/model.py",
     "skills/todo/scripts/todo_approval.py::TodoApprovalGate.commit": "skills/todo/scripts/todo_approval_store.py",
+    "automation/project_board/proposal_gate.py::ProposalApprovalGate.commit": "automation/project_board/proposals.py",
 }
 
 # The migration ledger. Key = the `+`-joined path(s) one R1 flow owns; value =

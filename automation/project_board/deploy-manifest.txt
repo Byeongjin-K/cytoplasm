@@ -1,0 +1,5 @@
+agent|automation/project_board/cron/project_board_watch.py|.hermes/scripts/project_board_watch.py|required
+agent|automation/project_board/cron/project_board_watch.py|project-board-watch|v2:cron;schedule=every 2m;script=project_board_watch.py;deliver=local;mode=no-agent
+agent|automation/project_board/cron/project_board_analyze.py|.hermes/scripts/project_board_analyze.py|required
+agent|automation/project_board/cron/project_board_analyze.py|project-board-analyze|v2:cron;schedule=every 30m;script=project_board_analyze.py;deliver=local;mode=no-agent
+agent|automation/project_board/systemd/autophagy-project-board.service|.config/systemd/user/autophagy-project-board.service|v2:file

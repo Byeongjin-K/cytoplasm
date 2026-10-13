@@ -49,6 +49,7 @@ class ApprovalKind(StrEnum):
     RELEASE = "release"
     OBSIDIAN_WRITE = "obsidian-write"
     TODO = "todo"
+    PROJECT_BOARD = "project-board"
 
 
 class ApprovalSurface(StrEnum):
@@ -91,6 +92,7 @@ KIND_LABELS: Final[Mapping[ApprovalKind, str]] = MappingProxyType({
     ApprovalKind.RELEASE: "릴리스",
     ApprovalKind.OBSIDIAN_WRITE: "옵시디언 노트 승인 요청",
     ApprovalKind.TODO: "할 일",
+    ApprovalKind.PROJECT_BOARD: "프로젝트 제안",
 })
 
 REQUEST_TITLE_LIMIT: Final = 40
@@ -210,6 +212,7 @@ _TRANSITIONS: Final[TransitionLedger] = MappingProxyType({
         (0, ApprovalSurface.OWNER_DM),
         (7, ApprovalSurface.AGENT_CHAT_THREAD),
     ),
+    ApprovalKind.PROJECT_BOARD: ((0, ApprovalSurface.AGENT_CHAT_THREAD),),
 })
 
 
@@ -252,6 +255,7 @@ def required_surface(kind: ApprovalKind) -> ApprovalSurface:
             | ApprovalKind.RELEASE
             | ApprovalKind.OBSIDIAN_WRITE
             | ApprovalKind.TODO
+            | ApprovalKind.PROJECT_BOARD
         ):
             return surface_at_policy(kind, POLICY_VERSION)
         case unreachable:
