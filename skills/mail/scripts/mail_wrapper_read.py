@@ -15,6 +15,9 @@ from mailon_interface import (
     SYSTEM_ENV_KEEP,
 )
 
+#: How long a timed-out mailon gets after SIGTERM to record its run and close its browser.
+TERMINATE_GRACE_SECONDS = 30
+
 
 def _cfg() -> dict:
     home = Path(os.environ.get("HOME", "~")).expanduser()
@@ -88,15 +91,25 @@ def run_mailon(cfg: dict, argv: list[str]) -> tuple[int, str, str]:
     if argv[0] not in MAILON_INTERFACE["read_only_commands"]:
         raise ValueError(f"stage-1 wrapper is READ-ONLY; refusing: {argv[0]}")
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd, cwd=cfg["repo"], env=build_subprocess_env(cfg),
-            capture_output=True, text=True, timeout=cfg["timeout"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
     except FileNotFoundError:
         return -6, "", "mailon python missing"
+    try:
+        out, err = proc.communicate(timeout=cfg["timeout"])
     except subprocess.TimeoutExpired:
+        # SIGTERM first: mailon then records the run as failed and closes its browser.
+        # A bare SIGKILL left rows `running` and a browser alive for 15 h (2026-10-13).
+        proc.terminate()
+        try:
+            proc.communicate(timeout=TERMINATE_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
         return -7, "", "mailon subprocess timeout"
-    return proc.returncode, proc.stdout, proc.stderr
+    return proc.returncode, out, err
 
 
 def _db_rows(cfg: dict, where: str, params: tuple, limit: int | None) -> list[dict]:

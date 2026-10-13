@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import signal
 import sys
 import traceback
 from dataclasses import asdict
@@ -219,12 +220,23 @@ def _sync_folder(db: StateDB, scraper: InboxScraper, cfg, limit: int,
     return new_count
 
 
+class SyncTerminated(Exception):
+    """The caller asked the sync to stop (SIGTERM from the wrapper's timeout)."""
+
+
+def _raise_terminated(signum, _frame) -> None:
+    raise SyncTerminated(f"terminated by signal {signum} (caller timeout)")
+
+
 def cmd_sync(args) -> int:
     """Full sync: log in, save new mails from the requested folders as Markdown."""
     cfg = load_config()
     _setup_logging(cfg.logs_dir)
     db = StateDB(cfg.state_db_path)
     run_id = db.start_run()
+    # SIGTERM ends the sync through the failure path below, so the run is recorded and
+    # `finally` closes the browser (2026-10-13: killed syncs left both behind).
+    signal.signal(signal.SIGTERM, _raise_terminated)
 
     try:
         folders = _parse_folders(args.folders)
