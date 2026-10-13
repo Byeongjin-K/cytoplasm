@@ -202,3 +202,26 @@ def test_configured_backoff_stays_within_the_cron_window() -> None:
     delays = _load_watch_module()._RETRY_DELAYS_S
     assert delays and all(delay > 0 for delay in delays)
     assert sum(delays) < 600  # a daily job must not camp on the scheduler
+
+
+def test_marker_behind_the_cli_error_prefix_is_still_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """triage_cli prints every GateError as ``GATE-REFUSED <marker>`` (2026-10-13 08:11).
+
+    The anchored match missed the marker behind that prefix, so a retry-safe failure was
+    never retried and the owner saw ``stage=runner code=child_exit`` instead of the cause.
+    """
+    calls = _stub(monkeypatch, tmp_path, [(4, f"GATE-REFUSED {_RETRY_SAFE}"), (0, "")])
+    assert watch.main() == 0
+    assert len(calls) == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_prefixed_unsafe_marker_is_reported_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = _stub(monkeypatch, tmp_path, [(4, f"GATE-REFUSED {_RETRY_UNSAFE}")])
+    assert watch.main() == 1
+    assert len(calls) == 1
+    assert capsys.readouterr().out.strip() == _RETRY_UNSAFE
