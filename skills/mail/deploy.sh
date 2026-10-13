@@ -56,6 +56,7 @@ deploy_provenance_check "$repo_root" \
   "$repo_root/skills/mail/scripts/mail_attachment_drive_watch.py" \
   "$repo_root/skills/mail/scripts/watch_failure_streak.py" \
   "$repo_root/skills/mail/scripts/mail_triage_watch.py" \
+  "$repo_root/skills/mail/scripts/mail_sync_watch.py" \
   "$repo_root/skills/mail/scripts/mailon_runtime_release.sh" \
   "$repo_root/skills/mail/scripts/mailon_vendor_digest.sh" \
   "$repo_root/skills/mail/scripts/mailon_runtime_drift.sh" \
@@ -105,6 +106,11 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk 
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-daily-digest\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 8 * * *" --deliver discord --no-agent --script mail_digest_watch.py; else hermes cron create "0 8 * * *" --name mail-daily-digest --no-agent --script mail_digest_watch.py --deliver discord; fi'
 source "$repo_root/automation/deploy_cron.sh"
 converge_cron mail-attachment-drive-watch "every 30m" mail_attachment_drive_watch.py discord
+# Workday hourly collection (2026-10-13): the 08:00 digest sync was the only scheduled one,
+# so one failed morning left a day without stored mail and nobody was told.
+push_file "$repo_root/skills/mail/scripts/mail_sync_watch.py" '.hermes/scripts/mail_sync_watch.py'
+run_agent "chmod 700 \"\$HOME/.hermes/scripts/mail_sync_watch.py\""
+converge_cron mail-sync-watch "20 9-19 * * 1-5" mail_sync_watch.py discord
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'
 
 # Build + activate the vendored mailon runtime release on the node.

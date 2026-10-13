@@ -1,6 +1,7 @@
 agent|skills/mail/scripts/mail_digest_watch.py|.hermes/scripts/mail_digest_watch.py|required
 agent|skills/mail/scripts/mail_attachment_drive_watch.py|.hermes/scripts/mail_attachment_drive_watch.py|required
 agent|skills/mail/scripts/mail_triage_watch.py|.hermes/scripts/mail_triage_watch.py|required
+agent|skills/mail/scripts/mail_sync_watch.py|.hermes/scripts/mail_sync_watch.py|required
 # watch_failure_streak 는 여러 워처가 공유하는 헬퍼 사본 하나 — 소스는 mail 이 소유하고,
 # budget/deploy.sh 도 같은 파일을 같은 목적지로 올린다(어느 쪽을 먼저 돌려도 결과 동일).
 agent|skills/mail/scripts/watch_failure_streak.py|.hermes/scripts/watch_failure_streak.py|required
@@ -10,3 +11,4 @@ agent|skills/mail/vendor/mailon|.hermes/mailon-runtime/current|v2:derived;algori
 agent|skills/mail/scripts/mail_triage_watch.py|mail-triage-watch|v2:cron;schedule=*/2 * * * *;script=mail_triage_watch.py;deliver=discord;mode=no-agent
 agent|skills/mail/scripts/mail_digest_watch.py|mail-daily-digest|v2:cron;schedule=0 8 * * *;script=mail_digest_watch.py;deliver=discord;mode=no-agent
 agent|skills/mail/scripts/mail_attachment_drive_watch.py|mail-attachment-drive-watch|v2:cron;schedule=every 30m;script=mail_attachment_drive_watch.py;deliver=discord;mode=no-agent
+agent|skills/mail/scripts/mail_sync_watch.py|mail-sync-watch|v2:cron;schedule=20 9-19 * * 1-5;script=mail_sync_watch.py;deliver=discord;mode=no-agent
