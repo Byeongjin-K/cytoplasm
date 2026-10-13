@@ -1,5 +1,8 @@
 """Loopback-only dashboard server: the live view, original sources, and the TODO check.
 
+Original sources and attachments are served only for evidence an approved card cites, and only
+the attachment names that card recorded — never an arbitrary stored mail or file.
+
 Local only by owner decision: a non-loopback bind is refused, not configurable. Every
 request needs the token from the private state root (``?t=`` once, then an HttpOnly
 SameSite=Strict cookie). A progress POST additionally needs the token in a header or form
@@ -135,7 +138,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _source(self, kind: str, source_id: str) -> None:
-        text = self.read_source(kind, source_id)
+        text = self.read_source(kind, source_id) if self.store.approved_attachments(kind, source_id) is not None else None
         if text is None:
             self._text(404, "source not found")
             return
@@ -152,6 +155,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _attachment(self, kind: str, source_id: str, name: str) -> None:
         if "/" in name or "\\" in name or ".." in name or not name:
+            self._text(404, "attachment not found")
+            return
+        if name not in (self.store.approved_attachments(kind, source_id) or ()):
             self._text(404, "attachment not found")
             return
         path = self.attachment_path(kind, source_id, name)

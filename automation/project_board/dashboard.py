@@ -357,7 +357,12 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
         by_proposal[todo.proposal_id].append(todo)
     cards = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in snapshot.sources)
     body = cards or EMPTY_SECTION
-    return f'<section id="sources" data-tab="sources"><h2>근거</h2>{body}</section>'
+    hint = (
+        '<p class="note">원문 메일과 첨부는 이 사본에 없습니다 — 대시보드(테일넷 주소)의 근거 탭에서 열립니다.</p>'
+        if mode == "file" and snapshot.sources
+        else ""
+    )
+    return f'<section id="sources" data-tab="sources"><h2>근거</h2>{hint}{body}</section>'
 
 
 def _events(snapshot: BoardSnapshot) -> str:

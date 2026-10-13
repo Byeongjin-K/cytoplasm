@@ -264,6 +264,16 @@ class BoardStore:
             updated = db.execute("SELECT * FROM todos WHERE todo_id = ?", (todo_id,)).fetchone()
         return _todo(updated)
 
+    def approved_attachments(self, kind: str, source_id: str) -> tuple[str, ...] | None:
+        """Attachment names of an approved source, or ``None`` when no approved card cites it."""
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT attachments FROM sources WHERE source_kind = ? AND source_id = ?", (kind, source_id)
+            ).fetchall()
+        if not rows:
+            return None
+        return tuple(dict.fromkeys(name for row in rows for name in json.loads(str(row["attachments"]))))
+
     def todo(self, todo_id: str) -> TodoRow | None:
         with self._connect() as db:
             row = db.execute("SELECT * FROM todos WHERE todo_id = ?", (todo_id,)).fetchone()
