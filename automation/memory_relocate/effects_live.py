@@ -32,6 +32,8 @@ from .choice_delete import NativeDelete
 from .choice_snapshot import SnapshotStore
 from .choice_verify import Verifier
 from .choices import Choice, RENDER_VERSION as CHOICES_VERSION, ROW_REACTIONS
+from .line_choices import REACTIONS as LINE_REACTIONS, RENDER_VERSION as LINE_VERSION
+from .line_migration import Migration
 from .model import RelocationRecord, record_key
 from .move_effects import MoveContext, build_move_effects
 from .render import prepare_approval_card, prepare_batch_card
@@ -98,6 +100,9 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
 
     def post(record: RelocationRecord) -> tuple[str, str] | None:
         try:
+            if record.render_version == LINE_VERSION:
+                record = next(r for r in store.all_pending()
+                              if record_key(r.source_kind, r.entry_sha256) == record_key(record.source_kind, record.entry_sha256))
             text = recover_entry_text(memory_dir, record)
             if text is None:
                 return None
@@ -138,6 +143,16 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
                 approval_guild_id=binding.guild_id or record.approval_guild_id,
             )
             store.update(bound)
+            if record.render_version == LINE_VERSION:
+                # The first line lends the existing request thread to its siblings.
+                # Lifecycle keys remain per-line; no parallel posting path is introduced.
+                for sibling in store.all_pending():
+                    if (sibling.render_version == LINE_VERSION and sibling.status == "proposed"
+                            and sibling.approval_thread_id is None):
+                        store.update(replace(
+                            sibling, approval_thread_id=binding.channel_id,
+                            approval_guild_id=binding.guild_id,
+                        ))
             if members:
                 members = tuple(
                     (replace(member, approval_thread_id=binding.channel_id,
@@ -170,6 +185,13 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
     dropped: dict[str, frozenset[int]] = {}
 
     def probe(record: RelocationRecord) -> str:
+        if record.render_version == LINE_VERSION:
+            try:
+                for emoji in LINE_REACTIONS:
+                    transport.add_reaction(record.channel_id, record.message_id or "", emoji)
+                return choices().probe(record)
+            except _EFFECT_ERRORS:
+                return "pending"
         if record.render_version == CHOICES_VERSION:
             count = sum(member.batch_hash == record.batch_hash for member in store.all_pending())
             for emoji in (*(emoji for row in ROW_REACTIONS[:count] for emoji in row), "✅", "⛔"):
@@ -223,7 +245,7 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
 
     def batch_members(record: RelocationRecord) -> tuple[tuple[RelocationRecord, str], ...] | None:
         """Every pending member of the record's batch with its current text, or None if one drifted."""
-        if record.batch_hash is None:
+        if record.batch_hash is None or record.render_version == LINE_VERSION:
             return ()
         members: list[tuple[RelocationRecord, str]] = []
         for member in sorted(store.all_pending(), key=lambda pending: (pending.batch_index or 0, record_key(pending.source_kind, pending.entry_sha256))):
@@ -241,12 +263,12 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
         recover_entry_text,
     )
     def write(record: RelocationRecord) -> tuple[str, str] | None:
-        if record.render_version == CHOICES_VERSION and not choices().permits_move(record):
+        if record.render_version in (CHOICES_VERSION, LINE_VERSION) and not choices().permits_move(record):
             return None
         return moves.write(record)
 
     def apply(record: RelocationRecord) -> ApplyOutcome:
-        if record.render_version == CHOICES_VERSION:
+        if record.render_version in (CHOICES_VERSION, LINE_VERSION):
             match record.choice:
                 case Choice.DELETE:
                     return choices().delete(record)
@@ -260,4 +282,5 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
                 return ApplyOutcome(False, "not_approved", None, 0)
         return moves.apply(record)
 
-    return ResolveEffects(post, probe, write, moves.verify, apply, now)
+    migration = Migration(state_path, memory_dir, transport, directory, recover_entry_text)
+    return ResolveEffects(post, probe, write, moves.verify, apply, now, migration.run, migration.notify_reposted)

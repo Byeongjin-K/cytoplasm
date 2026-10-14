@@ -24,6 +24,8 @@ def render_relocation_approval(
             content = _render_v2(record, entry_text)
         case "mc-reloc-render-v3":
             content = _render_v3(record, entry_text)
+        case "mc-reloc-line-render-v1":
+            content = _render_line_v1(record, entry_text)
         case _:
             raise RenderError(f"unsupported relocation render version: {render_version}")
     if len(content) > MAX_MESSAGE_CHARS:
@@ -62,6 +64,25 @@ def prepare_batch_card(members: Sequence[tuple[RelocationRecord, str]]) -> tuple
     if len(content) > MAX_MESSAGE_CHARS:
         raise RenderError("memory relocation batch approval exceeds the postable length")
     return version, content
+
+
+def _render_line_v1(record: RelocationRecord, entry_text: str) -> str:
+    from automation.interop import owner_message as om
+
+    here = om.Ref(scope="self")
+    message = om.OwnerMessage(
+        subject_key=record.batch_hash or "",
+        subject="메모리 정리",
+        fact=f"{entry_text}\n→ {record.note_relpath}",
+        location=here, owner=om.Action("react", here, "➡️ 이동 · 📌 유지 · 🗑️ 삭제"),
+        agent_next="선택한 줄만 처리. 이동은 저장 확인 뒤, 삭제는 양 계정 백업 뒤 실행",
+        recovery="not_applicable", detail=om.Approval(None, "원본 유지"),
+        render_version="owner-ko-v4",
+    )
+    try:
+        return om.render(message, destination=here)
+    except om.OwnerMessageError as error:
+        raise RenderError("owner envelope cannot render") from error
 
 
 def _render_batch_v1(members: Sequence[tuple[RelocationRecord, str]]) -> str:

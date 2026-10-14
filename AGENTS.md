@@ -482,7 +482,7 @@ python3 -m automation.rag_ingest      # 개인 RAG 인제스트
 - 값은 `automation/hermes_memory_config.LIMITS` 한 곳이고 큐레이터 `CAPS` 가 그것을 읽는다. 바꾸려면 그 상수를 고쳐 릴리스한다 — 선언 `v2:config` 가 계정 설정을 관측하고 `converge_config` 가 맞추며 agent+peer 를 함께 재시동한다.
 - 상한을 내리기 전에 파일을 먼저 줄인다 — 업스트림 NousResearch/hermes-agent#133028(열림): 파일이 상한보다 크면 정리·삭제 쓰기까지 거부된다. 모듈이 그런 내리기를 rc 7 로 막는다.
 - 상한은 프롬프트 예산이다(매 턴 늘어난 만큼 싣는다). 공간이 다시 차면 상한을 더 올리기 전에 사람 정보·처리 규칙이 USER.md 에 들어와 있는지(②) 먼저 본다. [소개](docs/기능소개/메모리-상한-올리기.md)
-- ② USER.md 는 사용자 본인만 담는다: `PERSON_REFERENCE`는 Obsidian 사람 노트로, USER.md의 `AGENT_RULE`은 MEMORY.md로 옮긴다. 새 배치 카드는 **줄별 이동(기본)·유지·삭제와 최종 승인 한 번**이며 모든 리액션을 봇이 미리 단다(최대 5줄·17개). 삭제는 agent·peer의 두 네이티브 파일에서 정확히 같은 글만 백업 후 지운다. agent가 카드·해시·소유자 리액션을 검증해 전체 선택을 한 번 동결하고 peer는 그 결정으로 자기 메모리를 처리한다(10/14 Q149, peer 독립 확인 없음). agent의 삭제는 선택 벡터가 같은 peer 완료 영수증을 기다린다. 기존 v1 카드의 계약은 불변이다. 일반 취소·유지는 다시 묻지 않고, 명시적 `owner-withdrew-approval` 철회만 다시 제안한다. 낱말 거부는 두 분류 갈래에만 길을 비키며, agent `SOUL.md`의 「사람 이름·과거 사실은 recall로 찾아라.」 한 줄 보장은 그대로다(`v2:config;algorithm=hermes-soul-recall-v1`). [소개](docs/기능소개/메모리-사람-규칙-정리.md)
+- ② USER.md 는 사용자 본인만 담는다: `PERSON_REFERENCE`는 Obsidian 사람 노트로, USER.md의 `AGENT_RULE`은 MEMORY.md로 옮긴다. **2026-10-15 소유자 지시로 새 제안은 한 줄당 메시지 하나**다. 봇이 ➡️ 이동·📌 유지·🗑️ 삭제 세 리액션을 미리 달며 소유자 반응 하나로 해당 줄만 동결한다(추가 최종 승인 없음, 무반응=보류·복수=유지). 메시지 ID·원문 해시·기존 요청 키를 검증한다. 소유자 반응 없는 미결 배치만 옛 메시지를 보존한 채 감사 보관하고 같은 스레드에 개별 재게시한다. 반응한 배치는 예전 계약 그대로다. 삭제는 agent·peer 양쪽 두 네이티브 파일에서 정확히 같은 글만 백업 후 지우고 agent는 동일 선택의 peer 영수증을 기다린다. Q149의 agent-only 검증·token-less peer는 유지한다. SOUL 자동 회상 줄과 분류 규칙은 불변이다. [소개](docs/기능소개/메모리-사람-규칙-정리.md)
 
 ## 후속 과제 기록 규칙 (cha 지시, 2026-07-26)
 

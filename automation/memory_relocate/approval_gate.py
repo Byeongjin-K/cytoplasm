@@ -10,6 +10,7 @@ from urllib.error import HTTPError
 from .approval_api import DiscordTransportLike, RelocationStoreLike, lifecycle
 from .choices import RENDER_VERSION as CHOICES_VERSION, ROW_REACTIONS
 from .model import RelocationRecord, record_key
+from .line_choices import REACTIONS as LINE_REACTIONS, RENDER_VERSION as LINE_VERSION, read_choice
 from .render import prepare_approval_card, prepare_batch_card
 
 if TYPE_CHECKING:
@@ -92,6 +93,16 @@ class RelocateApprovalGate:
         if request.action_hash not in content:
             return state.BINDING_MISMATCH
         try:
+            if self.record.render_version == LINE_VERSION:
+                if content != prepare_approval_card(self.record, self.entry_text)[1]:
+                    return state.BINDING_MISMATCH
+                for emoji in LINE_REACTIONS:
+                    self.transport.add_reaction(request.channel_id, request.message_id, emoji)
+                choice = read_choice(
+                    lambda emoji: self.transport.get_reaction_users(request.channel_id, request.message_id, emoji),
+                    self.transport.owner_id,
+                )
+                return state.BOUND_PENDING if choice is None else state.APPROVED
             for emoji in self._choice_reactions():
                 self.transport.add_reaction(request.channel_id, request.message_id, emoji)
             self.transport.add_reaction(
@@ -172,11 +183,12 @@ class RelocateApprovalGate:
                 self.journal.clear(intent.key)
         except _TRANSPORT_ERRORS as error:
             raise lifecycle().ApprovalSurfaceError(str(error)) from error
-        for emoji in (*self._choice_reactions(), APPROVE_EMOJI, CANCEL_EMOJI):
+        reactions = LINE_REACTIONS if version == LINE_VERSION else (*self._choice_reactions(), APPROVE_EMOJI, CANCEL_EMOJI)
+        for emoji in reactions:
             try:
                 self.transport.add_reaction(intent.channel_id, message_id, emoji)
             except _TRANSPORT_ERRORS:
-                if version == CHOICES_VERSION:
+                if version in (CHOICES_VERSION, LINE_VERSION):
                     break  # Retry seeds on the stored card, without enabling final approval early.
                 continue
         return lifecycle().PostedApproval(message_id, intent.channel_id)

@@ -10,6 +10,7 @@ from typing import Literal, Protocol, assert_never
 from .choice_files import atomic_text
 from .choice_request import ChoiceRequest, encode_request, parse_request
 from .choices import Choice, ChoiceError
+from .line_choices import RENDER_VERSION as LINE_VERSION
 from . import choice_json
 
 Decision = Literal["approved", "cancelled", "pending"]
@@ -102,6 +103,15 @@ class SnapshotStore:
                     return existing  # Never re-read rows, even after a restart.
                 case _:
                     assert_never(existing.phase)
+        if request.record.render_version == LINE_VERSION:
+            # One line is one snapshot. Nothing is written for an absent/removed reaction,
+            # and a failed read can retry without leaving a partial batch collecting marker.
+            choices = verifier.choices(request)
+            if not choices:
+                return None
+            frozen = Snapshot(request, "approved", choices, self.now.isoformat())
+            self.save(frozen)
+            return frozen
         decision = verifier.decision(request)
         moment = self.now.isoformat()
         match decision:
