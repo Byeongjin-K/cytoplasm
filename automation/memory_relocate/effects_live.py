@@ -29,6 +29,7 @@ from .apply import ApplyOutcome
 from .choice_accounts import accounts
 from .choice_agent import AgentChoices
 from .choice_delete import NativeDelete
+from .choice_snapshot import SnapshotStore
 from .choice_verify import Verifier
 from .choices import Choice, RENDER_VERSION as CHOICES_VERSION, ROW_REACTIONS
 from .model import RelocationRecord, record_key
@@ -78,6 +79,7 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
             choice_agent = AgentChoices(
                 store, NativeDelete(memory_dir, state_path.parent / "choice-deletes", now),
                 accounts(), Verifier(transport, directory),
+                SnapshotStore(state_path.parent / "choice-decisions", now),
             )
         return choice_agent
 

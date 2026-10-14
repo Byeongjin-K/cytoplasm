@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -13,15 +13,18 @@ from automation.memory_curator.deletion import DeletionOutcome
 from automation.memory_curator.model import MemoryKind
 from automation.interop.approval_directory import DiscordChannelDirectory
 from automation.memory_relocate.choice_accounts import Accounts
+from automation.memory_relocate.choice_agent import AgentChoices
 from automation.memory_relocate.choice_delete import NativeDelete
 from automation.memory_relocate.choice_files import Mailbox
 from automation.memory_relocate.choice_peer import PeerExecutor
+from automation.memory_relocate.choice_relay import AgentDecision
 from automation.memory_relocate.choice_request import ChoiceRequest, encode_request, parse_request
-from automation.memory_relocate.choice_snapshot import SnapshotStore
+from automation.memory_relocate.choice_snapshot import SnapshotStore, encode_snapshot
 from automation.memory_relocate.choice_verify import Verifier
-from automation.memory_relocate.choices import ChoiceError, ROW_REACTIONS
+from automation.memory_relocate.choices import Choice, ChoiceError, ROW_REACTIONS
 from automation.memory_relocate.cron import memory_relocate_watch as watch
 from automation.memory_relocate.model import RelocationState, record_key
+from automation.memory_relocate.relocation_store import RelocationStore
 from automation.memory_relocate.store import save_state
 from automation.obsidian_write.config import ObsidianWriteConfig
 from memory_choice_fakes import CHANNEL, NOW, OWNER, MessageSink, Reactions, members
@@ -31,7 +34,8 @@ from memory_choice_fakes import CHANNEL, NOW, OWNER, MessageSink, Reactions, mem
 class Execution:
     request: ChoiceRequest
     transport: Reactions
-    verifier: Verifier
+    agent: AgentChoices
+    reader: AgentDecision
     peer: PeerExecutor
     agent_memory: Path
     peer_memory: Path
@@ -74,17 +78,19 @@ def execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Execution:
     verifier = Verifier(transport, DiscordChannelDirectory("test", OWNER, transport.api))
     peer = PeerExecutor(SnapshotStore(tmp_path / "peer-decisions", NOW),
                         NativeDelete(memories[1], tmp_path / "peer-deletes", NOW), participants.peer)
-    return Execution(request, transport, verifier, peer, *memories, notices)
+    agent = AgentChoices(RelocationStore(watch.STATE_PATH),
+                         NativeDelete(memories[0], tmp_path / "agent-deletes", NOW),
+                         participants, verifier, SnapshotStore(watch.STATE_PATH.parent / "choice-decisions", NOW))
+    return Execution(request, transport, agent, AgentDecision(participants.agent), peer, *memories, notices)
 
 
-def test_cron_when_peer_freezes_choices_moves_keeps_and_deletes_exact_entries(execution: Execution) -> None:
-    # Given: the agent queued a card but may not execute its own apparent approval.
-    pending = watch.run_once(NOW)
-    assert {r.status for r in pending.state.relocations.values()} == {"posted"}
-    execution.peer.run(execution.request, execution.verifier)
+def test_cron_when_agent_freezes_choices_moves_keeps_and_deletes_exact_entries(execution: Execution) -> None:
+    # Given: the agent freezes owner reactions and publishes its bound decision.
+    decided = watch.run_once(NOW)
+    assert {r.status for r in decided.state.relocations.values()} == {"approved", "abandoned"}
+    execution.peer.run(execution.request, execution.reader)
 
-    # When: real cron ticks consume the peer receipt and execute through the native adapters.
-    watch.run_once(NOW)
+    # When: real cron ticks execute the frozen choices with the peer completion receipt.
     watch.run_once(NOW)
     completed = watch.run_once(NOW)
 
@@ -104,13 +110,13 @@ def test_cron_when_peer_freezes_choices_moves_keeps_and_deletes_exact_entries(ex
     assert [channel for channel, _ in execution.notices] == [CHANNEL]
 
 
-def test_peer_when_card_is_missing_does_not_delete_even_with_agent_request(execution: Execution) -> None:
-    # Given: a valid manifest and claimed approval, but peer's own GET cannot find the card.
-    execution.transport.content = None
+def test_peer_when_agent_decision_is_missing_does_not_delete(execution: Execution) -> None:
+    # Given: a valid manifest and owner reactions but no published agent decision.
     before = (execution.peer_memory / "USER.md").read_bytes()
-    # When / Then: independent verification fails before native writes.
-    with pytest.raises(OSError):
-        execution.peer.run(execution.request, execution.verifier)
+    # When: peer reads only its agent decision relay.
+    result = execution.peer.run(execution.request, execution.reader)
+    # Then: a request alone cannot grant authority.
+    assert result is None
     assert (execution.peer_memory / "USER.md").read_bytes() == before
     assert not tuple(execution.peer_memory.glob("*.deleted-*"))
 
@@ -118,8 +124,7 @@ def test_peer_when_card_is_missing_does_not_delete_even_with_agent_request(execu
 def test_agent_when_owner_cancels_after_peer_freeze_stops_unfinished_effects(execution: Execution) -> None:
     # Given: peer finished, and the agent has durably recorded the original choices.
     watch.run_once(NOW)
-    execution.peer.run(execution.request, execution.verifier)
-    watch.run_once(NOW)
+    execution.peer.run(execution.request, execution.reader)
     before = (execution.agent_memory / "USER.md").read_bytes()
     execution.transport.users["⛔"] = ((OWNER, False),)
     # When: the next cron would normally execute MOVE and DELETE.
@@ -132,11 +137,12 @@ def test_agent_when_owner_cancels_after_peer_freeze_stops_unfinished_effects(exe
 
 def test_peer_when_entry_is_readded_after_receipt_never_replays_deletion(execution: Execution) -> None:
     # Given: a completed peer deletion and subsequently re-added identical text.
-    execution.peer.run(execution.request, execution.verifier)
+    watch.run_once(NOW)
+    execution.peer.run(execution.request, execution.reader)
     restored = execution.request.members[0][1]
     (execution.peer_memory / "USER.md").write_text(restored, encoding="utf-8")
     # When: a duplicate request is processed.
-    execution.peer.run(execution.request, execution.verifier)
+    execution.peer.run(execution.request, execution.reader)
     # Then: the old authorization cannot delete the new incarnation.
     assert (execution.peer_memory / "USER.md").read_text() == restored
 
@@ -147,6 +153,7 @@ def test_peer_when_crash_follows_deletion_refuses_destructive_retry(
     # Given: the real delete succeeds but the caller crashes before recording completion.
     from automation.memory_relocate import choice_delete
 
+    watch.run_once(NOW)
     original = choice_delete.delete_entry
 
     def crash_after(
@@ -157,11 +164,26 @@ def test_peer_when_crash_follows_deletion_refuses_destructive_retry(
 
     monkeypatch.setattr(choice_delete, "delete_entry", crash_after)
     with pytest.raises(OSError):
-        execution.peer.run(execution.request, execution.verifier)
+        execution.peer.run(execution.request, execution.reader)
     restored = execution.request.members[0][1]
     (execution.peer_memory / "USER.md").write_text(restored, encoding="utf-8")
     monkeypatch.setattr(choice_delete, "delete_entry", original)
     # When / Then: a surviving write-ahead intent prevents deleting re-added text.
     with pytest.raises(ChoiceError, match="delete-interrupted"):
-        execution.peer.run(execution.request, execution.verifier)
+        execution.peer.run(execution.request, execution.reader)
     assert (execution.peer_memory / "USER.md").read_text() == restored
+
+
+def test_agent_when_peer_receipt_choices_differ_refuses_delete(execution: Execution) -> None:
+    # Given: the owner chose DELETE on row 1, but peer reports a different choice vector.
+    watch.run_once(NOW)
+    frozen = execution.agent.snapshots.load(execution.request)
+    assert frozen is not None
+    forged = replace(frozen, choices=(Choice.KEEP, Choice.DELETE, Choice.MOVE),
+                     peer_done=(execution.request.members[1][0].entry_sha256,))
+    execution.peer.outbox.publish(f"{execution.request.key}.json", encode_snapshot(forged))
+    before = (execution.agent_memory / "USER.md").read_bytes()
+    # When / Then: peer completion cannot substitute its own selection authority.
+    with pytest.raises(ChoiceError, match="peer_receipt_binding"):
+        execution.agent.delete(execution.request.record)
+    assert (execution.agent_memory / "USER.md").read_bytes() == before
