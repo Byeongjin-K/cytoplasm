@@ -256,6 +256,8 @@ def draft_sha256(record: dict) -> str:
         bound["quote"] = record["quote"]
     if "forward" in record:  # a forward's source marker (mail_forward)
         bound["forward"] = record["forward"]
+    if "drive_share" in record:  # file sha256, Drive folder, people, role (mail_drive_share)
+        bound["drive_share"] = record["drive_share"]
     # Keep legacy/no-attachment draft hashes byte-for-byte compatible while
     # binding every new attachment draft to its full manifest.
     if "attachments" in record:

@@ -107,6 +107,7 @@ def create_draft(
     origin_channel_id: str = "", origin_message_id: str = "",
     quote: str = "",
     forward: dict | None = None,
+    drive_share: dict | None = None,
 ) -> dict:
     """Persist a pending draft; ``quote`` (the answered or forwarded mail) is sent below ``body``."""
     directory = _public_drafts_dir()
@@ -151,6 +152,8 @@ def create_draft(
         record["quote"] = quote
     if forward:  # mail_forward.ForwardSource.record(); absent on every non-forward draft
         record["forward"] = forward
+    if drive_share:  # mail_drive_share.prepare(); absent on every draft without a Drive link
+        record["drive_share"] = drive_share
     record["sha256"] = triage_core.draft_sha256(record)
     write_json(directory / f"{draft_id}.json", record)
     return record
@@ -296,6 +299,14 @@ def execute_draft(draft: dict, approval: Approval) -> None:
     """Re-verify the frozen draft hash, then route to the account's send backend."""
     if triage_core.draft_sha256(draft) != draft["sha256"]:
         raise GateError("드래프트 내용 해시 불일치 — 실행 중단", 1)
+    # ``send_argv`` sits outside the hash, so only the share step below may supply it.
+    draft = {key: value for key, value in draft.items() if key != "send_argv"}
+    if "drive_share" in draft:
+        if draft.get("provider") == "gmail":
+            raise GateError("Drive 공유 메일은 기관메일 발송만 지원합니다", 2)
+        import mail_drive_share
+
+        draft = mail_drive_share.run(draft, approval)
     if draft.get("provider") == "gmail":
         import triage_gate_gmail
 
