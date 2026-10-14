@@ -130,6 +130,10 @@ def identity(values: Mapping[str, int | None]) -> str:
     return ",".join(f"{key}={'-' if values.get(key) is None else values[key]}" for key in LIMITS)
 
 
+def wanted_identity() -> str:
+    return identity(LIMITS)
+
+
 def digest(values: Mapping[str, int | None]) -> str:
     return hashlib.sha256(identity(values).encode()).hexdigest()[:16]
 

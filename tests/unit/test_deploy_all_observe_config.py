@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
-from automation import deploy_all_kinds, deploy_all_observe, hermes_memory_config
+from automation import deploy_all_kinds, deploy_all_observe, hermes_memory_config, hermes_soul_recall
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 _ROWS: Final = (
@@ -19,6 +19,7 @@ _ROWS: Final = (
     "v2:config;algorithm=hermes-memory-limits-v1;activation=gateway\n"
     "peer|automation/hermes_memory_config.py|.hermes/config.yaml|"
     "v2:config;algorithm=hermes-memory-limits-v1;activation=gateway\n"
+    "agent|automation/hermes_soul_recall.py|.hermes/SOUL.md|v2:config;algorithm=hermes-soul-recall-v1\n"
 )
 
 
@@ -26,7 +27,7 @@ def _runtime(tmp_path: Path) -> Path:
     root = tmp_path / "runtime"
     package = root / "automation"
     package.mkdir(parents=True)
-    for name in ("__init__.py", "hermes_memory_config.py"):
+    for name in ("__init__.py", "hermes_memory_config.py", "hermes_soul_recall.py"):
         _ = shutil.copy(_REPO / "automation" / name, package / name)
     (package / "pkg").mkdir()
     _ = (package / "pkg" / "deploy-manifest.txt").write_text(_ROWS, encoding="utf-8")
@@ -56,7 +57,14 @@ def _config(homes: Path, account: str, text: str) -> None:
 def _artifacts(root: Path, homes: Path) -> dict[str, deploy_all_kinds.ArtifactState]:
     lines = deploy_all_observe.collect(root, _runner(homes), "", gateway_only=False)
     parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] != "gateway"])
-    return {state.account: state for state in parsed.artifacts}
+    return {state.account: state for state in parsed.artifacts if state.destination == ".hermes/config.yaml"}
+
+
+def _soul(root: Path, homes: Path) -> deploy_all_kinds.ArtifactState:
+    lines = deploy_all_observe.collect(root, _runner(homes), "", gateway_only=False)
+    parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] != "gateway"])
+    (state,) = (s for s in parsed.artifacts if s.destination == ".hermes/SOUL.md")
+    return state
 
 
 def test_default_caps_are_stale_and_released_caps_are_ok(tmp_path: Path) -> None:
@@ -86,3 +94,14 @@ def test_unreadable_config_is_unknown_not_absent(tmp_path: Path) -> None:
     assert seen["agent"].status == "unknown"
     assert seen["agent"].details == (("unreadable-config", "-"),)
     assert seen["peer"].status == "unknown"
+
+
+def test_soul_recall_line_is_stale_until_present(tmp_path: Path) -> None:
+    root, homes = _runtime(tmp_path), tmp_path / "homes"
+    _config(homes, "agent", "model:\n  provider: x\n")
+    soul = homes / "agent" / ".hermes" / "SOUL.md"
+    _ = soul.write_text("You are an assistant.\n", encoding="utf-8")
+    state = _soul(root, homes)
+    assert (state.status, state.activation, state.details) == ("stale", "none", (("different-line", "-"),))
+    _ = soul.write_text(hermes_soul_recall.with_line("You are an assistant.\n"), encoding="utf-8")
+    assert _soul(root, homes).status == "ok"
