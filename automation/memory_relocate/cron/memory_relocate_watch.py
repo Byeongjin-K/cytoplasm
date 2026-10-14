@@ -120,7 +120,13 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
             client=CodexLlmClient.from_environment(os.environ),
             path=STATE_PATH.parent / "classify-cache.json",
         )
-        known = frozenset(record.entry_sha256 for record in state.relocations.values())
+        known = frozenset(
+            record.entry_sha256 for record in state.relocations.values()
+            if not (
+                record.status == "abandoned"
+                and record.last_block_reason == "owner-withdrew-approval"
+            )
+        )
         batch = select_batch(verdicts, files, known)
         if batch:
             members = [
@@ -178,13 +184,14 @@ def _merge_effect_bindings(
             continue
         if initial.action_hash != current.action_hash or resolved.action_hash != current.action_hash:
             continue
-        initial_binding = initial.message_id, initial.channel_id
-        current_binding = current.message_id, current.channel_id
+        initial_binding = initial.message_id, initial.channel_id, initial.approval_thread_id
+        current_binding = current.message_id, current.channel_id, current.approval_thread_id
         if current_binding != initial_binding or current.approval_guild_id != initial.approval_guild_id:
             relocations[key] = replace(
                 resolved,
                 message_id=current.message_id,
                 channel_id=current.channel_id,
+                approval_thread_id=current.approval_thread_id,
                 approval_guild_id=current.approval_guild_id,
             )
         if current.render_version != initial.render_version:
