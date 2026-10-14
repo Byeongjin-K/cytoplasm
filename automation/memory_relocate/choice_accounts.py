@@ -1,4 +1,12 @@
-"""Root-owned topology for the two unprivileged memory executors."""
+"""Mailbox topology for the two unprivileged memory executors, provisioned without root.
+
+The owner asked that an approved release needs no node work (2026-10-14 22:29), so the
+release provisions this itself with the accounts it already runs as. The parent is the ops
+hand-off directory that already serves the repair report queue (ops-owned, service group,
+setgid, group read-only, opened by fixed file names only). Inside it, ops keeps one
+shared directory that is group-writable but sticky: each executor creates only its own
+mailbox there and cannot rename or remove the other's. Every check stays fail-closed.
+"""
 from __future__ import annotations
 
 import grp
@@ -15,7 +23,9 @@ from automation.node_config import SYSTEM_NODE_CONFIG_PATH, load_node_config
 from .choice_files import Mailbox
 from .choices import ChoiceError
 
-MAILBOX_ROOT: Final = Path("/var/lib/autophagy/memory-choices")
+HANDOFF_ROOT: Final = Path("/srv/autophagy-repair-report-queue")
+MAILBOX_ROOT: Final = HANDOFF_ROOT / "memory-choices"
+_SHARED_MODE: Final = 0o3770  # setgid keeps the service group; sticky stops cross-account rename
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +40,46 @@ def _root_owned(path: Path) -> None:
         raise ChoiceError("root_owned_path_required")
 
 
+def _handoff_owned(path: Path, owner: int, group: int, mode: int | None = None) -> None:
+    """The ops hand-off parents: right owner and group, and nobody else may rewrite them."""
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or (
+        info.st_uid, info.st_gid,
+    ) != (owner, group):
+        raise ChoiceError("handoff_owner_required")
+    bits = stat.S_IMODE(info.st_mode)
+    if (mode is None and bits & 0o022) or (mode is not None and bits != mode):
+        raise ChoiceError("handoff_permissions")
+
+
+def check_topology(handoff: Path, shared: Path, ops: int, group: int) -> None:
+    _root_owned(handoff.parent)
+    _handoff_owned(handoff, ops, group)
+    _handoff_owned(shared, ops, group, _SHARED_MODE)
+
+
+def provision_shared(shared: Path, group: int) -> None:
+    """Run as ops: create the sticky, group-writable directory once; never repair it."""
+    try:
+        shared.mkdir(mode=0o770)
+    except FileExistsError:
+        return
+    os.chown(shared, -1, group)
+    shared.chmod(_SHARED_MODE)
+
+
+def provision_mailbox(mailbox: Mailbox) -> None:
+    """Run as the mailbox's own account: create it once, then require the exact shape."""
+    try:
+        mailbox.path.mkdir(mode=0o750)
+    except FileExistsError:
+        pass
+    else:
+        os.chown(mailbox.path, -1, mailbox.gid)
+        mailbox.path.chmod(0o750)
+    mailbox.check()
+
+
 def accounts(*, provision: bool = False) -> Accounts:
     """No home-config fallback may choose whose receipt or memory is trusted."""
     _root_owned(SYSTEM_NODE_CONFIG_PATH.parent)
@@ -37,6 +87,7 @@ def accounts(*, provision: bool = False) -> Accounts:
     config = load_node_config(SYSTEM_NODE_CONFIG_PATH)
     agent = pwd.getpwnam(config.agent_account)
     peer = pwd.getpwnam(config.peer_account)
+    ops = pwd.getpwnam(config.ops_account).pw_uid
     group = grp.getgrnam(config.service_group).gr_gid
     if agent.pw_uid == peer.pw_uid or 0 in (agent.pw_uid, peer.pw_uid):
         raise ChoiceError("distinct_service_accounts_required")
@@ -46,21 +97,19 @@ def accounts(*, provision: bool = False) -> Accounts:
     result = Accounts(Mailbox(MAILBOX_ROOT / "agent", agent.pw_uid, group),
                       Mailbox(MAILBOX_ROOT / "peer", peer.pw_uid, group))
     if provision:
-        if os.geteuid() != 0:
-            raise ChoiceError("provision_requires_root")
-        for directory in (MAILBOX_ROOT.parent, MAILBOX_ROOT):
-            directory.mkdir(mode=0o755, exist_ok=True)
-            _root_owned(directory)
-        for mailbox in (result.agent, result.peer):
-            try:
-                mailbox.path.mkdir(mode=0o750)
-            except FileExistsError:
-                mailbox.check()
-            else:
-                os.chown(mailbox.path, mailbox.uid, mailbox.gid)
-                mailbox.path.chmod(0o750)
-    _root_owned(MAILBOX_ROOT.parent)
-    _root_owned(MAILBOX_ROOT)
+        uid = os.geteuid()
+        if uid == ops:
+            _handoff_owned(HANDOFF_ROOT, ops, group)
+            provision_shared(MAILBOX_ROOT, group)
+            check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
+            return result
+        check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
+        own = {result.agent.uid: result.agent, result.peer.uid: result.peer}.get(uid)
+        if own is None:
+            raise ChoiceError("provision_account")
+        provision_mailbox(own)
+        return result
+    check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
     result.agent.check()
     result.peer.check()
     return result

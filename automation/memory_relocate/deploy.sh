@@ -55,8 +55,27 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memo
 source "$repo_root/automation/deploy_config.sh"
 converge_config agent .hermes/SOUL.md hermes-soul-recall-v1
 
-# Independent peer executor. Mailbox provisioning is an explicit root prerequisite;
-# this deployer never changes account/home permissions or grants cross-account writes.
+# Owner (2026-10-14 22:29): an approved release must need no node work. The choice mailboxes
+# are therefore provisioned here, without root, by the accounts the release already runs as:
+# ops creates the sticky shared directory in its existing hand-off directory, then each
+# executor creates only its own mailbox. Re-runs only re-check; nothing is repaired or widened.
+# -E -s (not -I): the module must import from the root-owned release tree it is started in.
+release_root=/srv/autophagy-agent-current
+module="cd $release_root && python3 -E -s -m automation.memory_relocate"
+provision="$module.choice_accounts --provision"
+run_account ops "$provision"
+run_account "$NODE_AGENT_ACCOUNT" "$provision"
+run_account "$NODE_PEER_ACCOUNT" "$provision"
+
+# The peer verifier reads only agent_chat_channel_id, from its own 0600 file (kept out of the
+# peer's general interop config so its gateway does not start answering in that channel).
+channel="$(run_agent "$module.peer_approval_config --print-channel")"
+case "$channel" in
+  ''|*[!0-9]*) echo "DEPLOY-BLOCK: agent_chat_channel_id is missing or malformed" >&2; exit 5 ;;
+esac
+run_account "$NODE_PEER_ACCOUNT" "$module.peer_approval_config --channel $channel"
+
+# Independent peer executor.
 for account in "$NODE_PEER_ACCOUNT"; do
   push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_peer_watch.py" '.hermes/scripts/memory_relocate_peer_watch.py'
   converge_cron memory-relocate-peer-watch "every 2m" memory_relocate_peer_watch.py local

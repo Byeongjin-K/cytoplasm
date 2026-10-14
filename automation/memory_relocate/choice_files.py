@@ -22,7 +22,7 @@ class Mailbox:
     gid: int
 
     def prepare(self) -> None:
-        """Root provisions the parent and participants; runtime never repairs permissions."""
+        """The release provisions the mailboxes (choice_accounts); runtime never repairs permissions."""
         if os.getuid() != self.uid:
             raise ChoiceError("mailbox_writer")
         self.check()
