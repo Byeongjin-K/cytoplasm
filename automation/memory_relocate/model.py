@@ -269,6 +269,12 @@ def parse_state(raw: object) -> RelocationState:
     return RelocationState(version=version, relocations=relocations)
 
 
+def _serialize_record(record: RelocationRecord) -> dict[str, object]:
+    from .serialization import _serialize_record as serialize
+
+    return serialize(record)
+
+
 def serialize_state(s: RelocationState) -> dict[str, object]:
     from .serialization import serialize_state as serialize
 
