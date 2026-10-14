@@ -1,31 +1,86 @@
 """Hermes MemoryProvider discovered at $HERMES_HOME/plugins/autophagy_recall/.
 
-Only prefetch is active: native memory, system prompt, and sync hooks are untouched.
+Owner Q155 (2026-10-15): the whole store is searched (one passage per note, top 100) and one
+call to the account's main model picks what the turn needs. The pick runs in the background;
+the turn waits for it at most the owner's 5 s (2026-10-14) and otherwise starts at once, and the
+``llm_request`` middleware attaches the result at the next model call of the same turn. Native
+memory, the system prompt, and sync hooks are untouched.
 """
 from __future__ import annotations
 
 import logging
-import os
-import subprocess
-import sys
-from pathlib import Path
-from typing import Final, Never
+import threading
+from collections.abc import Callable
+from typing import Any, Final, Never
 
 from agent.memory_provider import MemoryProvider
 
-_TIMEOUT_SECONDS: Final = 5.0  # owner 2026-10-14: "2초보다 더 길게 해야하는거 아니야?"
+from automation.memory_provider.attach import Recall, attach
+
+_WAIT_SECONDS: Final = 5.0  # owner 2026-10-14: "2초보다 더 길게 해야하는거 아니야?"
+_PICK_TIMEOUT_SECONDS: Final = 30.0
 _CHAR_LIMIT: Final = 4000
 _QUERY_LIMIT: Final = 2000
 _LOGGER: Final = logging.getLogger(__name__)
+_RECALLS: dict[str, Recall] = {}
+_RECALLS_LOCK: Final = threading.Lock()
+_MIDDLEWARE_REGISTERED: list[bool] = []
+
+Lookup = Callable[[str], str]
+
+
+def _complete(prompt: str) -> str:
+    from agent.auxiliary_client import call_llm
+
+    response = call_llm(messages=[{"role": "user", "content": prompt}], timeout=_PICK_TIMEOUT_SECONDS)
+    return str(response.choices[0].message.content or "")
+
+
+def pick_reference(query: str) -> str:
+    """One whole-store pick, formatted as the reference block; raises on lookup failure."""
+    from automation.knowledge.pack import KnowledgeQuery
+    from automation.knowledge.pick import pick_evidence
+    from automation.memory_provider.worker import HIT_LIMIT, format_reference
+
+    pack = pick_evidence(KnowledgeQuery(
+        query, sources=frozenset({"rag"}), limit=HIT_LIMIT, caller="memory-provider",
+    ), _complete)
+    if pack.verdict == "unavailable":
+        raise LookupError("knowledge lookup unavailable")
+    return format_reference(pack) if pack.verdict == "hit" else ""
+
+
+def _resolve(recall: Recall, lookup: Lookup) -> None:
+    try:
+        block = lookup(recall.query)
+    except LookupError:
+        _LOGGER.warning("MEMORY-RECALL-SKIP reason=lookup")
+        block = ""
+    except Exception:  # noqa: BLE001 - recall is optional; the turn must never fail on it
+        _LOGGER.warning("MEMORY-RECALL-SKIP reason=error")
+        block = ""
+    if len(block) > _CHAR_LIMIT:
+        _LOGGER.warning("MEMORY-RECALL-SKIP reason=oversize")
+        block = ""
+    recall.block = block
+    recall.done.set()
+
+
+def request_middleware(*, request: dict[str, Any], **context: Any) -> dict[str, Any] | None:
+    with _RECALLS_LOCK:
+        recall = _RECALLS.get(str(context.get("session_id") or ""))
+    if recall is None or not recall.block:
+        return None
+    from agent.memory_manager import build_memory_context_block
+
+    changed = attach(request, recall, build_memory_context_block(recall.block))
+    return None if changed is None else {"request": changed}
 
 
 class AutophagyRecallProvider(MemoryProvider):
-    """Stateless turn recall; pin the released worker generation for this instance."""
-
-    def __init__(self) -> None:
-        self._root = Path(os.environ.get(
-            "AUTOPHAGY_RUNTIME_ROOT", "/srv/autophagy-agent-current",
-        )).expanduser().resolve()
+    def __init__(self, lookup: Lookup = pick_reference, wait_seconds: float = _WAIT_SECONDS) -> None:
+        self._lookup = lookup
+        self._wait_seconds = wait_seconds
 
     @property
     def name(self) -> str:
@@ -33,7 +88,7 @@ class AutophagyRecallProvider(MemoryProvider):
 
     def is_available(self) -> bool:
         """No network check during discovery."""
-        return (self._root / "automation/memory_provider/worker.py").is_file()
+        return True
 
     def initialize(self, session_id: str, **kwargs: str) -> None:
         """No store, per-session cache, or conversation writes."""
@@ -42,34 +97,23 @@ class AutophagyRecallProvider(MemoryProvider):
         return []
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
-        """Bound the whole lookup, including process startup and MCP connection."""
         if not query.strip():
             return ""
-        environment = dict(os.environ)
-        environment["PYTHONPATH"] = str(self._root)
-        try:
-            result = subprocess.run(
-                [sys.executable, "-B", "-m", "automation.memory_provider.worker"],
-                input=query[:_QUERY_LIMIT],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                encoding="utf-8",
-                cwd=self._root,
-                env=environment,
-                timeout=_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            _LOGGER.warning("MEMORY-RECALL-SKIP reason=timeout")
-            return ""
-        except (OSError, UnicodeError):
-            _LOGGER.warning("MEMORY-RECALL-SKIP reason=process")
-            return ""
-        if result.returncode != 0:
-            _LOGGER.warning("MEMORY-RECALL-SKIP reason=lookup")
-            return ""
-        if len(result.stdout) > _CHAR_LIMIT:
-            _LOGGER.warning("MEMORY-RECALL-SKIP reason=oversize")
-            return ""
-        return result.stdout
+        recall = Recall(query[:_QUERY_LIMIT])
+        with _RECALLS_LOCK:
+            _RECALLS[session_id] = recall
+        threading.Thread(
+            target=_resolve, args=(recall, self._lookup), daemon=True, name="autophagy-recall",
+        ).start()
+        if recall.done.wait(self._wait_seconds):
+            recall.delivered = True
+            return recall.block
+        _LOGGER.info("MEMORY-RECALL-DEFER")
+        return ""
+
+
+def register(ctx: Any) -> None:
+    ctx.register_memory_provider(AutophagyRecallProvider())
+    if not _MIDDLEWARE_REGISTERED:
+        ctx.register_middleware("llm_request", request_middleware)
+        _MIDDLEWARE_REGISTERED.append(True)

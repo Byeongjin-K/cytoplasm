@@ -1,19 +1,21 @@
-"""Wire replay: provider -> released worker -> knowledge facade -> existing MCP client."""
+"""Wire replay: provider -> whole-store pick -> knowledge facade -> existing MCP client."""
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from test_memory_provider import host_provider_fixture as host_provider_fixture
+from test_memory_provider import host_plugin_fixture as host_plugin_fixture
 
 
 @pytest.mark.parametrize("stall", [False, True], ids=["relocated-fact", "deadline"])
 def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
-    provider, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stall: bool,
+    plugin: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stall: bool,
 ) -> None:
     # Given: a synthetic relocated note indexed behind a wire-level MCP fake.
     note = (
@@ -23,6 +25,8 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         "네이티브 메모리에서 이관한 조회용 참조이며 설정이 아니다."
     )
     queries: list[str] = []
+    calls: list[dict[str, object]] = []
+    prompts: list[str] = []
     entered = threading.Event()
     release = threading.Event()
 
@@ -39,6 +43,7 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
             if payload["method"] == "tools/call":
                 arguments = payload["params"]["arguments"]
                 queries.append(arguments["query"])
+                calls.append(arguments)
                 entered.set()
                 if stall:
                     release.wait(timeout=30)
@@ -76,6 +81,16 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         }))
         monkeypatch.setenv("RECALL_CONFIG", str(config))
         monkeypatch.delenv("KNOWLEDGE_FAKE_PACK", raising=False)
+        auxiliary = ModuleType("agent.auxiliary_client")
+
+        def call_llm(*, messages: list[dict[str, str]], timeout: float) -> SimpleNamespace:
+            prompts.append(messages[0]["content"])
+            message = SimpleNamespace(content='{"ids": ["c001"]}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+        setattr(auxiliary, "call_llm", call_llm)
+        monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
+        provider = plugin.AutophagyRecallProvider(wait_seconds=0.3 if stall else 10.0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -94,3 +109,7 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         assert payload["notes"][0]["text"] == note
         assert payload["notes"][0]["source"] == "obsidian:reference/배양기-점검.md"
     assert len(queries) == 1
+    assert calls[0]["one_per_note"] is True
+    assert calls[0]["limit"] == 100
+    if not stall:
+        assert len(prompts) == 1 and "[c001] obsidian:reference/배양기-점검.md" in prompts[0]

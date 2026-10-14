@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import importlib
 import json
-import subprocess
+import threading
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import replace
-from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Never
 
@@ -40,17 +39,22 @@ class HermesContract(ABC):
         return ""
 
 
-@pytest.fixture(name="provider")
-def host_provider_fixture(monkeypatch: pytest.MonkeyPatch) -> AutophagyRecallProvider:
-    # Given: only the host ABC is substituted; all recall/process logic is real.
+@pytest.fixture(name="plugin")
+def host_plugin_fixture(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    # Given: only the host ABC and fence helper are substituted; recall logic is real.
     host = ModuleType("agent.memory_provider")
     setattr(host, "MemoryProvider", HermesContract)
+    manager = ModuleType("agent.memory_manager")
+    setattr(manager, "build_memory_context_block", lambda raw: f"<memory-context>\n{raw}\n</memory-context>")
     monkeypatch.setitem(sys.modules, "agent.memory_provider", host)
+    monkeypatch.setitem(sys.modules, "agent.memory_manager", manager)
     monkeypatch.delitem(sys.modules, "automation.memory_provider.plugin", raising=False)
-    root = Path(__file__).resolve().parents[2]
-    monkeypatch.setenv("AUTOPHAGY_RUNTIME_ROOT", str(root))
-    plugin = importlib.import_module("automation.memory_provider.plugin")
-    return plugin.AutophagyRecallProvider()
+    return importlib.import_module("automation.memory_provider.plugin")
+
+
+@pytest.fixture(name="provider")
+def host_provider_fixture(plugin: ModuleType) -> AutophagyRecallProvider:
+    return plugin.AutophagyRecallProvider(lambda _query: "")
 
 
 def pack(content: str) -> EvidencePack:
@@ -116,20 +120,19 @@ def test_provider_leaves_system_and_tool_surfaces_empty(provider: AutophagyRecal
     assert provider.is_available()
 
 
-@pytest.mark.parametrize("reason", ["timeout", "process", "lookup", "oversize"])
+@pytest.mark.parametrize("reason", ["lookup", "error", "oversize"])
 def test_failure_injects_nothing_and_logs_only_masked_reason(
-    provider: AutophagyRecallProvider, monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture, reason: str,
+    plugin: ModuleType, caplog: pytest.LogCaptureFixture, reason: str,
 ) -> None:
-    # Given: subprocess is the narrow unmockable failure boundary.
-    def run(*args, **kwargs):
-        if reason == "timeout":
-            raise subprocess.TimeoutExpired("private query", 2, output="private result")
-        if reason == "process":
-            raise OSError("private path")
-        return subprocess.CompletedProcess([], 2 if reason == "lookup" else 0, "x" * 4001)
+    # Given: the pick is the narrow failure boundary.
+    def lookup(_query: str) -> str:
+        if reason == "lookup":
+            raise LookupError("private path")
+        if reason == "error":
+            raise RuntimeError("private result")
+        return "x" * 4001
 
-    monkeypatch.setattr(subprocess, "run", run)
+    provider = plugin.AutophagyRecallProvider(lookup)
     # When
     result = provider.prefetch("private query")
     # Then
@@ -137,31 +140,73 @@ def test_failure_injects_nothing_and_logs_only_masked_reason(
     assert [row.message for row in caplog.records] == [f"MEMORY-RECALL-SKIP reason={reason}"]
 
 
-def test_process_deadline_bounds_the_lookup(provider: AutophagyRecallProvider,
-                                           monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given
-    captured: list[float] = []
-
-    def run(*args, **kwargs):
-        captured.append(kwargs["timeout"])
-        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
-
-    monkeypatch.setattr(subprocess, "run", run)
-    # When
-    result = provider.prefetch("합성 장비 점검")
-    # Then
-    assert result == ""
-    assert captured == [5.0]
-
-
-def test_no_result_after_a_previous_hit_does_not_reuse_context(
-    provider: AutophagyRecallProvider, monkeypatch: pytest.MonkeyPatch,
+def test_a_slow_pick_does_not_hold_the_turn_and_attaches_at_the_next_model_call(
+    plugin: ModuleType, caplog: pytest.LogCaptureFixture,
 ) -> None:
+    # Given: a pick that finishes only after the turn has started.
+    release = threading.Event()
+
+    def lookup(_query: str) -> str:
+        assert release.wait(5)
+        return format_reference(pack("합성 장비는 청록 부품을 쓴다."))
+
+    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05)
+    caplog.set_level("INFO")
+    # When
+    started = provider.prefetch("합성 장비 점검", session_id="s1")
+    before = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s1")
+    release.set()
+    recall = plugin._RECALLS["s1"]
+    assert recall.done.wait(5)
+    after = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s1")
+    other = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s2")
+    # Then
+    assert started == ""
+    assert "MEMORY-RECALL-DEFER" in [row.message for row in caplog.records]
+    assert before is None
+    assert after is not None and "청록 부품" in after["request"]["input"][-1]["content"]
+    assert other is None
+
+
+def test_a_fast_pick_is_returned_at_turn_start_and_not_attached_again(plugin: ModuleType) -> None:
+    # Given
+    block = format_reference(pack("합성 장비는 청록 부품을 쓴다."))
+    provider = plugin.AutophagyRecallProvider(lambda _query: block)
+    # When
+    started = provider.prefetch("합성 장비", session_id="s3")
+    later = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비"}]}, session_id="s3")
+    # Then
+    assert started == block
+    assert later is None
+
+
+def test_registering_twice_adds_the_middleware_once(plugin: ModuleType) -> None:
+    # Given
+    class Context:
+        def __init__(self) -> None:
+            self.providers: list[object] = []
+            self.middleware: list[str] = []
+
+        def register_memory_provider(self, provider: object) -> None:
+            self.providers.append(provider)
+
+        def register_middleware(self, kind: str, _callback: object) -> None:
+            self.middleware.append(kind)
+
+    first, second = Context(), Context()
+    # When
+    plugin.register(first)
+    plugin.register(second)
+    # Then
+    assert len(first.providers) == len(second.providers) == 1
+    assert first.middleware + second.middleware == ["llm_request"]
+
+
+def test_no_result_after_a_previous_hit_does_not_reuse_context(plugin: ModuleType) -> None:
     # Given
     previous = format_reference(pack("합성 장비는 청록 부품을 쓴다."))
     replies = iter([previous, ""])
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs:
-                        subprocess.CompletedProcess([], 0, next(replies)))
+    provider = plugin.AutophagyRecallProvider(lambda _query: next(replies))
     assert provider.prefetch("합성 장비") == previous
     # When
     current = provider.prefetch("다른 주제", session_id="another")
