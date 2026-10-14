@@ -58,3 +58,11 @@ def test_an_agent_rule_already_in_memory_md_stays_native() -> None:
 def test_an_unreachable_model_keeps_the_cue_veto() -> None:
     (verdict,) = classify_entries({"user": (MemoryEntry(_PERSON),)}, client=_Down())
     assert (verdict.route, verdict.veto) == ("KEEP_NATIVE", "keep_native_rule")
+
+
+def test_a_short_colleague_entry_is_still_asked() -> None:
+    short = "가상 선임 호칭은 ‘선임님’."
+    (verdict,) = classify_entries({"user": (MemoryEntry(short),)}, client=_Llm("PERSON_REFERENCE", "가상 선임 호칭은", []))
+    assert verdict.route == "PERSON_REFERENCE"
+    (kept,) = classify_entries({"user": (MemoryEntry(short),)}, client=_Llm("TWIN", "가상 선임 호칭은", []))
+    assert (kept.route, kept.veto) == ("KEEP_NATIVE", "keep_native_rule")

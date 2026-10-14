@@ -120,7 +120,7 @@ def _run_with_fake_llm(
     monkeypatch.setattr(
         shadow_cli,
         "CodexLlmClient",
-        _FakeLlmFactory(_FakeLlm(responses=[_twin_response()], prompts=[])),
+        _FakeLlmFactory(_FakeLlm(responses=[_twin_response(), _twin_response()], prompts=[])),
     )
     exit_code = shadow_cli.main(["--memory-dir", str(memory_dir), *extra])
     assert exit_code == 0
@@ -261,7 +261,7 @@ def test_full_prints_raw_entry_text_while_the_default_masks_it(
     assert masked_preview.endswith("…")
     assert full_preview == " ".join(_LONG_ENTRY.split())
     assert _EVIDENCE in full_preview
-    assert _as_int(masked["llm_calls"]) == 1
+    assert _as_int(masked["llm_calls"]) == 2  # the long MEMORY entry + the short USER entry (Q138 ②)
 
 
 def _named_symbols(path: Path) -> set[str]:
