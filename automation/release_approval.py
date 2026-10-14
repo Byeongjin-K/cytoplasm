@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import secrets
 import sys
 from pathlib import Path
@@ -41,12 +42,19 @@ from automation.release_completion_target import (
     approval_decision,
 )
 from .release_request_gate import ReleaseRequestGate
-from automation.release_spec import ReleaseSpec, ReleaseSpecError, spec_from_record
+from automation.release_spec import (
+    ReleaseSpec,
+    ReleaseSpecError,
+    spec_from_record,
+    wrapper_surface,
+)
 from automation.release_retire import notify_stale_approval
 from automation.skill_gate_approval import GateSurface, SkillApprovalGate
 
 #: release.sh 의 자동 복구가 읽는 유일한 기계 판독 줄 — 거절 메시지는 바뀌지 않는다.
 STALE_PENDING_PREFIX: Final = "RELEASE-REQUEST-STALE:"
+_WRAPPER_NODE: Final = re.compile(r"[a-z0-9][a-z0-9.-]{0,62}\Z")
+_SHA256: Final = re.compile(r"[0-9a-f]{64}\Z")
 def _bindings() -> skill_gate_surface.SupplyChainSurface:
     return skill_gate_surface.surface_for(
         ApprovalKind.RELEASE, skill_gate._identity()  # noqa: SLF001 - the gate owns this
@@ -79,12 +87,19 @@ def cmd_plan(args: argparse.Namespace) -> int:
     except release_plan.ReleasePlanError as error:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
+    surfaces = list(plan.surface_digests)
+    for item in args.healthcheck_wrapper or ():
+        node, _, digest = item.partition("=")
+        if _WRAPPER_NODE.fullmatch(node) is None or _SHA256.fullmatch(digest) is None:
+            print(f"RELEASE-PLAN-BLOCK: bad --healthcheck-wrapper {item!r}", file=sys.stderr)
+            return 4
+        surfaces.append((wrapper_surface(node), digest))
     payload = {
         "base": plan.base,
         "head": plan.head,
         "major_note": release_notes.major_note(plan),
         "patch_notes": release_notes.detail_body(plan),
-        "surface_digests": [list(row) for row in plan.surface_digests],
+        "surface_digests": [list(row) for row in sorted(surfaces)],
         "version": plan.version,
     }
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
@@ -169,6 +184,25 @@ def cmd_decision(args: argparse.Namespace) -> int:
     return approval_decision(args, _gate, notify_stale_approval)
 
 
+def cmd_authorize_wrapper(args: argparse.Namespace) -> int:
+    """Did the owner's ✅ on release ``--head`` cover this exact wrapper fingerprint?
+
+    Same judgement as a skill riding the release approval (``release-authorize``): the
+    surface must be in the approved record's hash preimage, and the record must be the
+    release now deployed. Exit 0 authorized · 4 not covered/other release · 8 ⛔ ·
+    1 pending/unverifiable · 2 no usable record.
+    """
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(
+            skill=None,
+            surface=wrapper_surface(args.node),
+            hash=args.hash,
+            head=args.head,
+            peer_attest_mode="",
+        )
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="release-approval")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -178,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--head", required=True)
     plan.add_argument("--version", required=True)
     plan.add_argument("--bump", choices=("major", "minor", "patch"), default="patch")
+    plan.add_argument(
+        "--healthcheck-wrapper",
+        action="append",
+        metavar="NODE=DIGEST",
+        help="새 릴리스가 기대하는 래퍼 지문이 설치본과 다른 노드 — 승인 표면으로 묶는다",
+    )
     plan.set_defaults(run=cmd_plan)
     retire = commands.add_parser(
         "retire", help="서명·승인 완료된 이전 release를 감사 archive로 이동"
@@ -207,6 +247,13 @@ def main(argv: list[str] | None = None) -> int:
         help="origin/main 에서 도달 가능한 가장 가까운 릴리스 커밋 — 완결기가 실어 준다",
     )
     decision.set_defaults(run=cmd_decision)
+    authorize = commands.add_parser(
+        "authorize-wrapper", help="릴리스 ✅ 가 이 노드의 허용 목록 래퍼 지문을 덮는가(0/4/8/1/2)"
+    )
+    authorize.add_argument("--node", required=True)
+    authorize.add_argument("--hash", required=True)
+    authorize.add_argument("--head", required=True)
+    authorize.set_defaults(run=cmd_authorize_wrapper)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

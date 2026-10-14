@@ -52,8 +52,34 @@ def _held_reason(state: ArtifactState, declared: Mapping[tuple[str, str, str], s
     return declared.get(state.key) or observed
 
 
+#: 릴리스 ✅ 로 인가된 헬스체크 허용 목록 래퍼 갱신의 결과 토큰 → 소유자 문장(healthcheck_wrapper_release.sh).
+_WRAPPER_REASONS: Final = {
+    "not-covered": "이 릴리스 승인이 지금 기대 지문을 덮지 않는다(다음 릴리스 카드에 실린다)",
+    "cancelled": "소유자 ⛔",
+    "approval-unverified": "릴리스 승인을 확인하지 못했다",
+    "expected-unknown": "릴리스가 기대하는 지문을 계산하지 못했다",
+    "installed-unreadable": "설치된 래퍼를 읽지 못했다",
+    "install-failed": "설치기가 실패했다",
+}
+_WRAPPER_TOKEN: Final = re.compile(r"[a-z0-9.-]{1,63}\|(installed|skipped|failed)\|[A-Za-z0-9:=,.-]{1,120}\Z")
+
+
+def _wrapper_refresh(entries: tuple[str, ...]) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for entry in entries:
+        if _WRAPPER_TOKEN.fullmatch(entry) is None:
+            raise ObservationError(f"malformed wrapper refresh result: {entry[:80]!r}")
+        node, status, token = entry.split("|")
+        records.append({"node": node, "status": status, "detail": token})
+    return records
+
+
 def render_receipt(
-    plan: Plan, *, verified_at: str, declared_reasons: Mapping[tuple[str, str, str], str] | None = None
+    plan: Plan,
+    *,
+    verified_at: str,
+    declared_reasons: Mapping[tuple[str, str, str], str] | None = None,
+    wrapper_refresh: tuple[str, ...] = (),
 ) -> str:
     """전량 반영 영수증 — clean 이 아닌 계획에 서명하는 것을 코드가 거부한다.
 
@@ -65,7 +91,8 @@ def render_receipt(
         raise ObservationError("refusing to attest a non-clean deployment")
     retired = [a for a in plan.artifacts if a.status in ("retired-present", "retired-absent")]
     held = [a for a in plan.artifacts if a.status == "held"]
-    payload = {
+    refreshed = _wrapper_refresh(wrapper_refresh)
+    payload: dict[str, object] = {
         "version": RECEIPT_VERSION,
         "release_sha": plan.release_sha,
         "verified_at": verified_at,
@@ -115,6 +142,8 @@ def render_receipt(
             for state in plan.undeclared
         ],
     }
+    if refreshed:
+        payload["wrapper_refresh"] = refreshed
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
@@ -175,6 +204,25 @@ def _held_lines(document: Mapping[str, object]) -> list[str]:
     return lines
 
 
+def _wrapper_lines(document: Mapping[str, object]) -> list[str]:
+    lines: list[str] = []
+    for item in _records(document, "wrapper_refresh"):
+        node = one_line(item.get("node", "?"))
+        detail = str(item.get("detail", ""))
+        if detail.startswith("mismatch:"):
+            said = f"설치 뒤 지문 불일치({one_line(detail.removeprefix('mismatch:'))})"
+        else:
+            said = _WRAPPER_REASONS.get(detail, one_line(detail))
+        match item.get("status"):
+            case "failed":
+                lines.append(f"- 헬스체크 허용 목록 갱신 실패 — {node}: {said}")
+            case "skipped":
+                lines.append(f"- 헬스체크 허용 목록 갱신 보류 — {node}: {said}")
+            case _:
+                pass
+    return lines
+
+
 def pending_lines(document: object) -> tuple[str, ...]:
     """영수증 JSON → 사람이 읽을 남은 소유자 조치 줄. v1·판독 불가 문서는 빈 목록이다(예외 없음)."""
     if not isinstance(document, Mapping):
@@ -182,7 +230,7 @@ def pending_lines(document: object) -> tuple[str, ...]:
     version = document.get("version")
     if type(version) is not int or version < RECEIPT_VERSION:
         return ()
-    lines: list[str] = []
+    lines: list[str] = _wrapper_lines(document)
     for action in _records(document, "pending_owner_actions"):
         lines += _action_lines(action)
     if document.get("pending_unknown") is not False:

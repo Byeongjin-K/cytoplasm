@@ -106,6 +106,7 @@ def _run(
         **os.environ,
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "DEPLOY_SSH_HOST": "fake-node",
+        "DEPLOY_ALL_WRAPPER_REFRESH_CMD": "true",
         "DEPLOY_ALL_RECEIPT_DIR": str(tmp_path / "private" / "deploy-all"),
         "FAKE_CALLS": str(calls),
         "FAKE_RECEIPT": str(receipt),
@@ -249,6 +250,7 @@ def test_apply_serializes_concurrent_deployers_and_rechecks_after_waiting(
         **os.environ,
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "DEPLOY_SSH_HOST": "fake-node",
+        "DEPLOY_ALL_WRAPPER_REFRESH_CMD": "true",
         "DEPLOY_ALL_RECEIPT_DIR": str(tmp_path / "private" / "deploy-all"),
         "DEPLOY_ALL_LOCK_DIR": str(tmp_path / "locks"),
         "FAKE_CALLS": str(calls),
@@ -371,3 +373,28 @@ def test_owner_lines_are_printed_but_never_executed(tmp_path: Path) -> None:
         assert (case / "receipt.json").exists()
         calls = (case / "calls.log").read_text(encoding="utf-8")
         assert calls.count("systemctl --user restart") == (2 if extra else 0)
+
+
+def test_apply_carries_the_wrapper_refresh_result_into_the_receipt(tmp_path: Path) -> None:
+    """릴리스 ✅ 로 인가된 허용 목록 갱신의 결과는 영수증에 실려 적용 통지로 소유자에게 간다."""
+    refresh = tmp_path / "refresh.sh"
+    _ = refresh.write_text(
+        "printf 'WRAPPER-REFRESH|example-primary-node|failed|install-failed\\n'\n"
+        "printf 'WRAPPER-REFRESH|example-rag-node|current|abc123abc123\\n'\n",
+        encoding="utf-8",
+    )
+
+    result = _run(tmp_path, "--apply", extra_env={"DEPLOY_ALL_WRAPPER_REFRESH_CMD": f"bash {refresh}"})
+
+    assert result.returncode == 0, result.stderr
+    receipt_calls = [
+        line
+        for line in (tmp_path / "calls.log").read_text(encoding="utf-8").splitlines()
+        if "--format receipt" in line
+    ]
+    assert receipt_calls
+    assert all(
+        "--wrapper-refresh example-primary-node\\|failed\\|install-failed" in line
+        for line in receipt_calls
+    )
+    assert not any("example-rag-node" in line for line in receipt_calls)

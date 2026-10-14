@@ -85,6 +85,35 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 
 반출 스냅샷·fresh history·공개 원장 기록은 이 경로에 없다.
 
+### 헬스체크 허용 목록도 같은 ✅ 로 (2026-10-14~)
+
+헬스체크 전용 ssh 키의 강제명령 래퍼(허용 목록, 운영자 홈의
+`~/.local/libexec/autophagy-healthcheck-probe`)는 릴리스 트리 밖 파일이라 수렴이 올리지 못한다.
+예전에는 체크가 바뀐 릴리스마다 영수증의 「남은 소유자 조치」로 남아 사람이 노드에서 `--install` 을 돌렸다.
+이제 `release.sh` 가 한다.
+
+1. **승인 전** — `automation/healthcheck_wrapper_release.sh plan <HEAD>` 가 새 트리를 주 노드의 전용 빈
+   임시 디렉터리에 **파일로** 보내 풀고(셸 stdin 에 데이터를 싣지 않는다), 노드마다 그 릴리스가
+   기대할 `# wrapper-inputs:` 지문을 계산해 설치본과 대조한다. 다른 노드는
+   `healthcheck-wrapper:<node>` 표면으로 승인 해시에 들어가고, 카드에 한 줄이 붙는다:
+   `헬스체크 허용 목록도 갱신: <primary-node>, <rag-node>`. 다른 노드가 없으면 줄도 없고 카드는
+   예전 바이트 그대로다. 지문을 판정하지 못하면(노드 불통) `WRAPPER-PLAN-UNKNOWN` 을 남기고 줄 없이
+   진행한다 — 그 릴리스는 래퍼를 설치하지 않는다.
+2. **✅ 뒤** — `deploy_all.sh --apply` 가 영수증을 쓰기 직전에 `refresh` 를 돌린다. 노드 릴리스 트리로
+   기대 지문을 다시 계산하고, 설치본과 다르면 `release_approval authorize-wrapper` 로 그 지문이 지금 배포된
+   릴리스의 승인된 카드에 있었는지 묻는다(skill 의 `--release-approval` 과 같은 판정). 인가되면 운영자
+   계정으로 설치한다 — 주 노드는 릴리스 트리의 `--install`, 릴리스 트리가 없는 노드는 주 노드의
+   `--print <node>` 출력을 `provision-healthcheck-probe.sh --from-file` 로. 설치 뒤 헤더 지문을 다시 읽어
+   대조한다. sudo 도 authorized_keys 도 건드리지 않는다.
+3. **결과** — 영수증이 그 자리에서 위임 프로브를 다시 돌리므로 설치가 되면 `pending_owner_actions` 에서
+   빠진다. 실패·보류는 영수증 `wrapper_refresh` 에 남고 적용 통지의 「남은 소유자 조치」에
+   `헬스체크 허용 목록 갱신 실패 — <node>: <사유>`(설치 뒤 지문 불일치 포함) 또는 `… 보류 —`
+   (카드가 그 지문을 싣지 않았음·⛔·승인 확인 불가) 줄로 온다. 실패해도 영수증은 쓰인다.
+
+손으로 다시 설치하는 길(`bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install <node>`)은
+그대로다 — 카드가 갱신을 싣지 못한 릴리스의 남은 조치는 다음 릴리스 카드가 다시 싣거나 그 명령으로 닫는다.
+[기능 소개](../기능소개/릴리스-카드-헬스체크-허용목록-갱신.md)
+
 ### 릴리스 트레인 (2026-09-03 정책)
 
 릴리스는 매일 18:00 KST에 `automation/release.sh`로 한 묶음씩 컷한다. 즉시 컷하는 예외는 긴급 핫픽스뿐이며, 3일 릴리스 백로그 다이제스트 정책은 그대로 유지한다.

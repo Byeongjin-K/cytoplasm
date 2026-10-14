@@ -21,7 +21,7 @@ set -uo pipefail
 cmd="$1"; shift
 printf '%s\\n' "$cmd" >> "$CALLS"
 case "$cmd" in
-  plan) printf '{"version":"stub"}\\n' ;;
+  plan) printf '%s\\n' "$*" > "$PLAN_ARGS"; printf '{"version":"stub"}\\n' ;;
   retire) exit 0 ;;
   request)
     if [[ -f "$STALE_MARKER" ]]; then
@@ -184,6 +184,7 @@ def _run(
     allow_helper_drift: str = "0",
     note: str | None = _NOTE,
     gh_create_rc: str = "0",
+    wrapper_plan: str = "true",
 ) -> subprocess.CompletedProcess[str]:
     # 낡은 pending 요청이 있는 세계는 stale_head 를 준 테스트에서만 존재한다 —
     # marker 가 없으면 stub 의 request 는 예전 그대로 성공한다.
@@ -222,6 +223,8 @@ def _run(
         "RELEASE_LOCAL_CI": str(local_ci),
         "RELEASE_DEPLOY_ALL": str(deploy_all),
         "RELEASE_HELPER_PROBE_CMD": f"bash {helper_probe_stub}",
+        "RELEASE_WRAPPER_PLAN_CMD": wrapper_plan,
+        "PLAN_ARGS": str(tmp_path / "plan-args"),
         "HELPER_PROBE_MODE": helper_probe,
         "RELEASE_ALLOW_HELPER_DRIFT": allow_helper_drift,
         "RELEASE_POLL_SECONDS": "0",
@@ -700,3 +703,26 @@ def test_a_previous_tag_without_a_release_note_blocks_the_next_release(
     assert "RELEASE-NOTE-MISSING: v1.0.0" in result.stderr
     assert "automation/release-note.sh v1.0.0" in result.stderr
     assert "request" not in _calls(tmp_path)
+
+
+def test_the_wrapper_plan_is_bound_into_the_release_plan(tmp_path: Path) -> None:
+    """허용 목록 지문이 다른 노드는 같은 승인 계획의 표면이 된다 — 카드 한 줄과 ✅ 하나."""
+    _origin, work = _origin_with_commits(tmp_path)
+    plan = tmp_path / "wrapper-plan"
+    _ = plan.write_text(f"printf 'node-a={'1' * 64}\\n'\n", encoding="utf-8")
+
+    result = _run(tmp_path, work, decisions="2 0", wrapper_plan=f"bash {plan}")
+
+    assert result.returncode == 0, result.stderr
+    args = (tmp_path / "plan-args").read_text(encoding="utf-8")
+    assert f"--healthcheck-wrapper node-a={'1' * 64}" in args
+
+
+def test_an_unknown_wrapper_plan_does_not_block_the_release(tmp_path: Path) -> None:
+    _origin, work = _origin_with_commits(tmp_path)
+
+    result = _run(tmp_path, work, decisions="2 0", wrapper_plan="false")
+
+    assert result.returncode == 0, result.stderr
+    assert "WRAPPER-PLAN-UNKNOWN" in result.stderr
+    assert "--healthcheck-wrapper" not in (tmp_path / "plan-args").read_text(encoding="utf-8")

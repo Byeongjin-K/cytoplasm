@@ -187,8 +187,18 @@ def render_v5(spec: ReleaseView, *, bundle_names: str) -> str:
 
 
 def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
-    """Compact card with a replayable link to the first posted detail message."""
-    from automation.release_spec import EnvelopeUnavailable
+    """Compact card with a replayable link to the first posted detail message.
+
+    A ``healthcheck-wrapper:<node>`` surface adds one line naming those hosts. Without such
+    surfaces the bytes are unchanged, so every stored v6 card still replays exactly.
+    """
+    from automation.release_spec import WRAPPER_SURFACE_PREFIX, EnvelopeUnavailable
+
+    wrapper_hosts = [
+        name.removeprefix(WRAPPER_SURFACE_PREFIX)
+        for name, _digest in spec.surface_digests
+        if name.startswith(WRAPPER_SURFACE_PREFIX)
+    ]
 
     try:
         from automation.interop.owner_message import (
@@ -207,6 +217,11 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     facts = [
         f"배포 기준: `{spec.head_sha}`",
         f"배포 묶음: {bundle_summary}",
+        *(
+            [f"헬스체크 허용 목록도 갱신: {', '.join(wrapper_hosts)}"]
+            if wrapper_hosts
+            else []
+        ),
         f"승인 식별값: `{spec.action_hash()}`",
         f"변경 상세: {len(spec.detail_messages())}개 메시지",
     ]

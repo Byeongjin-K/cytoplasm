@@ -17,9 +17,17 @@ die() {
 }
 
 usage() {
-  printf 'usage: provision-healthcheck-probe.sh [node]\n'
+  printf 'usage: provision-healthcheck-probe.sh [--from-file <wrapper>] [node]\n'
 }
 
+# --from-file: 릴리스 트리가 없는 노드(RAG)는 주 노드 릴리스가 `--print <node>` 로 생성한 래퍼를
+# 받아 놓는다. 검사·원자 교체·read-back 은 생성 경로와 같다.
+from_file=""
+if [[ "${1:-}" == "--from-file" ]]; then
+  (($# >= 2)) || { usage >&2; exit 2; }
+  from_file="$2"
+  shift 2
+fi
 if (($# > 1)); then
   usage >&2
   exit 2
@@ -38,10 +46,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-generator_args=(--print)
-[[ -z "$node" ]] || generator_args+=("$node")
-bash "$GENERATOR" "${generator_args[@]}" > "$staged" \
-  || die "wrapper generation failed"
+if [[ -n "$from_file" ]]; then
+  [[ -n "$node" ]] || die "--from-file needs the node name"
+  cp -- "$from_file" "$staged" || die "cannot read $from_file"
+  grep -qx "# wrapper-node: $node" "$staged" || die "$from_file was not generated for node $node"
+  grep -Eq '^# wrapper-inputs: [0-9a-f]{64}$' "$staged" || die "$from_file carries no wrapper-inputs header"
+else
+  generator_args=(--print)
+  [[ -z "$node" ]] || generator_args+=("$node")
+  bash "$GENERATOR" "${generator_args[@]}" > "$staged" \
+    || die "wrapper generation failed"
+fi
 bash -n "$staged" || die "generated wrapper is not valid bash"
 
 want="$(sha256sum "$staged" | cut -d' ' -f1)"

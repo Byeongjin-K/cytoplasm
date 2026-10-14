@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
@@ -243,3 +244,67 @@ def test_a_clicked_digest_record_authorizes_without_rendering(
         _ = path.write_text(json.dumps(record), encoding="utf-8")
         assert _run() == 1
         assert calls == []
+
+
+# --- 헬스체크 허용 목록 래퍼: 같은 릴리스 ✅ 가 그 지문만 인가한다(2026-10-14) ----------------
+
+_WRAPPER = "1" * 64
+
+
+_SKILL_ONLY_SPEC = _spec
+
+
+def _wrapper_spec() -> ReleaseSpec:
+    base = _SKILL_ONLY_SPEC()
+    return replace(
+        base,
+        surface_digests=(*base.surface_digests, ("healthcheck-wrapper:node-a", _WRAPPER)),
+    )
+
+
+def _authorize_wrapper(*, digest: str = _WRAPPER, head: str = "a" * 40) -> int:
+    from automation import release_approval
+
+    return release_approval.cmd_authorize_wrapper(
+        argparse.Namespace(node="node-a", hash=digest, head=head)
+    )
+
+
+def test_an_approved_release_authorizes_its_wrapper_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "_spec", _wrapper_spec)
+    _env(tmp_path, monkeypatch, reactions={_APPROVE: [{"id": _OWNER, "bot": False}], _CANCEL: []})
+
+    assert _authorize_wrapper() == 0
+
+
+def test_a_wrapper_fingerprint_without_the_owner_approval_is_not_authorized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "_spec", _wrapper_spec)
+    _env(tmp_path, monkeypatch, reactions={})
+
+    assert _authorize_wrapper() == 1
+
+
+def test_a_wrapper_fingerprint_the_card_did_not_show_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api_log: list[str] = []
+    monkeypatch.setattr(sys.modules[__name__], "_spec", _wrapper_spec)
+    _env(tmp_path, monkeypatch, reactions={_APPROVE: [{"id": _OWNER, "bot": False}]}, api_log=api_log)
+
+    assert _authorize_wrapper(digest="2" * 64) == skill_gate.RELEASE_NOT_COVERED_EXIT
+    assert api_log == []
+
+
+def test_an_older_release_approval_does_not_authorize_the_deployed_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api_log: list[str] = []
+    monkeypatch.setattr(sys.modules[__name__], "_spec", _wrapper_spec)
+    _env(tmp_path, monkeypatch, reactions={_APPROVE: [{"id": _OWNER, "bot": False}]}, api_log=api_log)
+
+    assert _authorize_wrapper(head="f" * 40) == skill_gate.RELEASE_NOT_COVERED_EXIT
+    assert api_log == []
