@@ -14,7 +14,7 @@
   R1 `deploy.sh` 옆에는 `deploy-manifest.txt` 가 있다. 없으면 `no-manifest` 예외가 있어야 한다.
   R2 줄 연속(`\\` 개행)·여러 줄 따옴표·heredoc 본문을 한 논리 줄로 잇고 주석을 뺀 뒤, 원격 실행
      표식과 쓰기 관용구가 함께 있는 줄(또는 `scp`·`rsync` 원격 복사)은 날것 원격 쓰기다.
-     허용되는 길은 공용 헬퍼(`push_file`·`deploy_tree_swap`·`converge_cron`)뿐이고, 나머지는
+     허용되는 길은 공용 헬퍼(`push_file`·`deploy_tree_swap`·`converge_cron`·`converge_config`)뿐이고, 나머지는
      `raw` 예외(대상 = 그 줄에서 정확히 한 줄만 고르는 부분 문자열)가 있어야 한다.
   R3 헬퍼 호출의 목적지(리터럴, 또는 같은 파일의 리터럴 대입 하나로 풀리는 변수)는 어느 선언
      파일에든 있어야 한다(목적지 문자열로 대조). 아니면 `dest` 예외. 풀 수 없는 변수는 예외로도
@@ -51,7 +51,7 @@ _WRITE: Final = re.compile(
     r"|(?<![\w./-])(?:cp|install|mv|rm|crontab)\s"
     r"|(?<![\w-])hermes\s+cron\s+(?:create|edit|remove)(?![\w-])"
 )
-_HELPER: Final = re.compile(r"(?<![\w-])(push_file|deploy_tree_swap|converge_cron)\s+(.+)")
+_HELPER: Final = re.compile(r"(?<![\w-])(push_file|deploy_tree_swap|converge_cron|converge_config)\s+(.+)")
 _HEREDOC: Final = re.compile(r"(?<!<)<<(?!<)(-?)\s*(['\"]?)([A-Za-z_]\w*)\2")
 _VARIABLE: Final = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 _OPERATORS: Final = frozenset({"||", "&&", ";", "|", "&"})
@@ -164,7 +164,7 @@ def _helper_destination(name: str, rest: str) -> str | None:
         args.append(token)
     if name == "converge_cron":
         return args[0] if args else None
-    if name == "push_file":
+    if name in ("push_file", "converge_config"):
         return args[1] if len(args) >= 2 else None
     position = 0
     while position < len(args) and args[position].startswith("--"):

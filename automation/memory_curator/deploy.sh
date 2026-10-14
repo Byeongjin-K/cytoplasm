@@ -24,6 +24,11 @@ run_agent() {
   ssh "$host" "sudo -n -u agent -H bash -lc $(printf '%q' "$script")"
 }
 
+run_account() {
+  local account="$1" script="$2"
+  ssh "$host" "sudo -n -u $(printf '%q' "$account") -H bash -lc $(printf '%q' "$script")"
+}
+
 # push_file 은 원격 read-back 으로 착지를 확인한다 — 확인 없는 push 가 rc=0 으로
 # 끝나면서 파일은 그대로였던 실측(2026-08-20)이 이 공유 구현의 이유다.
 # shellcheck source=automation/deploy_push.sh
@@ -41,3 +46,10 @@ push_file "$repo_root/automation/memory_curator/cron/memory_curator_watch.py" '.
 source "$repo_root/automation/deploy_cron.sh"
 converge_cron memory-curator-watch "every 30m" memory_curator_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-curator-watch || true'
+
+# Hermes memory caps (owner decision 2026-10-14): the curator's CAPS and both accounts'
+# config.yaml read the same automation.hermes_memory_config.LIMITS. Gateways load the
+# config at start; the declaration is activation=gateway so deploy_all restarts agent+peer.
+source "$repo_root/automation/deploy_config.sh"
+converge_config agent .hermes/config.yaml hermes-memory-limits-v1
+converge_config peer .hermes/config.yaml hermes-memory-limits-v1
