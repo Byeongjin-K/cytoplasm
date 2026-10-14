@@ -95,14 +95,14 @@ def test_empty_results_inject_nothing() -> None:
     assert result == ""
 
 
-def test_only_three_hits_are_injected() -> None:
+def test_only_four_hits_are_injected() -> None:
     # Given
     evidence = pack("짧은 합성 기록")
     evidence = replace(evidence, items=evidence.items * 8)
     # When
     result = format_reference(evidence)
     # Then
-    assert len(json.loads(result[8:-4])["notes"]) == 3
+    assert len(json.loads(result[8:-4])["notes"]) == 4
 
 
 def test_provider_leaves_system_and_tool_surfaces_empty(provider: AutophagyRecallProvider) -> None:
@@ -127,7 +127,7 @@ def test_failure_injects_nothing_and_logs_only_masked_reason(
             raise subprocess.TimeoutExpired("private query", 2, output="private result")
         if reason == "process":
             raise OSError("private path")
-        return subprocess.CompletedProcess([], 2 if reason == "lookup" else 0, "x" * 3001)
+        return subprocess.CompletedProcess([], 2 if reason == "lookup" else 0, "x" * 4001)
 
     monkeypatch.setattr(subprocess, "run", run)
     # When

@@ -46,7 +46,7 @@ autophagy/
 ## CODE MAP
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
-| `AutophagyRecallProvider` | class | `automation/memory_provider/plugin/__init__.py` | Hermes 외부 제공자 `autophagy_recall`: 기존 지식 파사드 RAG를 턴 시작에 읽어 사용자 API 메시지에 참고 JSON으로 주입한다. 5초(소유자 결정 2026-10-14)·3건·3,000자 상한, 실패는 빈 주입·마스킹 로그, 내장 메모리·시스템 프롬프트·저장 경로 불변. 홈 플러그인 `v2:file;activation=gateway`; 기존 memory_curator config 선언의 합성 프로필이 상한과 `memory.provider`를 한 번에 수렴한다 ([소개](docs/기능소개/매-턴-자동-회상.md)) |
+| `AutophagyRecallProvider` | class | `automation/memory_provider/plugin/__init__.py` | Hermes 외부 제공자 `autophagy_recall`: 기존 지식 파사드 RAG를 턴 시작에 읽어 사용자 API 메시지에 참고 JSON으로 주입한다. 5초(소유자 결정 2026-10-14)·4건·4,000자 상한, 실패는 빈 주입·마스킹 로그, 내장 메모리·시스템 프롬프트·저장 경로 불변. 홈 플러그인 `v2:file;activation=gateway`; 기존 memory_curator config 선언의 합성 프로필이 상한과 `memory.provider`를 한 번에 수렴한다 ([소개](docs/기능소개/매-턴-자동-회상.md)) |
 | `evaluate_tool_call` | fn | `automation/interop/external_effect_gate.py` | 외부효과 denylist 게이트 — 읽기 허용, mutation은 소유자 승인 레코드 필요 |
 | `DiscordTransport` | class | `automation/interop/discord_transport.py` | 순차 청킹 전송 + 429 Retry-After 백오프 (8 callers) |
 | `origin_notice` | module | `automation/interop/origin_notice.py` | 승인 **결과** 통지 배달(주입 전용: api·transport_factory·fallback) — 레코드 `approval_thread_id`(요청별 승인 스레드)가 있으면 **스레드 생성 없이 거기에** 게시하고 `outcome=ThreadOutcome`(✅ 완료·⛔ 취소·⌛ 만료)이면 이름에 접두어를 붙여 아카이브(`close_thread`, best-effort `THREAD-CLOSE-FAIL`); 없으면 지시 메시지 앵커 스레드(400=재사용) → 채널 스레드 → 실패 시 `NOTIFY-THREAD-FAIL`+폴백. 전 스킬 공유 단일 구현, 사본 금지(「결과 통지 원채널 스레드 규칙」·「요청별 승인 스레드 규칙」) |

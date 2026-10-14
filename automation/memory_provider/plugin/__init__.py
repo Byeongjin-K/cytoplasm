@@ -14,7 +14,7 @@ from typing import Final, Never
 from agent.memory_provider import MemoryProvider
 
 _TIMEOUT_SECONDS: Final = 5.0  # owner 2026-10-14: "2초보다 더 길게 해야하는거 아니야?"
-_CHAR_LIMIT: Final = 3000
+_CHAR_LIMIT: Final = 4000
 _QUERY_LIMIT: Final = 2000
 _LOGGER: Final = logging.getLogger(__name__)
 

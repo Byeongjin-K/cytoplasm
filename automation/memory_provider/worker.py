@@ -8,8 +8,10 @@ from typing import Final, TypedDict, assert_never
 from automation.knowledge.facade import collect_evidence
 from automation.knowledge.pack import EvidencePack, KnowledgeQuery
 
-HIT_LIMIT: Final = 3
-CHAR_LIMIT: Final = 3000
+# Owner Q150 (2026-10-15): on evaluation set A, 4 notes per turn found the needed fact for
+# 33/46 questions against 32/46 with 3; the extra note costs about 1,000 characters.
+HIT_LIMIT: Final = 4
+CHAR_LIMIT: Final = 4000
 QUERY_LIMIT: Final = 2000
 EXCERPT_LIMIT: Final = 1200
 
