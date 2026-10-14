@@ -13,7 +13,7 @@ from typing import Final, assert_never
 from .owner_message_text import (
     Action as Action, Approval as Approval, OwnerMessage as OwnerMessage,
     Periodic as Periodic, Ref as Ref, Result as Result, Space as Space,
-    Presentation, render_v1, render_v2, resource_url as _resource_url,
+    Presentation, render_v1, render_v2, render_v4, resource_url as _resource_url,
 )
 
 __all__: Final = (
@@ -210,7 +210,7 @@ def render(message: OwnerMessage, *, destination: Ref) -> str:
     """Validate once; replay v1 or present Discord v2/v3 without changing the contract."""
     _validate(message, destination)
     if message.contract_version != 1 or message.render_version not in {
-        "owner-ko-v1", "owner-ko-v2", "owner-ko-v3",
+        "owner-ko-v1", "owner-ko-v2", "owner-ko-v3", "owner-ko-v4",
     }:
         field = "contract_version" if message.contract_version != 1 else "render_version"
         raise OwnerMessageError(message.contract_version, message.render_version, detail=f"message.{field}")
@@ -232,6 +232,8 @@ def render(message: OwnerMessage, *, destination: Ref) -> str:
     presentation = Presentation(location, owner, recovery)
     if message.render_version == "owner-ko-v1":
         return render_v1(message, presentation, _datetime)
+    if message.render_version == "owner-ko-v4":
+        return render_v4(message, presentation, _datetime)
     return render_v2(
         message, presentation, _datetime, full_reference=message.render_version == "owner-ko-v3",
     )

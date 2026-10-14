@@ -132,6 +132,35 @@ def human_timestamp(iso: str) -> str:
     return f"{day} {clock[:5]}{offset}"
 
 
+def render_v4(
+    message: OwnerMessage, refs: Presentation, timestamp: Callable[[datetime, str], str],
+) -> str:
+    """Compact presentation preserving exact fact bytes; older versions remain frozen."""
+    match message.detail:
+        case Approval(expires_at=expiry):
+            detail = "" if expiry is None else f"\n만료: {timestamp(expiry, 'expires_at')}"
+        case Result(outcome=outcome):
+            if message.agent_next is None and message.recovery == "not_applicable" and refs.location == "이 메시지":
+                return f"{message.fact} · {refs.owner}"
+            detail = f"\n{result_text(outcome)}"
+        case Periodic(start=start, end=end):
+            detail = f"\n관측: {timestamp(start, 'start')} ~ {timestamp(end, 'end')}"
+        case _:
+            assert_never(message.detail)
+    location = "" if refs.location in {"이 메시지", "여기", "해당 없음"} else f"\n위치: {refs.location}"
+    recovery = "" if message.recovery == "not_applicable" else f"\n되돌리기: {refs.recovery}"
+    owner = (
+        message.owner.argument
+        if message.owner.verb == "react" and message.owner.target == Ref("self") and message.owner.argument is not None
+        else refs.owner
+    )
+    return (
+        f"{message.subject}\n{message.fact}\n{owner}{detail}{location}\n"
+        f"다음: {message.agent_next or '추가 실행 없음'}{recovery}\n"
+        f"-# 참조: `{message.subject_key}`"
+    )
+
+
 def render_v2(
     message: OwnerMessage, refs: Presentation, timestamp: Callable[[datetime, str], str],
     *, full_reference: bool = False,
