@@ -27,6 +27,11 @@ class RagFetch:
     notes: tuple[str, ...]
 
 
+def memory_client(env: Mapping[str, str]) -> McpMemoryClient:
+    config = load_config(Path(env.get("KNOWLEDGE_RAG_CONFIG", env.get("RECALL_CONFIG", _CONFIG_DEFAULT))).expanduser())
+    return McpMemoryClient(config.mcp_base_url, config.api_key)
+
+
 def _enabled(env: Mapping[str, str], key: str) -> bool:
     return env.get(key, "").casefold() in {"1", "true", "yes", "on"}
 
@@ -41,8 +46,7 @@ def _hybrid_argument_is_unsupported(error: McpFatalError) -> bool:
 def fetch_rag(query: KnowledgeQuery, plan: QueryPlan, env: Mapping[str, str]) -> RagFetch:
     """Use MCP hybrid search, degrading to the old call shape on old deployments."""
     try:
-        config = load_config(Path(env.get("KNOWLEDGE_RAG_CONFIG", env.get("RECALL_CONFIG", _CONFIG_DEFAULT))).expanduser())
-        client = McpMemoryClient(config.mcp_base_url, config.api_key)
+        client = memory_client(env)
         search_text = f"{query.text} {plan.source_hint}" if plan.source_hint else query.text
         intent = analyze_entity_intent(query.text)
         if intent.matches:

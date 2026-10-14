@@ -178,10 +178,14 @@ class McpMemoryClient:
         query: str,
         limit: int = 5,
         entity_anchors: tuple[str, ...] | None = None,
+        *,
+        one_per_note: bool = False,
     ) -> list[dict[str, JsonValue]]:
         arguments: dict[str, JsonValue] = {"query": query, "limit": limit}
         if entity_anchors is not None:
             arguments["entity_anchors"] = list(entity_anchors)
+        if one_per_note:
+            arguments["one_per_note"] = True
         found = self.call_tool("search_memory", arguments)
         if not isinstance(found, list):
             raise McpFatalError("search_memory returned non-list result")
