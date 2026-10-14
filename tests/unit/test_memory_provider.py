@@ -151,7 +151,7 @@ def test_process_deadline_bounds_the_lookup(provider: AutophagyRecallProvider,
     result = provider.prefetch("합성 장비 점검")
     # Then
     assert result == ""
-    assert captured == [2.0]
+    assert captured == [5.0]
 
 
 def test_no_result_after_a_previous_hit_does_not_reuse_context(

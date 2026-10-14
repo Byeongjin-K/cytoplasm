@@ -41,7 +41,7 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
                 queries.append(arguments["query"])
                 entered.set()
                 if stall:
-                    release.wait(timeout=5)
+                    release.wait(timeout=30)
                     return
                 rows = [{
                     "score": 0.9, "content": note,
