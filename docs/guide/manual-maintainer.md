@@ -114,6 +114,22 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 그대로다 — 카드가 갱신을 싣지 못한 릴리스의 남은 조치는 다음 릴리스 카드가 다시 싣거나 그 명령으로 닫는다.
 [기능 소개](../기능소개/릴리스-카드-헬스체크-허용목록-갱신.md)
 
+### Hermes 설정 값도 릴리스가 맞춘다 (2026-10-14~)
+
+계정 `~/.hermes/config.yaml` 의 키 가운데 저장소가 값을 정하는 것은 배포 선언 `v2:config;algorithm=<이름>` 으로
+선언한다(첫 사례: 메모리 상한 `hermes-memory-limits-v1` — `automation/memory_curator/deploy-manifest.txt`).
+`deploy_all.sh` 가 계정마다 그 키를 관측해 다르면 소유 배포기를 부르고, 배포기는 공용 헬퍼 `converge_config`
+(`automation/deploy_config.sh`) 하나로만 그 파일을 쓴다 — 노드 릴리스 트리의 모듈이 계정 안에서 백업 → 원자적
+교체 → 다시 읽기를 한다. 선언이 `activation=gateway` 면 바뀐 릴리스에서 agent+peer 를 함께 재시동한다.
+
+- **값 바꾸기** — `automation/hermes_memory_config.py` 의 `LIMITS` 만 고쳐 PR → 릴리스. 큐레이터 `CAPS` 도 그 값을 읽는다.
+  노드에서 손으로 고치면 다음 릴리스가 저장소 값으로 되돌린다.
+- **내리기 주의** — 파일이 새 상한보다 긴 계정은 거부(rc 7)한다. 업스트림 결함 NousResearch/hermes-agent#133028:
+  상한보다 큰 파일은 정리·삭제 쓰기까지 막혀 갇힌다. 먼저 파일을 줄인다.
+- **판독 불가** — memory 블록 모양을 해석하지 못하면 관측이 `unknown` 이고 배포기를 부르지 않는다. 영수증이 막히므로
+  노드에서 그 계정의 `config.yaml` 을 직접 본다.
+[기능 소개](../기능소개/메모리-상한-올리기.md)
+
 ### 릴리스 트레인 (2026-09-03 정책)
 
 릴리스는 매일 18:00 KST에 `automation/release.sh`로 한 묶음씩 컷한다. 즉시 컷하는 예외는 긴급 핫픽스뿐이며, 3일 릴리스 백로그 다이제스트 정책은 그대로 유지한다.

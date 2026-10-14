@@ -3,8 +3,11 @@
 Hermes stores ambient facts in two capped Markdown files, entries split by
 lines that are just ``§``:
 
-* ``MEMORY.md`` — environment / rules / lessons (cap 2200 chars);
-* ``USER.md``   — name / role / preferences / style (cap 1375 chars).
+* ``MEMORY.md`` — environment / rules / lessons;
+* ``USER.md``   — name / role / preferences / style.
+
+The caps come from ``automation.hermes_memory_config.LIMITS``, the same values the
+release writes into each account's ``~/.hermes/config.yaml``.
 
 These are pure, frozen value objects — no file or network access here.
 """
@@ -14,10 +17,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias
 
+from automation.hermes_memory_config import LIMITS
+
 MemoryKind: TypeAlias = Literal["memory", "user"]
 
-#: Hermes hard caps (chars) per file, source: Hermes docs 05-2 자체 메모리.
-CAPS: Final[dict[MemoryKind, int]] = {"memory": 2200, "user": 1375}
+#: Hermes caps (chars) per file — the configured limits, not Hermes defaults.
+CAPS: Final[dict[MemoryKind, int]] = {
+    "memory": LIMITS["memory_char_limit"],
+    "user": LIMITS["user_char_limit"],
+}
 
 #: Entries are serialized joined by a lone ``§`` line.
 JOIN: Final = "\n§\n"

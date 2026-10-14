@@ -85,10 +85,10 @@ def test_every_row_lives_with_its_owning_package() -> None:
 
 
 def test_every_declared_source_exists() -> None:
-    """file·cron 은 파일을, tree·derived 는 디렉터리를 가리킨다."""
+    """file·cron·config 는 파일을, tree·derived 는 디렉터리를 가리킨다."""
     for declaration, row in _declared_rows():
         source = _REPO / row.source
-        exists = source.is_file() if row.kind in ("file", "cron") else source.is_dir()
+        exists = source.is_file() if row.kind in ("file", "cron", "config") else source.is_dir()
         assert exists, f"{declaration.relative_to(_REPO)} 가 없는 소스를 가리킨다: {row.source}"
 
 

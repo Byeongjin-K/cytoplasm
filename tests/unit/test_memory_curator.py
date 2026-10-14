@@ -1,7 +1,7 @@
 """Contract for the Hermes native-memory curator (pure logic).
 
-Hermes writes ambient facts to MEMORY.md (cap 2200 chars) and USER.md
-(cap 1375 chars), separated by lines that are just ``§``.  When a file
+Hermes writes ambient facts to MEMORY.md (cap 3300 chars) and USER.md
+(cap 3000 chars, both from automation.hermes_memory_config.LIMITS), separated by lines that are just ``§``.  When a file
 fills up, Hermes silently rejects new writes (no auto-organization).  The
 curator keeps those files tidy and under cap:
 
@@ -41,8 +41,8 @@ def test_parse_trims_and_drops_blank_entries() -> None:
 
 
 def test_kind_selects_cap() -> None:
-    assert parse_memory_file("x", kind="memory").char_cap == 2200
-    assert parse_memory_file("x", kind="user").char_cap == 1375
+    assert parse_memory_file("x", kind="memory").char_cap == 3300
+    assert parse_memory_file("x", kind="user").char_cap == 3000
 
 
 def test_char_count_matches_serialized_length() -> None:
@@ -57,7 +57,7 @@ def test_roundtrip_is_stable_for_clean_input() -> None:
 
 
 def test_fill_ratio_is_count_over_cap() -> None:
-    mf = parse_memory_file("x" * 1300, kind="user")  # cap 1375
+    mf = parse_memory_file("x" * 2850, kind="user")  # cap 3000
     assert 0.9 < mf.fill_ratio < 1.0
 
 
@@ -114,7 +114,7 @@ def test_promotion_candidates_remain_in_compacted_file() -> None:
 # Near-cap detection
 # --------------------------------------------------------------------------- #
 def test_near_cap_true_when_over_threshold() -> None:
-    plan = curate(parse_memory_file("x" * 1300, kind="user"))  # ~95%
+    plan = curate(parse_memory_file("x" * 2850, kind="user"))  # ~95%
     assert plan.near_cap is True
 
 
@@ -124,10 +124,10 @@ def test_near_cap_false_when_well_below() -> None:
 
 
 def test_plan_reports_headroom_chars() -> None:
-    mf = parse_memory_file("x" * 1000, kind="user")  # cap 1375
+    mf = parse_memory_file("x" * 1000, kind="user")  # cap 3000
     plan = curate(mf)
-    assert plan.char_cap == 1375
-    assert plan.headroom_after == 1375 - plan.compacted_chars
+    assert plan.char_cap == 3000
+    assert plan.headroom_after == 3000 - plan.compacted_chars
 
 
 # --------------------------------------------------------------------------- #

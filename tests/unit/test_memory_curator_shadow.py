@@ -67,8 +67,8 @@ def test_build_shadow_report_summarizes_routes_candidates_and_projection() -> No
     }
     assert report["schema"] == SHADOW_SCHEMA
     assert report["files"] == [
-        {"kind": "memory", "entries": 4, "chars": 100, "cap": 2200, "fill_pct": 4.5},
-        {"kind": "user", "entries": 1, "chars": 27, "cap": 1375, "fill_pct": 2.0},
+        {"kind": "memory", "entries": 4, "chars": 100, "cap": 3300, "fill_pct": 3.0},
+        {"kind": "user", "entries": 1, "chars": 27, "cap": 3000, "fill_pct": 0.9},
     ]
     assert report["routes"] == {
         "TWIN": {"count": 2, "reclaimable_chars": 55},
@@ -123,7 +123,7 @@ def test_build_shadow_report_summarizes_routes_candidates_and_projection() -> No
         "twin_chars": 55,
         "ops_chars": 27,
         "total_chars": 82,
-        "memory_fill_pct_after": 2.0,
+        "memory_fill_pct_after": 1.4,
         "user_fill_pct_after": 0.0,
     }
     projected = report["projected"]

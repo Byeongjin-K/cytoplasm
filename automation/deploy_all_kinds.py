@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from automation.deploy_all import Plan
 
-KINDS: Final = ("file", "tree", "derived", "cron")
+KINDS: Final = ("file", "tree", "derived", "cron", "config")
 POLICIES: Final = ("required", "optional", "held", "retired")
 ACTIVATIONS: Final = ("none", "gateway")
 STATUSES: Final = (

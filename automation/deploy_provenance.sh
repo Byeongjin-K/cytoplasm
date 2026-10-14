@@ -173,7 +173,7 @@ personal_provenance_check() { # personal_provenance_check <personal-repo> [appro
 # Listed here instead of discovered because most deployers source deploy_cron.sh AFTER the check.
 DEPLOY_PROVENANCE_SHARED_HELPERS=(
   automation/deploy_provenance.sh automation/deploy_cron.sh automation/deploy_push.sh
-  automation/deploy_tree.sh automation/deploy_tree_remote.sh
+  automation/deploy_tree.sh automation/deploy_tree_remote.sh automation/deploy_config.sh
 )
 
 # Origins bash reports for code that never came from a file (bash 5.2, measured): `environment`

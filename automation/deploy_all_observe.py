@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Final, TypeAlias
 from urllib.parse import quote
 
-from automation import deploy_all_gateway
+from automation import deploy_all_gateway, hermes_memory_config
 from automation.deploy_all_cron_listing import parse_cron_listing
 from automation.deploy_declarations import Declaration, all_declarations
 from automation.node_config import NodeConfigError, load_node_config
@@ -56,6 +56,7 @@ case "$1" in
   derived) d="$HOME/$3"; [[ -e "$d" ]] || gone "$d"; . "$2" || exit 44
     if [[ -d "$d/mailon" ]]; then mailon_vendor_digest "$d/mailon" || exit 44; else echo -; fi
     [[ ! -e "$d/runtime-manifest.json" ]] || cat -- "$d/runtime-manifest.json" || exit 44 ;;
+  config) PYTHONPATH="$2" python3 -B -m automation.hermes_memory_config --show ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
   delegated) timeout 300 bash "$2/automation/healthcheck_delegated.sh" ;;
@@ -213,7 +214,26 @@ def _cron(decl: Declaration, _root: Path, call: Runner, cache: dict[str, object]
     return _Seen(want, _sha_text("\n".join(have_values))[:16], "stale" if details else "ok", details)
 
 
-_OBSERVERS: Final = {"file": _file, "tree": _tree, "derived": _derived, "cron": _cron}
+_CONFIG_LINE: Final = re.compile(rf"^{hermes_memory_config.MARKER} have=([a-z_]+=(?:[0-9]+|-)(?:,[a-z_]+=(?:[0-9]+|-))*)$")
+
+
+def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
+    """계정 config.yaml 의 메모리 상한 — 원하는 값은 이 릴리스 트리의 `LIMITS` 다."""
+    if decl.attr("algorithm") != hermes_memory_config.ALGORITHM:
+        return _Seen("?", "?", "unknown", (("unsupported-algorithm", "-"),))
+    wanted = hermes_memory_config.identity(hermes_memory_config.LIMITS)
+    rc, out = call(decl.account, ("config", str(root)))
+    match = _CONFIG_LINE.fullmatch(out.strip()) if rc == 0 else None
+    if match is None:
+        return _Seen(_sha_text(wanted)[:16], "?", "unknown", (("unreadable-config", "-"),))
+    have = match[1]
+    pairs = dict(item.split("=", 1) for item in have.split(","))
+    details = tuple((f"different-{key}", "-") for key, value in hermes_memory_config.LIMITS.items()
+                    if pairs.get(key) != str(value))
+    return _Seen(_sha_text(wanted)[:16], _sha_text(have)[:16], "stale" if details else "ok", details)
+
+
+_OBSERVERS: Final = {"file": _file, "tree": _tree, "derived": _derived, "cron": _cron, "config": _config}
 
 
 def _verdict(decl: Declaration, seen: _Seen, roster_reason: str) -> tuple[str, Details]:

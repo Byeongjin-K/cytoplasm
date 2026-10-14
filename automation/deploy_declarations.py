@@ -2,7 +2,7 @@
 
 선언 파일(`<package>/deploy-manifest.txt`)과 네 필드 분해는 `watcher_manifest` 의 것을 그대로
 쓴다. 네 번째 필드가 `required`·`optional:<사유>` 면 legacy 행이고 의미는 예전과 같다(종류는
-file, 소유 패키지는 소스 앞 두 조각). `v2:` 로 시작하면 종류(file·tree·derived·cron)와 정책
+file, 소유 패키지는 소스 앞 두 조각). `v2:` 로 시작하면 종류(file·tree·derived·cron·config)와 정책
 (required·optional·held·retired)과 속성을 싣고, 소유 패키지는 **선언 파일이 놓인 디렉터리**다 —
 `configs/…` 소스에 앞 두 조각 규칙을 쓰면 엉뚱한 배포기를 가리킨다.
 
@@ -30,7 +30,7 @@ from automation.watcher_manifest import (
     read_declaration_text,
 )
 
-KINDS: Final = ("file", "tree", "derived", "cron")
+KINDS: Final = ("file", "tree", "derived", "cron", "config")
 POLICIES: Final = ("required", "optional", "held", "retired")
 
 Attrs: TypeAlias = tuple[tuple[str, str], ...]
@@ -40,10 +40,12 @@ _KIND_KEYS: Final[dict[str, frozenset[str]]] = {
     "tree": frozenset({"files", "profile", "prefix", "lock"}),
     "derived": frozenset({"algorithm", "requirements"}),
     "cron": frozenset({"schedule", "script", "deliver", "mode", "env"}),
+    "config": frozenset({"algorithm"}),
 }
 _ENV_NAME: Final = re.compile(r"[A-Z_][A-Z0-9_]*")
 _REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "cron": ("schedule", "script", "deliver", "mode"),
+    "config": ("algorithm",),
 }
 _ENUMS: Final[dict[str, tuple[str, ...]]] = {
     "policy": POLICIES,

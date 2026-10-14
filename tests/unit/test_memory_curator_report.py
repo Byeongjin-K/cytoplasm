@@ -17,7 +17,7 @@ def test_report_schema_and_fields(tmp_path: Path) -> None:
     report = build_report(apply_curation(tmp_path, "user", dry_run=False))
     assert report["schema"] == SCHEMA
     assert report["kind"] == "user"
-    assert report["char_cap"] == 1375
+    assert report["char_cap"] == 3000
     assert report["changed"] is True
     assert isinstance(report["freed_chars"], int) and report["freed_chars"] > 0
     assert report["backup"] is not None

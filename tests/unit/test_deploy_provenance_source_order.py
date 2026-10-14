@@ -32,7 +32,7 @@ _HEREDOC: Final = re.compile(
     r"(?=[ \t]|$)", re.MULTILINE)
 _HELPERS: Final = {
     "automation/deploy_cron.sh", "automation/deploy_push.sh", "automation/deploy_tree.sh",
-    "automation/deploy_tree_remote.sh", _GUARD,
+    "automation/deploy_tree_remote.sh", "automation/deploy_config.sh", _GUARD,
 }
 _ROOT_VARIABLE: Final = re.compile(
     r'^\s*(?:local\s+|readonly\s+)?(\w+)="\$\(cd "\$\(dirname "(?:\$\{BASH_SOURCE\[0\]\}|\$BASH_SOURCE|\$0)"\)'
