@@ -70,6 +70,35 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 
 ## 1. 릴리스 절차 — 순서가 전부다
 
+### 매 턴 자동 회상 제공자
+
+`automation/memory_provider/deploy.sh`는 선언된 agent·peer 홈
+`~/.hermes/plugins/autophagy_recall/__init__.py`만 배포한다. Hermes의 **메모리 제공자 로더**가
+이 홈 디렉터리를 직접 검색하므로 일반 플러그인 `register()`나 `hermes plugins enable`을
+사용하지 않는다. 워커는 불변 릴리스 트리에서 실행되고, 파일 배포만으로 기능이 켜지지는 않는다.
+
+활성화는 릴리스와 제공자 파일 배포를 완료한 뒤 각 계정 config.yaml의 기존 `memory:` 매핑에
+`provider: autophagy_recall`을 넣고 agent+peer 게이트웨이를 함께 재시동한다.
+다른 외부 제공자가 이미 설정돼 있으면 덧붙이지 않고 운영자가 하나를 선택한다.
+내장 USER.md·MEMORY.md는 그대로 둔다. 해제는 `memory.provider` 키를 지우고 두 게이트웨이를
+함께 재시동하는 것이다. 제공자 파일은 남아 있어도 선택되지 않으면 실행되지 않는다.
+`codex_app_server` 또는 비문자열 멀티모달 경로는 사용자 API 사본 주입을 우회하므로
+활성화 전 실제 운영 API 경로를 확인한다.
+
+**설정 수렴 연계 설계**: `session/memory-caps`의 `v2:config`·
+`automation/deploy_config.sh::converge_config`가 main에 들어온 뒤, 별도 알고리즘
+`hermes-memory-provider-v1`을 그 헬퍼와 config 관측기의 허용 목록에 등록한다.
+`automation.hermes_memory_config`의 블록 편집 경계를 재사용해 `memory.provider` 한 키만
+백업·원자 교체하고 Hermes 실제 설정 로더로 검증한다. 상한 알고리즘의 두 키를
+제공자 설정에 섞지 않는다. 제공자 패키지의 선언은 agent와 peer **각각 네 필드 한 줄**로
+`.hermes/config.yaml|v2:config;algorithm=hermes-memory-provider-v1;activation=gateway`를
+목적지·정책으로 갖고 배포기는 `converge_config`를 호출한다.
+해제 시에는 이 활성화 선언도 제거하거나 해제 알고리즘으로 바꿔 다음 수렴이 다시 켜지 않게 한다.
+현재 main에는 config 선언 종류가 없으므로 이 PR은 불법 선언이나 별도 YAML 편집기를
+넣지 않는다. 그 연계 전에는 위 운영자 opt-in 절차로만 활성화한다.
+
+[기능 소개와 설치본 계약·제한](../기능소개/매-턴-자동-회상.md)
+
 ### 1.0 공개 우선 릴리스 — 정상 경로 (2026-10-07~)
 
 1. 변경이 PR 로 cytoplasm main 에 머지됐다(필수 체크 셋 green, `automation/merge-pr.sh`).

@@ -1,0 +1,5 @@
+# Hermes's memory-provider loader discovers this directory directly; no general plugin enable.
+agent|automation/memory_provider/plugin/__init__.py|.hermes/plugins/autophagy_recall/__init__.py|v2:file;activation=gateway
+peer|automation/memory_provider/plugin/__init__.py|.hermes/plugins/autophagy_recall/__init__.py|v2:file;activation=gateway
+# The worker uses the pinned immutable release tree, not a second home runtime.
+# memory.provider is opt-in; see manual-maintainer.md for config convergence after memory-caps.
