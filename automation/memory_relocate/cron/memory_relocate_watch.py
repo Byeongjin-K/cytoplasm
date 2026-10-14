@@ -108,16 +108,17 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
     if any(record.status in _IN_FLIGHT for record in state.relocations.values()):
         return state
     try:
-        from automation.memory_curator.classify import classify_entries
+        from automation.memory_relocate.verdict_cache import classify_with_cache
         from automation.memory_curator.watch_steps import read_native
         from automation.memory_relocate.discover import select_batch, select_candidate
         from automation.memory_relocate.propose import build_batch, build_proposed_record, card_fits
         from automation.twin_distill.llm import CodexLlmClient
 
         files = {kind: read_native(MEMORY_DIR, kind)[1] for kind in ("memory", "user")}
-        verdicts = classify_entries(
+        verdicts = classify_with_cache(
             {kind: files[kind].entries for kind in ("memory", "user")},
             client=CodexLlmClient.from_environment(os.environ),
+            path=STATE_PATH.parent / "classify-cache.json",
         )
         known = frozenset(record.entry_sha256 for record in state.relocations.values())
         batch = select_batch(verdicts, files, known)
