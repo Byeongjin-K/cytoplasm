@@ -1,5 +1,8 @@
 """Loopback-only dashboard server: the live view, original sources, and the TODO check.
 
+Original sources and attachments are served only for evidence an approved card cites, and only
+the attachment names that card recorded — never an arbitrary stored mail or file.
+
 Local only by owner decision: a non-loopback bind is refused, not configurable. Every
 request needs the token from the private state root (``?t=`` once, then an HttpOnly
 SameSite=Strict cookie). A progress POST additionally needs the token in a header or form
@@ -8,9 +11,12 @@ cannot tick a todo through the owner's cookie.
 
 Tailnet access goes through ``tailscale serve`` on another host, which overwrites the
 ``Tailscale-User-Login`` header with the caller's real identity. A request that arrives under a
-configured tailnet origin, or carries that header at all, must come from an allowlisted login
-*in addition to* the token: the header alone is forgeable by any local process that can reach
-the loopback port, so it narrows access but never replaces the secret.
+configured tailnet origin, or carries that header at all, must come from an allowlisted login.
+By owner decision (2026-10-14) that login is enough on the tailnet path — no token — unless
+``dashboard.tailnet.token`` turns the token back on. The accepted risk: a local process on the
+node or the gateway can reach the loopback port and forge the header. A tokenless progress POST
+must carry a configured tailnet ``Origin``, so another site open in the owner's browser cannot
+tick a todo through ``tailscale serve``.
 """
 
 from __future__ import annotations
@@ -55,14 +61,21 @@ class _Handler(BaseHTTPRequestHandler):
     on_change: Callable[[], None]
     tailnet_origins: frozenset[str] = frozenset()
     tailnet_logins: frozenset[str] = frozenset()
+    tailnet_token: bool = False
+
+    def _via_tailnet(self) -> bool:
+        host = (self.headers.get("Host") or "").strip().lower()
+        return self.headers.get(IDENTITY_HEADER) is not None or f"https://{host}" in self.tailnet_origins
 
     def _identity_ok(self) -> bool:
-        login = self.headers.get(IDENTITY_HEADER)
-        host = (self.headers.get("Host") or "").strip().lower()
-        via_tailnet = login is not None or f"https://{host}" in self.tailnet_origins
-        if not via_tailnet:
+        if not self._via_tailnet():
             return True
+        login = self.headers.get(IDENTITY_HEADER)
         return login is not None and login.strip().lower() in self.tailnet_logins
+
+    def _tokenless(self) -> bool:
+        """An allowlisted tailnet login stands in for the token unless the config asks for both."""
+        return not self.tailnet_token and self._via_tailnet() and self._identity_ok()
 
     def _send(self, status: int, body: bytes, content_type: str, extra: dict[str, str] | None = None) -> None:
         self.send_response(status)
@@ -106,7 +119,7 @@ class _Handler(BaseHTTPRequestHandler):
             cookie = f"{COOKIE}={self.token}; HttpOnly; SameSite=Strict; Path=/"
             self._send(303, b"", "text/plain", {"Location": parsed.path or "/", "Set-Cookie": cookie})
             return
-        if not self._cookie_ok():
+        if not self._tokenless() and not self._cookie_ok():
             self._text(401, "authentication required — open the URL with ?t=<token> once")
             return
         parts = [unquote(part) for part in parsed.path.split("/") if part]
@@ -121,11 +134,11 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _dashboard(self) -> None:
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
-        page = render_dashboard(snapshot, mode="served", token=self.token)
+        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token)
         self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _source(self, kind: str, source_id: str) -> None:
-        text = self.read_source(kind, source_id)
+        text = self.read_source(kind, source_id) if self.store.approved_attachments(kind, source_id) is not None else None
         if text is None:
             self._text(404, "source not found")
             return
@@ -142,6 +155,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _attachment(self, kind: str, source_id: str, name: str) -> None:
         if "/" in name or "\\" in name or ".." in name or not name:
+            self._text(404, "attachment not found")
+            return
+        if name not in (self.store.approved_attachments(kind, source_id) or ()):
             self._text(404, "attachment not found")
             return
         path = self.attachment_path(kind, source_id, name)
@@ -165,6 +181,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._text(413, "request too large")
             return
         form = parse_qs(self.rfile.read(length).decode("utf-8", errors="replace"))
+        if self._tokenless():
+            if self.headers.get("Origin") not in self.tailnet_origins:
+                self._text(403, "forbidden")
+                return
+            self._record(parts[1], form)
+            return
         if not self._cookie_ok():
             self._text(401, "authentication required")
             return
@@ -175,13 +197,16 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._matches(supplied) or (origin is not None and origin not in allowed):
             self._text(403, "forbidden")
             return
+        self._record(parts[1], form)
+
+    def _record(self, todo_id: str, form: dict[str, list[str]]) -> None:
         status = form.get("status", [""])[0] or None
         raw_progress = form.get("progress", [""])[0]
         try:
             if status is not None and status not in STATUSES:
                 raise ProjectBoardError(f"status must be one of {', '.join(STATUSES)}")
             progress = int(raw_progress) if raw_progress else None
-            todo = self.store.record_progress(parts[1], status=status, progress=progress)
+            todo = self.store.record_progress(todo_id, status=status, progress=progress)
         except (ProjectBoardError, ValueError) as error:
             self._text(400, str(error))
             return
@@ -212,6 +237,7 @@ def make_server(
     on_change: Callable[[], None],
     tailnet_origins: tuple[str, ...] = (),
     tailnet_logins: tuple[str, ...] = (),
+    tailnet_token: bool = False,
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -231,6 +257,7 @@ def make_server(
             "on_change": staticmethod(on_change),
             "tailnet_origins": frozenset(o.lower() for o in tailnet_origins),
             "tailnet_logins": frozenset(x.lower() for x in tailnet_logins),
+            "tailnet_token": tailnet_token,
         },
     )
     server = ThreadingHTTPServer((host, port), handler)

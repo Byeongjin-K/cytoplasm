@@ -20,7 +20,7 @@ from automation.project_board.proposal_gate import discord_runtime, owner_id_fro
 from . import sources
 from .config import load_config
 from .llm import describe, provider_from_config
-from .models import STATUSES, ProjectBoardError
+from .models import GRADES, STATUSES, ProjectBoardError
 from .proposals import ProposalRecord
 from .service import (
     Board,
@@ -115,7 +115,7 @@ def cmd_revise(args: argparse.Namespace) -> int:
         replace_todos=tuple(parse_todo(t) for t in args.todo) if args.todo else None,
         add=tuple(parse_todo(t) for t in args.add), drop=tuple(args.drop),
         set_due=_pairs(args.set_due, "--set-due"), set_owner=_pairs(args.set_owner, "--set-owner"),
-        set_title=_pairs(args.set_title, "--set-title"),
+        set_title=_pairs(args.set_title, "--set-title"), grade=args.grade,
     )
     poster = None if args.no_post else (lambda record: post_card(board, record))
     record = revise(board, args.proposal, change, post=poster)
@@ -142,6 +142,14 @@ def cmd_progress(args: argparse.Namespace) -> int:
     todo = board.store.record_progress(args.todo, status=args.status, progress=args.progress, note=args.note)
     path = rebuild_dashboard(board, today=today_kst())
     print(f"PROGRESS todo={todo.todo_id} status={todo.status} progress={todo.progress} dashboard={path}")
+    return 0
+
+
+def cmd_grade(args: argparse.Namespace) -> int:
+    board = Board.default()
+    task_key = board.store.raise_grade(args.todo, args.grade)
+    path = rebuild_dashboard(board, today=today_kst())
+    print(f"GRADE todo={args.todo} grade={args.grade} task={task_key} dashboard={path}")
     return 0
 
 
@@ -175,6 +183,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         pending=lambda: pending_views(board), read_source=read_source, attachment_path=attachment,
         on_change=lambda: rebuild_dashboard(board, today=today_kst()),
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
+        tailnet_token=config.tailnet_token,
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()
@@ -264,6 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
     rev.add_argument("--set-due", action="append", default=[], help="N=YYYY-MM-DD (empty = 미정)")
     rev.add_argument("--set-owner", action="append", default=[], help="N=담당")
     rev.add_argument("--set-title", action="append", default=[], help="N=제목")
+    rev.add_argument("--grade", choices=GRADES, help="업무 보안 등급 (이 업무의 할 일 전부에 적용)")
     rev.add_argument("--no-post", action="store_true")
     rev.set_defaults(handler=cmd_revise)
 
@@ -275,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
     progress.add_argument("--progress", type=int)
     progress.add_argument("--note")
     progress.set_defaults(handler=cmd_progress)
+
+    grade = commands.add_parser("grade", help="raise the security grade of an approved todo's 업무 (all its todos)")
+    grade.add_argument("todo")
+    grade.add_argument("grade", choices=GRADES)
+    grade.set_defaults(handler=cmd_grade)
 
     commands.add_parser("build", help="rebuild the dashboard file").set_defaults(handler=cmd_build)
 
@@ -292,7 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     dry.add_argument("--days", type=int, default=28)
     dry.add_argument("--limit", type=int, default=60)
     dry.add_argument("--out", required=True, help="private JSONL path outside any checkout")
-    dry.add_argument("--prompt", choices=("v1", "v2"), default=None)
+    dry.add_argument("--prompt", choices=("v1", "v2", "v3"), default=None)
     dry.add_argument("--workers", type=int, default=3)
     dry.add_argument("--sequential", action="store_true", help="oldest first, earlier todos count as already open")
     dry.set_defaults(handler=cmd_dryrun)

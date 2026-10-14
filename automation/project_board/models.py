@@ -22,6 +22,21 @@ MAX_TODOS: Final = 12
 MAX_TITLE: Final = 200
 MAX_PROJECT: Final = 60
 MAX_SUMMARY: Final = 600
+GRADES: Final = ("공개", "과제내부", "대외비", "기관지정")
+DEFAULT_GRADE: Final = "과제내부"
+NEVER_EXPORTED: Final = frozenset({"대외비", "기관지정"})
+
+
+def grade_rank(grade: str) -> int:
+    if grade not in GRADES:
+        raise ProjectBoardError(f"grade must be one of {', '.join(GRADES)}")
+    return GRADES.index(grade)
+
+
+def stricter(*grades: str) -> str:
+    """The strictest of the given grades (empty values are ignored; none at all → the default)."""
+    present = [grade for grade in grades if grade]
+    return max(present, key=grade_rank) if present else DEFAULT_GRADE
 
 
 class ProjectBoardError(RuntimeError):
@@ -87,9 +102,10 @@ class Proposal:
     project_owner: str = ""
     provider: str = ""
     model: str = ""
+    grade: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        raw: dict[str, object] = {
             "project": self.project,
             "project_owner": self.project_owner,
             "summary": self.summary,
@@ -108,6 +124,9 @@ class Proposal:
             "provider": self.provider,
             "model": self.model,
         }
+        if self.grade:
+            raw["grade"] = self.grade  # absent for ungraded proposals, so their approval hash is unchanged
+        return raw
 
 
 def proposal_from_dict(raw: dict[str, object]) -> Proposal:
@@ -148,7 +167,16 @@ def proposal_from_dict(raw: dict[str, object]) -> Proposal:
         ),
         provider=str(raw.get("provider") or ""),
         model=str(raw.get("model") or ""),
+        grade=_grade(raw.get("grade")),
     )
+
+
+def _grade(value: object) -> str:
+    if value in (None, ""):
+        return ""
+    grade = str(value).strip()
+    grade_rank(grade)
+    return grade
 
 
 def canonical_json(proposal: Proposal) -> str:
@@ -176,6 +204,8 @@ class TodoRow:
     approved_at: str
     updated_at: str
     note: str = ""
+    task_key: str = ""
+    grade: str = DEFAULT_GRADE
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +220,7 @@ class SourceRow:
     source_date: str
     attachments: tuple[str, ...]
     approved_at: str
+    grade: str = DEFAULT_GRADE
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +253,7 @@ class PendingView:
     source_subject: str
     created_at: str
     thread_url: str = ""
+    grade: str = DEFAULT_GRADE
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,3 +265,4 @@ class BoardSnapshot:
     sources: tuple[SourceRow, ...] = ()
     events: tuple[EventRow, ...] = ()
     pending: tuple[PendingView, ...] = field(default=())
+    withheld: int = 0
