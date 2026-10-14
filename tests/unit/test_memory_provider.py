@@ -151,30 +151,60 @@ def test_a_slow_pick_does_not_hold_the_turn_and_attaches_at_the_next_model_call(
         return format_reference(pack("합성 장비는 청록 부품을 쓴다."))
 
     provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05)
+    provider.initialize("s1", hermes_home="unused", platform="discord")
     caplog.set_level("INFO")
-    # When
-    started = provider.prefetch("합성 장비 점검", session_id="s1")
-    before = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s1")
+    request = {"input": [{"role": "user", "content": "합성 장비 점검"}]}
+    # When: Hermes calls prefetch without a session id, then the turn's model calls carry it.
+    started = provider.prefetch("합성 장비 점검")
+    before = plugin.request_middleware(request=request, session_id="s1", turn_id="t1")
     release.set()
     recall = plugin._RECALLS["s1"]
     assert recall.done.wait(5)
-    after = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s1")
-    other = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="s2")
-    # Then
+    after = plugin.request_middleware(request=request, session_id="s1", turn_id="t1")
+    other_session = plugin.request_middleware(request=request, session_id="s2", turn_id="t1")
+    next_turn = plugin.request_middleware(request=request, session_id="s1", turn_id="t2")
+    # Then: only the turn whose first model call followed the prefetch gets it, even for the same words.
     assert started == ""
     assert "MEMORY-RECALL-DEFER" in [row.message for row in caplog.records]
     assert before is None
     assert after is not None and "청록 부품" in after["request"]["input"][-1]["content"]
-    assert other is None
+    assert other_session is None
+    assert next_turn is None
+
+
+def test_a_pending_recall_follows_a_session_switch(plugin: ModuleType) -> None:
+    # Given: context compression rotates the session id while the pick runs.
+    release = threading.Event()
+
+    def lookup(_query: str) -> str:
+        assert release.wait(5)
+        return format_reference(pack("합성 장비는 청록 부품을 쓴다."))
+
+    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05)
+    provider.initialize("old", hermes_home="unused", platform="discord")
+    assert provider.prefetch("합성 장비 점검") == ""
+    # When
+    provider.on_session_switch("new", parent_session_id="old", reason="compression")
+    release.set()
+    assert plugin._RECALLS["new"].done.wait(5)
+    changed = plugin.request_middleware(
+        request={"input": [{"role": "user", "content": "합성 장비 점검"}]}, session_id="new", turn_id="t1",
+    )
+    # Then
+    assert "old" not in plugin._RECALLS
+    assert changed is not None
 
 
 def test_a_fast_pick_is_returned_at_turn_start_and_not_attached_again(plugin: ModuleType) -> None:
     # Given
     block = format_reference(pack("합성 장비는 청록 부품을 쓴다."))
     provider = plugin.AutophagyRecallProvider(lambda _query: block)
+    provider.initialize("s3", hermes_home="unused", platform="discord")
     # When
-    started = provider.prefetch("합성 장비", session_id="s3")
-    later = plugin.request_middleware(request={"input": [{"role": "user", "content": "합성 장비"}]}, session_id="s3")
+    started = provider.prefetch("합성 장비")
+    later = plugin.request_middleware(
+        request={"input": [{"role": "user", "content": "합성 장비"}]}, session_id="s3", turn_id="t1",
+    )
     # Then
     assert started == block
     assert later is None

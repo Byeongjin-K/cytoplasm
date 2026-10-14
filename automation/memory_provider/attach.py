@@ -23,6 +23,14 @@ class Recall:
     block: str = ""
     delivered: bool = False
     index: int | None = None
+    turn_id: str | None = None
+
+
+def claim_turn(recall: Recall, turn_id: str) -> bool:
+    """Bind the recall to the first model call's turn after its prefetch; other turns never get it."""
+    if recall.turn_id is None:
+        recall.turn_id = turn_id
+    return recall.turn_id == turn_id
 
 
 def _text(content: object) -> str:

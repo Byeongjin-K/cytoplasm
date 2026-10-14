@@ -6,7 +6,8 @@ import pytest
 
 from automation.knowledge import pick
 from automation.knowledge.pack import KnowledgeQuery
-from automation.rag_ingest.mcp_client import McpUnreachableError
+from automation.knowledge.pack import EvidencePack
+from automation.rag_ingest.mcp_client import McpFatalError, McpUnreachableError
 
 QUERY = KnowledgeQuery("회의록 양식 어디 거 써?", sources=frozenset({"rag"}), limit=4, caller="memory-provider")
 
@@ -106,3 +107,20 @@ def test_an_unreachable_store_is_unavailable_not_empty(monkeypatch: pytest.Monke
     pack = pick.pick_evidence(QUERY, lambda _prompt: '{"ids": []}', env={})
 
     assert pack.verdict == "unavailable"
+
+
+def test_an_older_server_that_rejects_one_per_note_falls_back_to_the_previous_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class OldServer:
+        def search_memory(self, *_args: object, **_kwargs: object) -> list[dict[str, Any]]:
+            raise McpFatalError("validation error")
+
+    previous = EvidencePack("knowledge-v1", QUERY, "hit", (), {"rag": "hit"})
+    monkeypatch.setattr("automation.knowledge.adapters.rag.memory_client", lambda _env: OldServer())
+    monkeypatch.setattr("automation.knowledge.facade.collect_evidence", lambda query, env: previous)
+
+    def refuse(_prompt: str) -> str:
+        raise AssertionError("model must not be called")
+
+    assert pick.pick_evidence(QUERY, refuse, env={}) is previous

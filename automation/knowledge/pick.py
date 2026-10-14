@@ -91,7 +91,11 @@ def pick_evidence(
         rows = [dict(row) for row in memory_client(env).search_memory(
             query.text, limit=CANDIDATE_NOTES, one_per_note=True,
         )]
-    except (OSError, ValueError, McpUnreachableError, McpFatalError) as error:
+    except McpFatalError:
+        from automation.knowledge.facade import collect_evidence
+
+        return collect_evidence(query, env=env)
+    except (OSError, ValueError, McpUnreachableError) as error:
         layers = {"rag": "unavailable", "wiki": "skipped", "twin": "skipped"}
         return EvidencePack("knowledge-v1", query, "unavailable", (), layers,
                             (f"rag 계층 불가({error.__class__.__name__})",))

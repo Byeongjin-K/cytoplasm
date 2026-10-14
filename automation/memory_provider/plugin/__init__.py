@@ -15,7 +15,7 @@ from typing import Any, Final, Never
 
 from agent.memory_provider import MemoryProvider
 
-from automation.memory_provider.attach import Recall, attach
+from automation.memory_provider.attach import Recall, attach, claim_turn
 
 _WAIT_SECONDS: Final = 5.0  # owner 2026-10-14: "2초보다 더 길게 해야하는거 아니야?"
 _PICK_TIMEOUT_SECONDS: Final = 30.0
@@ -69,7 +69,7 @@ def _resolve(recall: Recall, lookup: Lookup) -> None:
 def request_middleware(*, request: dict[str, Any], **context: Any) -> dict[str, Any] | None:
     with _RECALLS_LOCK:
         recall = _RECALLS.get(str(context.get("session_id") or ""))
-    if recall is None or not recall.block:
+    if recall is None or not claim_turn(recall, str(context.get("turn_id") or "")) or not recall.block:
         return None
     from agent.memory_manager import build_memory_context_block
 
@@ -81,6 +81,7 @@ class AutophagyRecallProvider(MemoryProvider):
     def __init__(self, lookup: Lookup = pick_reference, wait_seconds: float = _WAIT_SECONDS) -> None:
         self._lookup = lookup
         self._wait_seconds = wait_seconds
+        self._session_id = ""
 
     @property
     def name(self) -> str:
@@ -91,7 +92,15 @@ class AutophagyRecallProvider(MemoryProvider):
         return True
 
     def initialize(self, session_id: str, **kwargs: str) -> None:
-        """No store, per-session cache, or conversation writes."""
+        """No store or conversation writes; Hermes' prefetch passes no session id, so keep it here."""
+        self._session_id = session_id
+
+    def on_session_switch(self, new_session_id: str, **kwargs: object) -> None:
+        with _RECALLS_LOCK:
+            pending = _RECALLS.pop(self._session_id, None)
+            if pending is not None:
+                _RECALLS[new_session_id] = pending
+        self._session_id = new_session_id
 
     def get_tool_schemas(self) -> list[Never]:
         return []
@@ -101,7 +110,7 @@ class AutophagyRecallProvider(MemoryProvider):
             return ""
         recall = Recall(query[:_QUERY_LIMIT])
         with _RECALLS_LOCK:
-            _RECALLS[session_id] = recall
+            _RECALLS[session_id or self._session_id] = recall
         threading.Thread(
             target=_resolve, args=(recall, self._lookup), daemon=True, name="autophagy-recall",
         ).start()
