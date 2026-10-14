@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import json
 import os
 import stat
 from pathlib import Path
 
 import pytest
 
-from automation.memory_relocate import choice_accounts, peer_approval_config
+from automation.memory_relocate import choice_accounts
 from automation.memory_relocate.choice_files import Mailbox
 from automation.memory_relocate.choices import ChoiceError
 
 _GROUP = os.getgid()
-_CHANNEL = "123456789012345678"
 
 
 def _handoff(tmp_path: Path) -> Path:
@@ -78,24 +76,3 @@ def test_a_squatted_or_linked_mailbox_is_refused(tmp_path: Path) -> None:
     (shared / "peer").symlink_to(tmp_path)
     with pytest.raises(ChoiceError, match="mailbox_permissions"):
         choice_accounts.provision_mailbox(Mailbox(shared / "peer", os.getuid(), _GROUP))
-
-
-def test_peer_config_holds_only_the_channel_and_is_private(tmp_path: Path) -> None:
-    path = tmp_path / "peer" / "approval-config.json"
-
-    assert peer_approval_config.write_config(_CHANNEL, path) is True
-    assert peer_approval_config.write_config(_CHANNEL, path) is False
-
-    assert json.loads(path.read_text(encoding="utf-8")) == {"agent_chat_channel_id": _CHANNEL}
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    with pytest.raises(ValueError, match="malformed"):
-        _ = peer_approval_config.write_config("12; rm -rf /", path)
-
-
-def test_agent_channel_is_read_only_when_well_formed(tmp_path: Path) -> None:
-    interop = tmp_path / "config.json"
-    _ = interop.write_text(json.dumps({"agent_chat_channel_id": _CHANNEL}), encoding="utf-8")
-    assert peer_approval_config.agent_channel(interop) == _CHANNEL
-    _ = interop.write_text(json.dumps({"owner_id": _CHANNEL}), encoding="utf-8")
-    with pytest.raises(ValueError, match="missing or malformed"):
-        _ = peer_approval_config.agent_channel(interop)

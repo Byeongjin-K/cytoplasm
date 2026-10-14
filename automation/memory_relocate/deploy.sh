@@ -67,15 +67,7 @@ run_account ops "$provision"
 run_account "$NODE_AGENT_ACCOUNT" "$provision"
 run_account "$NODE_PEER_ACCOUNT" "$provision"
 
-# The peer verifier reads only agent_chat_channel_id, from its own 0600 file (kept out of the
-# peer's general interop config so its gateway does not start answering in that channel).
-channel="$(run_agent "$module.peer_approval_config --print-channel")"
-case "$channel" in
-  ''|*[!0-9]*) echo "DEPLOY-BLOCK: agent_chat_channel_id is missing or malformed" >&2; exit 5 ;;
-esac
-run_account "$NODE_PEER_ACCOUNT" "$module.peer_approval_config --channel $channel"
-
-# Independent peer executor.
+# Peer local executor of agent decisions; no owner-chat credentials are needed.
 for account in "$NODE_PEER_ACCOUNT"; do
   push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_peer_watch.py" '.hermes/scripts/memory_relocate_peer_watch.py'
   converge_cron memory-relocate-peer-watch "every 2m" memory_relocate_peer_watch.py local

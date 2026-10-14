@@ -1,4 +1,4 @@
-"""Agent half: consume peer-owned frozen choices, never invent peer authority."""
+"""Agent-owned owner choices; peer receipts attest only completed deletions."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -11,7 +11,7 @@ from .apply import ApplyOutcome
 from .choice_accounts import Accounts
 from .choice_delete import NativeDelete
 from .choice_request import ChoiceRequest, encode_request, parse_request
-from .choice_snapshot import ApprovalReader, Snapshot, parse_snapshot
+from .choice_snapshot import ApprovalReader, Snapshot, SnapshotStore, encode_snapshot, parse_snapshot
 from .choices import Choice, ChoiceError
 from .model import RelocationRecord, RelocationState, record_key
 from .relocation_store import RelocationStore
@@ -24,6 +24,7 @@ class AgentChoices:
     native: NativeDelete
     accounts: Accounts
     verifier: ApprovalReader
+    snapshots: SnapshotStore
 
     def request(self, record: RelocationRecord) -> ChoiceRequest:
         # The original manifest survives native deletion and status transitions.
@@ -56,12 +57,17 @@ class AgentChoices:
 
     def probe(self, record: RelocationRecord) -> str:
         request = self.request(record)
-        # Agent re-checks cancellation too; peer receipt alone is not execute-now.
+        # Fresh cancellation stops unfinished effects without changing frozen rows.
         decision = self.verifier.decision(request)
         match decision:
             case "cancelled":
                 # A denial may cross the untrusted mailbox; it can never grant authority.
                 self.accounts.agent.publish(f"{request.key}.cancel.json", '{"cancelled":true}')
+                previous = self.snapshots.load(request)
+                if previous is not None:
+                    cancelled = replace(previous, cancelled=True)
+                    self.snapshots.save(cancelled)
+                    self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(cancelled))
                 return "cancelled"
             case "pending":
                 return "pending"
@@ -69,9 +75,10 @@ class AgentChoices:
                 pass
             case _:
                 assert_never(decision)
-        snapshot = self.snapshot(request)
+        snapshot = self.snapshots.freeze(request, self.verifier)
         if snapshot is None:
             return "pending"
+        self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(snapshot))
         if snapshot.cancelled:
             return "cancelled"
         match snapshot.phase:
@@ -108,7 +115,7 @@ class AgentChoices:
 
     def permits_move(self, record: RelocationRecord) -> bool:
         request = self.request(record)
-        snapshot = self.snapshot(request)
+        snapshot = self.snapshots.load(request)
         return (
             snapshot is not None and snapshot.phase == "approved" and not snapshot.cancelled
             and snapshot.choices[request.index(record)] is Choice.MOVE
@@ -117,8 +124,11 @@ class AgentChoices:
 
     def delete(self, record: RelocationRecord) -> ApplyOutcome:
         request = self.request(record)
-        snapshot = self.snapshot(request)
-        if snapshot is None or record.entry_sha256 not in snapshot.peer_done:
+        snapshot = self.snapshots.load(request)
+        receipt = self.snapshot(request)
+        if snapshot is not None and receipt is not None and receipt.choices != snapshot.choices:
+            raise ChoiceError("peer_receipt_binding")
+        if snapshot is None or receipt is None or record.entry_sha256 not in receipt.peer_done:
             return ApplyOutcome(False, "peer_pending", None, 0)
         number = request.index(record)
         if snapshot.cancelled:

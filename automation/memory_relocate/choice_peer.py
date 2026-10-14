@@ -1,8 +1,8 @@
-"""Peer-owned reaction executor: independently approve, freeze, then delete locally."""
+"""Peer-owned executor: freeze the supplied decision, then delete locally."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, assert_never
+from typing import assert_never
 
 from .choice_delete import NativeDelete
 from .choice_files import Mailbox
@@ -71,18 +71,3 @@ class PeerExecutor:
             self.snapshots.save(snapshot)
             self.outbox.publish(f"{request.key}.json", encode_snapshot(snapshot))
         return snapshot
-
-    def notify(self, snapshot: Snapshot, send: Callable[[Snapshot], bool]) -> None:
-        """Delivery failure cannot advance the notification watermark."""
-        if snapshot.phase != "approved" or not snapshot.peer_done:
-            return
-        marker = self.snapshots.root / f"{snapshot.request.key}.notified"
-        value = ",".join(snapshot.peer_done)
-        try:
-            previous = marker.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            previous = ""
-        if previous != value and send(snapshot):
-            from .choice_files import atomic_text
-
-            atomic_text(marker, value)

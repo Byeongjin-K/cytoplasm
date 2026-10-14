@@ -1,4 +1,4 @@
-"""Independent owner verification and durable selection, separate from old v1 tests."""
+"""Agent owner verification and durable selection, separate from old v1 tests."""
 from __future__ import annotations
 
 import json
@@ -56,7 +56,7 @@ def test_freeze_when_approve_is_not_owner_does_nothing(
 ) -> None:
     # Given: the final approve was not made by the real owner.
     verifier.transport.users = {"✅": users}
-    # When: peer independently checks it.
+    # When: the agent checks the owner's approval.
     frozen = SnapshotStore(tmp_path / "ledger", NOW).freeze(batch_request, verifier)
     # Then: no executable snapshot exists.
     assert frozen is None
@@ -68,7 +68,7 @@ def test_freeze_when_cancel_and_approve_coexist_cancels_without_reading_rows(
 ) -> None:
     # Given: both final decisions are owner reactions.
     verifier.transport.users = {"✅": ((OWNER, False),), "⛔": ((OWNER, False),)}
-    # When: the peer observes the card.
+    # When: the agent observes the card.
     frozen = SnapshotStore(tmp_path / "ledger", NOW).freeze(batch_request, verifier)
     # Then: cancellation wins, with no row snapshot.
     assert frozen is not None and frozen.phase == "cancelled"
@@ -122,3 +122,24 @@ def test_manifest_when_agent_changes_text_or_order_is_rejected(batch_request: Ch
     # When / Then: the peer recomputes hashes instead of trusting a supplied approval.
     with pytest.raises(ChoiceError, match="entry_digest"):
         parse_request(encode_request(changed))
+
+
+def test_freeze_when_rows_include_non_owner_reactions_ignores_them(
+    tmp_path: Path, batch_request: ChoiceRequest, verifier: OfflineVerifier,
+) -> None:
+    # Given: owner approves and chooses KEEP, while other users and bots choose DELETE.
+    verifier.transport.users = {
+        "✅": ((OWNER, False),),
+        ROW_REACTIONS[0][1]: ((OWNER, False),),
+        ROW_REACTIONS[0][2]: (("someone", False), (OWNER, True)),
+        ROW_REACTIONS[1][2]: (("someone", False),),
+        "⛔": (("someone", False), (OWNER, True)),
+    }
+    store = SnapshotStore(tmp_path / "agent-decisions", NOW)
+    frozen = store.freeze(batch_request, verifier)
+    verifier.transport.users[ROW_REACTIONS[2][2]] = (("someone", False),)
+    # When: the frozen choices are consumed again after non-owner changes.
+    restarted = store.freeze(batch_request, verifier)
+    # Then: only the owner's row counts and later reactions cannot alter the vector.
+    assert frozen is not None and restarted == frozen
+    assert frozen.choices == (Choice.KEEP, Choice.MOVE, Choice.MOVE)

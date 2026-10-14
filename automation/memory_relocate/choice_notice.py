@@ -1,4 +1,4 @@
-"""Per-account completion notices on the existing approval thread."""
+"""One terminal batch completion notice on the existing approval thread."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,7 +9,6 @@ from automation.interop.origin_notice import deliver
 from automation.interop.discord_transport import DiscordTransport as MessageTransport
 from automation.interop.reaction_approval import DiscordTransport
 
-from .choice_snapshot import Snapshot
 from .choice_files import atomic_text
 from .choices import Choice, RENDER_VERSION
 from .model import RelocationState
@@ -53,30 +52,3 @@ def notify_completed(state: RelocationState, root: Path, transport: DiscordTrans
         )
         if sent:
             atomic_text(marker, "delivered")
-
-
-def notify_peer(snapshot: Snapshot, transport: DiscordTransport) -> bool:
-    record = snapshot.request.record
-    location = om.Ref(
-        scope="message", space="guild" if record.approval_guild_id else "unknown",
-        guild_id=record.approval_guild_id, channel_id=record.channel_id,
-        message_id=record.message_id, search=("batch", record.batch_hash or ""),
-    )
-    message = om.OwnerMessage(
-        subject_key=snapshot.request.key, subject="메모리 정리 — peer 삭제 결과",
-        fact=f"peer의 삭제 확인 {len(snapshot.peer_done)}건. agent 처리 결과와는 별도입니다.",
-        location=location, owner=om.Action("none"),
-        agent_next="agent가 같은 승인과 동결 선택을 확인해 자기 메모리를 처리합니다",
-        recovery=om.Action("reply", location, "백업 복원이 필요하면 요청해 주세요"),
-        detail=om.Result("executed"),
-        render_version="owner-ko-v2",
-    )
-    result = deliver(
-        api=transport.api,
-        transport_factory=lambda channel: MessageTransport(token=transport.token, channel_id=channel),
-        record={"approval_thread_id": record.channel_id, "approval_guild_id": record.approval_guild_id,
-                "message_id": record.message_id},
-        thread_name="메모리 정리", content="", message=message,
-        fallback=lambda _body: owner_notice.notify_owner(message=message),
-    )
-    return bool(result)
