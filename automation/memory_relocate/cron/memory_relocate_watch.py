@@ -82,6 +82,11 @@ def _owner_id(path: Path = INTEROP_CONFIG) -> str:
     return owner_id
 
 
+# Public credential readers shared with the peer executor; legacy test seams remain.
+load_env_secrets = _load_env_secrets
+owner_id = _owner_id
+
+
 def acquire_single_instance_lock(lock_path: Path = LOCK_PATH) -> IO[str] | None:
     """Return a non-blocking watcher flock or ``None`` for an overlapping tick."""
     lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -120,7 +125,13 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
             client=CodexLlmClient.from_environment(os.environ),
             path=STATE_PATH.parent / "classify-cache.json",
         )
-        known = frozenset(record.entry_sha256 for record in state.relocations.values())
+        known = frozenset(
+            record.entry_sha256 for record in state.relocations.values()
+            if not (
+                record.status == "abandoned"
+                and record.last_block_reason == "owner-withdrew-approval"
+            )
+        )
         batch = select_batch(verdicts, files, known)
         if batch:
             members = [
@@ -178,17 +189,20 @@ def _merge_effect_bindings(
             continue
         if initial.action_hash != current.action_hash or resolved.action_hash != current.action_hash:
             continue
-        initial_binding = initial.message_id, initial.channel_id
-        current_binding = current.message_id, current.channel_id
+        initial_binding = initial.message_id, initial.channel_id, initial.approval_thread_id
+        current_binding = current.message_id, current.channel_id, current.approval_thread_id
         if current_binding != initial_binding or current.approval_guild_id != initial.approval_guild_id:
             relocations[key] = replace(
                 resolved,
                 message_id=current.message_id,
                 channel_id=current.channel_id,
+                approval_thread_id=current.approval_thread_id,
                 approval_guild_id=current.approval_guild_id,
             )
         if current.render_version != initial.render_version:
             relocations[key] = replace(relocations[key], render_version=current.render_version)
+        if current.choice != initial.choice:
+            relocations[key] = replace(relocations[key], choice=current.choice)
     return replace(
         result,
         state=RelocationState(result.state.version, relocations),
@@ -200,7 +214,18 @@ def run_once(now: datetime) -> ResolveResult:
     token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:
         raise WatchError("Discord token is unavailable")
-    state = _discover_and_propose(load_state(STATE_PATH), now)
+    state = load_state(STATE_PATH)
+    if not any(record.status in _IN_FLIGHT for record in state.relocations.values()):
+        from automation.memory_relocate.choice_files import atomic_text
+
+        stamp = STATE_PATH.parent / "discovery-at"
+        try:
+            last_discovery = float(stamp.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            last_discovery = 0
+        if now.timestamp() - last_discovery >= 1800:
+            atomic_text(stamp, str(now.timestamp()))
+            state = _discover_and_propose(state, now)
     # Checkpoint the proposal BEFORE anything posts: the approval gate binds the message id
     # through the on-disk store, so posting a record that exists only in memory posts a real
     # DM the record can never hold — an orphan, and a posting journal that outruns the state.
@@ -208,6 +233,13 @@ def run_once(now: datetime) -> ResolveResult:
     result = resolve_tick(state, effects=build_effects(memory_dir=MEMORY_DIR, state_path=STATE_PATH, rag_state_path=RAG_STATE_PATH, token=token, owner_id=_owner_id(), now=now), max_posts=1)
     result = _merge_effect_bindings(state, result, load_state(STATE_PATH))
     save_state(STATE_PATH, result.state)
+    try:
+        from automation.memory_relocate.choice_notice import notify_completed
+        from automation.interop.reaction_approval import DiscordTransport
+
+        notify_completed(result.state, STATE_PATH.parent / "choice-notices", DiscordTransport(token, _owner_id()))
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"MEMORY-CHOICES-NOTIFY-FAIL type={type(error).__name__}", file=sys.stderr)
     return result
 
 

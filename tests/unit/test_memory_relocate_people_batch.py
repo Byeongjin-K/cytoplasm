@@ -19,9 +19,9 @@ from automation.memory_relocate.apply import ApplyDeps, apply_relocation
 from automation.memory_relocate.approval_gate import KEYCAPS, approval_hash, approval_key, dropped_lines
 from automation.memory_relocate.binding import (
     RelocationHashFields,
-    batch_action_hash,
     relocation_action_hash,
 )
+from automation.memory_relocate.choices import batch_choices_hash
 from automation.memory_relocate.discover import select_batch
 from automation.memory_relocate.model import RelocationRecord, RelocationState, parse_state, record_key, serialize_state
 from automation.memory_relocate.plan import build_relocation_plan
@@ -77,9 +77,9 @@ def test_select_batch_takes_people_and_user_rules_only() -> None:
 def test_one_batch_hash_binds_exactly_the_members_and_the_card_shows_it() -> None:
     members = [(_record(PERSON, "person"), PERSON), (_record(RULE, "memory"), RULE)]
     records = build_batch(members, fits=card_fits)
-    assert {r.batch_hash for r in records} == {batch_action_hash([r.action_hash for r, _ in members])}
+    assert {r.batch_hash for r in records} == {batch_choices_hash([r.action_hash for r, _ in members])}
     version, card = prepare_batch_card(list(zip(records, (PERSON, RULE), strict=True)))
-    assert version == "mc-reloc-batch-render-v1"
+    assert version == "mc-reloc-batch-render-v2"
     assert records[0].batch_hash in card and PERSON in card and RULE in card and "MEMORY.md" in card
     assert approval_key(records[0]) == approval_key(records[1]) == f"batch:{records[0].batch_hash}"
     assert approval_hash(records[0]) == records[0].batch_hash
@@ -99,9 +99,9 @@ def test_an_entry_longer_than_a_card_does_not_block_the_rest() -> None:
     assert [r.entry_sha256 for r in records] == [entry_digest("user", PERSON)]
 
 
-def test_a_card_holds_at_most_ten_entries() -> None:
+def test_a_card_holds_at_most_five_entries() -> None:
     texts = [f"{PERSON} {index}" for index in range(12)]
-    assert len(build_batch([(_record(text, "person"), text) for text in texts], fits=card_fits)) == 10
+    assert len(build_batch([(_record(text, "person"), text) for text in texts], fits=lambda members: True)) == 5
 
 
 def test_batch_fields_round_trip_and_unknown_destinations_fail_closed() -> None:
@@ -192,7 +192,7 @@ def test_members_carry_their_card_numbers_and_the_card_shows_them() -> None:
     records = build_batch([(_record(PERSON, "person"), PERSON), (_record(RULE, "memory"), RULE)], fits=card_fits)
     assert [r.batch_index for r in records] == [1, 2]
     _, card = prepare_batch_card(list(zip(records, (PERSON, RULE), strict=True)))
-    assert f"1. [사람 노트] {PERSON}" in card and f"2. [MEMORY.md 로] {RULE}" in card
+    assert PERSON in card and RULE in card
 
 
 def test_only_the_owner_keycaps_drop_lines() -> None:

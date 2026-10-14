@@ -22,7 +22,7 @@ fi
 
 run_agent() {
   local script="$1"
-  ssh "$host" "sudo -n -u agent -H bash -lc $(printf '%q' "$script")"
+  run_account "${account:-$NODE_AGENT_ACCOUNT}" "$script"
 }
 
 run_account() {
@@ -45,12 +45,19 @@ ssh "$host" 'sudo -n -u ops -H git -C /srv/autophagy-agents pull --ff-only'
 # No-agent reaction watcher wrapper.
 push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_watch.py" '.hermes/scripts/memory_relocate_watch.py'
 
-# Idempotent cron registration (no-agent reaction watcher, every 30m). --all so a paused job is seen.
+# Reactions every 2m; expensive idle discovery retains its internal 30m cadence.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron memory-relocate-watch "every 30m" memory_relocate_watch.py local
+converge_cron memory-relocate-watch "every 2m" memory_relocate_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-relocate-watch || true'
 
 # Moved people facts are no longer in every prompt (owner decision Q138 ②): the agent's SOUL.md
 # carries one recall line. Only that line is ensured; the rest of the owner-editable file stays.
 source "$repo_root/automation/deploy_config.sh"
 converge_config agent .hermes/SOUL.md hermes-soul-recall-v1
+
+# Independent peer executor. Mailbox provisioning is an explicit root prerequisite;
+# this deployer never changes account/home permissions or grants cross-account writes.
+for account in "$NODE_PEER_ACCOUNT"; do
+  push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_peer_watch.py" '.hermes/scripts/memory_relocate_peer_watch.py'
+  converge_cron memory-relocate-peer-watch "every 2m" memory_relocate_peer_watch.py local
+done

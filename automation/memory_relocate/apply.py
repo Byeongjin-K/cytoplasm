@@ -20,6 +20,7 @@ GateBlock = Literal[
     "rag_not_ingested",
     "entry_absent",
     "entry_ambiguous",
+    "peer_pending",
 ]
 
 

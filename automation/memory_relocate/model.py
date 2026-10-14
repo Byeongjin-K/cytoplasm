@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal, TypeGuard
 
+from .choices import Choice
+
 MemoryKind = Literal["memory", "user"]
 RelocationStatus = Literal[
     "proposed",
@@ -59,8 +61,10 @@ class RelocationRecord:
     destination: str | None = None
     #: Shared by every record one approval card covers (owner Q138: as few cards as possible).
     batch_hash: str | None = None
-    #: The member's number on its batch card (1…10); the owner drops a line with that number's reaction.
+    #: Position on its versioned batch card.
     batch_index: int | None = None
+    #: Peer-observed, durable execution receipt; not part of the proposed option-set hash.
+    choice: Choice | None = None
 
 
 DESTINATIONS: Final = frozenset({"person", "memory"})
@@ -111,7 +115,7 @@ _RECORD_KEYS: Final = frozenset(
 #: Keys a record MAY carry — a row written before them still parses, and an
 #: unknown key outside this set is still an unreadable shape (fail-closed).
 _OPTIONAL_RECORD_KEYS: Final = frozenset(
-    {"approval_thread_id", "approval_guild_id", "render_version", "destination", "batch_hash", "batch_index"}
+    {"approval_thread_id", "approval_guild_id", "render_version", "destination", "batch_hash", "batch_index", "choice"}
 )
 
 
@@ -231,6 +235,7 @@ def _parse_record(raw: object) -> RelocationRecord:
         destination=_destination(payload.get("destination")),
         batch_hash=_string_or_none(payload.get("batch_hash"), "batch_hash"),
         batch_index=None if payload.get("batch_index") is None else _integer(payload.get("batch_index"), "batch_index"),
+        choice=None if payload.get("choice") is None else Choice(_string(payload["choice"], "choice")),
     )
 
 
@@ -265,53 +270,12 @@ def parse_state(raw: object) -> RelocationState:
 
 
 def _serialize_record(record: RelocationRecord) -> dict[str, object]:
-    optional = (
-        {"approval_thread_id": record.approval_thread_id}
-        if record.approval_thread_id is not None
-        else {}
-    )
-    if record.approval_guild_id is not None:
-        optional["approval_guild_id"] = record.approval_guild_id
-    if record.render_version is not None:
-        optional["render_version"] = record.render_version
-    if record.destination is not None:
-        optional["destination"] = record.destination
-    if record.batch_hash is not None:
-        optional["batch_hash"] = record.batch_hash
-    if record.batch_index is not None:
-        optional["batch_index"] = record.batch_index
-    return {
-        **optional,
-        "version": record.version,
-        "source_kind": record.source_kind,
-        "entry_sha256": record.entry_sha256,
-        "note_relpath": record.note_relpath,
-        "note_plan_sha256": record.note_plan_sha256,
-        "reclaimable_chars": record.reclaimable_chars,
-        "action_hash": record.action_hash,
-        "status": record.status,
-        "kind": record.kind,
-        "surface": record.surface,
-        "channel_id": record.channel_id,
-        "policy_version": record.policy_version,
-        "message_id": record.message_id,
-        "created_at": record.created_at,
-        "approved_at": record.approved_at,
-        "written_at": record.written_at,
-        "reconciled_at": record.reconciled_at,
-        "remote_ref": record.remote_ref,
-        "note_content_sha256": record.note_content_sha256,
-        "rag_source_key": record.rag_source_key,
-        "rag_fingerprint": record.rag_fingerprint,
-        "backup_path": record.backup_path,
-        "last_block_reason": record.last_block_reason,
-    }
+    from .serialization import _serialize_record as serialize
+
+    return serialize(record)
 
 
 def serialize_state(s: RelocationState) -> dict[str, object]:
-    return {
-        "version": _VERSION,
-        "relocations": {
-            key: _serialize_record(record) for key, record in s.relocations.items()
-        },
-    }
+    from .serialization import serialize_state as serialize
+
+    return serialize(s)

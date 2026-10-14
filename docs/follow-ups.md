@@ -10,6 +10,16 @@
 > (`4716602d`)의 불릿 삭제를 막는다. 그래서 **삭제가 아니라 이동**으로 처리하고, 가드가 두 문서를 합쳐 읽도록 고쳤다.
 > 원 묶음 `##` 헤딩을 양쪽에서 그대로 유지하는 것이 그 가드의 대조 키다.
 
+## 메모리 선택 검증 중 확인한 기존 린트 경고 (2026-10-14)
+
+- **낮음 · 진단 노이즈**: 전체 Ruff 검사는 통과하지만 기존 7곳의 `noqa` 문법 경고가 남는다
+  (`tests/unit/test_gateway_pair.py:15`, `test_repair_report_reconcile.py:3`,
+  `test_entity_preflight_resolver.py:39,56`, `test_release_rollback.py:53`,
+  `automation/repair/repair_report_reconcile.py:101`, `automation/group_roster/cli.py:137`).
+  해당 규칙이 실제로 필요한지 확인한 뒤 올바른 코드 목록으로 좁히거나 불필요한 주석을 제거한다.
+  이번 메모리 선택 변경이 만든 경고는 아니며 실행·승인 동작과 무관하다.
+  근거: `docs/qa/MEMCHOICES/verification.md`.
+
 ## 현재 열린 항목 없음 (2026-08-31 전수 처리)
 
 열린 19건을 병렬 수리로 17건 해소, 2건 재판정(BLOCKED — 기술이전 render 진리표는 KD 확인 선행, G8 분할 잔여는 FS3 재생 핀·동결 소유)했다.

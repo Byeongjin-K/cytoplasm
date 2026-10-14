@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Final, Literal, TypeAlias, TypeGuard, assert_never
 
 from .apply import ApplyOutcome
+from .choices import Choice, RENDER_VERSION as CHOICES_VERSION
 from .model import RelocationRecord, RelocationState
 
 RuntimeRelocationStatus: TypeAlias = Literal[
@@ -17,12 +18,12 @@ RuntimeRelocationStatus: TypeAlias = Literal[
     "reconciled",
     "abandoned",
 ]
-ReactionVerdict: TypeAlias = Literal["approved", "cancelled", "pending", "missing"]
+ReactionVerdict: TypeAlias = Literal["approved", "cancelled", "pending", "missing", "kept"]
 
 _RUNTIME_STATUSES: Final = frozenset(
     {"proposed", "posted", "approved", "written", "ingested", "reconciled", "abandoned"}
 )
-_REACTION_VERDICTS: Final = frozenset({"approved", "cancelled", "pending", "missing"})
+_REACTION_VERDICTS: Final = frozenset({"approved", "cancelled", "pending", "missing", "kept"})
 
 
 def _is_runtime_status(value: str) -> TypeGuard[RuntimeRelocationStatus]:
@@ -83,6 +84,15 @@ def resolve_tick(
         if status.startswith("legacy") or not _is_runtime_status(status):
             continue
 
+        if record.render_version == CHOICES_VERSION and status in ("approved", "written"):
+            current = effects.probe_reaction(record)
+            if current in ("cancelled", "kept"):
+                relocations[key] = replace(record, status="abandoned", last_block_reason="owner-cancelled")
+                abandoned.append(key)
+                continue
+            if current != "approved":
+                continue
+
         match status:
             case "proposed":
                 if len(posted) >= max_posts:
@@ -117,6 +127,9 @@ def resolve_tick(
                     case "cancelled":
                         relocations[key] = replace(record, status="abandoned")
                         abandoned.append(key)
+                    case "kept":
+                        relocations[key] = replace(record, status="abandoned", last_block_reason="owner-kept")
+                        abandoned.append(key)
                     case "missing":
                         relocations[key] = replace(
                             record,
@@ -129,6 +142,24 @@ def resolve_tick(
                         assert_never(unreachable)
 
             case "approved":
+                match record.choice:
+                    case Choice.DELETE:
+                        outcome = effects.apply_delete(record)
+                        if outcome.deleted:
+                            relocations[key] = replace(
+                                record, status="reconciled", reconciled_at=transition_time,
+                                backup_path=outcome.backup_path, last_block_reason=None,
+                            )
+                            reconciled.append(key)
+                        else:
+                            relocations[key] = replace(record, last_block_reason=outcome.reason)
+                        continue
+                    case Choice.KEEP:
+                        continue
+                    case Choice.MOVE | None:
+                        pass
+                    case _:
+                        assert_never(record.choice)
                 write_receipt = effects.write_obsidian(record)
                 if write_receipt is not None:
                     remote_ref, note_content_sha256 = write_receipt

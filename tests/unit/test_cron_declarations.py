@@ -212,7 +212,7 @@ def test_every_registration_matches_its_declaration() -> None:
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
     assert len(names["agent"]) == 29
-    assert names["peer"] == {"doctor-watch", "selfskill-audit-watch"}
+    assert names["peer"] == {"doctor-watch", "selfskill-audit-watch", "memory-relocate-peer-watch"}
     assert "mail-triage-repair-daily" not in {job.name for job in declared}
     assert "mail-triage-repair-daily" not in {registration.job.name for registration in registered}
     raw = {(registration.job.package, registration.job.name) for registration in registered

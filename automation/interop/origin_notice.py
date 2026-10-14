@@ -164,7 +164,7 @@ def deliver(
     *,
     api: ApiCall,
     transport_factory: Callable[[str], _SendsChunks],
-    record: dict,
+    record: dict[str, _RecordValue],
     thread_name: str,
     content: str,
     fallback: Callable[[str], object],
