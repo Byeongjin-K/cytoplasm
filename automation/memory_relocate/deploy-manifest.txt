@@ -1,3 +1,5 @@
 agent|automation/memory_relocate/cron/memory_relocate_watch.py|.hermes/scripts/memory_relocate_watch.py|required
-agent|automation/memory_relocate/cron/memory_relocate_watch.py|memory-relocate-watch|v2:cron;schedule=every 30m;script=memory_relocate_watch.py;deliver=local;mode=no-agent
+agent|automation/memory_relocate/cron/memory_relocate_watch.py|memory-relocate-watch|v2:cron;schedule=every 2m;script=memory_relocate_watch.py;deliver=local;mode=no-agent
 agent|automation/hermes_soul_recall.py|.hermes/SOUL.md|v2:config;algorithm=hermes-soul-recall-v1
+peer|automation/memory_relocate/cron/memory_relocate_peer_watch.py|.hermes/scripts/memory_relocate_peer_watch.py|required
+peer|automation/memory_relocate/cron/memory_relocate_peer_watch.py|memory-relocate-peer-watch|v2:cron;schedule=every 2m;script=memory_relocate_peer_watch.py;deliver=local;mode=no-agent

@@ -47,9 +47,18 @@ def prepare_batch_card(members: Sequence[tuple[RelocationRecord, str]]) -> tuple
     if not members or len({record.batch_hash for record, _ in members}) != 1 or members[0][0].batch_hash is None:
         raise RenderError("a batch card needs members that share one batch hash")
     version = members[0][0].render_version or BATCH_RENDER_VERSION
-    if version != BATCH_RENDER_VERSION:
-        raise RenderError(f"unsupported batch render version: {version}")
-    content = _render_batch_v1(members)
+    match version:
+        case "mc-reloc-batch-render-v1":
+            content = _render_batch_v1(members)
+        case "mc-reloc-batch-render-v2":
+            from .choice_render import render_choices
+            from .choices import MAX_ROWS
+
+            if len(members) > MAX_ROWS:
+                raise RenderError("too many batch choice rows")
+            content = render_choices(members)
+        case _:
+            raise RenderError(f"unsupported batch render version: {version}")
     if len(content) > MAX_MESSAGE_CHARS:
         raise RenderError("memory relocation batch approval exceeds the postable length")
     return version, content

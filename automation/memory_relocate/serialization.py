@@ -21,6 +21,8 @@ def _serialize_record(record: RelocationRecord) -> dict[str, object]:
         optional["batch_hash"] = record.batch_hash
     if record.batch_index is not None:
         optional["batch_index"] = record.batch_index
+    if record.choice is not None:
+        optional["choice"] = record.choice.value
     return {
         **optional,
         "version": record.version,

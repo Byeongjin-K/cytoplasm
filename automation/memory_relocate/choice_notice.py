@@ -1,0 +1,82 @@
+"""Per-account completion notices on the existing approval thread."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from automation import owner_notice
+from automation.interop import origin_notice, owner_message as om
+from automation.interop.origin_notice import deliver
+from automation.interop.discord_transport import DiscordTransport as MessageTransport
+from automation.interop.reaction_approval import DiscordTransport
+
+from .choice_snapshot import Snapshot
+from .choice_files import atomic_text
+from .choices import Choice, RENDER_VERSION
+from .model import RelocationState
+
+
+def notify_completed(state: RelocationState, root: Path, transport: DiscordTransport) -> None:
+    """One terminal batch notice; no close while any member is still executing."""
+    batches = {r.batch_hash for r in state.relocations.values() if r.render_version == RENDER_VERSION}
+    for batch in batches:
+        records = [r for r in state.relocations.values() if r.batch_hash == batch]
+        if any(r.status not in ("reconciled", "abandoned") for r in records):
+            continue
+        record = records[0]
+        if not record.message_id or not record.message_id.isdigit():
+            continue
+        marker = root / f"{record.message_id}.notified"
+        if marker.exists():
+            continue
+        moved = sum(r.status == "reconciled" and r.choice is Choice.MOVE for r in records)
+        deleted = sum(r.status == "reconciled" and r.choice is Choice.DELETE for r in records)
+        kept = len(records) - moved - deleted
+        location = origin_notice.approval_location({
+            "approval_thread_id": record.channel_id, "approval_guild_id": record.approval_guild_id,
+            "message_id": record.message_id,
+        })
+        message = om.OwnerMessage(
+            subject_key=batch or "", subject="메모리 정리 결과",
+            fact=f"이동 {moved}건 · 양 계정 삭제 {deleted}건 · 유지/취소 {kept}건. 삭제 전 백업은 각 계정에 보관했습니다.",
+            location=location, owner=om.Action("none"), agent_next=None,
+            recovery=om.Action("reply", location, "백업 복원이 필요하면 요청해 주세요"),
+            detail=om.Result("executed"), render_version="owner-ko-v2",
+        )
+        sent = deliver(
+            api=transport.api,
+            transport_factory=lambda channel: MessageTransport(token=transport.token, channel_id=channel),
+            record={"approval_thread_id": record.channel_id, "approval_guild_id": record.approval_guild_id,
+                    "message_id": record.message_id},
+            thread_name="메모리 정리", content="", message=message,
+            fallback=lambda _body: owner_notice.notify_owner(message=message),
+            outcome=origin_notice.ThreadOutcome.DONE,
+        )
+        if sent:
+            atomic_text(marker, "delivered")
+
+
+def notify_peer(snapshot: Snapshot, transport: DiscordTransport) -> bool:
+    record = snapshot.request.record
+    location = om.Ref(
+        scope="message", space="guild" if record.approval_guild_id else "unknown",
+        guild_id=record.approval_guild_id, channel_id=record.channel_id,
+        message_id=record.message_id, search=("batch", record.batch_hash or ""),
+    )
+    message = om.OwnerMessage(
+        subject_key=snapshot.request.key, subject="메모리 정리 — peer 삭제 결과",
+        fact=f"peer의 삭제 확인 {len(snapshot.peer_done)}건. agent 처리 결과와는 별도입니다.",
+        location=location, owner=om.Action("none"),
+        agent_next="agent가 같은 승인과 동결 선택을 확인해 자기 메모리를 처리합니다",
+        recovery=om.Action("reply", location, "백업 복원이 필요하면 요청해 주세요"),
+        detail=om.Result("executed"),
+        render_version="owner-ko-v2",
+    )
+    result = deliver(
+        api=transport.api,
+        transport_factory=lambda channel: MessageTransport(token=transport.token, channel_id=channel),
+        record={"approval_thread_id": record.channel_id, "approval_guild_id": record.approval_guild_id,
+                "message_id": record.message_id},
+        thread_name="메모리 정리", content="", message=message,
+        fallback=lambda _body: owner_notice.notify_owner(message=message),
+    )
+    return bool(result)

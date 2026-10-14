@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final
 from urllib.error import HTTPError
 
 from .approval_api import DiscordTransportLike, RelocationStoreLike, lifecycle
+from .choices import RENDER_VERSION as CHOICES_VERSION, ROW_REACTIONS
 from .model import RelocationRecord, record_key
 from .render import prepare_approval_card, prepare_batch_card
 
@@ -91,6 +92,8 @@ class RelocateApprovalGate:
         if request.action_hash not in content:
             return state.BINDING_MISMATCH
         try:
+            for emoji in self._choice_reactions():
+                self.transport.add_reaction(request.channel_id, request.message_id, emoji)
             self.transport.add_reaction(
                 request.channel_id,
                 request.message_id,
@@ -169,12 +172,22 @@ class RelocateApprovalGate:
                 self.journal.clear(intent.key)
         except _TRANSPORT_ERRORS as error:
             raise lifecycle().ApprovalSurfaceError(str(error)) from error
-        for emoji in (APPROVE_EMOJI, CANCEL_EMOJI):
+        for emoji in (*self._choice_reactions(), APPROVE_EMOJI, CANCEL_EMOJI):
             try:
                 self.transport.add_reaction(intent.channel_id, message_id, emoji)
             except _TRANSPORT_ERRORS:
+                if version == CHOICES_VERSION:
+                    break  # Retry seeds on the stored card, without enabling final approval early.
                 continue
         return lifecycle().PostedApproval(message_id, intent.channel_id)
+
+    def _choice_reactions(self) -> tuple[str, ...]:
+        if self.record.render_version != CHOICES_VERSION:
+            return ()
+        count = len(self.members) or sum(
+            record.batch_hash == self.record.batch_hash for record in self.store.pending()
+        )
+        return tuple(emoji for row in ROW_REACTIONS[:count] for emoji in row)
 
     def commit(
         self,

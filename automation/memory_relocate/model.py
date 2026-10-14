@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Literal, TypeGuard
 
+from .choices import Choice
+
 MemoryKind = Literal["memory", "user"]
 RelocationStatus = Literal[
     "proposed",
@@ -59,8 +61,10 @@ class RelocationRecord:
     destination: str | None = None
     #: Shared by every record one approval card covers (owner Q138: as few cards as possible).
     batch_hash: str | None = None
-    #: The member's number on its batch card (1…10); the owner drops a line with that number's reaction.
+    #: Position on its versioned batch card.
     batch_index: int | None = None
+    #: Peer-observed, durable execution receipt; not part of the proposed option-set hash.
+    choice: Choice | None = None
 
 
 DESTINATIONS: Final = frozenset({"person", "memory"})
@@ -111,7 +115,7 @@ _RECORD_KEYS: Final = frozenset(
 #: Keys a record MAY carry — a row written before them still parses, and an
 #: unknown key outside this set is still an unreadable shape (fail-closed).
 _OPTIONAL_RECORD_KEYS: Final = frozenset(
-    {"approval_thread_id", "approval_guild_id", "render_version", "destination", "batch_hash", "batch_index"}
+    {"approval_thread_id", "approval_guild_id", "render_version", "destination", "batch_hash", "batch_index", "choice"}
 )
 
 
@@ -231,6 +235,7 @@ def _parse_record(raw: object) -> RelocationRecord:
         destination=_destination(payload.get("destination")),
         batch_hash=_string_or_none(payload.get("batch_hash"), "batch_hash"),
         batch_index=None if payload.get("batch_index") is None else _integer(payload.get("batch_index"), "batch_index"),
+        choice=None if payload.get("choice") is None else Choice(_string(payload["choice"], "choice")),
     )
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Final, assert_never
 
 from automation.interop.approval_directory import DiscordChannelDirectory
 from automation.interop.approval_lease import FileKeyLease, PostingJournal
@@ -25,6 +25,12 @@ from automation.memory_curator.watch_steps import read_native
 from automation.obsidian_write.config import ObsidianWriteError, load_config
 
 from .approval_gate import RelocateApprovalGate, approval_hash, approval_key, dropped_lines, request_approval
+from .apply import ApplyOutcome
+from .choice_accounts import accounts
+from .choice_agent import AgentChoices
+from .choice_delete import NativeDelete
+from .choice_verify import Verifier
+from .choices import Choice, RENDER_VERSION as CHOICES_VERSION, ROW_REACTIONS
 from .model import RelocationRecord, record_key
 from .move_effects import MoveContext, build_move_effects
 from .render import prepare_approval_card, prepare_batch_card
@@ -64,6 +70,16 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
     journal = PostingJournal(state_path.parent / "posting-journal")
     write_config = load_config()
     push_approval_log = state_path.parent / "relocate-push-approvals.jsonl"
+    choice_agent: AgentChoices | None = None
+
+    def choices() -> AgentChoices:
+        nonlocal choice_agent
+        if choice_agent is None:
+            choice_agent = AgentChoices(
+                store, NativeDelete(memory_dir, state_path.parent / "choice-deletes", now),
+                accounts(), Verifier(transport, directory),
+            )
+        return choice_agent
 
 
     def live_requests(key: str) -> tuple[RelocationRecord, ...]:
@@ -152,6 +168,11 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
     dropped: dict[str, frozenset[int]] = {}
 
     def probe(record: RelocationRecord) -> str:
+        if record.render_version == CHOICES_VERSION:
+            count = sum(member.batch_hash == record.batch_hash for member in store.all_pending())
+            for emoji in (*(emoji for row in ROW_REACTIONS[:count] for emoji in row), "✅", "⛔"):
+                transport.add_reaction(record.channel_id, record.message_id or "", emoji)
+            return choices().probe(record)
         batch = record.batch_hash
         if batch is None:
             return probe_one(record)
@@ -217,4 +238,24 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
         MoveContext(memory_dir, rag_state_path, write_config, push_approval_log, owner_id, now),
         recover_entry_text,
     )
-    return ResolveEffects(post, probe, moves.write, moves.verify, moves.apply, now)
+    def write(record: RelocationRecord) -> tuple[str, str] | None:
+        if record.render_version == CHOICES_VERSION and not choices().permits_move(record):
+            return None
+        return moves.write(record)
+
+    def apply(record: RelocationRecord) -> ApplyOutcome:
+        if record.render_version == CHOICES_VERSION:
+            match record.choice:
+                case Choice.DELETE:
+                    return choices().delete(record)
+                case Choice.KEEP | None:
+                    return ApplyOutcome(False, "not_approved", None, 0)
+                case Choice.MOVE:
+                    pass
+                case _:
+                    assert_never(record.choice)
+            if not choices().permits_move(record):
+                return ApplyOutcome(False, "not_approved", None, 0)
+        return moves.apply(record)
+
+    return ResolveEffects(post, probe, write, moves.verify, apply, now)

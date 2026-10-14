@@ -4,7 +4,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 
-from .binding import RelocationHashFields, batch_action_hash, relocation_action_hash
+from .binding import RelocationHashFields, relocation_action_hash
+from .choices import MAX_ROWS, RENDER_VERSION, batch_choices_hash
 from .model import MemoryKind, RelocationRecord
 from .plan import build_relocation_plan
 from .rag_verify import rag_source_key
@@ -57,8 +58,8 @@ def build_proposed_record(
     )
 
 
-#: Number reactions 1️⃣…🔟 let the owner drop single lines, so a card holds at most ten.
-MAX_BATCH = 10
+#: Three distinct choices per row plus the final approve/cancel fit Discord's 20 reactions.
+MAX_BATCH = MAX_ROWS
 
 
 def build_batch(
@@ -73,6 +74,8 @@ def build_batch(
     """
     taken: list[tuple[RelocationRecord, str]] = []
     for member in members:
+        if any(text == member[1] for _, text in taken):
+            continue
         if len(taken) < MAX_BATCH and fits([*taken, member]):
             taken.append(member)
     if not taken:
@@ -91,8 +94,8 @@ def card_fits(members: Sequence[tuple[RelocationRecord, str]]) -> bool:
 
 
 def _bound(members: Sequence[tuple[RelocationRecord, str]]) -> tuple[RelocationRecord, ...]:
-    batch = batch_action_hash([record.action_hash for record, _ in members])
+    batch = batch_choices_hash([record.action_hash for record, _ in members])
     return tuple(
-        replace(record, batch_hash=batch, batch_index=number)
+        replace(record, batch_hash=batch, batch_index=number, render_version=RENDER_VERSION)
         for number, (record, _) in enumerate(members, start=1)
     )
