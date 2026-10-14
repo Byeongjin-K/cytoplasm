@@ -18,7 +18,9 @@ def test_routes_match_the_route_literal() -> None:
     literal_routes = frozenset(get_args(Route))
 
     # Then ROUTES is exact and cannot drift from the alias.
-    assert ROUTES == {"TWIN", "OPS_REFERENCE", "KEEP_NATIVE", "UNCERTAIN"}
+    assert ROUTES == {
+        "TWIN", "OPS_REFERENCE", "PERSON_REFERENCE", "AGENT_RULE", "KEEP_NATIVE", "UNCERTAIN",
+    }
     assert literal_routes == ROUTES
 
 

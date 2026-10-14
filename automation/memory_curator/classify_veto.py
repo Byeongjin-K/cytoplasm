@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Final
 
 
-from .classify_model import EntryVerdict, VetoReason
+from .classify_model import MOVABLE_ROUTES, EntryVerdict, VetoReason
 from .model import MemoryKind
 
 _IDENTITY_CUES: Final[tuple[str, ...]] = (
@@ -122,6 +122,10 @@ def pre_llm_veto(
 
 
 def post_llm_veto(verdict: EntryVerdict) -> EntryVerdict:
+    if verdict.route == "AGENT_RULE" and verdict.source_kind != "user":
+        return replace(verdict, route="KEEP_NATIVE", evidence="", reason="agent_rule_in_memory", veto="keep_native_rule")
+    if verdict.route in MOVABLE_ROUTES and _MARKER not in verdict.entry_text:
+        return verdict
     veto = _native_veto(verdict.entry_text)
     if veto is not None:
         return replace(

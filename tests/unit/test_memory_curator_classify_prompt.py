@@ -19,7 +19,7 @@ def test_version_tag_opens_the_prompt() -> None:
     rendered = render(_ENTRY_A, source_kind="memory")
 
     # Then the first line carries the version tag downstream parsers pin.
-    assert MC_CLASSIFY_VERSION == "mc-classify-v1"
+    assert MC_CLASSIFY_VERSION == "mc-classify-v2"
     assert MC_CLASSIFY_VERSION in rendered.splitlines()[0]
 
 
