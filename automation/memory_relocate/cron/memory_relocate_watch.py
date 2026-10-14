@@ -116,7 +116,8 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
         from automation.memory_relocate.verdict_cache import classify_with_cache
         from automation.memory_curator.watch_steps import read_native
         from automation.memory_relocate.discover import select_batch, select_candidate
-        from automation.memory_relocate.propose import build_batch, build_proposed_record, card_fits
+        from automation.memory_relocate.propose import build_proposed_record
+        from automation.memory_relocate.line_choices import build_lines
         from automation.twin_distill.llm import CodexLlmClient
 
         files = {kind: read_native(MEMORY_DIR, kind)[1] for kind in ("memory", "user")}
@@ -152,7 +153,7 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
                 )
                 for found in batch
             ]
-            records = build_batch(members, fits=card_fits)
+            records = build_lines(members)
             if records:
                 added = {record_key(record.source_kind, record.entry_sha256): record for record in records}
                 return replace(state, relocations={**dict(state.relocations), **added})
@@ -170,6 +171,10 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
             binding_policy_version=_BINDING_POLICY_VERSION,
             now=now,
         )
+        lines = build_lines(((record, candidate.entry_text),))
+        if not lines:
+            return state
+        record = lines[0]
     except Exception:  # noqa: BLE001 - discovery is best-effort; a bad tick must not block resolve
         return state
     key = record_key(record.source_kind, record.entry_sha256)
@@ -230,9 +235,14 @@ def run_once(now: datetime) -> ResolveResult:
     # through the on-disk store, so posting a record that exists only in memory posts a real
     # DM the record can never hold — an orphan, and a posting journal that outruns the state.
     save_state(STATE_PATH, state)
-    result = resolve_tick(state, effects=build_effects(memory_dir=MEMORY_DIR, state_path=STATE_PATH, rag_state_path=RAG_STATE_PATH, token=token, owner_id=_owner_id(), now=now), max_posts=1)
+    effects = build_effects(memory_dir=MEMORY_DIR, state_path=STATE_PATH, rag_state_path=RAG_STATE_PATH, token=token, owner_id=_owner_id(), now=now)
+    if effects.migrate is not None:
+        state = effects.migrate(state)
+    result = resolve_tick(state, effects=effects, max_posts=len(state.relocations))
     result = _merge_effect_bindings(state, result, load_state(STATE_PATH))
     save_state(STATE_PATH, result.state)
+    if effects.notify_migrated is not None:
+        effects.notify_migrated(result.state)
     try:
         from automation.memory_relocate.choice_notice import notify_completed
         from automation.interop.reaction_approval import DiscordTransport

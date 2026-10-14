@@ -11,8 +11,9 @@ from .binding import RelocationHashFields, relocation_action_hash
 from .choices import MAX_ROWS, RENDER_VERSION, ChoiceError, batch_choices_hash
 from . import choice_json
 from .model import RelocationRecord, RelocationState, parse_state, record_key, serialize_state
+from .line_choices import RENDER_VERSION as LINE_VERSION, line_hash
 from .plan import build_relocation_plan
-from .render import prepare_batch_card
+from .render import prepare_approval_card, prepare_batch_card
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,8 @@ class ChoiceRequest:
 
     @property
     def content(self) -> str:
+        if self.record.render_version == LINE_VERSION:
+            return prepare_approval_card(self.record, self.members[0][1])[1]
         return prepare_batch_card(self.members)[1]
 
     def index(self, record: RelocationRecord) -> int:
@@ -69,8 +72,10 @@ def parse_request(document: str) -> ChoiceRequest:
             raise ChoiceError("entry_text")
         if any(previous == text for _, previous in members):
             raise ChoiceError("duplicate_entry_text")
-        if record.render_version != RENDER_VERSION or record.batch_index != number:
+        if record.render_version not in (RENDER_VERSION, LINE_VERSION) or record.batch_index != number:
             raise ChoiceError("member_version_or_order")
+        if record.render_version == LINE_VERSION and len(records) != 1:
+            raise ChoiceError("line_member_count")
         if record.entry_sha256 != entry_digest(record.source_kind, text):
             raise ChoiceError("entry_digest")
         plan = build_relocation_plan(text, source_kind=record.source_kind, destination=record.destination)
@@ -85,8 +90,8 @@ def parse_request(document: str) -> ChoiceRequest:
         if record.choice is not None or record.status != "posted":
             raise ChoiceError("request_already_decided")
         members.append((record, text))
-    batch = batch_choices_hash([r.action_hash for r, _ in members])
     first = records[0]
+    batch = line_hash(first) if first.render_version == LINE_VERSION else batch_choices_hash([r.action_hash for r, _ in members])
     if not first.message_id or not first.message_id.isascii() or not first.message_id.isdigit():
         raise ChoiceError("message_id")
     if not first.channel_id.isascii() or not first.channel_id.isdigit():

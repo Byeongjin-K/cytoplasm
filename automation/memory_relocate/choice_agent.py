@@ -13,6 +13,7 @@ from .choice_delete import NativeDelete
 from .choice_request import ChoiceRequest, encode_request, parse_request
 from .choice_snapshot import ApprovalReader, Snapshot, SnapshotStore, encode_snapshot, parse_snapshot
 from .choices import Choice, ChoiceError
+from .line_choices import RENDER_VERSION as LINE_VERSION
 from .model import RelocationRecord, RelocationState, record_key
 from .relocation_store import RelocationStore
 from .store import load_state, save_state
@@ -57,6 +58,15 @@ class AgentChoices:
 
     def probe(self, record: RelocationRecord) -> str:
         request = self.request(record)
+        if record.render_version == LINE_VERSION:
+            snapshot = self.snapshots.freeze(request, self.verifier)
+            if snapshot is None:
+                return "pending"
+            if self.verifier.decision(self._frozen_request(snapshot)) != "approved":
+                return "pending"
+            self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(snapshot))
+            self._persist_choices(snapshot)
+            return "kept" if snapshot.choices[0] is Choice.KEEP else "approved"
         # Fresh cancellation stops unfinished effects without changing frozen rows.
         decision = self.verifier.decision(request)
         match decision:
@@ -119,8 +129,17 @@ class AgentChoices:
         return (
             snapshot is not None and snapshot.phase == "approved" and not snapshot.cancelled
             and snapshot.choices[request.index(record)] is Choice.MOVE
-            and self.verifier.decision(request) == "approved"
+            and self.verifier.decision(self._frozen_request(snapshot)) == "approved"
         )
+
+    def _frozen_request(self, snapshot: Snapshot) -> ChoiceRequest:
+        """Carry the durable line choice into message-only revalidation; never reselect."""
+        if snapshot.request.record.render_version != LINE_VERSION:
+            return snapshot.request
+        return ChoiceRequest(tuple(
+            (replace(record, choice=choice), text)
+            for (record, text), choice in zip(snapshot.request.members, snapshot.choices, strict=True)
+        ))
 
     def delete(self, record: RelocationRecord) -> ApplyOutcome:
         request = self.request(record)
@@ -135,7 +154,7 @@ class AgentChoices:
             return ApplyOutcome(False, "not_approved", None, 0)
         if snapshot.phase != "approved" or snapshot.choices[number] is not Choice.DELETE:
             raise ChoiceError("delete_not_authorized")
-        if self.verifier.decision(request) != "approved":
+        if self.verifier.decision(self._frozen_request(snapshot)) != "approved":
             return ApplyOutcome(False, "not_approved", None, 0)
         backups = self.native.apply(request, number)
         return ApplyOutcome(True, None, backups[0] if backups else None, 0)

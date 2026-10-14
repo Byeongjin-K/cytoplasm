@@ -8,6 +8,7 @@ from typing import Final, Literal, TypeAlias, TypeGuard, assert_never
 from .apply import ApplyOutcome
 from .choices import Choice, RENDER_VERSION as CHOICES_VERSION
 from .model import RelocationRecord, RelocationState
+from .line_choices import RENDER_VERSION as LINE_VERSION
 
 RuntimeRelocationStatus: TypeAlias = Literal[
     "proposed",
@@ -42,6 +43,8 @@ class ResolveEffects:
     verify_rag: Callable[[RelocationRecord], bool]
     apply_delete: Callable[[RelocationRecord], ApplyOutcome]
     now: datetime
+    migrate: Callable[[RelocationState], RelocationState] | None = None
+    notify_migrated: Callable[[RelocationState], None] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +87,7 @@ def resolve_tick(
         if status.startswith("legacy") or not _is_runtime_status(status):
             continue
 
-        if record.render_version == CHOICES_VERSION and status in ("approved", "written"):
+        if record.render_version in (CHOICES_VERSION, LINE_VERSION) and status in ("approved", "written"):
             current = effects.probe_reaction(record)
             if current in ("cancelled", "kept"):
                 relocations[key] = replace(record, status="abandoned", last_block_reason="owner-cancelled")
