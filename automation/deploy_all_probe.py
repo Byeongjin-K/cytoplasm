@@ -176,6 +176,13 @@ def main(argv: list[str] | None = None) -> int:
         "--format", choices=("report", "actions", "receipt", "gateways"), default="report"
     )
     parser.add_argument(
+        "--wrapper-refresh",
+        action="append",
+        default=[],
+        metavar="NODE|STATUS|TOKEN",
+        help="릴리스 ✅ 로 인가된 허용 목록 래퍼 갱신 결과(영수증에 싣는다)",
+    )
+    parser.add_argument(
         "--strict-undeclared",
         action="store_true",
         help="선언 밖 홈 파일도 drift 로 판정",
@@ -201,10 +208,17 @@ def main(argv: list[str] | None = None) -> int:
             for d in all_declarations(args.runtime_root)
             if not d.legacy
         }
-        print(
-            deploy_all.render_receipt(plan, verified_at=verified_at, declared_reasons=reasons),
-            end="",
-        )
+        try:
+            receipt = deploy_all.render_receipt(
+                plan,
+                verified_at=verified_at,
+                declared_reasons=reasons,
+                wrapper_refresh=tuple(args.wrapper_refresh),
+            )
+        except deploy_all.ObservationError as error:
+            print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
+            return 4
+        print(receipt, end="")
         return 0
     if args.format == "actions":
         actions = deploy_all.render_actions(plan)

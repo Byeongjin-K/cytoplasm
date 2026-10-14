@@ -26,12 +26,19 @@ wrapper_die() { printf 'WRAPPER-GEN: %s\n' "$1" >&2; exit "${2:-1}"; }
 
 #: 래퍼가 어떤 입력으로 만들어졌는지 한 줄로 남긴다. 드리프트 프로브는 이 값만 보고
 #: 재생성이 필요한지 판정하므로, 매 5분마다 전수 기록을 다시 돌릴 필요가 없다.
+#:
+#: 체크 정의에는 이 트리의 경로가 박힌다(`<automation>/../configs/…` 매니페스트 인자). 그 경로를
+#: 노드의 릴리스 경로로 정규화해 지문이 트리의 **위치**가 아니라 **내용**만 말하게 한다 —
+#: 릴리스 승인 전에 새 트리를 노드의 임시 디렉터리에 풀어 기대 지문을 계산하는
+#: `healthcheck_wrapper_release.sh` 가 수렴 뒤 `/srv/…` 에서 계산한 값과 같은 답을 얻어야 한다.
+#: 그 경로에서 이미 돌던 생성기에게는 바이트 그대로라 설치된 래퍼의 지문은 바뀌지 않는다.
 wrapper_inputs_digest() { # wrapper_inputs_digest <node>
   local node="$1" command_digest
+  local live_dir="${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}/automation/"
   command_digest="$(wrapper_recorded_commands_digest "$node")" || return 1
   {
     printf 'v%s\n%s\n' "$WRAPPER_VERSION" "$node"
-    printf '%s\n' "${LIVE_CHECKS[@]}"
+    printf '%s\n' "${LIVE_CHECKS[@]//"$WRAPPER_SCRIPT_DIR/"/"$live_dir"}"
     printf 'recorded-probe-command-hashes:%s\n' "$command_digest"
     cat -- "${HEALTHCHECK_WATCHER_MANIFEST:-$WRAPPER_SCRIPT_DIR/../configs/watcher-deploy-manifest.txt}"
     cat -- "${HEALTHCHECK_RUNTIME_PACKAGE_MANIFEST:-$WRAPPER_SCRIPT_DIR/../configs/runtime-package-manifest.txt}"

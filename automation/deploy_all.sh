@@ -54,8 +54,29 @@ readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-al
 
 log() { printf '[deploy-all] %s\n' "$*" >&2; }
 
-probe() { # probe <format> — 노드 릴리스 트리의 판정을 그대로 중계한다
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --format $1" < /dev/null
+probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정을 그대로 중계한다
+  local format="$1" extra=""
+  shift
+  (( $# )) && printf -v extra ' %q' "$@"
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --format $format$extra" < /dev/null
+}
+
+#: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다
+#: (healthcheck_wrapper_release.sh refresh). 결과는 영수증에 실려 적용 통지로 소유자에게 간다 —
+#: 실패해도 영수증을 막지 않는다(위임 표면은 영수증을 막지 않는 것과 같다).
+wrapper_receipt_args=()
+refresh_wrappers() {
+  local -a refresh_cmd
+  local out line _tag node status token
+  read -r -a refresh_cmd <<< "${DEPLOY_ALL_WRAPPER_REFRESH_CMD:-bash $repo_root/automation/healthcheck_wrapper_release.sh refresh}"
+  out="$("${refresh_cmd[@]}" "$local_head")" || log "WRAPPER-REFRESH-UNKNOWN: the refresh step did not finish"
+  wrapper_receipt_args=()
+  while IFS= read -r line; do
+    [[ "$line" == WRAPPER-REFRESH\|* ]] || continue
+    log "$line"
+    IFS='|' read -r _tag node status token <<< "$line"
+    [[ "$status" == current ]] || wrapper_receipt_args+=(--wrapper-refresh "$node|$status|$token")
+  done <<< "$out"
 }
 
 node_release_sha() {
@@ -106,7 +127,7 @@ write_receipt() {
   # 영수증 내용은 노드가 **지금 다시 판정**해 만든다 — 아까의 판정을 재사용하면
   # 그 사이의 변화가 서명된다. read-back 대조는 deploy_push 와 같은 규율이다.
   local receipt want got
-  if ! receipt="$(probe receipt)"; then
+  if ! receipt="$(probe receipt "${wrapper_receipt_args[@]}")"; then
     log "RECEIPT-BLOCK: the node no longer judges itself clean"
     return 1
   fi
@@ -202,6 +223,7 @@ case "$mode" in
       else
         log "already fully deployed"
       fi
+      refresh_wrappers
       write_receipt
       exit $?
     fi
@@ -249,6 +271,7 @@ case "$mode" in
     fi
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then
+      refresh_wrappers
       write_receipt
       exit $?
     fi

@@ -196,8 +196,22 @@ if (( decision_rc != 0 )); then
   # 태그 전 main이 전진한 APPROVED도 여기서 감사 회수한다. 새 요청은 새 ✅가 필요하다.
   "${approval[@]}" retire --head "$base" --tip "$head" \
     || die "previous release record cannot be archived safely" 4
+  # 헬스체크 허용 목록(강제명령 래퍼)은 릴리스 트리 밖 파일이라 수렴이 올리지 못한다. 이 릴리스가 기대할
+  # 지문이 설치본과 다른 노드를 표면으로 묶어 같은 ✅ 가 갱신까지 인가한다(소유자 지시 2026-10-14).
+  # 판정하지 못하면 카드에 싣지 않고 진행한다 — 그러면 수렴 뒤에도 설치하지 않고 영수증에 남는다.
+  wrapper_args=()
+  read -r -a wrapper_plan_cmd <<< "${RELEASE_WRAPPER_PLAN_CMD:-bash $SCRIPT_DIR/healthcheck_wrapper_release.sh plan}"
+  if wrapper_plan_out="$("${wrapper_plan_cmd[@]}" "$head")"; then
+    while IFS= read -r wrapper_line; do
+      [[ "$wrapper_line" =~ ^[a-z0-9][a-z0-9.-]*=[0-9a-f]{64}$ ]] \
+        && wrapper_args+=(--healthcheck-wrapper "$wrapper_line")
+    done <<< "$wrapper_plan_out"
+  else
+    log "WRAPPER-PLAN-UNKNOWN: 허용 목록 지문을 판정하지 못해 카드에 갱신을 싣지 않는다 — 수렴 뒤 영수증의 남은 소유자 조치로 남는다"
+  fi
   "${plan_approval[@]}" plan --repo "$REPO_ROOT" --base "$base" --head "$head" \
-    --version "$version" --bump "$bump" > "$workdir/plan.json" || die "release plan failed" 4
+    --version "$version" --bump "$bump" "${wrapper_args[@]}" > "$workdir/plan.json" \
+    || die "release plan failed" 4
   request_refusal="approval request was refused — 살아 있는 다른 요청은 파괴하지 않는다 (⛔ 로 막혔다면 노드 agent 계정에서: python3 -m automation.release_abandon --version <v> --head <sha> --message-id <id> --reason <why>)"
   if ! post_request; then
     # 낡은 pending 요청의 자동 복구. 두 세션이 번갈아 릴리스하면, 소유자 결정을 아직

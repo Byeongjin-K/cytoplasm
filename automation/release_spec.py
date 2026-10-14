@@ -30,6 +30,14 @@ from automation.skill_gate_specs import (
 RELEASE_ACTION: Final = "release.deploy"
 #: 신규 카드가 쓰는 판본. 1~5 는 이미 게시된 카드의 재생 전용이며 문구가 동결이다.
 NEW_RENDER_VERSION: Final = 6
+#: 헬스체크 강제명령 래퍼(허용 목록) 갱신을 릴리스 ✅ 에 묶는 표면 이름의 머리. 값은 새 릴리스가
+#: 그 노드에 기대하는 `# wrapper-inputs:` 지문이고, 승인 해시에 다른 표면과 똑같이 들어간다.
+#: 이 표면이 없는 레코드(지금까지의 모든 카드)는 해시도 카드 바이트도 그대로다.
+WRAPPER_SURFACE_PREFIX: Final = "healthcheck-wrapper:"
+
+
+def wrapper_surface(node: str) -> str:
+    return f"{WRAPPER_SURFACE_PREFIX}{node}"
 
 _RELEASE_VERSION: Final = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+\Z")
 _COMMIT_SHA: Final = re.compile(r"[0-9a-f]{40}\Z")
@@ -221,7 +229,7 @@ class ReleaseSpec:
         summary.extend(
             name
             for name, _digest in self.surface_digests
-            if not name.startswith(("skill:", "home:"))
+            if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX))
         )
         return " · ".join(summary) or "변경 없음"
 

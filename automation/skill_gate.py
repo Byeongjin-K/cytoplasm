@@ -688,10 +688,20 @@ def cmd_release_authorize(args: argparse.Namespace) -> int:
     except (ReleaseSpecError, ValueError):
         print("RELEASE-AUTHORIZE: release record is malformed", file=sys.stderr)
         return 2
-    if (f"skill:{args.skill}", args.hash) not in spec.surface_digests:
+    surface_name = getattr(args, "surface", None) or f"skill:{args.skill}"
+    head = getattr(args, "head", None) or ""
+    if head and spec.head_sha != head:
+        # 예전 릴리스의 ✅ 가 지금 배포된 릴리스의 표면을 인가하지 못하게 한다.
+        print(
+            f"RELEASE-AUTHORIZE-BLOCK: release record is for {spec.head_sha[:12]},"
+            f" not {head[:12]}",
+            file=sys.stderr,
+        )
+        return RELEASE_NOT_COVERED_EXIT
+    if (surface_name, args.hash) not in spec.surface_digests:
         print(
             f"RELEASE-AUTHORIZE-BLOCK: release {spec.version} does not cover"
-            f" skill:{args.skill}@{args.hash[:12]} — 릴리스 이후 바뀐 스킬은 옆 승인으로 못 탄다",
+            f" {surface_name}@{args.hash[:12]} — 릴리스 이후 바뀐 표면은 옆 승인으로 못 탄다",
             file=sys.stderr,
         )
         return RELEASE_NOT_COVERED_EXIT
@@ -730,7 +740,7 @@ def cmd_release_authorize(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 7
-        print(f"RELEASE-AUTHORIZED: {spec.version} covers skill:{args.skill}", file=sys.stderr)
+        print(f"RELEASE-AUTHORIZED: {spec.version} covers {surface_name}", file=sys.stderr)
         print(f"{record.get('message_id', '')}:{record.get('release_nonce', '')}")
         return 0
     if decision is Probe.CANCELLED:
@@ -795,8 +805,11 @@ def main() -> int:
             cmd.add_argument("--user-id", default="")
             cmd.add_argument("--forge-signature", action="store_true")
     release_cmd = sub.add_parser("release-authorize")
-    release_cmd.add_argument("--skill", required=True)
+    release_target = release_cmd.add_mutually_exclusive_group(required=True)
+    release_target.add_argument("--skill")
+    release_target.add_argument("--surface", help="스킬 밖 표면(예: healthcheck-wrapper:<node>)")
     release_cmd.add_argument("--hash", required=True)
+    release_cmd.add_argument("--head", default="", help="이 릴리스 HEAD 의 레코드만 인가한다")
     release_cmd.add_argument("--peer-attest-mode", choices=("discord", "signed"), default="")
     release_cmd.add_argument("--peer-attest-public-key", default="")
     release_cmd.add_argument("--peer-attestation-stdin", action="store_true")
