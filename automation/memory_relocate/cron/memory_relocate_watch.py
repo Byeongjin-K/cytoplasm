@@ -110,8 +110,8 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
     try:
         from automation.memory_curator.classify import classify_entries
         from automation.memory_curator.watch_steps import read_native
-        from automation.memory_relocate.discover import select_candidate
-        from automation.memory_relocate.propose import build_proposed_record
+        from automation.memory_relocate.discover import select_batch, select_candidate
+        from automation.memory_relocate.propose import build_batch, build_proposed_record, card_fits
         from automation.twin_distill.llm import CodexLlmClient
 
         files = {kind: read_native(MEMORY_DIR, kind)[1] for kind in ("memory", "user")}
@@ -120,6 +120,30 @@ def _discover_and_propose(state: RelocationState, now: datetime) -> RelocationSt
             client=CodexLlmClient.from_environment(os.environ),
         )
         known = frozenset(record.entry_sha256 for record in state.relocations.values())
+        batch = select_batch(verdicts, files, known)
+        if batch:
+            members = [
+                (
+                    build_proposed_record(
+                        found.candidate.entry_text,
+                        source_kind=found.candidate.source_kind,
+                        entry_sha256=found.candidate.entry_sha256,
+                        reclaimable_chars=found.candidate.reclaimable_chars,
+                        binding_kind="obsidian-write",
+                        binding_surface="owner-dm",
+                        binding_channel_id="",
+                        binding_policy_version=_BINDING_POLICY_VERSION,
+                        now=now,
+                        destination=found.destination,
+                    ),
+                    found.candidate.entry_text,
+                )
+                for found in batch
+            ]
+            records = build_batch(members, fits=card_fits)
+            if records:
+                added = {record_key(record.source_kind, record.entry_sha256): record for record in records}
+                return replace(state, relocations={**dict(state.relocations), **added})
         candidate = select_candidate(verdicts, files, known)
         if candidate is None:
             return state

@@ -42,6 +42,18 @@ class RelocationStore:
         if (current.action_hash, current.message_id) == (action_hash, message_id):
             self._persist(state, replace(current, message_id=None))
 
+    def clear_batch_message_id(self, batch_hash: str, message_id: str) -> None:
+        """Unbind every member of one batch card, only where it still holds that exact message."""
+        state = load_state(self.state_path)
+        records = dict(state.relocations)
+        changed = False
+        for key, record in state.relocations.items():
+            if record.batch_hash == batch_hash and record.message_id == message_id:
+                records[key] = replace(record, message_id=None)
+                changed = True
+        if changed:
+            save_state(self.state_path, RelocationState(state.version, records))
+
     def update(self, record: RelocationRecord) -> None:
         state, current = self._current(record_key(record.source_kind, record.entry_sha256))
         if current.action_hash != record.action_hash or current.message_id != record.message_id:

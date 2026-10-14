@@ -54,6 +54,14 @@ class RelocationRecord:
     approval_thread_id: str | None = None
     approval_guild_id: str | None = None
     render_version: str | None = None
+    #: Where the entry goes: None = Obsidian ops reference (v1), "person" = Obsidian person note,
+    #: "memory" = MEMORY.md (a USER.md handling rule). Part of ``action_hash`` when set.
+    destination: str | None = None
+    #: Shared by every record one approval card covers (owner Q138: as few cards as possible).
+    batch_hash: str | None = None
+
+
+DESTINATIONS: Final = frozenset({"person", "memory"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +108,9 @@ _RECORD_KEYS: Final = frozenset(
 )
 #: Keys a record MAY carry — a row written before them still parses, and an
 #: unknown key outside this set is still an unreadable shape (fail-closed).
-_OPTIONAL_RECORD_KEYS: Final = frozenset({"approval_thread_id", "approval_guild_id", "render_version"})
+_OPTIONAL_RECORD_KEYS: Final = frozenset(
+    {"approval_thread_id", "approval_guild_id", "render_version", "destination", "batch_hash"}
+)
 
 
 def _is_mapping(value: object) -> TypeGuard[dict[object, object]]:
@@ -216,7 +226,15 @@ def _parse_record(raw: object) -> RelocationRecord:
         ),
         approval_guild_id=_string_or_none(payload.get("approval_guild_id"), "approval_guild_id"),
         render_version=_string_or_none(payload.get("render_version"), "render_version"),
+        destination=_destination(payload.get("destination")),
+        batch_hash=_string_or_none(payload.get("batch_hash"), "batch_hash"),
     )
+
+
+def _destination(value: object) -> str | None:
+    if value is None or value in DESTINATIONS:
+        return None if value is None else str(value)
+    raise RelocationError(f"unknown relocation destination: {value!r}")
 
 
 def empty_state() -> RelocationState:
@@ -253,6 +271,10 @@ def _serialize_record(record: RelocationRecord) -> dict[str, object]:
         optional["approval_guild_id"] = record.approval_guild_id
     if record.render_version is not None:
         optional["render_version"] = record.render_version
+    if record.destination is not None:
+        optional["destination"] = record.destination
+    if record.batch_hash is not None:
+        optional["batch_hash"] = record.batch_hash
     return {
         **optional,
         "version": record.version,

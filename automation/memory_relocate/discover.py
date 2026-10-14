@@ -65,6 +65,45 @@ def select_candidate(
     return best
 
 
+#: Route → destination of a batched move (owner Q138 ②). OPS_REFERENCE keeps its one-at-a-time path.
+_BATCH_DESTINATIONS: Final[dict[str, str]] = {"PERSON_REFERENCE": "person", "AGENT_RULE": "memory"}
+
+
+@dataclass(frozen=True, slots=True)
+class BatchCandidate:
+    candidate: RelocationCandidate
+    destination: str
+
+
+def select_batch(
+    verdicts: Sequence[EntryVerdict],
+    files: Mapping[str, MemoryFile],
+    known_digests: frozenset[str],
+) -> tuple[BatchCandidate, ...]:
+    """Every unhandled person fact and USER.md handling rule, in file order (one card covers them)."""
+    found: list[BatchCandidate] = []
+    claimed: dict[MemoryKind, set[int]] = {kind: set() for kind in _RELOCATABLE_KINDS}
+    for verdict in verdicts:
+        destination = _BATCH_DESTINATIONS.get(verdict.route)
+        if destination is None or verdict.source_kind not in _RELOCATABLE_KINDS:
+            continue
+        if destination == "memory" and verdict.source_kind != "user":
+            continue
+        memory_file = files.get(verdict.source_kind)
+        digest = entry_digest(verdict.source_kind, verdict.entry_text)
+        if memory_file is None or digest in known_digests:
+            continue
+        index = _index_of(memory_file, verdict.entry_text, claimed[verdict.source_kind])
+        if index is None:
+            continue
+        claimed[verdict.source_kind].add(index)
+        found.append(BatchCandidate(
+            RelocationCandidate(verdict.source_kind, verdict.entry_text, digest, reclaimable_chars(memory_file, index)),
+            destination,
+        ))
+    return tuple(found)
+
+
 def _index_of(memory_file: MemoryFile, text: str, claimed: set[int]) -> int | None:
     for index, entry in enumerate(memory_file.entries):
         if entry.text == text and index not in claimed:

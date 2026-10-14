@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from .model import RelocationRecord
 
 RENDER_VERSION = "mc-reloc-render-v3"
+BATCH_RENDER_VERSION = "mc-reloc-batch-render-v1"
 MAX_MESSAGE_CHARS = 1900
+_DESTINATION_LABELS = {"person": "사람 노트", "memory": "MEMORY.md 로"}
 
 
 class RenderError(ValueError):
@@ -36,6 +40,54 @@ def prepare_approval_card(record: RelocationRecord, entry_text: str) -> tuple[st
     except RenderError:
         version = "mc-reloc-render-v1"
         return version, render_relocation_approval(record, entry_text=entry_text, render_version=version)
+
+
+def prepare_batch_card(members: Sequence[tuple[RelocationRecord, str]]) -> tuple[str, str]:
+    """One card for every record that shares a batch hash; a stored version is replayed as is."""
+    if not members or len({record.batch_hash for record, _ in members}) != 1 or members[0][0].batch_hash is None:
+        raise RenderError("a batch card needs members that share one batch hash")
+    version = members[0][0].render_version or BATCH_RENDER_VERSION
+    if version != BATCH_RENDER_VERSION:
+        raise RenderError(f"unsupported batch render version: {version}")
+    content = _render_batch_v1(members)
+    if len(content) > MAX_MESSAGE_CHARS:
+        raise RenderError("memory relocation batch approval exceeds the postable length")
+    return version, content
+
+
+def _render_batch_v1(members: Sequence[tuple[RelocationRecord, str]]) -> str:
+    try:
+        from automation.interop import owner_message as om
+    except ImportError as error:
+        raise RenderError("owner envelope unavailable") from error
+    lines = ["USER.md·MEMORY.md 에서 옮길 항목:"]
+    for number, (record, text) in enumerate(members, start=1):
+        label = _DESTINATION_LABELS.get(record.destination or "", "참조 노트")
+        lines += [f"{number}. [{label}] {text}", f"   → {record.note_relpath}"]
+    lines += [
+        f"회수 예상 문자 수: {sum(record.reclaimable_chars for record, _ in members)}",
+        f"판본: {BATCH_RENDER_VERSION}",
+    ]
+    here = om.Ref(scope="self")
+    message = om.OwnerMessage(
+        subject_key=members[0][0].batch_hash or "",
+        subject=f"메모리 정리 — 사람 정보·처리 규칙 {len(members)}건",
+        fact="\n".join(lines),
+        location=here,
+        owner=om.Action("react", here, "✅ 한 번에 전부 승인 / ⛔ 전부 취소"),
+        agent_next=(
+            "사람 노트는 저장·인제스트 확인 뒤, 규칙은 MEMORY.md 추가 확인 뒤 원래 자리에서 삭제;"
+            " 사람 정보는 이후 recall(검색)로 조회"
+        ),
+        recovery="not_applicable",
+        detail=om.Approval(None, "원본 유지"),
+        render_version="owner-ko-v2",
+    )
+    try:
+        rendered = om.render(message, destination=here).splitlines()
+    except om.OwnerMessageError as error:
+        raise RenderError("owner envelope cannot render") from error
+    return "\n".join((*rendered[:-1], f"- action_hash: `{members[0][0].batch_hash}`", rendered[-1]))
 
 
 def _render_v2(record: RelocationRecord, entry_text: str) -> str:

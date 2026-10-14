@@ -87,6 +87,7 @@ def test_relocation_action_hash_excludes_rendered_note_dates() -> None:
         "entry_sha256",
         "note_relpath",
         "note_plan_sha256",
+        "destination",
     )
     assert relocation_action_hash(before_fields) == relocation_action_hash(after_fields)
 
