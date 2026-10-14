@@ -1,7 +1,7 @@
 ---
 name: recall
 description: "개인 RAG(personal_cha) 검색 스킬. `!recall <질문>` 명시 호출 + 개인/프로젝트 지식 질문에 자동 사용. 검색 결과를 출처(위키 경로/회의/보고 id)와 함께 인용하고, 결과가 없으면 반드시 '기억 없음'이라고 답한다(지어내기 금지). RAG 노드 다운 시 '검색 불가' 안내 후 일반 답변. W2-5."
-version: 1.3.0
+version: 1.4.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -37,6 +37,12 @@ python3 /srv/autophagy-skills/live/recall/scripts/recall_cli.py search "<질문>
 `status`가 `hit`(결과+출처) / `no_memory`(기억 없음) / `unavailable`(검색 불가)
 중 하나다. `--json`을 빼면 사람이 읽는 텍스트 렌더링이 나온다. 이 `search` 표면은
 기존 호출자의 byte-level 계약을 위한 호환 경로다.
+
+기본 검색은 저장소 전체에서 노트당 한 문단씩 상위 100개를 받아 계정 주 모델이 그 질문에
+필요한 사실이 적힌 문단을 최대 4개 고른다(형 Q150 "Recall 기능을 고쳐야 하는거 아니야?",
+자동 회상과 같은 고르기). 그래서 한 번 호출에 약 7–10초가 걸린다. 고른 결과는 점수 문턱을
+다시 거치지 않고 `search.picked=true`로 표시된다. 모델이 답하지 못하거나 검색 서버가 예전
+판이면 예전 검색(점수 문턱)으로 돌아가고 `search.picked=false`다. `RECALL_PICK=0`이면 끈다.
 
 ## 세 저장소 근거 명령
 
