@@ -183,7 +183,7 @@ def test_flagged_fallback_unions_rows_but_only_entity_literal_can_hit(
     anchored = _row(0.52, "김민준 박사와 배양 자동화 일정을 조율했다.", "obsidian:people/collaboration.md#c0000", path="people/collaboration.md")
     calls: list[str] = []
 
-    def fake_search(query: str, limit: int):
+    def fake_search(query: str, limit: int, picker: object = None):
         calls.append(query)
         rows = [unrelated] if len(calls) == 1 else [unrelated, anchored]
         return rows[:limit], None, ["fake://entity"], "fake://entity"
@@ -205,7 +205,7 @@ def test_flagged_fallback_rejects_strong_unrelated_auxiliary_row(
     unrelated = _row(0.91, "무관한 고득점 문서", "wiki:unrelated.md#c0000", path="unrelated.md")
     calls = 0
 
-    def fake_search(query: str, limit: int):
+    def fake_search(query: str, limit: int, picker: object = None):
         nonlocal calls
         del query, limit
         calls += 1
@@ -224,7 +224,7 @@ def test_flagged_fallback_rejects_strong_unrelated_auxiliary_row(
 def test_flag_off_preserves_single_search_behavior(monkeypatch, capsys, tmp_path: Path) -> None:
     calls = 0
 
-    def fake_search(query: str, limit: int):
+    def fake_search(query: str, limit: int, picker: object = None):
         nonlocal calls
         del query, limit
         calls += 1

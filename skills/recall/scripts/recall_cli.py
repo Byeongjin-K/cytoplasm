@@ -34,10 +34,12 @@ import recall_runtime  # noqa: E402 - resolved from the script dir inserted abov
 sys.path.insert(0, str(recall_runtime.runtime_root()))
 
 import recall_core  # noqa: E402
+import recall_pick  # noqa: E402
 
 _RUNTIME_DEFAULT = "~/.hermes/rag_ingest_runtime"
 _CONFIG_DEFAULT = "~/.hermes/rag-ingest/config.json"
 _LOG_DIR_DEFAULT = "~/.hermes/recall/logs"
+_PICKED = "pick:whole-store"
 analyze_entity_intent = recall_core.analyze_entity_intent
 
 
@@ -88,7 +90,9 @@ def _fake_search(
     return rows[:limit], None, ["fake://recall-test"]
 
 
-def _mcp_search(query: str, limit: int) -> tuple[list[dict[str, Any]] | None, str | None, list[str], str | None]:
+def _mcp_search(
+    query: str, limit: int, picker: recall_pick.Picker | None = None,
+) -> tuple[list[dict[str, Any]] | None, str | None, list[str], str | None]:
     """Single-attempt search through the deployed W2-4 rag_ingest client."""
     runtime = Path(os.environ.get("RAG_INGEST_RUNTIME", _RUNTIME_DEFAULT)).expanduser()
     config_path = Path(os.environ.get("RECALL_CONFIG", _CONFIG_DEFAULT)).expanduser()
@@ -104,7 +108,12 @@ def _mcp_search(query: str, limit: int) -> tuple[list[dict[str, Any]] | None, st
         return None, f"recall config not available: {error.__class__.__name__}", [], None
     client = McpMemoryClient(base_url=config.mcp_base_url, api_key=config.api_key)
     try:
-        rows = client.search_memory(query, limit=limit)
+        if picker is None:
+            rows = client.search_memory(query, limit=limit)
+        else:
+            rows, picked = picker(client, query, limit, McpFatalError)
+            if picked:
+                return rows, None, client.network_log + [_PICKED], config.mcp_base_url
     except (McpUnreachableError, McpFatalError) as error:
         # ONE attempt only — no retry loop. Mask detail down to the class name
         # plus a short reason so no auth material can leak into agent output.
@@ -124,7 +133,8 @@ def run_search(args: argparse.Namespace) -> int:
         rows, error, network_log = _fake_search(args.query, args.limit)
         base_url = "fake://recall-test"
     else:
-        rows, error, network_log, base_url = _mcp_search(args.query, args.limit)
+        rows, error, network_log, base_url = _mcp_search(args.query, args.limit, recall_pick.picker())
+    picked = _PICKED in network_log
 
     searches = 1
     entity_hint_count = 0
@@ -138,6 +148,7 @@ def run_search(args: argparse.Namespace) -> int:
     )
     if (
         args.entity_fallback
+        and not picked
         and error is None
         and rows is not None
         and not primary_has_hits
@@ -178,6 +189,7 @@ def run_search(args: argparse.Namespace) -> int:
         classification_query=classification_query,
         searches=searches,
         entity_hint_count=entity_hint_count,
+        picked=picked,
     )
     _log_line(response, network_log)
     if args.json:

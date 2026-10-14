@@ -62,14 +62,20 @@ def parse_pick(answer: str, count: int) -> tuple[int, ...] | None:
     return tuple(picked)
 
 
+def choose(text: str, rows: Rows, complete: Complete) -> Rows | None:
+    """The picked rows in pick order; None when the model's answer is not the asked JSON."""
+    if not rows:
+        return []
+    picked = parse_pick(complete(build_prompt(text, rows)), len(rows))
+    return None if picked is None else [rows[position] for position in picked]
+
+
 def pick_pack(query: KnowledgeQuery, rows: Rows, complete: Complete) -> EvidencePack:
     layers = {"rag": "no_memory", "wiki": "skipped", "twin": "skipped"}
-    if not rows:
-        return EvidencePack("knowledge-v1", query, "no_evidence", (), layers)
-    picked = parse_pick(complete(build_prompt(query.text, rows)), len(rows))
-    if picked is None:
+    chosen = choose(query.text, rows, complete)
+    if chosen is None:
         return EvidencePack("knowledge-v1", query, "no_evidence", (), layers, ("pick 답 형식 불일치",))
-    items = tuple(item_from_rag(rows[position], True) for position in picked)
+    items = tuple(item_from_rag(row, True) for row in chosen)
     layers["rag"] = "hit" if items else "no_memory"
     return EvidencePack("knowledge-v1", query, "hit" if items else "no_evidence", items, layers)
 
