@@ -17,7 +17,8 @@ RAG 검색에도 적용한다. 예전에는 소스가 동기화돼도 실행 이
   남는다. 별도 노드 작업은 없다.
 - 빌드·health·검색이 실패하면 이전 이미지로 돌아가 재기동하고 검증한다. 실패와 되돌림 결과는
   영수증·적용 통지의 남은 조치에 남는다. 승인이 없거나 다른 HEAD·소스 지문이면 실행하지 않는다.
-- 관측할 수 없는 노드는 최신·stale이라고 추측하지 않고 승인 전에 멈춘다.
+- 관측할 수 없는 노드는 최신·stale이라고 추측하지 않는다. 경고 후 RAG 갱신만 카드에서 빼고
+  릴리스를 진행하며, 미상·승인 누락은 영수증과 적용 통지의 남은 조치에 남긴다.
 - 릴리스 PC가 RAG 노드이면 자기 SSH 없이 로컬 ops로 소스·이미지를 관측하고 같은 실행 파일로
   갱신한다. `hostname -s`와 설정의 RAG 노드 이름을 대조하며, 별도 노드일 때만 SSH/SCP를 쓴다.
   테스트·운영용 노드 판정 override는 관측과 배포 모두 `RAG_STACK_LOCAL_NODE`다.
@@ -28,7 +29,7 @@ embedding 재빌드는 계속 HELD이며, 이 경로는 embedding·Qdrant를 재
 
 ## 관련
 
-`automation/rag_mcp_release.sh`, `automation/rag_stack/{deploy.sh,remote.sh,smoke.py}`,
+`automation/rag_mcp_release.sh`, `automation/rag_stack/{deploy.sh,deploy_runtime.sh,remote.sh,smoke.py}`,
 `automation/runtime_package_probe.sh`, `automation/release_approval.py`,
 `automation/deploy_receipt.py`, `tests/unit/test_rag_stack_deploy.py`.
 별도 승인 카드·워처 없이 기존 릴리스 승인 게이트를 재사용한다.

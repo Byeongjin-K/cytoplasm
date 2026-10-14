@@ -119,13 +119,17 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 RAG 노드가 설정된 설치에서는 승인 전에 기존 `rag_stack_current`의 `rag|tree` 선택으로
 소스와 실행 중 MCP 이미지를 릴리스와 대조한다. stale일 때만 `rag-mcp` 트리 지문을 승인 해시에
 추가하고 카드에 `검색 잠깐 끊김(~1분)·되돌림 있음` 한 줄을 표시한다. 판독 불가면
-승인 전에 멈춘다. 같은 상태를 최신이라고 추측하지 않는다.
+`RAG-MCP-PLAN-UNKNOWN` 경고를 남기고 해당 갱신만 카드에서 빼고 릴리스를 진행한다.
+미상을 최신이라고 추측하거나 승인에 없는 RAG 갱신을 실행하지 않는다. 수렴 뒤에도 판정할 수
+없으면 영수증과 적용 통지의 남은 소유자 조치에 남는다.
 
 소유자 승인 뒤 `deploy_all.sh --apply`가 source sync와 MCP 전용
 `docker compose up -d --build --no-deps mcp`를 ops로 실행한다. 노드의 비공개 설정을 보존하고,
 `/health`와 인증된 `search_memory` 1회가 통과해야 성공이다. 실패하면 기록한 이전 이미지로
 `--no-build --pull never --no-deps mcp`를 실행한 뒤 이미지·health·검색을 다시 확인한다.
 embedding과 Qdrant는 재빌드하거나 재기동하지 않는다. embedding 변경 창은 계속 별도 보류다.
+배포기는 provenance 검사 전에 `deploy_runtime.sh`의 고정 실행 함수와 관측 헬퍼를 로드한다.
+검사는 실행 함수의 소스까지 포함하며, 통과 뒤에만 그 함수를 호출한다.
 
 릴리스 호스트가 RAG 노드 자신이면(`rag_node_name == hostname -s`) 관측과 갱신 모두
 자기 자신에게 SSH하지 않고 로컬 `sudo -n -u ops -H`로 실행한다. 파일은 ops가 읽을 수 있는

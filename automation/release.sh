@@ -217,7 +217,7 @@ if (( decision_rc != 0 )); then
       rag_args+=(--rag-mcp "$rag_digest")
     }
   else
-    die "RAG-MCP-PLAN-UNKNOWN: cannot judge configured RAG source/image before approval" 4
+    log "RAG-MCP-PLAN-UNKNOWN: RAG 소스·이미지를 판정하지 못해 카드에 갱신을 싣지 않는다 — 수렴 뒤 영수증의 남은 소유자 조치로 남는다"
   fi
   "${plan_approval[@]}" plan --repo "$REPO_ROOT" --base "$base" --head "$head" \
     --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" > "$workdir/plan.json" \
