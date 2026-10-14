@@ -70,6 +70,12 @@ CATEGORIES: Final[dict[str, Category]] = {
     "procurement": Category(folder="구매", periodicity="oneshot"),
     "doctype": Category(folder="문서", periodicity="oneshot"),
     "patent": Category(folder="특허", periodicity="oneshot", gate_only=True),
+    # A file the owner sends a named person through the mail approval card (2026-10-14).
+    # The upload happens only after that card's ✅, so a hand publish has no place here.
+    "share": Category(
+        folder="공유", periodicity="oneshot",
+        skill_owned="skills/mail/scripts/triage_cli.py compose --drive-share <파일> --share-with <주소>",
+    ),
 }
 
 

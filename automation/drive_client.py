@@ -29,6 +29,9 @@ _FOLDER_MIME = "application/vnd.google-apps.folder"
 _PUBLIC_TYPES = frozenset({"anyone", "domain"})
 _WRITE_ROLES = frozenset({"writer", "organizer", "fileOrganizer"})
 _PERMISSION_FIELDS = "permissions(id,type,role)"
+_SHARE_FIELDS = "permissions(id,type,role,emailAddress)"
+#: The only role a per-person share may grant: view and download, nothing more.
+SHARE_ROLE = "reader"
 
 
 class DriveClientError(RuntimeError):
@@ -195,6 +198,9 @@ class DriveClient:
     def trash_file(self, file_id: str) -> str:
         return self._files_update(file_id, body={"trashed": True})
 
+    def web_view_link(self, file_id: str) -> str:
+        return self._web_view_link(file_id)
+
     def _web_view_link(self, file_id: str) -> str:
         result = self._run(
             [self.gws_bin, "drive", "files", "get", "--params",
@@ -287,6 +293,43 @@ class DriveClient:
             raise DriveClientError(
                 f"소유자 권한이 유일하지 않음({len(rows)}건, fail-closed): {file_id}"
             )
+
+    def shared_readers(self, file_id: str) -> frozenset[str]:
+        """The people ``file_id`` is shared with, failing closed on anything but owner + readers.
+
+        A per-person share is the owner plus named ``user`` readers and nothing else:
+        an ``anyone``/``domain`` grant would turn the link public, a ``group`` hides who
+        can open it, and any write role lets someone replace the file the owner approved.
+        """
+        rows = _permission_rows(self._run(
+            [self.gws_bin, "drive", "permissions", "list", "--params",
+             json.dumps({"fileId": file_id, "fields": _SHARE_FIELDS})]
+        ))
+        owners = 0
+        readers: set[str] = set()
+        for row in rows:
+            ptype = str(row.get("type", ""))
+            role = str(row.get("role", ""))
+            if ptype in _PUBLIC_TYPES:
+                raise DriveClientError(f"공개/도메인 공유 감지 type={ptype} role={role}: {file_id}")
+            if role == "owner":
+                owners += 1
+                continue
+            email = str(row.get("emailAddress", "")).strip().lower()
+            if ptype != "user" or role != SHARE_ROLE or not email:
+                raise DriveClientError(f"개인 보기 권한이 아닌 공유 감지 type={ptype} role={role}: {file_id}")
+            readers.add(email)
+        if owners != 1:
+            raise DriveClientError(f"소유자 권한이 유일하지 않음({owners}건, fail-closed): {file_id}")
+        return frozenset(readers)
+
+    def grant_reader(self, file_id: str, email: str) -> None:
+        """Give one named person view-only access; Drive sends no notice (the mail carries the link)."""
+        _ = self._run(
+            [self.gws_bin, "drive", "permissions", "create", "--params",
+             json.dumps({"fileId": file_id, "sendNotificationEmail": False}),
+             "--json", json.dumps({"type": "user", "role": SHARE_ROLE, "emailAddress": email})]
+        )
 
     def _fetch_media(self, file_id: str, fetched: Path, tmp: Path, export_as: str = "") -> None:
         """Land ``file_id``'s bytes at ``fetched``, inside the private directory ``tmp``.
