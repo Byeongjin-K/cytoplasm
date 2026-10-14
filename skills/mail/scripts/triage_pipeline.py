@@ -42,6 +42,7 @@ def compose_and_post(
     origin_message_id: str = "",
     quote: str = "",
     forward: dict | None = None,
+    drive_share: dict | None = None,
 ) -> dict:
     recipient_body = (
         mail_evidence.sanitize_draft_body(body, evidence_pack)
@@ -54,7 +55,7 @@ def compose_and_post(
         kind="compose",
         attachment_paths=attachments,
         origin_channel_id=origin_channel_id, origin_message_id=origin_message_id,
-        quote=quote, forward=forward,
+        quote=quote, forward=forward, drive_share=drive_share,
     )
     recipients = ", ".join(item for item in (to, cc) if item)
     gap = triage_recipient.related_recipient_gap(

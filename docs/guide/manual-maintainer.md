@@ -229,6 +229,20 @@ readlink /srv/autophagy-agent-current
 annotated 태그가 맞다. `^{}` 줄이 없으면 lightweight 태그이고, 그것은 후보조차 되지
 않는다.
 
+**외부효과 규칙을 더한 릴리스는 규칙 수도 확인한다.** `configs/external-effect-tools.yaml` 의
+규칙은 릴리스의 `deploy_all --apply` 가 인터롭 묶음으로 agent·peer 홈 사본에 나른다. 그 묶음이
+roster 보류(`INTEROP-DEPLOY-HELD`)로 멈추면 새 규칙이 적용되지 않은 채 남는다. 2026-10-14 에는 Drive
+사람별 공유 규칙 `gws_drive_permission_grant` 가 더해져 규칙이 9개다. 소유자 지시는
+"오토파지에 \"드라이브 업로드·공유\" 승인 경로를 새로 만들고 그걸로 보냄 (몇 시간, 다음에도 씀)"
+이었다([소개](../기능소개/메일-Drive-공유-링크.md)).
+
+```bash
+# 두 계정의 규칙 사본이 릴리스 트리와 같은가 (노드에서)
+sha256sum /srv/autophagy-agent-current/configs/external-effect-tools.yaml
+sudo -n -u agent -H sh -c 'sha256sum ~/.hermes/interop/external-effect-tools.yaml'
+sudo -n -u agent -H sh -c "grep -c '^  - id:' ~/.hermes/interop/external-effect-tools.yaml"
+```
+
 ---
 
 ## 2. 업데이트 신뢰키 — 보관

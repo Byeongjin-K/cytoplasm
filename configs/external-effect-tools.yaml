@@ -23,3 +23,6 @@ rules:
   - id: patent_draft_drive_upload
     tool_name_regex: (?i)^(?:terminal|shell|bash|gws)$
     arguments_regex: (?i)(?:^|[^A-Za-z0-9_])gws\s+drive\s+(?:files\s+create|\+upload)\b.*patent-drafts
+  - id: gws_drive_permission_grant
+    tool_name_regex: (?i)^(?:terminal|shell|bash|gws)$
+    arguments_regex: (?i)(?:^|[^A-Za-z0-9_])gws\s+drive\s+permissions\s+(?:create|update)(?:\s|$)

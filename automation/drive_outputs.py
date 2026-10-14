@@ -7,6 +7,7 @@ that require durable Drive storage use :func:`publish`; optional skill hooks use
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
@@ -17,7 +18,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final, TypeAlias
 
-from automation.drive_client import DriveClient
+from automation.drive_client import DriveClient, DriveClientError
 from automation.drive_taxonomy import (
     artifact_name,
     bundle_name,
@@ -25,6 +26,7 @@ from automation.drive_taxonomy import (
     TaxonomyError,
     ensure_depth,
     folder_parts,
+    outputs_root,
     period_key,
 )
 
@@ -185,6 +187,111 @@ def publish(
 
     action = "updated" if actions and all(item == "updated" for item in actions) else "created"
     return PublishResult(tuple(links), action, parent_id)
+
+
+@dataclass(frozen=True, slots=True)
+class ShareResult:
+    file_id: str
+    link: str
+    action: str
+
+
+class ShareRefused(RuntimeError):
+    """A share that must not proceed; ``code`` is a fixed lowercase cause for audit records."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def share_target(name: str, *, on: date, project: str | None = None) -> tuple[tuple[str, ...], str]:
+    """The folder parts and Drive file name a share of ``name`` will use, fixed at request time.
+
+    The caller binds both into the owner's approval, so the upload later lands exactly
+    where the card said — a date that rolls over between the card and the ✅ moves nothing.
+    """
+    path = Path(_nfc(name))
+    if not path.stem or path.name != _nfc(name):
+        raise TaxonomyError(f"invalid share file name: {name!r}")
+    parts = folder_parts("share", on.year, project=project)
+    drive_name = artifact_name(period_key("oneshot", on), path.stem, path.suffix)
+    _ = ensure_depth((*parts, drive_name))
+    return parts, drive_name
+
+
+def _local_digest(local: Path) -> tuple[str, int]:
+    with local.open("rb") as handle:
+        digest = hashlib.file_digest(handle, "sha256").hexdigest()
+    return digest, local.stat().st_size
+
+
+def share(
+    local: Path,
+    parts: Sequence[str],
+    name: str,
+    *,
+    sha256: str,
+    size: int,
+    grantees: Sequence[str],
+    prior_id: str | None = None,
+    client: DriveClient | None = None,
+) -> ShareResult:
+    """Upload ``local`` and share it view-only with exactly ``grantees``; return its link.
+
+    Every step is checked before the next one: the local bytes must still be the ones the
+    owner approved, Drive's own sha256 and size must match after the upload, the file may
+    hold no permission beyond the owner and these readers before or after the grant, and
+    nothing here can create an anyone-with-link or domain permission. ``prior_id`` is the
+    file an earlier attempt already uploaded; when Drive still holds those exact bytes it
+    is reused instead of uploading the same file again.
+    """
+    checked = ensure_depth((*parts, _nfc(name)))
+    share_root = (outputs_root(), category("share").folder)
+    if tuple(checked[:2]) != share_root:
+        raise ShareRefused(f"share folder outside {'/'.join(share_root)}", "drive_folder_refused")
+    people = tuple(sorted({person.strip().lower() for person in grantees}))
+    if not people or any("@" not in person for person in people):
+        raise ShareRefused("share needs at least one named person", "drive_grantee_invalid")
+    if _local_digest(local) != (sha256, size):
+        raise ShareRefused("the approved file changed before upload", "local_copy_changed")
+    drive = client or client_from_environment()
+
+    file_id = ""
+    action = "reused"
+    if prior_id:
+        try:
+            if drive.file_checksum(prior_id) == (sha256, size):
+                file_id = prior_id
+        except Exception:  # noqa: BLE001 — an unreadable prior upload is uploaded again below
+            file_id = ""
+    if not file_id:
+        parent_id = drive.ensure_folder_path(tuple(checked[:-1]))
+        uploaded = drive.upsert_file(local, checked[-1], parent_id)
+        file_id = uploaded["id"]
+        action = uploaded["action"]
+        if drive.file_checksum(file_id) != (sha256, size):
+            raise ShareRefused("Drive copy does not match the approved bytes", "drive_checksum_mismatch")
+
+    try:
+        present = drive.shared_readers(file_id)
+    except DriveClientError as error:
+        raise ShareRefused(str(error), "drive_permission_refused") from error
+    unexpected = sorted(present - set(people))
+    if unexpected:
+        raise ShareRefused(
+            f"file is already shared beyond the approved people ({len(unexpected)})",
+            "drive_permission_refused",
+        )
+    for person in people:
+        if person not in present:
+            drive.grant_reader(file_id, person)
+    try:
+        final = drive.shared_readers(file_id)
+    except DriveClientError as error:
+        raise ShareRefused(str(error), "drive_permission_refused") from error
+    if final != frozenset(people):
+        raise ShareRefused("the share does not name exactly the approved people", "drive_permission_refused")
+    return ShareResult(file_id=file_id, link=drive.web_view_link(file_id), action=action)
 
 
 def publish_state_file(

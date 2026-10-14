@@ -117,7 +117,7 @@ def execute_mailon_draft(draft: dict, approval: triage_gate.Approval) -> None:
                 f"{_safe_failure_message(safe_error)} (code={error.error_code})", 2
             ) from error
 
-    argv = tuple(draft["argv"])
+    argv = tuple(draft.get("send_argv") or draft["argv"])  # mail_drive_share: the link filled in
     _append_record(triage_gate._approval_log(), _approval_record(argv, approval))
     rc, stdout, _stderr = triage_gate._run_send(argv)
     payload = _send_payload(stdout)

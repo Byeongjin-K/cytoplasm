@@ -40,6 +40,7 @@ import triage_digest
 import triage_gate
 import triage_llm
 import triage_mode
+import mail_drive_share
 import mail_forward
 import mail_quote
 import mail_send_retry
@@ -131,16 +132,30 @@ def cmd_compose(args: argparse.Namespace) -> int:
     forwarding = bool(getattr(args, "forward", "") or getattr(args, "forward_gmail", ""))
     if not forwarding and (args.subject is None or args.body is None):
         raise triage_gate.GateError("새 메일에는 --subject 와 --body 가 필요합니다 (전달은 --forward)", 2)
-    forward = _forward_source(args)
+    drive_path = str(getattr(args, "drive_share", "") or "")
+    share_with = tuple(getattr(args, "share_with", ()) or ())
+    if not drive_path and (share_with or getattr(args, "drive_folder", "")):
+        raise triage_gate.GateError("--share-with · --drive-folder 는 --drive-share 와 함께만 씁니다", 2)
+    share = (
+        mail_drive_share.prepare(drive_path, share_with, body=args.body or "",
+                                 project=str(getattr(args, "drive_folder", "") or ""))
+        if drive_path else None
+    )
+    forward = None
     try:
-        return _compose(args, forward)
+        forward = _forward_source(args)
+        return _compose(args, forward, share)
     except BaseException:
         if forward is not None:
             forward.discard()
+        if share is not None:
+            mail_drive_share.discard(share)
         raise
 
 
-def _compose(args: argparse.Namespace, forward: mail_forward.ForwardSource | None) -> int:
+def _compose(
+    args: argparse.Namespace, forward: mail_forward.ForwardSource | None, share: dict | None = None,
+) -> int:
     subject = args.subject if args.subject is not None else (forward.subject if forward else "")
     body = args.body if args.body is not None else ""
     cc = ", ".join(getattr(args, "cc", ()) or ())
@@ -169,6 +184,7 @@ def _compose(args: argparse.Namespace, forward: mail_forward.ForwardSource | Non
         origin_message_id=str(getattr(args, "origin_message_id", "") or ""),
         quote=quote,
         forward=forward.record() if forward else None,
+        drive_share=share,
     )
     if pack is not None:
         mail_evidence.write_sidecar(triage_gate.gate_dir(), str(draft["id"]), pack)
@@ -176,6 +192,9 @@ def _compose(args: argparse.Namespace, forward: mail_forward.ForwardSource | Non
     print(f"COMPOSED draft={draft['id']} posted={posted}")
     if forward is not None:
         print(f"FORWARD draft={draft['id']} source={forward.origin} attachments={len(forward.attachments)}")
+    if share is not None:
+        print(f"DRIVE-SHARE draft={draft['id']} file={share['drive_name']} "
+              f"people={len(share['grantees'])} role={share['role']}")
     _print_thread_line(draft)
     return 0
 
@@ -577,6 +596,19 @@ def build_parser() -> argparse.ArgumentParser:
     origin_mail.add_argument(
         "--forward-gmail", default="", metavar="MESSAGE_ID",
         help="전달(FW) — 이 Gmail 메시지의 원문을 인용하고 원 첨부를 바이트 그대로 첨부",
+    )
+    compose.add_argument(
+        "--drive-share", default="", metavar="PATH",
+        help="메일 첨부로 보낼 수 없는 파일 — ✅ 뒤 Drive 에 올려 --share-with 사람에게만 보기 권한을 주고 "
+             f"본문의 `{mail_drive_share.PLACEHOLDER}` 자리에 링크를 넣어 보낸다",
+    )
+    compose.add_argument(
+        "--share-with", action="append", default=[], metavar="EMAIL",
+        help="Drive 파일을 볼 사람의 이메일 (여러 번 지정 가능, 링크 공개는 하지 않는다)",
+    )
+    compose.add_argument(
+        "--drive-folder", default="", metavar="NAME",
+        help="Drive 공유 폴더 한 단 — autophagy/공유/<NAME>/<연도>/ (생략 시 autophagy/공유/<연도>/)",
     )
     compose.set_defaults(func=cmd_compose)
 

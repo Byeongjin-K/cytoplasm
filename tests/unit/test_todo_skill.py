@@ -158,6 +158,7 @@ def test_existing_denylist_rules_unchanged() -> None:
         "generic_external_effect_tool",
         "generic_external_post_command",
         "patent_draft_drive_upload",
+        "gws_drive_permission_grant",
     ]
     assert _decide(_shell("gws calendar events insert --json {}")).external_effect is True
     assert _decide(_shell("gws gmail +send --to a@b.c")).external_effect is True

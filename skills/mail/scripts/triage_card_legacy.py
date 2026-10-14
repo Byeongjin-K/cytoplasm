@@ -92,6 +92,17 @@ def render_approvals_message(
                 lines.append(
                     f"  - `{safe_name}` · {item['size_bytes']} bytes · `{item['mime_type']}`"
                 )
+    share = draft.get("drive_share")
+    if isinstance(share, dict):
+        safe_file = str(share["source_name"]).replace("`", "'")
+        people = ", ".join(f"`{person}`" for person in share["grantees"])
+        lines.extend([
+            f"- Drive 공유: `{safe_file}` · {share['size_bytes']} bytes · `{share['sha256']}`",
+            f"  - 올릴 곳: `{'/'.join(share['folder'])}/{share['drive_name']}`",
+            f"  - 보기 권한(reader)만: {people} — 링크 공개 없음",
+            f"  - ✅ 하면 업로드·검증·공유 뒤 본문의 `{share['placeholder']}` 자리에 링크를 넣어 보냅니다. "
+            "하나라도 실패하면 메일은 나가지 않습니다.",
+        ])
     lines.append(f"- draft: `{draft['id']}` sha256: `{draft['sha256']}`")
     if draft.get("provider") == "gmail":
         lines.append(f"- action hash: `{draft['approval_action_hash']}`")

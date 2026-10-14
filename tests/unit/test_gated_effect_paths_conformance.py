@@ -39,6 +39,7 @@ GATED_RULES: Final[dict[str, tuple[str, ...] | str]] = {
         "automation/memory_relocate/approval_gate.py::request_approval",
     ),
     "patent_draft_drive_upload": ("skills/patent-prep/scripts/patent_export.py::prepare_export",),
+    "gws_drive_permission_grant": ("skills/mail/scripts/triage_approval.py::request_approval",),
     "generic_external_effect_tool": (
         "catch-all safety net for tool names that look like remote sends; no supported "
         "skill emits one, so a match means the agent improvised and must report that the "
