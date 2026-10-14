@@ -87,7 +87,7 @@ def test_silent_with_completed_deletion_sends_one_event_summary(tmp_path: Path) 
 def test_send_with_promotions_and_near_cap_combines_one_dm(tmp_path: Path) -> None:
     # Given: three durable entries and enough filler to enter the near-cap bucket.
     durable = "\n§\n".join(f"앞으로 결합 원칙 {index}을 지킨다" for index in range(3))
-    memories = _memory_dir(tmp_path, user=f"{durable}\n§\n{'x' * 1200}")
+    memories = _memory_dir(tmp_path, user=f"{durable}\n§\n{'x' * 2620}")
     state_path = tmp_path / "state.json"
     notes: dict[str, bytes] = {}
     proposals: list[PromotionProposal] = []

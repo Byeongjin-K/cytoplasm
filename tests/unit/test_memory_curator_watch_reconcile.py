@@ -112,7 +112,7 @@ def test_s5_unchanged_actionable_state_alerts_once_across_three_ticks(
     tmp_path: Path,
 ) -> None:
     # Given: one unchanged near-cap bucket and a successful alert effect.
-    memories = _memory_dir(tmp_path, user="x" * 1200)
+    memories = _memory_dir(tmp_path, user="x" * 2620)
     state_path = tmp_path / "state.json"
     alerts: list[str] = []
 
@@ -130,7 +130,7 @@ def test_s5_unchanged_actionable_state_alerts_once_across_three_ticks(
 
 def test_s5_bucket_change_holds_inside_cooldown_then_sends_once(tmp_path: Path) -> None:
     # Given: a near bucket that has already produced one successful alert.
-    memories = _memory_dir(tmp_path, user="x" * 1200)
+    memories = _memory_dir(tmp_path, user="x" * 2620)
     state_path = tmp_path / "state.json"
     alerts: list[str] = []
 
@@ -144,7 +144,7 @@ def test_s5_bucket_change_holds_inside_cooldown_then_sends_once(tmp_path: Path) 
     )
 
     # When: the file enters critical inside cooldown and remains there past cooldown.
-    _ = (memories / "USER.md").write_text("x" * 1320, encoding="utf-8")
+    _ = (memories / "USER.md").write_text("x" * 2880, encoding="utf-8")
     held = run_cycle(
         memories, state_path, promote=lambda _proposal: None, alert=send,
         read_twin=lambda _slug: None, now=NOW + timedelta(hours=1),
@@ -162,7 +162,7 @@ def test_s5_bucket_change_holds_inside_cooldown_then_sends_once(tmp_path: Path) 
 
 def test_hold_with_three_posted_promotions_sends_one_event_summary(tmp_path: Path) -> None:
     # Given: a near-cap alert was sent and three durable entries appear inside its cooldown.
-    memories = _memory_dir(tmp_path, user="x" * 1200)
+    memories = _memory_dir(tmp_path, user="x" * 2620)
     state_path = tmp_path / "state.json"
     alerts: list[str] = []
     _ = run_cycle(
@@ -177,7 +177,7 @@ def test_hold_with_three_posted_promotions_sends_one_event_summary(tmp_path: Pat
     prior_last_sent = load_state(state_path).alert.last_sent_signature
     alerts.clear()
     durable = "\n§\n".join(f"앞으로 원칙 {index}을 지킨다" for index in range(3))
-    _ = (memories / "USER.md").write_text(f"{durable}\n§\n{'x' * 1120}", encoding="utf-8")
+    _ = (memories / "USER.md").write_text(f"{durable}\n§\n{'x' * 2445}", encoding="utf-8")
     notes: dict[str, bytes] = {}
     proposals: list[PromotionProposal] = []
 
@@ -203,7 +203,7 @@ def test_hold_with_three_posted_promotions_sends_one_event_summary(tmp_path: Pat
 
 def test_s5_failed_alert_does_not_advance_last_sent_and_retries(tmp_path: Path) -> None:
     # Given: an actionable state whose first DM send fails.
-    memories = _memory_dir(tmp_path, user="x" * 1200)
+    memories = _memory_dir(tmp_path, user="x" * 2620)
     state_path = tmp_path / "state.json"
     attempts: list[str] = []
 
