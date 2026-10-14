@@ -93,6 +93,33 @@ def task_key_of(kind: str, source_id: str, subject: str) -> str:
     return f"{kind}:{conversation_of(kind, source_id, subject)}"
 
 
+SCHEMA_VERSION: Final = 2
+RELEASES: Final = Path("/srv/autophagy-agent-releases")
+
+
+def _live_board(path: Path) -> bool:
+    return path.resolve().parent == (Path.home() / ".hermes" / "project-board").resolve()
+
+
+def _prepare(connection: sqlite3.Connection, path: Path) -> None:
+    """Create or migrate the schema — but never past this code, and never on the live board from unreleased code."""
+    version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    if version > SCHEMA_VERSION:
+        raise ProjectBoardError(
+            f"board schema v{version} is newer than this code (v{SCHEMA_VERSION}); run the released code"
+        )
+    if version == SCHEMA_VERSION:
+        return
+    if _live_board(path) and not Path(__file__).resolve().is_relative_to(RELEASES):
+        raise ProjectBoardError(
+            "refusing to change the live board schema from code outside the release runtime; "
+            "point PROJECT_BOARD_ROOT at a sandbox"
+        )
+    connection.executescript(_SCHEMA)
+    _migrate(connection)
+    connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
 def _migrate(connection: sqlite3.Connection) -> None:
     columns = {row[1] for row in connection.execute("PRAGMA table_info(todos)")}
     if "task_key" not in columns:
@@ -123,8 +150,7 @@ class BoardStore:
             if fresh:
                 self.path.chmod(0o600)
             connection.row_factory = sqlite3.Row
-            connection.executescript(_SCHEMA)
-            _migrate(connection)
+            _prepare(connection, self.path)
             yield connection
             connection.commit()
         finally:
@@ -288,9 +314,17 @@ class BoardStore:
         return tuple(f"{row['project']} · {row['title']}" + (f" ({row['due']})" if row["due"] else "") for row in rows)
 
     def project_names(self) -> tuple[str, ...]:
-        with self._connect() as db:
-            rows = db.execute("SELECT name FROM projects ORDER BY name").fetchall()
-        return tuple(str(row["name"]) for row in rows)
+        """Read-only: never creates the file, the schema, or a migration — dry runs and status call this."""
+        if not self.path.exists():
+            return ()
+        connection = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=30)
+        try:
+            rows = connection.execute("SELECT name FROM projects ORDER BY name").fetchall()
+        except sqlite3.OperationalError:
+            return ()
+        finally:
+            connection.close()
+        return tuple(str(row[0]) for row in rows)
 
     def snapshot(
         self, *, today: date, pending: tuple[PendingView, ...] = (), now: datetime | None = None,

@@ -134,6 +134,57 @@ def test_a_retryable_failure_leaves_the_minutes_for_the_next_tick(tmp_path: Path
     assert len(analyze_new_minutes(board, drive, Model(), config, today=TODAY, post=None).proposed) == 1
 
 
+def test_reading_project_names_never_migrates_the_board(tmp_path: Path) -> None:
+    import sqlite3
+
+    from automation.project_board.board_store import BoardStore
+
+    path = tmp_path / "board.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE projects (name TEXT PRIMARY KEY, owner TEXT NOT NULL, created_at TEXT NOT NULL)")
+        db.execute("CREATE TABLE todos (todo_id TEXT PRIMARY KEY)")
+        db.execute("INSERT INTO projects VALUES ('과제A', '', '')")
+    before = path.read_bytes()
+    assert BoardStore(path).project_names() == ("과제A",)
+    assert path.read_bytes() == before
+    assert BoardStore(tmp_path / "missing.db").project_names() == ()
+    assert not (tmp_path / "missing.db").exists()
+
+
+def test_the_live_board_schema_moves_only_under_released_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sqlite3
+
+    from automation.project_board import board_store
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    live = tmp_path / "home" / ".hermes" / "project-board" / "board.db"
+    with pytest.raises(ProjectBoardError, match="release runtime"):
+        board_store.BoardStore(live).snapshot(today=TODAY)
+    assert not live.exists() or "tasks" not in live.read_bytes().decode("latin-1")
+    sandbox = board_store.BoardStore(tmp_path / "sandbox" / "board.db")
+    sandbox.snapshot(today=TODAY)
+    with sqlite3.connect(sandbox.path) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == board_store.SCHEMA_VERSION
+    monkeypatch.setattr(board_store, "RELEASES", Path(board_store.__file__).resolve().parents[2])
+    board_store.BoardStore(live).snapshot(today=TODAY)
+    with sqlite3.connect(live) as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == board_store.SCHEMA_VERSION
+
+
+def test_a_board_newer_than_the_code_stops_before_writing(tmp_path: Path) -> None:
+    import sqlite3
+
+    from automation.project_board import board_store
+
+    path = tmp_path / "board.db"
+    with sqlite3.connect(path) as db:
+        db.execute(f"PRAGMA user_version = {board_store.SCHEMA_VERSION + 1}")
+    before = path.read_bytes()
+    with pytest.raises(ProjectBoardError, match="newer than this code"):
+        board_store.BoardStore(path).snapshot(today=TODAY)
+    assert path.read_bytes() == before
+
+
 def test_a_corrupt_watermark_stops_instead_of_flooding(tmp_path: Path) -> None:
     from automation.project_board.config import BoardConfig
     from automation.project_board.llm import LlmConfig
