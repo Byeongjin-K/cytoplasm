@@ -5,6 +5,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 eval "$(python3 "$repo_root/automation/node_config_sh.py" --print-env)"
 host="${RAG_STACK_SSH_HOST:-$NODE_RAG_NODE_NAME}"
+local_node="${RAG_STACK_LOCAL_NODE:-$(hostname -s)}"
 if [ -z "$host" ]; then
   echo "DEPLOY-BLOCK: RAG_STACK_SSH_HOST is unset and node config gave no RAG node name. Set it (or configure ~/.hermes/node.toml)" >&2
   echo "              and re-run; refusing to ssh to an unresolvable placeholder." >&2
@@ -33,9 +34,15 @@ fi
 
 # No payload or executable arrives through remote shell stdin. Source, helper and
 # smoke files enter a fresh ops-owned staging directory, which is removed on exit.
-stage="$(mktemp -d)"
+stage="$(mktemp -d /tmp/autophagy-rag-transfer.XXXXXX)"
 remote=""
-run_ops() { ssh -n "$host" "sudo -n -u ops -H bash -c $(printf '%q' "$1")"; }
+run_ops() {
+  if [[ "$NODE_RAG_NODE_NAME" == "$local_node" ]]; then
+    sudo -n -u ops -H bash -c "$1" < /dev/null
+  else
+    ssh -n "$host" "sudo -n -u ops -H bash -c $(printf '%q' "$1")"
+  fi
+}
 cleanup() {
   [[ -z "$remote" ]] || run_ops "rm -rf -- '$remote'" || echo "RAG-MCP-CLEANUP-FAIL" >&2
   rm -rf -- "$stage"
@@ -50,8 +57,19 @@ tar -C "$repo_root/configs/rag" \
   -czf "$stage/source.tar.gz" compose.yaml personal-rag.service env.example mcp embedding
 source "$repo_root/automation/runtime_package_probe.sh"
 LC_ALL=C runtime_package_local_snapshot "$repo_root/configs/rag" tree > "$stage/expected"
-scp -q "$stage/source.tar.gz" "$stage/expected" \
-  "$repo_root/automation/rag_stack/remote.sh" "$repo_root/automation/rag_stack/smoke.py" \
+cp -- "$repo_root/automation/rag_stack/remote.sh" "$repo_root/automation/rag_stack/smoke.py" \
   "$repo_root/automation/rag_ingest/mcp_client.py" \
-  "$repo_root/automation/deploy_tree_remote.sh" "ops@$host:$remote/"
-run_ops "bash '$remote/remote.sh' '$mode' '$remote'"
+  "$repo_root/automation/deploy_tree_remote.sh" "$stage/"
+payload=("$stage/source.tar.gz" "$stage/expected" "$stage/remote.sh" \
+  "$stage/smoke.py" "$stage/mcp_client.py" "$stage/deploy_tree_remote.sh")
+if [[ "$NODE_RAG_NODE_NAME" == "$local_node" ]]; then
+  # Ops cannot traverse the caller's checkout/home. Expose only these public source
+  # files by name in a fresh temp directory; no secret enters the transfer stage.
+  chmod 711 "$stage"
+  chmod 644 "${payload[@]}"
+  sudo -n -u ops -H cp -- "${payload[@]}" "$remote/"
+  sudo -n -u ops -H bash "$remote/remote.sh" "$mode" "$remote" < /dev/null
+else
+  scp -q "${payload[@]}" "ops@$host:$remote/"
+  run_ops "bash '$remote/remote.sh' '$mode' '$remote'"
+fi

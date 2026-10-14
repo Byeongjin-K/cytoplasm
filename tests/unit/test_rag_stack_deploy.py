@@ -28,7 +28,14 @@ with open(os.environ["FAKE_CALLS"], "a") as f:
 if args[:2] == ["image", "tag"]:
     state["tags"][args[3]] = args[2]
 elif args[0] == "inspect":
-    print(state["image"])
+    print("personal_rag" if ".Config.Labels" in args[2] else state["image"])
+elif args[0] == "ps":
+    print("mcp-container")
+elif args[0] == "exec":
+    import hashlib
+    for file in args[3:]:
+        content = pathlib.Path(os.environ["FAKE_IMAGE_SOURCE"], pathlib.Path(file).name).read_bytes()
+        print(hashlib.sha256(content).hexdigest(), file)
 elif "ps" in args:
     print("mcp-container")
 elif "up" in args:
@@ -84,7 +91,10 @@ def _fake(tmp_path: Path) -> dict[str, str]:
     return {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "HOME": str(home),
             "DOCKER_STATE": str(state), "FAKE_CALLS": str(tmp_path / "calls"),
             "AFTER": _AFTER, "FAIL_SMOKE": "0", "RAG_STACK_SSH_HOST": "fake-rag",
-            "DEPLOY_ALLOW_UNPUSHED": "1", "RAG_MCP_AUTHORIZE_CMD": "true"}
+            "DEPLOY_ALLOW_UNPUSHED": "1", "RAG_MCP_AUTHORIZE_CMD": "true",
+            "RAG_STACK_LOCAL_NODE": "different-node",
+            "HEALTHCHECK_NODE_CONFIG_PATH": str(_REPO / "configs/node.example.toml"),
+            "FAKE_IMAGE_SOURCE": str(_REPO / "configs/rag/mcp/src/rag_mcp")}
 
 
 def _digest() -> str:

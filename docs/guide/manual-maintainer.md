@@ -127,6 +127,11 @@ RAG 노드가 설정된 설치에서는 승인 전에 기존 `rag_stack_current`
 `--no-build --pull never --no-deps mcp`를 실행한 뒤 이미지·health·검색을 다시 확인한다.
 embedding과 Qdrant는 재빌드하거나 재기동하지 않는다. embedding 변경 창은 계속 별도 보류다.
 
+릴리스 호스트가 RAG 노드 자신이면(`rag_node_name == hostname -s`) 관측과 갱신 모두
+자기 자신에게 SSH하지 않고 로컬 `sudo -n -u ops -H`로 실행한다. 파일은 ops가 읽을 수 있는
+전용 임시 폴더에서 ops 소유 실행 폴더로 복사하고, 끝나면 둘 다 정리한다. 별도 RAG 노드는
+기존 SSH/SCP 경로다. 두 경로의 노드 판정 override는 `RAG_STACK_LOCAL_NODE` 하나다.
+
 영수증의 `rag_mcp_refresh`에 status와 전후 이미지 ID가 남는다. 실패·승인 불일치는
 `pending_owner_actions`와 적용 통지에 남으며, 성공은 최신 프로브로 재확인하므로 RAG 갱신을
 위한 별도 노드 활성화 명령이 필요 없다.
