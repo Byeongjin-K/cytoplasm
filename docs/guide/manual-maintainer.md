@@ -77,31 +77,28 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 이 홈 디렉터리를 직접 검색하므로 일반 플러그인 `register()`나 `hermes plugins enable`을
 사용하지 않는다. 워커는 불변 릴리스 트리에서 실행되고, 파일 배포만으로 기능이 켜지지는 않는다.
 
-활성화는 릴리스와 제공자 파일 배포를 완료한 뒤 각 계정 config.yaml의 기존 `memory:` 매핑에
-`provider: autophagy_recall`을 넣고 agent+peer 게이트웨이를 함께 재시동한다.
-다른 외부 제공자가 이미 설정돼 있으면 덧붙이지 않고 운영자가 하나를 선택한다.
-내장 USER.md·MEMORY.md는 그대로 둔다. 해제는 `memory.provider` 키를 지우고 두 게이트웨이를
-함께 재시동하는 것이다. 제공자 파일은 남아 있어도 선택되지 않으면 실행되지 않는다.
+활성화는 릴리스의 기존 config 수렴 경로가 한다. `memory_curator/deploy-manifest.txt`의
+agent·peer별 `.hermes/config.yaml` **기존 두 행**이
+`hermes-memory-profile-with-recall-v1`을 선택하고, 소유 배포기가 `converge_config`를 호출한다.
+`automation.memory_provider.config`는 `hermes_memory_config.LIMITS`의 상한과
+`memory.provider: autophagy_recall`을 공용 블록 편집기로 한 번에 작성한다.
+백업·원자 교체·read-back은 기존 상한 writer를 재사용하며, `activation=gateway`가
+agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md는 수정하지 않는다.
+다른 외부 제공자가 이미 선택돼 있으면 `external-provider-selected`(rc 7)로 거부한다.
+운영자가 기존 선택을 정리하기 전에는 조용히 덮어쓰지 않는다.
+
+해제는 원하는 릴리스의 기존 config 두 행을 상한 전용 `hermes-memory-limits-v1`로 되돌리고,
+`memory.provider` 키를 지운 뒤 두 게이트웨이를 함께 재시동하는 것이다.
+제공자 파일은 남아 있어도 선택되지 않으면 실행되지 않는다. 선언을 그대로 둔 채 키만
+지우면 다음 수렴이 다시 켜므로 선언과 설정을 함께 바꾼다.
 `codex_app_server` 또는 비문자열 멀티모달 경로는 사용자 API 사본 주입을 우회하므로
 활성화 전 실제 운영 API 경로를 확인한다.
 
-**설정 수렴 연계 설계**: `session/memory-caps`의 `v2:config`·
-`automation/deploy_config.sh::converge_config`가 main에 들어온 뒤, 합성 알고리즘
-`hermes-memory-profile-with-recall-v1`을 그 헬퍼와 config 관측기의 허용 목록에 등록한다.
-`automation.hermes_memory_config`의 블록 편집·백업·원자 교체 경계를 재사용하며 상한 값은
-그 모듈의 기존 `LIMITS`를 그대로 읽고 제공자 선택만 더한다. Hermes 실제 설정 로더로
-두 상한과 제공자 선택을 함께 검증한다.
-
-**동일 목적지의 선언을 추가하면 안 된다.** 선행 브랜치의
-`automation/memory_curator/deploy-manifest.txt`가 이미 agent·peer 각각의 `.hermes/config.yaml`을
-소유한다. `(account, destination)` 유일성 규칙을 유지하면서 그 **기존 두 행**의 알고리즘만
-합성 알고리즘으로 교체하고, 기존 소유 배포기가 `converge_config`를 호출하게 한다.
-제공자 패키지는 홈 플러그인 파일 선언만 유지한다. 두 알고리즘이 같은 config 파일을
-각자 쓰거나 별도 YAML 편집기를 갖는 구조는 만들지 않는다.
-해제 시에는 원하는 프로필을 제공자 없는 상한 알고리즘으로 바꾸고 `memory.provider`를
-제거한 뒤 두 게이트웨이를 재시동해 다음 수렴이 다시 켜지 않게 한다.
-현재 main에는 config 선언 종류가 없으므로 이 PR은 불법 선언이나 별도 YAML 편집기를
-넣지 않는다. 그 연계 전에는 위 운영자 opt-in 절차로만 활성화한다.
+**동일 목적지의 선언을 추가하지 않는다.** `(account, destination)` 유일성은 그대로이며
+제공자 패키지는 홈 플러그인 파일 선언만 소유한다. config 관측 알고리즘 등록은
+`automation/deploy_all_config.py`에 있고 기존 상한·`hermes-soul-recall-v1`도 유지한다.
+`--show`·`--check`·`--apply`는 `python3 -m automation.memory_provider.config`의 계약이다.
+재시동 후 실제 질문으로 회상을 확인하는 것은 릴리스 이후 운영 검증이다.
 
 [기능 소개와 설치본 계약·제한](../기능소개/매-턴-자동-회상.md)
 

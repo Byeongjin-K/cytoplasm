@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Final, TypeAlias
 from urllib.parse import quote
 
-from automation import deploy_all_gateway, hermes_memory_config, hermes_soul_recall
+from automation import deploy_all_config, deploy_all_gateway
 from automation.deploy_all_cron_listing import parse_cron_listing
 from automation.deploy_declarations import Declaration, all_declarations
 from automation.node_config import NodeConfigError, load_node_config
@@ -215,27 +215,12 @@ def _cron(decl: Declaration, _root: Path, call: Runner, cache: dict[str, object]
 
 
 #: algorithm → the module that owns the wanted value and runs `--show` inside the account.
-_CONFIG_MODULES: Final = {
-    hermes_memory_config.ALGORITHM: hermes_memory_config,
-    hermes_soul_recall.ALGORITHM: hermes_soul_recall,
-}
-_CONFIG_PAIRS: Final = r"([a-z_]+=[a-z0-9-]+(?:,[a-z_]+=[a-z0-9-]+)*)"
+_CONFIG_MODULES: Final = deploy_all_config.CONFIG_MODULES
 
 
 def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
     """계정 설정 파일의 저장소가 정한 값 — 원하는 값은 이 릴리스 트리의 알고리즘 모듈이 말한다."""
-    module = _CONFIG_MODULES.get(decl.attr("algorithm"))
-    if module is None:
-        return _Seen("?", "?", "unknown", (("unsupported-algorithm", "-"),))
-    wanted = module.wanted_identity()
-    rc, out = call(decl.account, ("config", str(root), module.__name__))
-    match = re.fullmatch(rf"{re.escape(module.MARKER)} have={_CONFIG_PAIRS}", out.strip()) if rc == 0 else None
-    if match is None:
-        return _Seen(_sha_text(wanted)[:16], "?", "unknown", (("unreadable-config", "-"),))
-    have = dict(item.split("=", 1) for item in match[1].split(","))
-    want = dict(item.split("=", 1) for item in wanted.split(","))
-    details = tuple((f"different-{key}", "-") for key, value in want.items() if have.get(key) != value)
-    return _Seen(_sha_text(wanted)[:16], _sha_text(match[1])[:16], "stale" if details else "ok", details)
+    return _Seen(*deploy_all_config.observe_config(decl, root, call))
 
 
 _OBSERVERS: Final = {"file": _file, "tree": _tree, "derived": _derived, "cron": _cron, "config": _config}

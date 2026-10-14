@@ -143,6 +143,11 @@ def apply_limits(text: str, wanted: Mapping[str, int] | None = None) -> str:
     wanted = LIMITS if wanted is None else wanted
     if all(read_limits(text).get(key) == value for key, value in wanted.items()):
         return text
+    return apply_memory_values(text, wanted)
+
+
+def apply_memory_values(text: str, wanted: Mapping[str, int | str]) -> str:
+    """Edit selected memory scalars using the shared block parser; leave other keys alone."""
     lines = text.splitlines()
     span = _section(lines)
     if span is None:

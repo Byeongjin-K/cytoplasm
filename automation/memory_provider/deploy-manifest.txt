@@ -2,4 +2,4 @@
 agent|automation/memory_provider/plugin/__init__.py|.hermes/plugins/autophagy_recall/__init__.py|v2:file;activation=gateway
 peer|automation/memory_provider/plugin/__init__.py|.hermes/plugins/autophagy_recall/__init__.py|v2:file;activation=gateway
 # The worker uses the pinned immutable release tree, not a second home runtime.
-# memory.provider is opt-in; see manual-maintainer.md for config convergence after memory-caps.
+# memory.provider converges with the existing caps declarations owned by memory_curator.
