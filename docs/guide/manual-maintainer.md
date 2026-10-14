@@ -86,14 +86,20 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 활성화 전 실제 운영 API 경로를 확인한다.
 
 **설정 수렴 연계 설계**: `session/memory-caps`의 `v2:config`·
-`automation/deploy_config.sh::converge_config`가 main에 들어온 뒤, 별도 알고리즘
-`hermes-memory-provider-v1`을 그 헬퍼와 config 관측기의 허용 목록에 등록한다.
-`automation.hermes_memory_config`의 블록 편집 경계를 재사용해 `memory.provider` 한 키만
-백업·원자 교체하고 Hermes 실제 설정 로더로 검증한다. 상한 알고리즘의 두 키를
-제공자 설정에 섞지 않는다. 제공자 패키지의 선언은 agent와 peer **각각 네 필드 한 줄**로
-`.hermes/config.yaml|v2:config;algorithm=hermes-memory-provider-v1;activation=gateway`를
-목적지·정책으로 갖고 배포기는 `converge_config`를 호출한다.
-해제 시에는 이 활성화 선언도 제거하거나 해제 알고리즘으로 바꿔 다음 수렴이 다시 켜지 않게 한다.
+`automation/deploy_config.sh::converge_config`가 main에 들어온 뒤, 합성 알고리즘
+`hermes-memory-profile-with-recall-v1`을 그 헬퍼와 config 관측기의 허용 목록에 등록한다.
+`automation.hermes_memory_config`의 블록 편집·백업·원자 교체 경계를 재사용하며 상한 값은
+그 모듈의 기존 `LIMITS`를 그대로 읽고 제공자 선택만 더한다. Hermes 실제 설정 로더로
+두 상한과 제공자 선택을 함께 검증한다.
+
+**동일 목적지의 선언을 추가하면 안 된다.** 선행 브랜치의
+`automation/memory_curator/deploy-manifest.txt`가 이미 agent·peer 각각의 `.hermes/config.yaml`을
+소유한다. `(account, destination)` 유일성 규칙을 유지하면서 그 **기존 두 행**의 알고리즘만
+합성 알고리즘으로 교체하고, 기존 소유 배포기가 `converge_config`를 호출하게 한다.
+제공자 패키지는 홈 플러그인 파일 선언만 유지한다. 두 알고리즘이 같은 config 파일을
+각자 쓰거나 별도 YAML 편집기를 갖는 구조는 만들지 않는다.
+해제 시에는 원하는 프로필을 제공자 없는 상한 알고리즘으로 바꾸고 `memory.provider`를
+제거한 뒤 두 게이트웨이를 재시동해 다음 수렴이 다시 켜지 않게 한다.
 현재 main에는 config 선언 종류가 없으므로 이 PR은 불법 선언이나 별도 YAML 편집기를
 넣지 않는다. 그 연계 전에는 위 운영자 opt-in 절차로만 활성화한다.
 
