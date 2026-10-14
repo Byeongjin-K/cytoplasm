@@ -29,6 +29,24 @@ MEETING_DIR_ENV: Final = "PROJECT_BOARD_MEETING_DIR"
 _REPO: Final = Path(__file__).resolve().parents[2]
 
 
+_MINUTES_PREFIX: Final = re.compile(r"^\s*회의록\s*[-—–_:·]?\s*")
+_DATED: Final = re.compile(r"\d{4}-\d{2}-\d{2}(?:[_ ]\d{4})?")
+_SESSION: Final = re.compile(
+    r"(?:\s*[-_·]?\s*\(?\s*(?:제\s*)?\d+\s*(?:차|회)\s*\)?|\s*\(\d+\)|\s*#\d+|\s*-\s*\d+)\s*$"
+)
+
+
+def meeting_key(title: str) -> str:
+    """The meeting series a minutes file belongs to: title without date, 「회의록」 and session number."""
+    text = _DATED.sub(" ", _MINUTES_PREFIX.sub("", " ".join(title.split())))
+    text = " ".join(text.split()).strip(" -_·")
+    while True:
+        stripped = _SESSION.sub("", text).strip(" -_·")
+        if stripped == text or not stripped:
+            return text.casefold()
+        text = stripped
+
+
 def thread_key(subject: str) -> str:
     """The conversation a mail belongs to: its subject without reply/forward prefixes, case-folded."""
     text = " ".join(subject.split())

@@ -155,6 +155,7 @@ def test_a_board_from_before_grades_migrates_and_reads_the_default(tmp_path: Pat
     with sqlite3.connect(path) as db:
         db.execute("DROP TABLE tasks")
         db.execute("ALTER TABLE todos DROP COLUMN task_key")
+        db.execute("PRAGMA user_version = 0")
     store = BoardStore(path)
     todo = store.snapshot(today=TODAY).todos[0]
     assert (todo.task_key, todo.grade) == ("mail:옛 업무", "과제내부")

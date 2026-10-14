@@ -44,6 +44,7 @@ class BoardConfig:
     llm: LlmConfig
     analyze_enabled: bool = False
     max_per_tick: int = 5
+    analyze_minutes: bool = True
     port: int = DEFAULT_PORT
     digest_to: tuple[str, ...] = ()
     digest_subject: str = "프로젝트 현황 일일 요약"
@@ -125,6 +126,7 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         llm=llm_config(raw.get("llm")),
         analyze_enabled=bool(analyze.get("enabled", False)),
         max_per_tick=max(1, min(20, int(analyze.get("max_per_tick") or 5))),
+        analyze_minutes=analyze.get("minutes", True) is not False,
         port=port,
         digest_to=tuple(recipients),
         digest_subject=str(digest.get("subject") or "프로젝트 현황 일일 요약"),
