@@ -185,6 +185,33 @@ def test_a_board_newer_than_the_code_stops_before_writing(tmp_path: Path) -> Non
     assert path.read_bytes() == before
 
 
+def test_the_dashboard_exits_when_the_release_pointer_moves(tmp_path: Path) -> None:
+    import threading
+
+    from automation.project_board.server import exit_on_new_release
+
+    for name in ("rel-a", "rel-b"):
+        (tmp_path / name).mkdir()
+    pointer = tmp_path / "current"
+    pointer.symlink_to(tmp_path / "rel-a")
+
+    class Server:
+        stopped = threading.Event()
+
+        def shutdown(self) -> None:
+            self.stopped.set()
+
+    server, stop = Server(), threading.Event()
+    watcher = threading.Thread(target=exit_on_new_release, args=(server, pointer, stop, 0.01), daemon=True)
+    watcher.start()
+    assert not server.stopped.wait(0.1)
+    pointer.unlink()
+    pointer.symlink_to(tmp_path / "rel-b")
+    assert server.stopped.wait(5)
+    watcher.join(5)
+    stop.set()
+
+
 def test_a_corrupt_watermark_stops_instead_of_flooding(tmp_path: Path) -> None:
     from automation.project_board.config import BoardConfig
     from automation.project_board.llm import LlmConfig

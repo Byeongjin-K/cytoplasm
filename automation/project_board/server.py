@@ -24,6 +24,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import threading
 from collections.abc import Callable
 from datetime import date
 from html import escape
@@ -222,6 +223,16 @@ class _Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - http.server API
         logger.info("%s %s", self.command, urlparse(self.path).path)
+
+
+def exit_on_new_release(server: ThreadingHTTPServer, pointer: Path, stop: threading.Event, interval: float = 60.0) -> None:
+    """Shut the server down once ``pointer`` resolves elsewhere, so systemd restarts it on the new release."""
+    started = pointer.resolve()
+    while not stop.wait(interval):
+        if pointer.resolve() != started:
+            logger.info("release moved; exiting so the unit restarts on it")
+            server.shutdown()
+            return
 
 
 def make_server(

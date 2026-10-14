@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 from collections.abc import Sequence
 from datetime import date, datetime
 from pathlib import Path
@@ -160,7 +161,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from .server import make_server
+    from .server import exit_on_new_release, make_server
 
     board = Board.default()
     config = load_config()
@@ -190,6 +191,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()
+    release = Path("/srv/autophagy-agent-current")
+    stop = threading.Event()
+    if Path(__file__).resolve().is_relative_to(release.resolve()):
+        threading.Thread(target=exit_on_new_release, args=(server, release, stop), daemon=True).start()
     try:
         server.serve_forever()
     finally:

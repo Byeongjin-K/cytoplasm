@@ -9,7 +9,7 @@ Environment=PYTHONPATH=/srv/autophagy-agent-current
 ExecStart=/usr/bin/python3 -m automation.project_board serve --host 127.0.0.1
 Restart=always
 RestartSec=10
-# Picks up a newly converged release within the hour without a deploy-time restart hook.
+# The server exits within a minute of a new release (exit_on_new_release); this cap is the backstop.
 RuntimeMaxSec=3600
 
 [Install]
