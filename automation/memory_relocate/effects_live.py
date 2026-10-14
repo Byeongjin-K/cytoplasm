@@ -33,7 +33,7 @@ from automation.interop.external_effect_gate import ApprovalContext
 from automation.obsidian_write import gate_binding
 from automation.obsidian_write.writer import write_note
 
-from .approval_gate import RelocateApprovalGate, approval_hash, approval_key, request_approval
+from .approval_gate import RelocateApprovalGate, approval_hash, approval_key, dropped_lines, request_approval
 from .apply import ApplyDeps, ApplyOutcome, apply_relocation
 from .binding import RelocationHashFields, relocation_action_hash
 from .model import RelocationRecord, record_key
@@ -185,7 +185,30 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
             return verdict.live.message_id, verdict.live.channel_id
         return None
 
+    decided: dict[str, str] = {}
+    dropped: dict[str, frozenset[int]] = {}
+
     def probe(record: RelocationRecord) -> str:
+        batch = record.batch_hash
+        if batch is None:
+            return probe_one(record)
+        if batch not in decided:
+            decided[batch] = probe_one(record)
+            if decided[batch] == "approved":
+                try:
+                    count = max((m.batch_index or 0) for m in store.all_pending() if m.batch_hash == batch)
+                    channel, message = record.channel_id, record.message_id or ""
+                    dropped[batch] = dropped_lines(
+                        lambda emoji: transport.get_reaction_users(channel, message, emoji), owner_id, count
+                    )
+                except _EFFECT_ERRORS:
+                    decided[batch] = "pending"
+        verdict = decided[batch]
+        if verdict == "approved" and record.batch_index in dropped.get(batch, frozenset()):
+            return "cancelled"
+        return verdict
+
+    def probe_one(record: RelocationRecord) -> str:
         try:
             text = recover_entry_text(memory_dir, record)
             # An unbound surface cannot be verified; fail closed rather than treating it as gone and discarding ✅.
@@ -298,7 +321,7 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
         if record.batch_hash is None:
             return ()
         members: list[tuple[RelocationRecord, str]] = []
-        for member in sorted(store.all_pending(), key=lambda pending: record_key(pending.source_kind, pending.entry_sha256)):
+        for member in sorted(store.all_pending(), key=lambda pending: (pending.batch_index or 0, record_key(pending.source_kind, pending.entry_sha256))):
             if member.batch_hash != record.batch_hash:
                 continue
             member_text = recover_entry_text(memory_dir, member)

@@ -60,8 +60,9 @@ def _render_batch_v1(members: Sequence[tuple[RelocationRecord, str]]) -> str:
         from automation.interop import owner_message as om
     except ImportError as error:
         raise RenderError("owner envelope unavailable") from error
-    lines = ["USER.md·MEMORY.md 에서 옮길 항목:"]
+    lines = ["USER.md·MEMORY.md 에서 옮길 항목 (빼고 싶은 줄은 그 번호 이모지를 누른 뒤 ✅):"]
     for number, (record, text) in enumerate(members, start=1):
+        number = record.batch_index or number
         label = _DESTINATION_LABELS.get(record.destination or "", "참조 노트")
         lines += [f"{number}. [{label}] {text}", f"   → {record.note_relpath}"]
     lines += [
@@ -74,7 +75,7 @@ def _render_batch_v1(members: Sequence[tuple[RelocationRecord, str]]) -> str:
         subject=f"메모리 정리 — 사람 정보·처리 규칙 {len(members)}건",
         fact="\n".join(lines),
         location=here,
-        owner=om.Action("react", here, "✅ 한 번에 전부 승인 / ⛔ 전부 취소"),
+        owner=om.Action("react", here, "✅ 승인(번호를 누른 줄은 남김) / ⛔ 전부 취소"),
         agent_next=(
             "사람 노트는 저장·인제스트 확인 뒤, 규칙은 MEMORY.md 추가 확인 뒤 원래 자리에서 삭제;"
             " 사람 정보는 이후 recall(검색)로 조회"

@@ -57,20 +57,24 @@ def build_proposed_record(
     )
 
 
+#: Number reactions 1️⃣…🔟 let the owner drop single lines, so a card holds at most ten.
+MAX_BATCH = 10
+
+
 def build_batch(
     members: Sequence[tuple[RelocationRecord, str]],
     *,
     fits: Callable[[Sequence[tuple[RelocationRecord, str]]], bool],
 ) -> tuple[RelocationRecord, ...]:
-    """Take the longest prefix whose one card fits, and bind it with one batch hash.
+    """Take members in order while one card still fits (at most ``MAX_BATCH``), bind them with one hash.
 
-    The rest waits for the next cycle — the watcher proposes again only when nothing is in flight.
+    A member that does not fit is skipped, not a wall: an entry longer than a card would otherwise
+    stop every later one. The rest waits for the next cycle (the watcher proposes only when idle).
     """
     taken: list[tuple[RelocationRecord, str]] = []
     for member in members:
-        if not fits([*taken, member]):
-            break
-        taken.append(member)
+        if len(taken) < MAX_BATCH and fits([*taken, member]):
+            taken.append(member)
     if not taken:
         return ()
     return _bound(taken)
@@ -88,4 +92,7 @@ def card_fits(members: Sequence[tuple[RelocationRecord, str]]) -> bool:
 
 def _bound(members: Sequence[tuple[RelocationRecord, str]]) -> tuple[RelocationRecord, ...]:
     batch = batch_action_hash([record.action_hash for record, _ in members])
-    return tuple(replace(record, batch_hash=batch) for record, _ in members)
+    return tuple(
+        replace(record, batch_hash=batch, batch_index=number)
+        for number, (record, _) in enumerate(members, start=1)
+    )

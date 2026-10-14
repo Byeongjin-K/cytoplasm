@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
@@ -126,6 +127,21 @@ def approval_key(record: RelocationRecord) -> str:
 
 def approval_hash(record: RelocationRecord) -> str:
     return record.batch_hash or record.action_hash
+
+
+#: Keycap reactions 1️⃣…9️⃣ and 🔟: the owner's number on a batch card keeps that line where it is.
+KEYCAPS: Final = (*(f"{number}\ufe0f\u20e3" for number in range(1, 10)), "\U0001f51f")
+
+
+def dropped_lines(
+    read_users: Callable[[str], tuple[tuple[str, bool], ...]], owner_id: str, count: int
+) -> frozenset[int]:
+    """Card numbers (1-based) the owner reacted to with a keycap; bots and others do not count."""
+    return frozenset(
+        number
+        for number, emoji in enumerate(KEYCAPS[:count], start=1)
+        if _owner_reacted(read_users(emoji), owner_id)
+    )
 
 
 def _owner_reacted(users: tuple[tuple[str, bool], ...], owner_id: str) -> bool:

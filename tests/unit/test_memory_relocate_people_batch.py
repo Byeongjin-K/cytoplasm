@@ -16,7 +16,7 @@ from automation.memory_curator.classify_model import EntryVerdict
 from automation.memory_curator.curator import parse_memory_file
 from automation.memory_curator.deletion import MemoryCapError, append_entry
 from automation.memory_relocate.apply import ApplyDeps, apply_relocation
-from automation.memory_relocate.approval_gate import approval_hash, approval_key
+from automation.memory_relocate.approval_gate import KEYCAPS, approval_hash, approval_key, dropped_lines
 from automation.memory_relocate.binding import (
     RelocationHashFields,
     batch_action_hash,
@@ -85,12 +85,23 @@ def test_one_batch_hash_binds_exactly_the_members_and_the_card_shows_it() -> Non
     assert approval_hash(records[0]) == records[0].batch_hash
 
 
-def test_a_batch_that_would_overflow_one_card_keeps_the_prefix_that_fits() -> None:
+def test_a_batch_that_would_overflow_one_card_keeps_what_fits() -> None:
     long_rules = [f"{RULE} {index} " + "가" * 600 for index in range(4)]
     members = [(_record(text, "memory"), text) for text in long_rules]
     records = build_batch(members, fits=card_fits)
     assert 0 < len(records) < len(members)
     assert all(r.batch_hash == records[0].batch_hash for r in records)
+
+
+def test_an_entry_longer_than_a_card_does_not_block_the_rest() -> None:
+    huge = "가" * 1901
+    records = build_batch([(_record(huge, "person"), huge), (_record(PERSON, "person"), PERSON)], fits=card_fits)
+    assert [r.entry_sha256 for r in records] == [entry_digest("user", PERSON)]
+
+
+def test_a_card_holds_at_most_ten_entries() -> None:
+    texts = [f"{PERSON} {index}" for index in range(12)]
+    assert len(build_batch([(_record(text, "person"), text) for text in texts], fits=card_fits)) == 10
 
 
 def test_batch_fields_round_trip_and_unknown_destinations_fail_closed() -> None:
@@ -123,7 +134,6 @@ def test_one_card_posts_once_and_one_reaction_moves_every_member() -> None:
     assert len(posts) == 1
     assert {(r.status, r.message_id) for r in posted.state.relocations.values()} == {("posted", "m1")}
     approved = resolve_tick(posted.state, effects=effects, max_posts=1)
-    assert len(probes) == 1
     assert {r.status for r in approved.state.relocations.values()} == {"approved"}
 
 
@@ -176,3 +186,16 @@ def test_a_rule_leaves_user_md_only_after_memory_md_holds_it(tmp_path: Path) -> 
     assert outcome.deleted
     assert (tmp_path / "USER.md").read_text(encoding="utf-8") == OWNER
     assert RULE in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+
+
+def test_members_carry_their_card_numbers_and_the_card_shows_them() -> None:
+    records = build_batch([(_record(PERSON, "person"), PERSON), (_record(RULE, "memory"), RULE)], fits=card_fits)
+    assert [r.batch_index for r in records] == [1, 2]
+    _, card = prepare_batch_card(list(zip(records, (PERSON, RULE), strict=True)))
+    assert f"1. [사람 노트] {PERSON}" in card and f"2. [MEMORY.md 로] {RULE}" in card
+
+
+def test_only_the_owner_keycaps_drop_lines() -> None:
+    reactions = {KEYCAPS[1]: (("owner", False),), KEYCAPS[2]: (("someone", False), ("owner", True))}
+    assert dropped_lines(lambda emoji: reactions.get(emoji, ()), "owner", 3) == frozenset({2})
+    assert dropped_lines(lambda emoji: reactions.get(emoji, ()), "owner", 1) == frozenset()

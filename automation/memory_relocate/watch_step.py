@@ -64,7 +64,6 @@ def resolve_tick(
     reconciled: list[str] = []
     abandoned: list[str] = []
     transition_time = effects.now.isoformat()
-    verdicts: dict[str, str] = {}
     touched: set[str] = set()
 
     def batch_members(record: RelocationRecord, status: str) -> list[str]:
@@ -105,12 +104,7 @@ def resolve_tick(
                     posted.append(key)
 
             case "posted":
-                if record.batch_hash is not None and record.batch_hash in verdicts:
-                    verdict = verdicts[record.batch_hash]
-                else:
-                    verdict = effects.probe_reaction(record)
-                    if record.batch_hash is not None:
-                        verdicts[record.batch_hash] = verdict
+                verdict = effects.probe_reaction(record)
                 if not _is_reaction_verdict(verdict):
                     continue
                 match verdict:
