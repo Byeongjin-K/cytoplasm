@@ -1,4 +1,5 @@
 import hashlib
+import re
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import ClassVar, Literal
@@ -15,6 +16,10 @@ _HTTP_LIMITS = httpx.Limits(
     keepalive_expiry=30.0,
 )
 _HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=10.0)
+# Depth of the raw dense pool behind one-passage-per-note search (set A: the needed note is
+# within the first 100 distinct notes of a 500-deep pool for 39/46 questions).
+NOTE_POOL = 500
+_CHUNK_SUFFIX = re.compile(r"#c\d+$")
 
 
 class MemoryPayload(BaseModel):
@@ -179,8 +184,24 @@ class MemoryStore:
         query: str,
         limit: int,
         entity_anchors: list[str] | None = None,
+        *,
+        one_per_note: bool = False,
     ) -> list[MemorySearchResult]:
         vector = await self.embed(query)
+        if one_per_note:
+            # Owner Q155 (2026-10-15): recall looks at the whole store; long chat logs fill a
+            # raw top-k with chunks of one conversation, so keep the best passage per note.
+            seen: set[str] = set()
+            notes: list[MemorySearchResult] = []
+            for point in await self._query_points(vector, NOTE_POOL):
+                key = _CHUNK_SUFFIX.sub("", point.payload.source)
+                if key in seen:
+                    continue
+                seen.add(key)
+                notes.append(self._search_result(point))
+                if len(notes) == limit:
+                    break
+            return notes
         if not entity_anchors:
             async with self.client(self.settings.qdrant_url) as client:
                 response = await client.post(

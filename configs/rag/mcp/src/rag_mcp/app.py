@@ -37,6 +37,7 @@ class HealthResponse(BaseModel):
     status: str
 
 
+MAX_PASSAGE_LIMIT = 20
 settings = RagSettings.from_environment()
 memory_store = MemoryStore(settings)
 mcp = FastMCP("personal-memory")
@@ -54,9 +55,18 @@ async def load_memory(
 @mcp.tool
 async def search_memory(
     query: Annotated[str, Field(min_length=1, max_length=100_000)],
-    limit: Annotated[int, Field(ge=1, le=20)] = 5,
+    limit: Annotated[int, Field(ge=1, le=100)] = 5,
     entity_anchors: Annotated[list[str] | None, Field(max_length=20)] = None,
+    one_per_note: bool = False,  # noqa: FBT001, FBT002 - MCP tool arguments are named JSON fields
 ) -> list[MemorySearchResult]:
+    if one_per_note:
+        if entity_anchors is not None:
+            message = "one_per_note cannot be combined with entity_anchors"
+            raise ValueError(message)
+        return await memory_store.search(query, limit, one_per_note=True)
+    if limit > MAX_PASSAGE_LIMIT:
+        message = f"limit above {MAX_PASSAGE_LIMIT} needs one_per_note"
+        raise ValueError(message)
     if entity_anchors is None:
         return await memory_store.search(query, limit)
     return await memory_store.search(query, limit, entity_anchors)
