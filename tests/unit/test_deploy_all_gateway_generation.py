@@ -107,6 +107,7 @@ def _apply(
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "DEPLOY_SSH_HOST": "fake-node",
         "DEPLOY_ALL_WRAPPER_REFRESH_CMD": "true",
+        "DEPLOY_ALL_RAG_MCP_REFRESH_CMD": "true",
         "DEPLOY_ALL_RECEIPT_DIR": str(tmp_path / "private" / "deploy-all"),
         "DEPLOY_ALL_LOCK_DIR": str(tmp_path / "locks"),
         "DEPLOY_ALL_GATEWAY_WAIT_SECONDS": wait_seconds,

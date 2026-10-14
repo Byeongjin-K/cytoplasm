@@ -36,7 +36,7 @@ _APPROVED: Final = {
     ("automation/hermes_compat/deploy.sh", "raw"): 1,
     ("automation/interop/deploy.sh", "raw"): 3,
     ("automation/notes_organize/deploy.sh", "raw"): 1,
-    ("automation/rag_stack/deploy.sh", "raw"): 1,
+    ("automation/rag_stack/deploy.sh", "raw"): 2,
     ("automation/regression_bank/deploy_lab_node.sh", "raw"): 8,
     ("automation/research_trends/deploy.sh", "raw"): 1,
     ("skills/budget/deploy.sh", "raw"): 1,

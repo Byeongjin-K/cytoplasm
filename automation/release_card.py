@@ -7,6 +7,7 @@ from typing import Final, TypeAlias
 
 from automation.release_spec import (
     NEW_RENDER_VERSION,
+    RAG_MCP_SURFACE,
     EnvelopeUnavailable,
     ReleaseSpec,
     ReleaseSpecError,
@@ -47,6 +48,10 @@ def preflight_new_request(spec: ReleaseSpec) -> tuple[ReleaseSpec | None, str]:
         LEGACY_ENVELOPE_VERSION,
         LEGACY_PLAIN_VERSION,
     ):
+        if version != NEW_RENDER_VERSION and any(
+            name == RAG_MCP_SURFACE for name, _digest in spec.surface_digests
+        ):
+            break  # Never approve a rebuild on a fallback card that omits its outage notice.
         candidate = replace(spec, render_version=version)
         probe = candidate
         if version == NEW_RENDER_VERSION and not candidate.detail_message_ids:

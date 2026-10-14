@@ -1,1 +1,2 @@
-ops|configs/rag|personal-rag|v2:tree;policy=held;reason=rag-node-owner-change-window;profile=tree;node=rag
+ops|configs/rag|personal-rag|v2:tree;policy=required;profile=tree;node=rag
+ops|configs/rag/embedding|personal-rag/embedding|v2:tree;policy=held;reason=embedding-owner-change-window;profile=tree;node=rag

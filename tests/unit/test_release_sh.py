@@ -224,6 +224,7 @@ def _run(
         "RELEASE_DEPLOY_ALL": str(deploy_all),
         "RELEASE_HELPER_PROBE_CMD": f"bash {helper_probe_stub}",
         "RELEASE_WRAPPER_PLAN_CMD": wrapper_plan,
+        "RELEASE_RAG_MCP_PLAN_CMD": "true",
         "PLAN_ARGS": str(tmp_path / "plan-args"),
         "HELPER_PROBE_MODE": helper_probe,
         "RELEASE_ALLOW_HELPER_DRIFT": allow_helper_drift,

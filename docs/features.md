@@ -1,5 +1,7 @@
 # Autophagy 기능 현황판
 
+- [릴리스 승인으로 RAG mcp 자동 갱신](기능소개/릴리스-RAG-mcp-자동갱신.md) — MCP만 재빌드하고 health·인증 검색 실패 시 이전 이미지로 되돌린다. embedding 재빌드는 보류한다.
+
 > cha 개인 AI 에이전트 시스템의 **기능 단위 현황판**.
 > 상세 설계·작업 분해·검증 기준의 단일 진실은 [.omo/plans/autophagy-agents.md](../.omo/plans/autophagy-agents.md) (Work Plan v2.3)이며, 이 문서는 그 요약 뷰 + 신규 아이디어 수집함이다.
 

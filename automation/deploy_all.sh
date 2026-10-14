@@ -18,7 +18,7 @@
 #            때까지 대기(DEPLOY_ALL_GATEWAY_WAIT_SECONDS·_INTERVAL) → 전량 재판정 → 영수증
 #
 # ⑤ root 자산·⑥ RAG 는 상시 healthcheck 프로브가 소유한다(영수증의 delegated 필드) —
-# 여기서 실행하지 않는다. 릴리스 시점에 다시 돌린 그 프로브의 실패는 `ACT|owner|` 로 출력만 한다.
+# root 자산은 여기서 실행하지 않는다. RAG MCP는 카드에 묶인 릴리스 승인 뒤에만 갱신한다.
 #
 # Exit: 0 ok(영수증 기록) · 1 실행 실패/drift/재판정 실패 · 2 usage · 3 host 미설정 · 4 판정 불가/전제 미충족
 set -uo pipefail
@@ -65,6 +65,22 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
 #: (healthcheck_wrapper_release.sh refresh). 결과는 영수증에 실려 적용 통지로 소유자에게 간다 —
 #: 실패해도 영수증을 막지 않는다(위임 표면은 영수증을 막지 않는 것과 같다).
 wrapper_receipt_args=()
+rag_receipt_args=()
+refresh_rag_mcp() {
+  local -a refresh_cmd
+  local out rc=0 line result=""
+  read -r -a refresh_cmd <<< "${DEPLOY_ALL_RAG_MCP_REFRESH_CMD:-bash $repo_root/automation/rag_mcp_release.sh refresh}"
+  out="$("${refresh_cmd[@]}" "$local_head")" || rc=$?
+  while IFS= read -r line; do
+    [[ "$line" == RAG-MCP-REFRESH\|* ]] || continue
+    log "$line"
+    result="${line#RAG-MCP-REFRESH|}"
+  done <<< "$out"
+  # A cut transport or a crash before the sentinel cannot be reported as success.
+  [[ -n "$result" || "$rc" == 0 ]] || result="failed|-|-|refresh-unfinished"
+  rag_receipt_args=()
+  [[ -z "$result" ]] || rag_receipt_args=(--rag-mcp-refresh "$result")
+}
 refresh_wrappers() {
   local -a refresh_cmd
   local out line _tag node status token
@@ -127,7 +143,7 @@ write_receipt() {
   # 영수증 내용은 노드가 **지금 다시 판정**해 만든다 — 아까의 판정을 재사용하면
   # 그 사이의 변화가 서명된다. read-back 대조는 deploy_push 와 같은 규율이다.
   local receipt want got
-  if ! receipt="$(probe receipt "${wrapper_receipt_args[@]}")"; then
+  if ! receipt="$(probe receipt "${wrapper_receipt_args[@]}" "${rag_receipt_args[@]}")"; then
     log "RECEIPT-BLOCK: the node no longer judges itself clean"
     return 1
   fi
@@ -224,6 +240,7 @@ case "$mode" in
         log "already fully deployed"
       fi
       refresh_wrappers
+      refresh_rag_mcp
       write_receipt
       exit $?
     fi
@@ -272,6 +289,7 @@ case "$mode" in
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then
       refresh_wrappers
+      refresh_rag_mcp
       write_receipt
       exit $?
     fi

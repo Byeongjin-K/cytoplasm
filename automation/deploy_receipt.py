@@ -3,7 +3,7 @@
 영수증은 "이 릴리스가 한 번 전량 반영되었다"의 롤아웃 증명이다(RC-4). clean 이 아닌 계획에는
 서명하지 않는다. v2 는 그 옆에 보류(held)·퇴역(retired) 행과, 릴리스 시점에 다시 돌린 위임
 프로브(root 자산·RAG·헬스체크 허용 목록) 가운데 PASS 가 아닌 것을 그 프로브 자신의 안내 줄과
-함께 싣는다. 그것들은 릴리스가 올릴 수 없는 표면이라 영수증을 막지 않는다 — 대신 적용 통지가
+함께 싣는다. RAG MCP는 승인된 추가 효과로 갱신하며 실패 결과도 남긴다. 위임 표면은 영수증을 막지 않는다 — 대신 적용 통지가
 `pending_lines` 로 소유자에게 목록을 말한다. `release_sha` 는 최상위 키로 둔다(상시 프로브
 `release_receipt_probe.sh` 가 그 키와 `version` 만 읽는다).
 """
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Final
 
 from automation.deploy_all_gateway import receipt_held
 from automation.deploy_all_kinds import KINDS, ArtifactState, ObservationError
+from automation.rag_mcp_receipt import parse_refresh
 
 if TYPE_CHECKING:
     from automation.deploy_all import Plan
@@ -80,6 +81,7 @@ def render_receipt(
     verified_at: str,
     declared_reasons: Mapping[tuple[str, str, str], str] | None = None,
     wrapper_refresh: tuple[str, ...] = (),
+    rag_mcp_refresh: str = "",
 ) -> str:
     """전량 반영 영수증 — clean 이 아닌 계획에 서명하는 것을 코드가 거부한다.
 
@@ -144,6 +146,21 @@ def render_receipt(
     }
     if refreshed:
         payload["wrapper_refresh"] = refreshed
+    if rag_mcp_refresh:
+        rag = parse_refresh(rag_mcp_refresh)
+        payload["rag_mcp_refresh"] = rag
+        if rag["status"] in ("failed", "skipped"):
+            # Even if the source/image probe now passes, a failed smoke or rollback
+            # is a failed release effect. It must remain visible to the owner.
+            payload["pending_owner_actions"] = [
+                *[
+                    {"probe": check.probe, "node": check.node, "check": check.name,
+                     "status": check.status, "guidance": list(check.details)}
+                    for check in plan.pending if check.probe != "rag_stack_current"
+                ],
+                {"probe": "rag_stack_current", "node": "rag", "check": "RAG MCP 갱신",
+                 "status": "FAIL", "guidance": [f"검색 갱신 실패/보류: {rag['detail']}"]},
+            ]
     return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 

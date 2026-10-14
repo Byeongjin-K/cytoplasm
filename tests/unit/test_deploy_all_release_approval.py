@@ -112,6 +112,7 @@ def deployment(tmp_path: Path) -> Deployment:
         "PYTHONPATH": str(_REPO),
         "DEPLOY_SSH_HOST": "fake-node",
         "DEPLOY_ALL_WRAPPER_REFRESH_CMD": "true",
+        "DEPLOY_ALL_RAG_MCP_REFRESH_CMD": "true",
         "DEPLOY_ALL_LOCK_DIR": str(tmp_path / "locks"),
         "DEPLOY_ALL_RECEIPT_DIR": str(state),
         "HEALTHCHECK_NODE_CONFIG_PATH": str(_REPO / "configs/node.example.toml"),

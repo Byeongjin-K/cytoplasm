@@ -114,6 +114,24 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 그대로다 — 카드가 갱신을 싣지 못한 릴리스의 남은 조치는 다음 릴리스 카드가 다시 싣거나 그 명령으로 닫는다.
 [기능 소개](../기능소개/릴리스-카드-헬스체크-허용목록-갱신.md)
 
+### RAG 검색 컨테이너도 같은 승인으로 갱신한다
+
+RAG 노드가 설정된 설치에서는 승인 전에 기존 `rag_stack_current`의 `rag|tree` 선택으로
+소스와 실행 중 MCP 이미지를 릴리스와 대조한다. stale일 때만 `rag-mcp` 트리 지문을 승인 해시에
+추가하고 카드에 `검색 잠깐 끊김(~1분)·되돌림 있음` 한 줄을 표시한다. 판독 불가면
+승인 전에 멈춘다. 같은 상태를 최신이라고 추측하지 않는다.
+
+소유자 승인 뒤 `deploy_all.sh --apply`가 source sync와 MCP 전용
+`docker compose up -d --build --no-deps mcp`를 ops로 실행한다. 노드의 비공개 설정을 보존하고,
+`/health`와 인증된 `search_memory` 1회가 통과해야 성공이다. 실패하면 기록한 이전 이미지로
+`--no-build --pull never --no-deps mcp`를 실행한 뒤 이미지·health·검색을 다시 확인한다.
+embedding과 Qdrant는 재빌드하거나 재기동하지 않는다. embedding 변경 창은 계속 별도 보류다.
+
+영수증의 `rag_mcp_refresh`에 status와 전후 이미지 ID가 남는다. 실패·승인 불일치는
+`pending_owner_actions`와 적용 통지에 남으며, 성공은 최신 프로브로 재확인하므로 RAG 갱신을
+위한 별도 노드 활성화 명령이 필요 없다.
+[기능 소개](../기능소개/릴리스-RAG-mcp-자동갱신.md)
+
 ### Hermes 설정 값도 릴리스가 맞춘다 (2026-10-14~)
 
 계정 `~/.hermes/config.yaml` 의 키 가운데 저장소가 값을 정하는 것은 배포 선언 `v2:config;algorithm=<이름>` 으로

@@ -30,7 +30,8 @@ automation/interop/deploy.sh|raw|cat > "$t" || { rm -f "$t"; exit 1; }|rule-file
 automation/interop/deploy.sh|raw|cp -p "$HOME/$f" "$b/$f"|rollback copy of the current drop-in, plugin files and guard to ~/.hermes/interop/rollback/<UTC> before the bundle moves (permanent)
 automation/interop/deploy.sh|raw|cp -p "$f" "$b/.hermes/interop/external-effect-tools.yaml"|rollback copy of a differing home rule file to ~/.hermes/interop/rollback/<UTC> before push_file replaces it, also on roster-held runs (permanent)
 automation/notes_organize/deploy.sh|raw|--name notes-weekly-organize --no-agent|FS3-pinned test tests/unit/test_watcher_deploy_coverage.py fixes this registration text
-automation/rag_stack/deploy.sh|raw|install -m 0644 "$stage/compose.yaml"|RAG node, owner-run — declared held
+automation/rag_stack/deploy.sh|raw|run_ops "rm -rf -- '$remote'"|private ops staging cleanup only, never the active source or image
+automation/rag_stack/deploy.sh|raw|scp -q "$stage/source.tar.gz"|RAG node mixed source/secret tree: explicit files in fresh ops staging, exchange preserves node-only secrets; helpers cannot preserve them
 automation/regression_bank/deploy_lab_node.sh|raw|'crontab -'|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외
 automation/regression_bank/deploy_lab_node.sh|raw|'crontab -l 2>/dev/null|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외
 automation/regression_bank/deploy_lab_node.sh|raw|; crontab -l"|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외

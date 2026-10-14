@@ -45,6 +45,7 @@ from .release_request_gate import ReleaseRequestGate
 from automation.release_spec import (
     ReleaseSpec,
     ReleaseSpecError,
+    RAG_MCP_SURFACE,
     spec_from_record,
     wrapper_surface,
 )
@@ -94,6 +95,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(f"RELEASE-PLAN-BLOCK: bad --healthcheck-wrapper {item!r}", file=sys.stderr)
             return 4
         surfaces.append((wrapper_surface(node), digest))
+    rag_digest = getattr(args, "rag_mcp", None)
+    if rag_digest:
+        if _SHA256.fullmatch(rag_digest) is None:
+            print("RELEASE-PLAN-BLOCK: bad --rag-mcp digest", file=sys.stderr)
+            return 4
+        surfaces.append((RAG_MCP_SURFACE, rag_digest))
     payload = {
         "base": plan.base,
         "head": plan.head,
@@ -219,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         help="새 릴리스가 기대하는 래퍼 지문이 설치본과 다른 노드 — 승인 표면으로 묶는다",
     )
     plan.set_defaults(run=cmd_plan)
+    plan.add_argument("--rag-mcp", metavar="DIGEST", help="stale RAG source/image: bind the MCP-only rebuild")
     retire = commands.add_parser(
         "retire", help="서명·승인 완료된 이전 release를 감사 archive로 이동"
     )
@@ -254,6 +262,13 @@ def main(argv: list[str] | None = None) -> int:
     authorize.add_argument("--hash", required=True)
     authorize.add_argument("--head", required=True)
     authorize.set_defaults(run=cmd_authorize_wrapper)
+    rag = commands.add_parser("authorize-rag-mcp", help="authorize the release-bound MCP-only rebuild")
+    rag.add_argument("--hash", required=True)
+    rag.add_argument("--head", required=True)
+    rag.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=RAG_MCP_SURFACE, hash=args.hash,
+                           head=args.head, peer_attest_mode="")
+    ))
     args = parser.parse_args(argv)
     return int(args.run(args))
 
