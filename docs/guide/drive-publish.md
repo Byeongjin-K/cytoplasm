@@ -98,6 +98,7 @@ kind만 넘긴다. 새 카테고리는 레지스트리에 한 줄 추가로 끝�
 | `procurement` | 구매 | oneshot | - | - |
 | `doctype` | 문서 | oneshot | - | - |
 | `patent` | 특허 | oneshot | ✔ | - |
+| `share` | 공유 | oneshot | - | - |
 
 **스킬이 소유한 카테고리(`skill_owned`)는 손으로 발행할 수 없다.** `meeting`·`transcript` 는
 그 스킬의 파이프라인이 산출물에 부수효과를 붙이는 자리다 — 회의록은 action-item 원장과 관리번호를,
@@ -105,6 +106,15 @@ kind만 넘긴다. 새 카테고리는 레지스트리에 한 줄 추가로 끝�
 그것만 빠져 있다. 그래서 `drive_publish_cli` 가 `--kind meeting|transcript` 를 Drive 호출 전에
 `DRIVE-PUBLISH-REFUSED`(exit 2)로 거부하고 올바른 명령을 안내한다. **파사드에는 이 가드가 없다** —
 스킬 자신이 파사드를 거쳐 발행하기 때문이다. 레지스트리가 그 사실의 단일 출처다.
+
+**`share`(공유)는 owner-only 가 아닌 유일한 카테고리다(2026-10-14).** `publish` 가 아니라
+`drive_outputs.share` 가 올리며, 발행과 달리 소유자가 메일 승인 카드에서 확인한 사람에게만
+`type=user, role=reader` 권한을 더한다. 재다운로드 대신 Drive `sha256Checksum`·크기로 바이트를
+확인하고(수백 MB 파일을 다시 받지 않기 위해서다), 권한은 부여 전·후에 "소유자 + 지정한 사람(reader)"
+외의 것이 하나라도 있으면 `ShareRefused` 로 멈춘다 — 링크 공개(anyone)·도메인·편집 권한을
+만드는 경로는 없다. 폴더·파일명은 `share_target` 이 요청 시점에 정해 승인에 묶고, 폴더는
+`autophagy/공유/` 밖을 가리킬 수 없다. 스킬 소유 카테고리라 손 발행은 거부되며 호출자는
+mail `compose --drive-share` 뿐이다([소개](../기능소개/메일-Drive-공유-링크.md)).
 
 `gate_only` 카테고리(patent)는 일반 발행 경로에서 `TaxonomyError`로 거부된다. 특허 산출물은
 전용 반출 게이트(`patent_export`)만 만질 수 있고, 이 규약은 그 폴더의 **위치**만 정한다.
