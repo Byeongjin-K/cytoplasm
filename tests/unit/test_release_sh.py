@@ -185,6 +185,7 @@ def _run(
     note: str | None = _NOTE,
     gh_create_rc: str = "0",
     wrapper_plan: str = "true",
+    rag_plan: str = "true",
 ) -> subprocess.CompletedProcess[str]:
     # 낡은 pending 요청이 있는 세계는 stale_head 를 준 테스트에서만 존재한다 —
     # marker 가 없으면 stub 의 request 는 예전 그대로 성공한다.
@@ -224,6 +225,7 @@ def _run(
         "RELEASE_DEPLOY_ALL": str(deploy_all),
         "RELEASE_HELPER_PROBE_CMD": f"bash {helper_probe_stub}",
         "RELEASE_WRAPPER_PLAN_CMD": wrapper_plan,
+        "RELEASE_RAG_MCP_PLAN_CMD": rag_plan,
         "PLAN_ARGS": str(tmp_path / "plan-args"),
         "HELPER_PROBE_MODE": helper_probe,
         "RELEASE_ALLOW_HELPER_DRIFT": allow_helper_drift,

@@ -187,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="선언 밖 홈 파일도 drift 로 판정",
     )
+    parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     args = parser.parse_args(argv)
     if args.format == "gateways":
         return _gateways(args.runtime_root)
@@ -214,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
                 verified_at=verified_at,
                 declared_reasons=reasons,
                 wrapper_refresh=tuple(args.wrapper_refresh),
+                rag_mcp_refresh=args.rag_mcp_refresh,
             )
         except deploy_all.ObservationError as error:
             print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
