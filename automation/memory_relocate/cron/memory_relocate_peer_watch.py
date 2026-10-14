@@ -83,7 +83,7 @@ def run_once(now: datetime) -> int:
 
 def main() -> int:
     try:
-        load_env_secrets()
+        load_env_secrets(Path.home() / ".env.secrets")  # the peer account's own secrets file
         lock = acquire_single_instance_lock(Path.home() / ".hermes/memory-relocate-peer/watch.lock")
         if lock is None:
             return 0
