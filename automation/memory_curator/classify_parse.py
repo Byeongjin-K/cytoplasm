@@ -61,7 +61,10 @@ def parse_verdict(
                     ):
                         return _closed_verdict(source_kind, entry_text)
                     match route:
-                        case "TWIN" | "OPS_REFERENCE" | "KEEP_NATIVE" | "UNCERTAIN":
+                        case (
+                            "TWIN" | "OPS_REFERENCE" | "PERSON_REFERENCE" | "AGENT_RULE"
+                            | "KEEP_NATIVE" | "UNCERTAIN"
+                        ):
                             return EntryVerdict(
                                 source_kind=source_kind,
                                 entry_text=entry_text,

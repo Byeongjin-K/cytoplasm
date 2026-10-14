@@ -16,9 +16,10 @@
 
 _CONVERGE_CONFIG_SAFE='^[A-Za-z0-9_./-]+$'
 
-_converge_config_module() { # _converge_config_module <algorithm>
+_converge_config_module() { # _converge_config_module <algorithm> → "<module> <destination>"
   case "$1" in
-    hermes-memory-limits-v1) printf '%s' automation.hermes_memory_config ;;
+    hermes-memory-limits-v1) printf '%s' "automation.hermes_memory_config .hermes/config.yaml" ;;
+    hermes-soul-recall-v1) printf '%s' "automation.hermes_soul_recall .hermes/SOUL.md" ;;
     *) return 1 ;;
   esac
 }
@@ -26,18 +27,19 @@ _converge_config_module() { # _converge_config_module <algorithm>
 converge_config() { # converge_config <account> <destination-relative-to-HOME> <algorithm>
   local -
   set +e
-  local account="$1" destination="$2" algorithm="$3" module runtime rc out
+  local account="$1" destination="$2" algorithm="$3" module target runtime rc out
   runtime="${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}"
   if [[ ! "$account" =~ $_CONVERGE_CONFIG_SAFE || ! "$runtime" =~ $_CONVERGE_CONFIG_SAFE ]]; then
     printf 'DEPLOY-BLOCK: converge_config refuses unsafe account or runtime path.\n' >&2
     return 2
   fi
-  if [[ "$destination" != .hermes/config.yaml ]]; then
-    printf 'DEPLOY-BLOCK: converge_config only writes .hermes/config.yaml (got %q).\n' "$destination" >&2
+  if ! target="$(_converge_config_module "$algorithm")"; then
+    printf 'DEPLOY-BLOCK: converge_config has no module for algorithm %q.\n' "$algorithm" >&2
     return 2
   fi
-  if ! module="$(_converge_config_module "$algorithm")"; then
-    printf 'DEPLOY-BLOCK: converge_config has no module for algorithm %q.\n' "$algorithm" >&2
+  module="${target%% *}"
+  if [[ "$destination" != "${target#* }" ]]; then
+    printf 'DEPLOY-BLOCK: algorithm %q writes %s, not %q.\n' "$algorithm" "${target#* }" "$destination" >&2
     return 2
   fi
   out="$(run_account "$account" "PYTHONPATH=$(printf '%q' "$runtime") python3 -B -m $module --apply" </dev/null 2>&1)"

@@ -22,20 +22,24 @@ from automation.interop.reaction_approval import (
     record_push_approval,
     thread_candidates,
 )
+import hashlib
+
 from automation.memory_curator.binding import entry_digest
+from automation.memory_curator.deletion import DeletionError, append_entry
+from automation.memory_curator.model import CAPS
 from automation.memory_curator.watch_steps import read_native
 from automation.obsidian_write.config import ObsidianWriteError, load_config
 from automation.interop.external_effect_gate import ApprovalContext
 from automation.obsidian_write import gate_binding
 from automation.obsidian_write.writer import write_note
 
-from .approval_gate import RelocateApprovalGate, request_approval
+from .approval_gate import RelocateApprovalGate, approval_hash, approval_key, dropped_lines, request_approval
 from .apply import ApplyDeps, ApplyOutcome, apply_relocation
 from .binding import RelocationHashFields, relocation_action_hash
 from .model import RelocationRecord, record_key
 from .plan import RelocationPlan, build_relocation_plan
 from .rag_verify import verify_ingested
-from .render import prepare_approval_card
+from .render import prepare_approval_card, prepare_batch_card
 from .relocation_store import RelocationStore, RelocationStoreError
 from .watch_step import ResolveEffects
 
@@ -93,7 +97,9 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
     def plan_for(record: RelocationRecord) -> RelocationPlan | None:
         try:
             text = recover_entry_text(memory_dir, record)
-            return None if text is None else build_relocation_plan(text, source_kind=record.source_kind)
+            return None if text is None else build_relocation_plan(
+                text, source_kind=record.source_kind, destination=record.destination
+            )
         except _EFFECT_ERRORS:
             return None
 
@@ -103,7 +109,7 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
             return tuple(
                 pending
                 for pending in store.all_pending()
-                if record_key(pending.source_kind, pending.entry_sha256) == key
+                if approval_key(pending) == key
                 and pending.message_id
             )
         except _EFFECT_ERRORS:
@@ -114,9 +120,14 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
             text = recover_entry_text(memory_dir, record)
             if text is None:
                 return None
-            key = record_key(record.source_kind, record.entry_sha256)
+            members = batch_members(record)
+            if record.batch_hash is not None and members is None:
+                return None
+            key = approval_key(record)
             live = live_requests(key)
-            card = None if live else prepare_approval_card(record, text)
+            card = None if live else (
+                prepare_batch_card(members) if members else prepare_approval_card(record, text)
+            )
             # One approval key keeps ONE thread: this runs before the façade decides
             # PENDING, so a live request of the same key lends its thread instead of
             # leaving an empty one behind per tick. A request whose message went MISSING
@@ -137,13 +148,24 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
                 ApprovalKind.OBSIDIAN_WRITE,
                 directory,
                 owner_id,
-                request=RequestThread(title=PurePosixPath(record.note_relpath).name),
+                request=RequestThread(
+                    title=f"메모리 정리 {len(members)}건" if members else PurePosixPath(record.note_relpath).name
+                ),
             )
             bound = replace(
                 record, approval_thread_id=binding.channel_id,
                 approval_guild_id=binding.guild_id or record.approval_guild_id,
             )
             store.update(bound)
+            if members:
+                members = tuple(
+                    (replace(member, approval_thread_id=binding.channel_id,
+                             approval_guild_id=binding.guild_id or member.approval_guild_id), member_text)
+                    for member, member_text in members
+                )
+                for member, _ in members:
+                    if member.entry_sha256 != record.entry_sha256:
+                        store.update(member)
             verdict = request_approval(
                 bound,
                 text,
@@ -153,6 +175,7 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
                 binding=binding,
                 lease=lease,
                 journal=journal,
+                **({"members": members} if members else {}),
             )
         except _EFFECT_ERRORS:
             return None
@@ -162,15 +185,38 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
             return verdict.live.message_id, verdict.live.channel_id
         return None
 
+    decided: dict[str, str] = {}
+    dropped: dict[str, frozenset[int]] = {}
+
     def probe(record: RelocationRecord) -> str:
+        batch = record.batch_hash
+        if batch is None:
+            return probe_one(record)
+        if batch not in decided:
+            decided[batch] = probe_one(record)
+            if decided[batch] == "approved":
+                try:
+                    count = max((m.batch_index or 0) for m in store.all_pending() if m.batch_hash == batch)
+                    channel, message = record.channel_id, record.message_id or ""
+                    dropped[batch] = dropped_lines(
+                        lambda emoji: transport.get_reaction_users(channel, message, emoji), owner_id, count
+                    )
+                except _EFFECT_ERRORS:
+                    decided[batch] = "pending"
+        verdict = decided[batch]
+        if verdict == "approved" and record.batch_index in dropped.get(batch, frozenset()):
+            return "cancelled"
+        return verdict
+
+    def probe_one(record: RelocationRecord) -> str:
         try:
             text = recover_entry_text(memory_dir, record)
             # An unbound surface cannot be verified; fail closed rather than treating it as gone and discarding ✅.
             if text is None or record.message_id is None or not record.channel_id:
                 return "pending"
             request = ApprovalRequest(
-                record_key(record.source_kind, record.entry_sha256),
-                record.action_hash,
+                approval_key(record),
+                approval_hash(record),
                 record.message_id,
                 record.channel_id,
                 record.created_at,
@@ -189,6 +235,8 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
                 return "pending"
 
     def write(record: RelocationRecord) -> tuple[str, str] | None:
+        if record.destination == "memory":
+            return append_rule(record)
         plan = plan_for(record)
         if plan is None:
             return None
@@ -226,6 +274,8 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
         return None if raw is None else raw.decode("utf-8", errors="replace")
 
     def verified(record: RelocationRecord) -> bool:
+        if record.destination == "memory":
+            return native_rule(record) is not None
         try:
             body = note_text(record)
             return (
@@ -240,23 +290,62 @@ def build_effects(*, memory_dir: Path, state_path: Path, rag_state_path: Path, t
         plan = plan_for(record)
         if plan is None:
             return ApplyOutcome(False, "entry_absent", None, 0)
-        deps = ApplyDeps(
-            memory_dir,
-            lambda relpath: _safe_read_note(write_config.clone_dir, relpath),
-            lambda relpath, body: verify_ingested(rag_state_path, relpath, body).ingested,
-            lambda current: relocation_action_hash(
+        def rehash(current: RelocationRecord) -> str:
+            return relocation_action_hash(
                 RelocationHashFields(
                     current.source_kind,
                     current.entry_sha256,
                     current.note_relpath,
                     current.note_plan_sha256,
+                    current.destination,
                 )
-            ),
-            now,
-        )
+            )
+
+        if record.destination == "memory":
+            deps = ApplyDeps(memory_dir, lambda _relpath: native_rule(record), lambda _relpath, _body: native_rule(record) is not None, rehash, now)
+        else:
+            deps = ApplyDeps(
+                memory_dir,
+                lambda relpath: _safe_read_note(write_config.clone_dir, relpath),
+                lambda relpath, body: verify_ingested(rag_state_path, relpath, body).ingested,
+                rehash,
+                now,
+            )
         try:
             return apply_relocation(record, note_text(record) or "", deps=deps)
         except _EFFECT_ERRORS:
             return ApplyOutcome(False, "entry_absent", None, 0)
+
+    def batch_members(record: RelocationRecord) -> tuple[tuple[RelocationRecord, str], ...] | None:
+        """Every pending member of the record's batch with its current text, or None if one drifted."""
+        if record.batch_hash is None:
+            return ()
+        members: list[tuple[RelocationRecord, str]] = []
+        for member in sorted(store.all_pending(), key=lambda pending: (pending.batch_index or 0, record_key(pending.source_kind, pending.entry_sha256))):
+            if member.batch_hash != record.batch_hash:
+                continue
+            member_text = recover_entry_text(memory_dir, member)
+            if member_text is None:
+                return None
+            members.append((member, member_text))
+        return tuple(members)
+
+    def native_rule(record: RelocationRecord) -> bytes | None:
+        """The moved rule's bytes once MEMORY.md holds it verbatim — the 'note' of a native move."""
+        text = recover_entry_text(memory_dir, record)
+        if text is None:
+            return None
+        _, memory_file = read_native(memory_dir, "memory")
+        return text.encode("utf-8") if any(entry.text == text for entry in memory_file.entries) else None
+
+    def append_rule(record: RelocationRecord) -> tuple[str, str] | None:
+        text = recover_entry_text(memory_dir, record)
+        if text is None:
+            return None
+        try:
+            _ = append_entry(memory_dir, "memory", text, cap=CAPS["memory"], now=now)
+        except (DeletionError, OSError):
+            return None
+        return f"native:{record.note_relpath}", hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     return ResolveEffects(post, probe, write, verified, apply, now)

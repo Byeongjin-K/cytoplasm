@@ -18,7 +18,7 @@ from .classify_model import Route
 from .model import MemoryKind
 
 #: Pinned by downstream parsers; bump only alongside the response contract.
-MC_CLASSIFY_VERSION: Final = "mc-classify-v1"
+MC_CLASSIFY_VERSION: Final = "mc-classify-v2"
 
 #: Unambiguous entry delimiters — never appear in Hermes memory text.
 ENTRY_OPEN: Final = "<<<ENTRY"
@@ -32,6 +32,14 @@ _ROUTE_DEFINITIONS: Final[dict[Route, str]] = {
     "OPS_REFERENCE": (
         "구체적 운영 사실(경로/포트/scope/CLI 위치/동기화 절차)"
         " — 필요할 때 recall 가능."
+    ),
+    "PERSON_REFERENCE": (
+        "사용자 본인이 아닌 다른 사람(동료·담당자·외부 인사)에 대한 사실 — 호칭·연락처·소속·직함·"
+        "그 사람에게 쓰는 말투. 사람 노트로 옮겨 필요할 때 recall."
+    ),
+    "AGENT_RULE": (
+        "USER.md 에 들어온 에이전트 작업 처리 규칙(메일·할 일·문서를 어떻게 처리하는가) — 사용자 본인이"
+        " 누구인지가 아니다. MEMORY.md 로 옮긴다. MEMORY.md 항목에는 쓰지 않는다."
     ),
     "KEEP_NATIVE": (
         "신원/전역 응답 스타일/안전·승인 불변식/recall 이전에 필요한 라우팅 규칙."

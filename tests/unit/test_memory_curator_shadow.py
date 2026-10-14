@@ -73,6 +73,8 @@ def test_build_shadow_report_summarizes_routes_candidates_and_projection() -> No
     assert report["routes"] == {
         "TWIN": {"count": 2, "reclaimable_chars": 55},
         "OPS_REFERENCE": {"count": 1, "reclaimable_chars": 27},
+        "PERSON_REFERENCE": {"count": 0, "reclaimable_chars": 0},
+        "AGENT_RULE": {"count": 0, "reclaimable_chars": 0},
         "KEEP_NATIVE": {"count": 1, "reclaimable_chars": 0},
         "UNCERTAIN": {"count": 1, "reclaimable_chars": 0},
     }

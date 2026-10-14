@@ -25,6 +25,11 @@ run_agent() {
   ssh "$host" "sudo -n -u agent -H bash -lc $(printf '%q' "$script")"
 }
 
+run_account() {
+  local account="$1" script="$2"
+  ssh "$host" "sudo -n -u $(printf '%q' "$account") -H bash -lc $(printf '%q' "$script")"
+}
+
 # push_file 은 원격 read-back 으로 착지를 확인한다 — 확인 없는 push 가 rc=0 으로
 # 끝나면서 파일은 그대로였던 실측(2026-08-20)이 이 공유 구현의 이유다.
 # shellcheck source=automation/deploy_push.sh
@@ -44,3 +49,8 @@ push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_watch.py" 
 source "$repo_root/automation/deploy_cron.sh"
 converge_cron memory-relocate-watch "every 30m" memory_relocate_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-relocate-watch || true'
+
+# Moved people facts are no longer in every prompt (owner decision Q138 ②): the agent's SOUL.md
+# carries one recall line. Only that line is ensured; the rest of the owner-editable file stays.
+source "$repo_root/automation/deploy_config.sh"
+converge_config agent .hermes/SOUL.md hermes-soul-recall-v1

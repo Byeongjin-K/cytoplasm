@@ -64,8 +64,20 @@ def resolve_tick(
     reconciled: list[str] = []
     abandoned: list[str] = []
     transition_time = effects.now.isoformat()
+    touched: set[str] = set()
+
+    def batch_members(record: RelocationRecord, status: str) -> list[str]:
+        if record.batch_hash is None:
+            return []
+        return [
+            other_key
+            for other_key, other in relocations.items()
+            if other.batch_hash == record.batch_hash and other.status == status
+        ]
 
     for key in sorted(relocations):
+        if key in touched:
+            continue
         record = relocations[key]
         status = str(record.status)
         if status.startswith("legacy") or not _is_runtime_status(status):
@@ -80,12 +92,15 @@ def resolve_tick(
                     continue
                 message_id, channel_id = receipt
                 if message_id and channel_id:
-                    relocations[key] = replace(
-                        record,
-                        status="posted",
-                        message_id=message_id,
-                        channel_id=channel_id,
-                    )
+                    # One batch card posts once and binds every member of the batch.
+                    for member_key in batch_members(record, "proposed") or [key]:
+                        relocations[member_key] = replace(
+                            relocations[member_key],
+                            status="posted",
+                            message_id=message_id,
+                            channel_id=channel_id,
+                        )
+                        touched.add(member_key)
                     posted.append(key)
 
             case "posted":

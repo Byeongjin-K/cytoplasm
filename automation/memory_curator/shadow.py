@@ -12,7 +12,9 @@ from .reporting import preview
 SHADOW_SCHEMA: Final = "memory-curator-shadow-v1"
 
 _KINDS: Final[tuple[MemoryKind, ...]] = ("memory", "user")
-_ROUTES: Final[tuple[Route, ...]] = ("TWIN", "OPS_REFERENCE", "KEEP_NATIVE", "UNCERTAIN")
+_ROUTES: Final[tuple[Route, ...]] = (
+    "TWIN", "OPS_REFERENCE", "PERSON_REFERENCE", "AGENT_RULE", "KEEP_NATIVE", "UNCERTAIN",
+)
 _VETO_REASONS: Final[tuple[VetoReason, ...]] = (
     "credential",
     "keep_native_rule",
@@ -68,12 +70,12 @@ def build_shadow_report(
         match verdict.route:
             case "TWIN":
                 cue_recall["both" if matched_by_cue else "classifier_only"] += 1
-            case "OPS_REFERENCE" | "KEEP_NATIVE" | "UNCERTAIN":
+            case "OPS_REFERENCE" | "PERSON_REFERENCE" | "AGENT_RULE" | "KEEP_NATIVE" | "UNCERTAIN":
                 if matched_by_cue:
                     cue_recall["cue_only"] += 1
 
         match verdict.route:
-            case "TWIN" | "OPS_REFERENCE":
+            case "TWIN" | "OPS_REFERENCE" | "PERSON_REFERENCE" | "AGENT_RULE":
                 reclaimable = reclaimable_chars(memory_file, index)
                 routes[verdict.route]["reclaimable_chars"] += reclaimable
                 digest = entry_digest(verdict.source_kind, verdict.entry_text)
