@@ -18,6 +18,7 @@ _REPO = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("text", [
     "model:\n  provider: synthetic\n",
     "memory:\n  memory_char_limit: 2200\n  user_char_limit: 1375\n  nudge_interval: 10\n",
+    "memory:\n  provider: builtin\n  metadata:\n    label: synthetic\n",
 ])
 def test_profile_sets_caps_and_provider_in_one_mapping(text: str) -> None:
     # Given
@@ -145,3 +146,18 @@ def test_shared_converge_helper_runs_apply_and_check(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load((root / "config.yaml").read_text())["memory"] == {
         **hermes_memory_config.LIMITS, "provider": config.PROVIDER, "nudge_interval": 10}
+
+
+def test_nested_provider_is_refused_before_writing(tmp_path: Path) -> None:
+    # Given
+    root = tmp_path / ".hermes"
+    root.mkdir()
+    text = "memory:\n  provider:\n    name: synthetic_backend\n"
+    path = root / "config.yaml"
+    path.write_text(text)
+    # When
+    rc = config.main(["--apply"], home=tmp_path)
+    # Then
+    assert rc == 3
+    assert path.read_text() == text
+    assert not list(root.glob("*.bak-*"))

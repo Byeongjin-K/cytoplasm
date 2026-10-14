@@ -86,6 +86,7 @@ agent·peer별 `.hermes/config.yaml` **기존 두 행**이
 agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md는 수정하지 않는다.
 다른 외부 제공자가 이미 선택돼 있으면 `external-provider-selected`(rc 7)로 거부한다.
 운영자가 기존 선택을 정리하기 전에는 조용히 덮어쓰지 않는다.
+중첩 provider·중복 키·지원하지 않는 메모리 매핑은 쓰기 전 rc 3으로 거부한다.
 
 해제는 원하는 릴리스의 기존 config 두 행을 상한 전용 `hermes-memory-limits-v1`로 되돌리고,
 `memory.provider` 키를 지운 뒤 두 게이트웨이를 함께 재시동하는 것이다.

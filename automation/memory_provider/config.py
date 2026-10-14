@@ -39,6 +39,13 @@ def read_profile(text: str) -> Profile:
         _, found = limits._children(lines, span)
         if "provider" in found:
             child = limits._CHILD.match(lines[found["provider"]])
+            indent = len(child[1]) if child else 0
+            for following in lines[found["provider"] + 1:span[1]]:
+                if not following.strip() or following.lstrip().startswith("#"):
+                    continue
+                if len(following) - len(following.lstrip()) > indent:
+                    raise limits.ConfigShapeError("memory.provider must not have nested content")
+                break
             raw = child[3].split(" #", 1)[0].strip() if child else ""
             if raw not in {"", "null", "~"}:
                 provider = limits._value(raw)
