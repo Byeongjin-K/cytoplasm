@@ -7,6 +7,12 @@
 must not overwrite the gateway's record. It never raises; a gateway must not
 lose its gate because the record could not be written.
 
+Hermes loads the selected memory provider (``memory.provider``) lazily, when the
+first agent is built, so its ``register`` cannot write the record at start. The
+record therefore also carries the hash of that provider's home plugin file as it
+stood when the gateway started; the gateway imports that same file later, and a
+file replaced afterwards no longer matches.
+
 ``check`` compares that record with the live pidfile, the release a deploy
 expects and the installed plugin files. Anything it cannot read is
 ``unknown``; a missing or mismatching record is ``stale``; only a full match
@@ -87,12 +93,29 @@ def _write_private(target: Path, payload: dict[str, object]) -> None:
         raise
 
 
+def _memory_provider_plugin(home: Path) -> tuple[str, Path] | None:
+    """The home plugin file of the configured memory provider, if there is one."""
+    try:
+        from automation.memory_provider.config import read_profile
+
+        name = read_profile((home / ".hermes" / "config.yaml").read_text(encoding="utf-8")).provider
+    except Exception:  # noqa: BLE001 - an unreadable config only leaves the provider unrecorded (stale)
+        return None
+    if name is None:
+        return None
+    path = home / ".hermes" / "plugins" / name / "__init__.py"
+    return (name, path) if path.is_file() else None
+
+
 def _record(plugin: str, plugin_file: str, *, home: Path, argv: Sequence[str], env: Mapping[str, str], pid: int) -> None:
     if not _is_gateway_process(argv, env, pid):
         return
     target = home / ".hermes" / RECORD_NAME
     plugins = _previous_plugins(target, pid)
     plugins[plugin] = _sha256(Path(plugin_file))
+    provider = _memory_provider_plugin(home)
+    if provider is not None:
+        plugins[provider[0]] = _sha256(provider[1])
     _write_private(target, {
         "pid": pid,
         "import_root": _import_root(),
