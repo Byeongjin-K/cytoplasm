@@ -40,7 +40,8 @@ class AgentDecision:
                 assert_never(snapshot.phase)
 
     def choices(self, request: ChoiceRequest) -> tuple[Choice, ...]:
+        """No choices until the agent publishes an approved decision; an unanswered line is waiting, not a fault."""
         snapshot = self.snapshot(request)
         if snapshot is None or snapshot.phase != "approved" or snapshot.cancelled:
-            raise ChoiceError("agent_decision_missing")
+            return ()
         return snapshot.choices

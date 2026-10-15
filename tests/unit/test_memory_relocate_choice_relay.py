@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 
 from automation.memory_relocate.choice_snapshot import Snapshot, encode_snapshot
-from automation.memory_relocate.choices import Choice, ChoiceError
+from automation.memory_relocate.choices import Choice
 from memory_choice_fakes import NOW
 from test_memory_relocate_choice_execution import Execution, execution as execution
 
@@ -42,8 +42,7 @@ def test_decision_when_snapshot_has_a_phase_reads_it(
     assert decision == expected
 
 
-def test_choices_when_agent_file_is_missing_refuses(execution: Execution) -> None:
-    # Given: the agent has not frozen choices.
-    # When / Then: a peer cannot collect an invented default vector.
-    with pytest.raises(ChoiceError, match="agent_decision_missing"):
-        execution.reader.choices(execution.request)
+def test_choices_when_agent_file_is_missing_are_empty_not_invented(execution: Execution) -> None:
+    # Given: the agent has not frozen choices (the owner has not pressed yet).
+    # When / Then: the peer gets no choices to execute, never an invented default vector.
+    assert execution.reader.choices(execution.request) == ()
