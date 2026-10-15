@@ -1,7 +1,7 @@
 ---
 name: calendar
-description: "cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
-version: 1.4.3
+description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
+version: 1.4.4
 author: autophagy-agents
 license: MIT
 platforms: [linux]

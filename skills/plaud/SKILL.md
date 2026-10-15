@@ -1,7 +1,7 @@
 ---
 name: plaud
-description: "Plaud 라이프로그 동기화(plaud-sync 워처)의 상태를 읽기 전용으로 보고한다 — 로컬 전사 대기·승인 대기·저장 대기 건수와 로컬 전사본(.md) 경로. 트리거: 'plaud 상태', '라이프로그 동기화 상태', 'plaud 승인 대기 몇 건', 'plaud 마지막 폴', 'plaud 전사본 어디', 'plaud 녹음 회의록으로'. READ-only — Plaud·Discord·vault 어디에도 쓰지 않는다. 승인 카드(✅/⛔)는 이 스킬이 아니라 #agent-chat 요청별 스레드에 있다."
-version: 1.3.0
+description: "Plaud 녹음·라이프로그 동기화 상태나 전사본 위치를 물을 때 사용. Plaud 라이프로그 동기화(plaud-sync 워처)의 상태를 읽기 전용으로 보고한다 — 로컬 전사 대기·승인 대기·저장 대기 건수와 로컬 전사본(.md) 경로. 트리거: 'plaud 상태', '라이프로그 동기화 상태', 'plaud 승인 대기 몇 건', 'plaud 마지막 폴', 'plaud 전사본 어디', 'plaud 녹음 회의록으로'. READ-only — Plaud·Discord·vault 어디에도 쓰지 않는다. 승인 카드(✅/⛔)는 이 스킬이 아니라 #agent-chat 요청별 스레드에 있다."
+version: 1.3.1
 author: autophagy-agents
 license: MIT
 platforms: [linux]

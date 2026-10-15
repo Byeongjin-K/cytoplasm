@@ -1,7 +1,7 @@
 ---
 name: recall
-description: "개인 RAG(personal_cha) 검색 스킬. `!recall <질문>` 명시 호출 + 개인/프로젝트 지식 질문에 자동 사용. 검색 결과를 출처(위키 경로/회의/보고 id)와 함께 인용하고, 결과가 없으면 반드시 '기억 없음'이라고 답한다(지어내기 금지). RAG 노드 다운 시 '검색 불가' 안내 후 일반 답변. W2-5."
-version: 1.4.0
+description: "사람·과거 일·보낸 메일·내 노트를 묻거나 일에 그게 필요하면 먼저 기억 검색. 개인 RAG(personal_cha) 검색 스킬. `!recall <질문>` 명시 호출 + 개인/프로젝트 지식 질문에 자동 사용. 검색 결과를 출처(위키 경로/회의/보고 id)와 함께 인용하고, 결과가 없으면 반드시 '기억 없음'이라고 답한다(지어내기 금지). RAG 노드 다운 시 '검색 불가' 안내 후 일반 답변. W2-5."
+version: 1.4.1
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -125,3 +125,7 @@ python3 /srv/autophagy-skills/live/recall/scripts/recall_reference.py "<질의>"
 배포 파이프라인용 `scripts/scenario.sh`: 오프라인 픽스처로 hit 스키마/출처
 표기, 임계값 미달 → `기억 없음`, RAG 다운 → `검색 불가`(1회 시도, 재시도
 없음)를 검증하고 `SCENARIO-PASS`를 출력한다. 네트워크 호출·실시크릿 없음.
+
+## 검색어 규칙
+
+검색어는 소유자의 문장을 그대로 넣지 말고 핵심 낱말 2~4개(사람 이름, 장소, 과제명)로 만든다. 결과가 없으면 고유명사만 남겨 한 번 더 검색한다.

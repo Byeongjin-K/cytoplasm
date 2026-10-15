@@ -1,7 +1,7 @@
 ---
 name: hello-autophagy
-description: "Deterministic demo skill that validates the W1-8 skill deploy pipeline (sandbox → owner approval → mount). Prints a fixed Korean greeting via scripts/hello.sh."
-version: 1.0.1
+description: "스킬 배포 파이프라인이 동작하는지 데모로 확인하고 싶을 때만 사용. Deterministic demo skill that validates the W1-8 skill deploy pipeline (sandbox → owner approval → mount). Prints a fixed Korean greeting via scripts/hello.sh."
+version: 1.0.2
 author: autophagy-agents
 license: MIT
 platforms: [linux]

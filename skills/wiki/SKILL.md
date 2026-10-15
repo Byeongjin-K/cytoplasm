@@ -1,7 +1,7 @@
 ---
 name: wiki
-description: "개인 위키(~/wiki, 700, git 밖) + 의사결정 트윈(decision-twin) 관리 스킬. 노트 생성/수정은 반드시 초안 → 확인 메시지 게시(봇이 ✅·⛔ 미리 부착) → cha의 ✅ 리액션 → 저장의 게이트를 거친다(⛔=취소, ⛔ 우선; 텍스트 `저장 <draft-id>`는 하위호환 fallback). 조회/백링크/정리 제안/twin 컨설트는 읽기 전용. W2-2 + DT-B."
-version: 2.1.0
+description: "위키 노트를 찾거나 쓰거나 고칠 때, 과거 판단 근거를 물을 때 사용. 개인 위키(~/wiki, 700, git 밖) + 의사결정 트윈(decision-twin) 관리 스킬. 노트 생성/수정은 반드시 초안 → 확인 메시지 게시(봇이 ✅·⛔ 미리 부착) → cha의 ✅ 리액션 → 저장의 게이트를 거친다(⛔=취소, ⛔ 우선; 텍스트 `저장 <draft-id>`는 하위호환 fallback). 조회/백링크/정리 제안/twin 컨설트는 읽기 전용. W2-2 + DT-B."
+version: 2.1.1
 author: autophagy-agents
 license: MIT
 platforms: [linux]

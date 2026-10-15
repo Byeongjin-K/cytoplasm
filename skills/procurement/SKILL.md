@@ -1,7 +1,7 @@
 ---
 name: procurement
-description: "이미 등록된 구매/용역 템플릿에 품목·금액·업체를 채워 초안 파일을 생성하고 cha에게만 검토 요청을 보낸다. 새 문서의 등록·스킬화·문서 종류 저장·개선은 doctype 소유이며, 이 스킬은 새로 받은 문서를 템플릿으로 저장하지 않는다."
-version: 1.2.3
+description: "구매·용역 요청 문서를 등록된 양식으로 채워 달라고 할 때 사용. 이미 등록된 구매/용역 템플릿에 품목·금액·업체를 채워 초안 파일을 생성하고 cha에게만 검토 요청을 보낸다. 새 문서의 등록·스킬화·문서 종류 저장·개선은 doctype 소유이며, 이 스킬은 새로 받은 문서를 템플릿으로 저장하지 않는다."
+version: 1.2.4
 author: autophagy-agents
 license: MIT
 platforms: [linux]

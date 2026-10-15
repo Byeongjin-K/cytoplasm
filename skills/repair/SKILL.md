@@ -1,7 +1,7 @@
 ---
 name: repair
-description: "오류·스킬 실패·헬스체크 실패를 레닥션된 개인 Kanban 수리 티켓으로 기록한다. 전체 로그는 ops 전용 경로에만 보관한다. W6-1."
-version: 1.0.1
+description: "오류나 스킬 실패를 고쳐 달라거나 수리 요청을 남기라고 할 때 사용. 오류·스킬 실패·헬스체크 실패를 레닥션된 개인 Kanban 수리 티켓으로 기록한다. 전체 로그는 ops 전용 경로에만 보관한다. W6-1."
+version: 1.0.2
 author: autophagy-agents
 license: MIT
 metadata:

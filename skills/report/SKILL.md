@@ -1,7 +1,7 @@
 ---
 name: report
-description: "개인 노트로 보고서·reveal.js 슬라이드·발표 대본을 생성한다. 모든 입력은 같은 모델·발행 경로를 사용한다. W5-3."
-version: 1.1.0
+description: "내 노트로 보고서·발표 슬라이드·대본을 만들라고 할 때 사용. 개인 노트로 보고서·reveal.js 슬라이드·발표 대본을 생성한다. 모든 입력은 같은 모델·발행 경로를 사용한다. W5-3."
+version: 1.1.1
 author: autophagy-agents
 license: MIT
 metadata:

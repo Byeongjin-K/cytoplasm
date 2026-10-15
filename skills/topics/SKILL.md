@@ -1,7 +1,7 @@
 ---
 name: topics
-description: "`!topics add|list|remove`로 arXiv 주간 연구동향 키워드를 관리한다. 모든 등록 주제에 동일한 조회·보고 경로를 사용한다."
-version: 1.1.0
+description: "주간 연구동향(arXiv) 키워드를 추가·확인·삭제하라고 할 때 사용. `!topics add|list|remove`로 arXiv 주간 연구동향 키워드를 관리한다. 모든 등록 주제에 동일한 조회·보고 경로를 사용한다."
+version: 1.1.1
 author: autophagy-agents
 license: MIT
 platforms: [linux]
