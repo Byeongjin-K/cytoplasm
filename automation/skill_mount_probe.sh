@@ -59,6 +59,14 @@ probe_skill_mounts_current() {
   local live="${HEALTHCHECK_SKILL_LIVE_ROOT:-$target}"
   output="$(skill_mount_verdict "$(autophagy_runtime_root)" "$live")" || status=$?
   (( status == 0 )) && return 0
+  if (( status == 1 )) \
+    && [[ "$(readlink -e -- "$(autophagy_runtime_root)" 2>/dev/null)" == \
+          "$(readlink -e -- "${HEALTHCHECK_RELEASE_SOURCE_ROOT:-${RUNTIME_RELEASE_CURRENT:-/srv/autophagy-agent-current}}" 2>/dev/null)" ]] \
+    && python3 "$(dirname "${BASH_SOURCE[0]}")/release_switch_grace.py" \
+      --current "${HEALTHCHECK_RELEASE_SOURCE_ROOT:-${RUNTIME_RELEASE_CURRENT:-/srv/autophagy-agent-current}}" \
+      --live-root "$live"; then
+    return 0
+  fi
   while IFS= read -r line; do [[ -n "$line" ]] && skill_mount_log "$line"; done <<< "$output"
   return 1
 }

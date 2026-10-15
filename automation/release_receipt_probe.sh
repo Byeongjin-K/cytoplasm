@@ -2,7 +2,7 @@
 # 릴리스 영수증 프로브 — "현재 릴리스가 전량 반영되었는가"를 추측이 아니라 조회로 만든다 (RC-4).
 #
 # 영수증(`deploy_all.sh` 가 전량 재판정 통과 시에만 기록)의 release_sha 와 현재 릴리스
-# 포인터를 대조한다. 영수증 없음·판독 불가·sha 불일치는 전부 FAIL 이다(fail-closed) —
+# 포인터를 대조한다. 짧은 세대 전환 유예 외에는 영수증 없음·판독 불가·sha 불일치는 FAIL —
 # "아마 다 배포됐겠지"가 중복 개발을 부른 그 추측이고, 이 프로브가 그 추측을 없앤다.
 #
 # 이 영수증은 **롤아웃 증명**이다: 그 릴리스가 한 번 전량 반영되었음을 말한다. 이후의
@@ -12,16 +12,24 @@
 # 로컬 프로브다 — cron 호스트(primary node)에서 /srv 를 직접 읽는다(ssh·sudo 없음).
 release_receipt_log() { printf '[release-receipt] %s\n' "$*" >&2; }
 
+release_receipt_switch_grace() {
+  python3 "$(dirname "${BASH_SOURCE[0]}")/release_switch_grace.py" \
+    --current "${HEALTHCHECK_RELEASE_SOURCE_ROOT:-${RUNTIME_RELEASE_CURRENT:-/srv/autophagy-agent-current}}" "$@" >&2
+}
+
 probe_release_fully_deployed() { # probe_release_fully_deployed <node> <account> <receipt-path>
   local _node="$1" _account="$2" receipt="$3"
   local current sha recorded fields version
 
-  current="$(readlink "${HEALTHCHECK_RELEASE_SOURCE_ROOT:-/srv/autophagy-agent-current}" 2>/dev/null)" || {
+  current="$(readlink "${HEALTHCHECK_RELEASE_SOURCE_ROOT:-${RUNTIME_RELEASE_CURRENT:-/srv/autophagy-agent-current}}" 2>/dev/null)" || {
     release_receipt_log "RECEIPT-UNKNOWN: cannot read the release pointer"
     return 1
   }
   sha="$(basename "$current")"
 
+  if [[ ! -e "$receipt" && ! -L "$receipt" ]] && release_receipt_switch_grace --missing-receipt; then
+    return 0
+  fi
   if [[ ! -r "$receipt" ]]; then
     release_receipt_log \
       "RECEIPT-MISSING: no full-deployment receipt for release $sha — run automation/deploy_all.sh --verify"
@@ -45,6 +53,10 @@ print(version if type(version) is int else "-")
   version="${fields##*$'\n'}"
 
   if [[ "$recorded" != "$sha" ]]; then
+    if [[ "$version" =~ ^[0-9]+$ ]] && (( version >= 2 )) \
+      && release_receipt_switch_grace --receipt-sha "$recorded"; then
+      return 0
+    fi
     release_receipt_log \
       "RECEIPT-STALE: receipt attests $recorded but the release is $sha — run automation/deploy_all.sh --apply"
     return 1
