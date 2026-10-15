@@ -1,5 +1,5 @@
 """Per-project view: a project card opens ``#project/<name>`` with only that project's rows,
-and the 할 일·일정 tabs carry a 전체/프로젝트 picker whose pills are links (back and sharing work)."""
+and the 할 일·일정 tabs carry a 전체/프로젝트 dropdown whose options are addresses (back and sharing work)."""
 
 from __future__ import annotations
 
@@ -74,8 +74,9 @@ def test_todos_and_schedule_tabs_offer_a_project_picker_that_tags_every_row(tmp_
     page = render_dashboard(_store(tmp_path).snapshot(today=TODAY), mode="served", token="t" * 40)
     for tab in ("todos", "schedule"):
         panel = page.split(f'<section id="{tab}"', 1)[1].split("</section>", 1)[0]
-        pills = re.findall(r'<a href="([^"]+)" data-p="([^"]*)">', panel)
-        assert pills[0] == (f"#{tab}", "")
-        assert (project_href("프로젝트B", tab), "프로젝트B") in pills
+        assert panel.count("<select data-picker") == 1
+        options = re.findall(r'<option value="([^"]+)" data-p="([^"]*)">', panel)
+        assert options[0] == (f"#{tab}", "")
+        assert (project_href("프로젝트B", tab), "프로젝트B") in options
         rows = re.findall(r'<li [^>]*data-project="([^"]+)"', panel)
         assert sorted(set(rows)) == ["프로젝트A", "프로젝트B"] and len(rows) == 3

@@ -174,9 +174,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._text(403, "forbidden")
             return
         parts = [unquote(part) for part in urlparse(self.path).path.split("/") if part]
-        if len(parts) != 2 or parts[0] != "todo":
+        if len(parts) != 2 or parts[0] not in ("todo", "project"):
             self._text(404, "not found")
             return
+        act = self._record if parts[0] == "todo" else self._archive
         length = int(self.headers.get("Content-Length") or 0)
         if length > _MAX_BODY:
             self._text(413, "request too large")
@@ -186,7 +187,7 @@ class _Handler(BaseHTTPRequestHandler):
             if self.headers.get("Origin") not in self.tailnet_origins:
                 self._text(403, "forbidden")
                 return
-            self._record(parts[1], form)
+            act(parts[1], form)
             return
         if not self._cookie_ok():
             self._text(401, "authentication required")
@@ -198,7 +199,27 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._matches(supplied) or (origin is not None and origin not in allowed):
             self._text(403, "forbidden")
             return
-        self._record(parts[1], form)
+        act(parts[1], form)
+
+    def _archive(self, project: str, form: dict[str, list[str]]) -> None:
+        """보관 / 보관 해제 — the same authority as a progress tick; who is the tailnet login, else the token holder."""
+        value = form.get("archived", [""])[0]
+        if value not in ("0", "1"):
+            self._text(400, "archived must be 0 or 1")
+            return
+        login = self.headers.get(IDENTITY_HEADER) if self._via_tailnet() else None
+        who = login.strip().lower() if login else "로컬 대시보드(토큰)"
+        try:
+            changed = self.store.set_archived(project, value == "1", by=who)
+        except ProjectBoardError as error:
+            self._text(400, str(error))
+            return
+        try:
+            self.on_change()
+        except Exception as error:  # noqa: BLE001 - the mark is recorded; the file rebuild is best-effort
+            logger.warning("dashboard rebuild failed: %s", type(error).__name__)
+        body = json.dumps({"ok": True, "project": project, "archived": value == "1", "changed": changed}, ensure_ascii=False)
+        self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
 
     def _record(self, todo_id: str, form: dict[str, list[str]]) -> None:
         status = form.get("status", [""])[0] or None

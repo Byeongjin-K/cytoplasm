@@ -93,7 +93,7 @@ def task_key_of(kind: str, source_id: str, subject: str) -> str:
     return f"{kind}:{conversation_of(kind, source_id, subject)}"
 
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 RELEASES: Final = Path("/srv/autophagy-agent-releases")
 
 
@@ -129,6 +129,10 @@ def _migrate(connection: sqlite3.Connection) -> None:
             connection.execute(
                 "UPDATE todos SET task_key = ? WHERE todo_id = ?", (task_key_of(kind, source_id, subject), todo_id)
             )
+    project_columns = {row[1] for row in connection.execute("PRAGMA table_info(projects)")}
+    if "archived_at" not in project_columns:
+        connection.execute("ALTER TABLE projects ADD COLUMN archived_at TEXT NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE projects ADD COLUMN archived_by TEXT NOT NULL DEFAULT ''")
 
 
 def utc_stamp(now: datetime | None = None) -> str:
@@ -170,7 +174,7 @@ class BoardStore:
             ).fetchone()
             if current is None:
                 db.execute(
-                    "INSERT INTO projects VALUES (?, ?, ?, ?)",
+                    "INSERT INTO projects (name, owner, created_at, updated_at) VALUES (?, ?, ?, ?)",
                     (proposal.project, proposal.project_owner, stamp, stamp),
                 )
             else:
@@ -290,6 +294,31 @@ class BoardStore:
             updated = db.execute("SELECT * FROM todos WHERE todo_id = ?", (todo_id,)).fetchone()
         return _todo(updated)
 
+    def set_archived(self, project: str, archived: bool, *, by: str, now: datetime | None = None) -> bool:
+        """Hide (or bring back) a project on the main screens. Only a mark: no todo or source is touched.
+
+        Returns ``False`` when the project already was in that state. Who and when stay on the
+        project row while it is archived, and every change is also an event.
+        """
+        stamp = utc_stamp(now)
+        who = " ".join(by.split())[:120] or "알 수 없음"
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT archived_at FROM projects WHERE name = ?", (project,)).fetchone()
+            if row is None:
+                raise ProjectBoardError(f"no approved project named {project}")
+            if bool(row["archived_at"]) == archived:
+                return False
+            db.execute(
+                "UPDATE projects SET archived_at = ?, archived_by = ? WHERE name = ?",
+                (stamp if archived else "", who if archived else "", project),
+            )
+            db.execute(
+                "INSERT INTO events (at, todo_id, project, kind, detail) VALUES (?, ?, ?, ?, ?)",
+                (stamp, "", project, "archive" if archived else "unarchive", who),
+            )
+        return True
+
     def approved_attachments(self, kind: str, source_id: str) -> tuple[str, ...] | None:
         """Attachment names of an approved source, or ``None`` when no approved card cites it."""
         with self._connect() as db:
@@ -389,10 +418,14 @@ class BoardStore:
                     overdue=sum(1 for d in open_dues if d < iso_today),
                     next_due=next((d for d in open_dues if d >= iso_today), None),
                     updated_at=str(project["updated_at"]),
+                    archived_at=str(project["archived_at"]),
+                    archived_by=str(project["archived_by"]),
                 )
             )
         return BoardSnapshot(
-            today=iso_today, generated_at=utc_stamp(now), projects=tuple(views), todos=todos,
+            today=iso_today, generated_at=utc_stamp(now),
+            projects=tuple(view for view in views if not view.archived_at),
+            archived=tuple(view for view in views if view.archived_at), todos=todos,
             sources=sources, events=events, pending=pending, withheld=withheld,
         )
 

@@ -232,6 +232,8 @@ class ProjectView:
     overdue: int
     next_due: str | None
     updated_at: str
+    archived_at: str = ""
+    archived_by: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +263,7 @@ class BoardSnapshot:
     today: str
     generated_at: str
     projects: tuple[ProjectView, ...] = ()
+    archived: tuple[ProjectView, ...] = ()
     todos: tuple[TodoRow, ...] = ()
     sources: tuple[SourceRow, ...] = ()
     events: tuple[EventRow, ...] = ()
