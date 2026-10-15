@@ -27,19 +27,25 @@ def _row(source: str, score: float = 0.3) -> dict[str, Any]:
 
 class _Client:
     def __init__(self, *, reject_per_note: bool = False) -> None:
-        self.calls: list[tuple[int, bool]] = []
+        self.calls: list[tuple[int, bool, int]] = []
         self.reject_per_note = reject_per_note
 
-    def search_memory(self, query: str, limit: int = 5, *, one_per_note: bool = False) -> list[dict[str, Any]]:
-        self.calls.append((limit, one_per_note))
-        if one_per_note and self.reject_per_note:
-            raise _OldServerError("validation error: unexpected one_per_note")
+    def search_memory(
+        self, query: str, limit: int = 5, *, one_per_note: bool = False, per_note: int = 1,
+        exclude_notes: object = (),
+    ) -> list[dict[str, Any]]:
+        self.calls.append((limit, one_per_note, per_note))
+        if per_note != 1 and self.reject_per_note:
+            raise _OldServerError("validation error: unexpected per_note")
         return [_row("wiki:a.md"), _row("wiki:b.md")]
 
 
-def _model(monkeypatch: pytest.MonkeyPatch, answer: str | Exception) -> None:
+def _model(monkeypatch: pytest.MonkeyPatch, *answers: str | Exception) -> None:
+    replies = iter(answers)
+
     class Client:
         def complete(self, _prompt: str) -> str:
+            answer = next(replies)
             if isinstance(answer, Exception):
                 raise answer
             return answer
@@ -51,10 +57,10 @@ def test_the_pick_can_be_turned_off() -> None:
     assert recall_pick.picker({"RECALL_PICK": "0"}) is None
 
 
-def test_the_agent_call_searches_the_whole_store_one_passage_per_note_and_keeps_the_pick(
+def test_the_agent_call_searches_the_whole_store_two_passages_per_note_and_keeps_the_pick(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _model(monkeypatch, '{"ids": ["c002"]}')
+    _model(monkeypatch, '{"ids": ["c002"]}', '{"ids": ["c001"]}')
     client = _Client()
     pick = recall_pick.picker({})
     assert pick is not None
@@ -63,7 +69,7 @@ def test_the_agent_call_searches_the_whole_store_one_passage_per_note_and_keeps_
 
     assert picked is True
     assert [row["source"] for row in rows] == ["wiki:b.md"]
-    assert client.calls == [(100, True)]
+    assert client.calls == [(60, True, 2)]
 
 
 @pytest.mark.parametrize("failure", ["model", "old-server"])
@@ -76,7 +82,7 @@ def test_a_failed_pick_falls_back_to_the_plain_search(monkeypatch: pytest.Monkey
     rows, picked = pick(client, "질문", 5, _OldServerError)
 
     assert picked is False
-    assert client.calls[-1] == (5, False)
+    assert client.calls[-1] == (5, False, 1)
     assert len(rows) == 2
 
 

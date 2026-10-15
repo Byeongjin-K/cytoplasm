@@ -19,15 +19,12 @@ def picker(env: Mapping[str, str] = os.environ) -> Picker | None:
 
     def pick(client: Any, query: str, limit: int, fatal: type[Exception]) -> tuple[Rows, bool]:
         from automation.codex_llm import CodexClient, CodexError
-        from automation.knowledge.pick import CANDIDATE_NOTES, choose
+        from automation.knowledge.pick import attached_rows, choose, store_search
 
         try:
-            rows = [dict(row) for row in client.search_memory(query, limit=CANDIDATE_NOTES, one_per_note=True)]
-            chosen = choose(query, rows, CodexClient.from_environment().complete)
+            chosen = choose(query, store_search(client), CodexClient.from_environment().complete)
         except (CodexError, ValueError, fatal):
-            chosen = None
-        if chosen is None:
             return [dict(row) for row in client.search_memory(query, limit=limit)], False
-        return chosen, True
+        return attached_rows(chosen), True
 
     return pick
