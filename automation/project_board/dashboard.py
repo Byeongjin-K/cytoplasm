@@ -336,21 +336,18 @@ def _fresh_in_shelf(full: BoardSnapshot, shelf: tuple[ProjectView, ...]) -> dict
     return {name: count for name, count in counts.items() if count}
 
 
-def _fresh_notice(fresh: dict[str, int]) -> str:
-    if not fresh:
-        return ""
-    items = "".join(
-        f'<li><a href="{escape(project_href(name), quote=True)}">{escape(name)}</a> · 새 할 일 {count}건</li>'
-        for name, count in fresh.items()
+def _nav(shelf: tuple[ProjectView, ...], fresh: dict[str, int]) -> str:
+    """The tab bar; 보관함 carries its own counts so archived work is noticed without leaving the shelf."""
+    if not shelf:
+        return _NAV
+    new = sum(fresh.values())
+    badges = f' <span class="badge d-none">{len(shelf)}</span>' + (
+        f' <span class="badge d-soon">새 {new}</span>' if new else ""
     )
-    return (
-        '<div class="card pending" style="margin-top:12px"><b>보관한 프로젝트에 새 할 일</b>'
-        '<p class="note">보관 뒤 승인된 할 일입니다 — 필요하면 프로젝트 화면에서 「보관 해제」하세요.</p>'
-        f'<ul class="small">{items}</ul></div>'
-    )
+    return _NAV.replace('data-tab="archive">보관함</a>', f'data-tab="archive">보관함{badges}</a>')
 
 
-def _summary(snapshot: BoardSnapshot, today: date, fresh: dict[str, int] | None = None) -> str:
+def _summary(snapshot: BoardSnapshot, today: date) -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
@@ -389,7 +386,7 @@ def _summary(snapshot: BoardSnapshot, today: date, fresh: dict[str, int] | None 
         projects = f'<h3>프로젝트 <span class="small muted">— 눌러서 그 프로젝트만 보기</span></h3><div class="grid">{cards}</div>'
     return (
         '<section id="summary" data-tab="summary"><h2>요약</h2>'
-        f'<div class="chips">{chips}</div>{pending}{_fresh_notice(fresh or {})}{projects}{withheld}'
+        f'<div class="chips">{chips}</div>{pending}{projects}{withheld}'
         f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
     )
 
@@ -687,8 +684,8 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"{meta}<title>프로젝트 대시보드</title><style>{_CSS}</style></head><body>"
-        f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_NAV}</nav></div></header><main>'
-        f"{empty}{_summary(snapshot, today, fresh)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
+        f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main>'
+        f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
         f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
         f"<script>{scripts}</script></body></html>"
     )

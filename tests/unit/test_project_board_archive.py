@@ -84,20 +84,20 @@ def test_archive_is_a_recorded_mark_and_unarchive_brings_it_back(tmp_path: Path)
         store.set_archived("없는 과제", True, by="owner@example.com")
 
 
-def test_work_approved_after_archiving_is_flagged_not_hidden(tmp_path: Path) -> None:
+def test_work_approved_after_archiving_is_flagged_only_inside_the_shelf(tmp_path: Path) -> None:
     store = _store(tmp_path)
     store.set_archived("가상과제 감마", True, by=OWNER)
     page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN)
-    assert "보관한 프로젝트에 새 할 일" not in page
+    assert '보관함 <span class="badge d-none">1</span></a>' in page and "보관 뒤 새 할 일" not in page
     store.apply_proposal("pb-9", proposal_from_dict({
         "project": "가상과제 감마", "summary": "요약", "todos": [{"title": "보관 뒤 요청"}, {"title": "하나 더"}],
         "source": {"kind": "mail", "source_id": "pb-9-u", "subject": "다시 온 메일"},
     }), message_id="pb-9", now=datetime(2099, 1, 1, tzinfo=UTC))
     page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN)
-    summary = _section(page, "summary")
-    assert "보관한 프로젝트에 새 할 일" in summary and "가상과제 감마</a> · 새 할 일 2건" in summary
+    for tab in ("summary", "projects", "todos", "schedule", "sources"):
+        assert "가상과제 감마" not in _section(page, tab), tab  # owner: archived projects appear nowhere on the main screens
     assert "보관 뒤 새 할 일 2" in _section(page, "archive")
-    assert "보관 뒤 요청" not in _section(page, "todos")  # still archived: the owner decides
+    assert '보관함 <span class="badge d-none">1</span> <span class="badge d-soon">새 2</span></a>' in page
 
 
 def test_the_documented_rollback_leaves_exactly_the_v2_columns(tmp_path: Path) -> None:
