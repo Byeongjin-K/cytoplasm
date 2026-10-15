@@ -93,7 +93,7 @@ def task_key_of(kind: str, source_id: str, subject: str) -> str:
     return f"{kind}:{conversation_of(kind, source_id, subject)}"
 
 
-SCHEMA_VERSION: Final = 2
+SCHEMA_VERSION: Final = 3
 RELEASES: Final = Path("/srv/autophagy-agent-releases")
 
 
@@ -129,6 +129,12 @@ def _migrate(connection: sqlite3.Connection) -> None:
             connection.execute(
                 "UPDATE todos SET task_key = ? WHERE todo_id = ?", (task_key_of(kind, source_id, subject), todo_id)
             )
+    project_columns = {row[1] for row in connection.execute("PRAGMA table_info(projects)")}
+    if "archived_at" not in project_columns:
+        connection.execute("ALTER TABLE projects ADD COLUMN archived_at TEXT NOT NULL DEFAULT ''")
+        connection.execute("ALTER TABLE projects ADD COLUMN archived_by TEXT NOT NULL DEFAULT ''")
+    if "actor" not in {row[1] for row in connection.execute("PRAGMA table_info(events)")}:
+        connection.execute("ALTER TABLE events ADD COLUMN actor TEXT NOT NULL DEFAULT ''")
 
 
 def utc_stamp(now: datetime | None = None) -> str:
@@ -170,7 +176,7 @@ class BoardStore:
             ).fetchone()
             if current is None:
                 db.execute(
-                    "INSERT INTO projects VALUES (?, ?, ?, ?)",
+                    "INSERT INTO projects (name, owner, created_at, updated_at) VALUES (?, ?, ?, ?)",
                     (proposal.project, proposal.project_owner, stamp, stamp),
                 )
             else:
@@ -253,6 +259,7 @@ class BoardStore:
         progress: int | None = None,
         note: str | None = None,
         now: datetime | None = None,
+        by: str = "",
     ) -> TodoRow:
         if status is not None and status not in STATUSES:
             raise ProjectBoardError(f"status must be one of {', '.join(STATUSES)}")
@@ -281,14 +288,39 @@ class BoardStore:
             if note:
                 detail += f" · {new_note}"
             db.execute(
-                "INSERT INTO events (at, todo_id, project, kind, detail) VALUES (?, ?, ?, ?, ?)",
-                (stamp, todo_id, str(row["project"]), "progress", detail),
+                "INSERT INTO events (at, todo_id, project, kind, detail, actor) VALUES (?, ?, ?, ?, ?, ?)",
+                (stamp, todo_id, str(row["project"]), "progress", detail, _who(by)),
             )
             db.execute(
                 "UPDATE projects SET updated_at = ? WHERE name = ?", (stamp, str(row["project"]))
             )
             updated = db.execute("SELECT * FROM todos WHERE todo_id = ?", (todo_id,)).fetchone()
         return _todo(updated)
+
+    def set_archived(self, project: str, archived: bool, *, by: str, now: datetime | None = None) -> bool:
+        """Hide (or bring back) a project on the main screens. Only a mark: no todo or source is touched.
+
+        Returns ``False`` when the project already was in that state. Who and when stay on the
+        project row while it is archived, and every change is also an event.
+        """
+        stamp = utc_stamp(now)
+        who = _who(by) or "알 수 없음"
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT archived_at FROM projects WHERE name = ?", (project,)).fetchone()
+            if row is None:
+                raise ProjectBoardError(f"no approved project named {project}")
+            if bool(row["archived_at"]) == archived:
+                return False
+            db.execute(
+                "UPDATE projects SET archived_at = ?, archived_by = ? WHERE name = ?",
+                (stamp if archived else "", who if archived else "", project),
+            )
+            db.execute(
+                "INSERT INTO events (at, todo_id, project, kind, detail, actor) VALUES (?, ?, ?, ?, ?, ?)",
+                (stamp, "", project, "archive" if archived else "unarchive", "", who),
+            )
+        return True
 
     def approved_attachments(self, kind: str, source_id: str) -> tuple[str, ...] | None:
         """Attachment names of an approved source, or ``None`` when no approved card cites it."""
@@ -362,7 +394,8 @@ class BoardStore:
                 for row in db.execute("SELECT * FROM sources ORDER BY approved_at DESC").fetchall()
             )
             events = tuple(
-                EventRow(str(r["at"]), str(r["todo_id"]), str(r["project"]), str(r["kind"]), str(r["detail"]))
+                EventRow(str(r["at"]), str(r["todo_id"]), str(r["project"]), str(r["kind"]), str(r["detail"]),
+                         str(r["actor"]))
                 for r in db.execute("SELECT * FROM events ORDER BY id DESC LIMIT 30").fetchall()
             )
             projects = db.execute("SELECT * FROM projects ORDER BY name").fetchall()
@@ -389,12 +422,21 @@ class BoardStore:
                     overdue=sum(1 for d in open_dues if d < iso_today),
                     next_due=next((d for d in open_dues if d >= iso_today), None),
                     updated_at=str(project["updated_at"]),
+                    archived_at=str(project["archived_at"]),
+                    archived_by=str(project["archived_by"]),
                 )
             )
         return BoardSnapshot(
-            today=iso_today, generated_at=utc_stamp(now), projects=tuple(views), todos=todos,
+            today=iso_today, generated_at=utc_stamp(now),
+            projects=tuple(view for view in views if not view.archived_at),
+            archived=tuple(view for view in views if view.archived_at), todos=todos,
             sources=sources, events=events, pending=pending, withheld=withheld,
         )
+
+
+def _who(by: str) -> str:
+    """The dashboard's identity of whoever acted, one line, bounded."""
+    return " ".join(by.split())[:120]
 
 
 def _todo(row: sqlite3.Row) -> TodoRow:
