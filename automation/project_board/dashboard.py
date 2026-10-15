@@ -38,7 +38,7 @@ nav{display:flex;gap:4px;flex-wrap:wrap}
 nav a{padding:5px 11px;border-radius:999px;color:var(--text);text-decoration:none;font-size:14px}
 nav a:hover{background:var(--gray-bg)}
 nav a.on{background:var(--text);color:#fff}
-main>[hidden]{display:none}
+main>[hidden],main [hidden]{display:none!important}
 main{max-width:1180px;margin:0 auto;padding:18px 18px 64px}
 section{margin-top:30px}
 h2{font-size:21px;margin:0 0 12px}
@@ -79,8 +79,21 @@ li.done .todo-title{text-decoration:line-through;color:var(--text2)}
 .src .names{font-size:13px;color:var(--text2);overflow-wrap:anywhere}
 .empty{padding:28px;text-align:center;color:var(--text2)}
 .note{font-size:13px;color:var(--text2);margin:6px 0 0}
+a.pcard{display:block;color:inherit;text-decoration:none}
+a.pcard:hover{border-color:var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.go{color:#0058b0;font-size:13px;margin-top:6px}
+h3 a{color:inherit;text-decoration:none} h3 a:hover{color:#0058b0}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.pills a{padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--text);
+text-decoration:none;font-size:14px;white-space:nowrap}
+.pills a:hover{border-color:var(--accent)}
+.pills a.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.back{display:inline-block;margin-bottom:8px;font-size:14px}
+.pv-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pv-head h2{margin:0}
 @media (max-width:600px){.bar{padding:8px 12px;gap:6px}main{padding:12px 12px 48px}.chip{min-width:calc(50% - 4px)}
 nav{flex-wrap:nowrap;overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}nav a{flex:none;padding:7px 12px}
+.pills{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}.pills a{flex:none;padding:7px 12px}
 h2{font-size:19px}}
 """
 
@@ -101,13 +114,55 @@ document.querySelectorAll('input[data-todo]').forEach(function(box){
 _TABS_JS: Final = """
 (function(){
   var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
-      names=[].map.call(links,function(a){return a.dataset.tab;});
+      names=[].map.call(links,function(a){return a.dataset.tab;}),title=document.title,sticky='';
+  function dec(s){try{return decodeURIComponent(s);}catch(e){return '';}}
+  function parse(hash){
+    var q=hash.indexOf('?p=');
+    if(hash.indexOf('project/')===0){return {tab:'project',proj:dec(hash.slice(8))};}
+    if(q>=0){return {tab:hash.slice(0,q),proj:dec(hash.slice(q+3))};}
+    return {tab:hash.indexOf('todo-')===0?'todos':hash,proj:''};
+  }
+  function pick(panel,proj){
+    var pills=panel?panel.querySelectorAll('.pills a'):[],known=false;
+    [].forEach.call(pills,function(a){if(a.dataset.p===proj){known=true;}});
+    if(!known){proj='';}
+    [].forEach.call(pills,function(a){var on=a.dataset.p===proj;a.classList.toggle('on',on);
+      if(on){a.setAttribute('aria-current','true');a.parentNode.scrollLeft=Math.max(0,a.offsetLeft-a.parentNode.offsetLeft-12);}
+      else{a.removeAttribute('aria-current');}});
+    return proj;
+  }
+  function filterSchedule(proj){
+    var panel=document.getElementById('schedule');if(!panel){return;}
+    proj=pick(panel,proj);var any=false,chosen=proj;
+    [].forEach.call(panel.querySelectorAll('.bucket'),function(card){
+      var n=0;[].forEach.call(card.querySelectorAll('li[data-project]'),function(li){
+        var ok=!proj||li.dataset.project===proj;li.hidden=!ok;if(ok){n++;}});
+      card.hidden=!n;if(n){any=true;}var c=card.querySelector('.cnt');if(c){c.textContent=n;}
+    });
+    var none=document.getElementById('schedule-none');if(none){none.style.display=any?'none':'';}
+    return chosen;
+  }
+  function filterTodos(proj){
+    var panel=document.getElementById('todos');if(!panel){return;}
+    var chosen=document.body.dataset.project=pick(panel,proj);
+    document.dispatchEvent(new Event('pb-project'));
+    return chosen;
+  }
   function show(){
-    var hash=location.hash.slice(1),tab=hash.indexOf('todo-')===0?'todos':hash;
-    if(names.indexOf(tab)<0){tab='summary';}
-    panels.forEach(function(s){s.hidden=s.dataset.tab!==tab;});
-    links.forEach(function(a){var on=a.dataset.tab===tab;a.classList.toggle('on',on);
+    var hash=location.hash.slice(1),r=parse(hash),tab=r.tab,page=null;
+    if(tab==='project'){
+      panels.forEach(function(s){if(s.dataset.tab==='project'&&s.dataset.project===r.proj){page=s;}});
+      if(!page){tab='projects';}
+    }else if(names.indexOf(tab)<0){tab='summary';}
+    var navTab=page?'projects':tab;
+    panels.forEach(function(s){s.hidden=page?s!==page:s.dataset.tab!==tab;});
+    links.forEach(function(a){var on=a.dataset.tab===navTab;a.classList.toggle('on',on);
       if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
+    var t=filterTodos(tab==='todos'?r.proj:''),s=filterSchedule(tab==='schedule'?r.proj:'');
+    if(page){sticky=r.proj;}else if(tab==='todos'){sticky=t||'';}else if(tab==='schedule'){sticky=s||'';}
+    links.forEach(function(a){var n=a.dataset.tab;if(n==='todos'||n==='schedule'){
+      a.setAttribute('href','#'+n+(sticky?'?p='+encodeURIComponent(sticky):''));}});
+    document.title=page?r.proj+' · '+title:title;
     var target=hash.indexOf('todo-')===0&&document.getElementById(hash);
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
   }
@@ -125,19 +180,21 @@ EMPTY_SECTION: Final = (
 _FILTER_JS: Final = """
 (function(){
   var q=document.getElementById('todo-q'),s=document.getElementById('todo-s'),
-      c=document.getElementById('todo-count'),rows=document.querySelectorAll('ul.todos li');
+      c=document.getElementById('todo-count'),rows=document.querySelectorAll('#todos ul.todos li');
   function apply(){
-    var text=q.value.trim().toLowerCase(),want=s.value,shown=0;
+    var text=q.value.trim().toLowerCase(),want=s.value,proj=document.body.dataset.project||'',shown=0,total=0;
     rows.forEach(function(li){
-      var ok=(!want||li.dataset.status===want)&&(!text||li.textContent.toLowerCase().indexOf(text)>=0);
+      var mine=!proj||li.dataset.project===proj;if(mine){total++;}
+      var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.toLowerCase().indexOf(text)>=0);
       li.hidden=!ok;if(ok){shown++;}
     });
-    document.querySelectorAll('.todo-group').forEach(function(g){
+    document.querySelectorAll('#todos .todo-group').forEach(function(g){
       g.hidden=!g.querySelector('li:not([hidden])');
     });
-    c.textContent=shown+' / '+rows.length+' 건';
+    c.textContent=shown+' / '+total+' 건';
   }
-  q.addEventListener('input',apply);s.addEventListener('change',apply);apply();
+  q.addEventListener('input',apply);s.addEventListener('change',apply);
+  document.addEventListener('pb-project',apply);apply();
 })();
 """
 
@@ -186,6 +243,24 @@ def _grade_badge(grade: str) -> str:
     return f'<span class="badge {css}" title="업무 보안 등급">{escape(grade)}{hint}</span>'
 
 
+def project_href(name: str, tab: str = "project") -> str:
+    """``#project/<name>`` opens one project's page; ``#todos?p=<name>`` filters a tab to it."""
+    encoded = quote(name, safe="")
+    return f"#project/{encoded}" if tab == "project" else f"#{tab}?p={encoded}"
+
+
+def _pills(tab: str, snapshot: BoardSnapshot) -> str:
+    """전체 / 프로젝트별 — the picker above a tab; each pill is a link, so back and sharing work."""
+    if not snapshot.projects:
+        return ""
+    links = [f'<a href="#{tab}" data-p="">전체</a>'] + [
+        f'<a href="{escape(project_href(view.name, tab), quote=True)}" data-p="{escape(view.name, quote=True)}">'
+        f"{escape(view.name)}</a>"
+        for view in snapshot.projects
+    ]
+    return f'<div class="pills" role="group" aria-label="프로젝트 고르기">{"".join(links)}</div>'
+
+
 def _summary(snapshot: BoardSnapshot, today: date) -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
@@ -219,9 +294,13 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         if snapshot.withheld
         else ""
     )
+    projects = ""
+    if snapshot.projects:
+        cards = "".join(_project_card(view, today) for view in snapshot.projects)
+        projects = f'<h3>프로젝트 <span class="small muted">— 눌러서 그 프로젝트만 보기</span></h3><div class="grid">{cards}</div>'
     return (
         '<section id="summary" data-tab="summary"><h2>요약</h2>'
-        f'<div class="chips">{chips}</div>{pending}{withheld}'
+        f'<div class="chips">{chips}</div>{pending}{projects}{withheld}'
         f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
     )
 
@@ -235,11 +314,13 @@ def _project_card(view: ProjectView, today: date) -> str:
         upcoming = f'다음 마감 {escape(view.next_due)} <span class="badge {css}">{label}</span>'
     else:
         upcoming = "다음 마감 없음"
+    href = escape(project_href(view.name), quote=True)
     return (
-        f'<div class="card"><b>{escape(view.name)}</b>{owner}'
+        f'<a class="card pcard" href="{href}" data-project="{escape(view.name, quote=True)}"><b>{escape(view.name)}</b>{owner}'
         f'<div class="prog" role="img" aria-label="진척 {percent}%"><i style="width:{percent}%"></i></div>'
         f'<div class="small">{view.done}/{view.total} 완료{overdue}</div>'
-        f'<div class="small muted" style="margin-top:4px">{upcoming}</div></div>'
+        f'<div class="small muted" style="margin-top:4px">{upcoming}</div>'
+        '<div class="go">할 일·일정 보기 →</div></a>'
     )
 
 
@@ -249,7 +330,7 @@ def _projects(snapshot: BoardSnapshot, today: date) -> str:
     return f'<section id="projects" data-tab="projects"><h2>프로젝트</h2>{body}</section>'
 
 
-def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
+def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -> str:
     done = todo.status == "완료"
     label, css = _dday(todo.due, today) if not done else ("완료", "d-far")
     box = (
@@ -266,14 +347,19 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date) -> str:
     progress = f"<span>{todo.progress}%</span>" if todo.status == "진행" else ""
     note = f'<div class="note">{escape(todo.note)}</div>' if todo.note else ""
     done_class = ' class="done"' if done else ""
+    ident = f'id="todo-{escape(todo.todo_id, quote=True)}" ' if anchor else ""
     return (
-        f'<li id="todo-{escape(todo.todo_id, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
+        f'<li {ident}data-project="{escape(todo.project, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
         f"{done_class}>{box}<div class=\"todo-main\">"
         f'<div class="todo-title">{escape(todo.title)}</div><div class="meta">'
         f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(todo.status)}</span>'
         f'<span class="badge {css}">{label}</span>{_grade_badge(todo.grade)}{owner}{due}{progress}<span>{source}</span>'
         f"</div>{note}</div></li>"
     )
+
+
+def _todo_order(todo: TodoRow) -> tuple[bool, str, str]:
+    return (todo.status == "완료", todo.due or "9999", todo.todo_id)
 
 
 def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
@@ -284,9 +370,11 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         groups[todo.project].append(todo)
     blocks = []
     for project in sorted(groups):
-        items = sorted(groups[project], key=lambda t: (t.status == "완료", t.due or "9999", t.todo_id))
+        items = sorted(groups[project], key=_todo_order)
+        heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)} →</a>'
         blocks.append(
-            f'<div class="todo-group card" style="margin-bottom:10px"><h3 style="margin-top:0">{escape(project)}</h3>'
+            f'<div class="todo-group card" data-project="{escape(project, quote=True)}" style="margin-bottom:10px">'
+            f'<h3 style="margin-top:0">{heading}</h3>'
             f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul></div>'
         )
     options = "".join(f'<option value="{s}">{s}</option>' for s in ("열림", "진행", "완료", "보류"))
@@ -300,12 +388,14 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         'aria-label="할 일 검색"><select id="todo-s" aria-label="상태 필터"><option value="">전체 상태</option>'
         f'{options}</select><span id="todo-count" class="small muted"></span></div>'
     )
-    return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{filters}{note}{"".join(blocks)}</section>'
+    pills = _pills("todos", snapshot)
+    return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{pills}{filters}{note}{"".join(blocks)}</section>'
 
 
-def _agenda(snapshot: BoardSnapshot, today: date) -> str:
+def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date) -> str:
+    """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket."""
     buckets: dict[str, list[TodoRow]] = defaultdict(list)
-    for todo in snapshot.todos:
+    for todo in todos:
         if todo.status in OPEN_STATUSES:
             buckets[_bucket(todo.due, today)].append(todo)
     parts = []
@@ -317,16 +407,28 @@ def _agenda(snapshot: BoardSnapshot, today: date) -> str:
         for todo in rows:
             label, css = _dday(todo.due, today)
             items.append(
-                f'<li><span class="badge {css}">{label}</span><b>{escape(todo.title)}</b>'
+                f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
+                f'<b>{escape(todo.title)}</b>{_grade_badge(todo.grade)}'
                 f'<span class="small muted">{escape(todo.project)}'
                 f'{" · " + escape(todo.owner) if todo.owner else ""}'
                 f'{" · " + escape(todo.due) if todo.due else ""}</span></li>'
             )
-        parts.append(f'<div class="card" style="margin-bottom:10px"><h3 style="margin-top:0">{name} '
-                     f'<span class="badge d-none">{len(rows)}</span></h3><ul>{"".join(items)}</ul></div>')
+        parts.append(f'<div class="card bucket" style="margin-bottom:10px"><h3 style="margin-top:0">{name} '
+                     f'<span class="badge d-none cnt">{len(rows)}</span></h3><ul>{"".join(items)}</ul></div>')
+    return "".join(parts)
+
+
+def _agenda(snapshot: BoardSnapshot, today: date) -> str:
+    cards = _agenda_cards(snapshot.todos, today)
     fallback = '<div class="card empty">마감이 남은 할 일이 없습니다.</div>' if snapshot.todos else EMPTY_SECTION
-    body = "".join(parts) or fallback
-    return f'<section id="schedule" data-tab="schedule" class="agenda"><h2>일정</h2>{body}</section>'
+    none = (
+        '<div id="schedule-none" class="card empty" style="display:none">이 프로젝트에는 마감이 남은 할 일이 없습니다.</div>'
+        if cards
+        else ""
+    )
+    body = (cards + none) or fallback
+    pills = _pills("schedule", snapshot)
+    return f'<section id="schedule" data-tab="schedule" class="agenda"><h2>일정</h2>{pills}{body}</section>'
 
 
 def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode) -> str:
@@ -377,6 +479,44 @@ def _events(snapshot: BoardSnapshot) -> str:
     return f'<section id="events" data-tab="summary"><h2>최근 기록</h2><div class="card"><ul class="small">{items}</ul></div></section>'
 
 
+def _project_page(index: int, view: ProjectView, snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
+    """One project's own screen: its 할 일, 일정 and 근거 only, grade badges kept on every row."""
+    todos = [t for t in snapshot.todos if t.project == view.name]
+    sources = [s for s in snapshot.sources if s.project == view.name]
+    pending = [p for p in snapshot.pending if p.project == view.name]
+    grades = sorted({t.grade for t in todos} | {s.grade for s in sources}, key=lambda g: GRADES.index(g) if g in GRADES else 1)
+    badges = "".join(_grade_badge(grade) for grade in grades)
+    open_todos = [t for t in todos if t.status in OPEN_STATUSES]
+    overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
+    week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
+    owner = f'<span class="small muted">담당 {escape(view.owner)}</span>' if view.owner else ""
+    chips = (
+        f'<div class="chip over"><span class="muted small">지연</span><b>{overdue}</b></div>'
+        f'<div class="chip soon"><span class="muted small">이번 주 마감</span><b>{week}</b></div>'
+        f'<div class="chip"><span class="muted small">완료</span><b>{view.done}/{view.total}</b></div>'
+        f'<div class="chip"><span class="muted small">검토 대기</span><b>{len(pending)}</b></div>'
+    )
+    items = "".join(_todo_item(t, mode, today, anchor=False) for t in sorted(todos, key=_todo_order))
+    todo_block = f'<div class="card"><ul class="todos">{items}</ul></div>' if items else (
+        '<div class="card empty">이 프로젝트의 할 일이 없습니다.</div>'
+    )
+    agenda = _agenda_cards(todos, today) or '<div class="card empty">마감이 남은 할 일이 없습니다.</div>'
+    by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
+    for todo in todos:
+        by_proposal[todo.proposal_id].append(todo)
+    evidence = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in sources) or (
+        '<div class="card empty">근거가 없습니다.</div>'
+    )
+    return (
+        f'<section id="pv-{index}" data-tab="project" data-project="{escape(view.name, quote=True)}">'
+        '<a class="back" href="#projects">← 전체 프로젝트</a>'
+        f'<div class="pv-head"><h2>{escape(view.name)}</h2>{badges}{owner}</div>'
+        f'<div class="chips" style="margin-top:12px">{chips}</div>'
+        f'<h3>할 일</h3>{todo_block}<h3>일정</h3><div class="agenda">{agenda}</div><h3>'
+        f"근거 (메일·회의록)</h3>{evidence}</section>"
+    )
+
+
 def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") -> str:
     today = date.fromisoformat(snapshot.today)
     empty = ""
@@ -387,12 +527,13 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
         )
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
     scripts = _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
+    pages = "".join(_project_page(i, view, snapshot, mode, today) for i, view in enumerate(snapshot.projects, 1))
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"{meta}<title>프로젝트 대시보드</title><style>{_CSS}</style></head><body>"
         f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_NAV}</nav></div></header><main>'
         f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
-        f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_events(snapshot)}</main>"
+        f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_events(snapshot)}{pages}</main>"
         f"<script>{scripts}</script></body></html>"
     )
