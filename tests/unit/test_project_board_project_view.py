@@ -58,6 +58,18 @@ def test_summary_and_project_cards_link_to_the_project_page(tmp_path: Path) -> N
     assert f'href="{href}"' in projects
 
 
+def test_every_list_folds_under_a_heading_that_keeps_its_count(tmp_path: Path) -> None:
+    page = render_dashboard(_store(tmp_path).snapshot(today=TODAY), mode="served", token="t" * 40)
+    folds = re.findall(r'<details [^>]*data-fold="([^"]+)"[^>]*><summary><h3>(.*?) <span class="badge d-none cnt">(\d+)</span>', page)
+    keys = {key: (title, int(count)) for key, title, count in folds}
+    assert len(keys) == len(folds)  # one browser-kept state per list
+    assert sum(count for key, (_, count) in keys.items() if key.startswith("s:")) == 3
+    assert keys["t:프로젝트A"][1] == 2 and keys["e:프로젝트B"] == ("프로젝트B", 1)
+    assert keys["p:프로젝트A:t"] == ("할 일", 2) and keys["p:프로젝트A:e"][1] == 1
+    assert keys["p:프로젝트B:s"] == ("일정", 1)
+    assert "localStorage" in page and "pb-fold:" in page
+
+
 def test_todos_and_schedule_tabs_offer_a_project_picker_that_tags_every_row(tmp_path: Path) -> None:
     page = render_dashboard(_store(tmp_path).snapshot(today=TODAY), mode="served", token="t" * 40)
     for tab in ("todos", "schedule"):

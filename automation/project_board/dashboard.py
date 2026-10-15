@@ -90,6 +90,14 @@ text-decoration:none;font-size:14px;white-space:nowrap}
 .pills a.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .back{display:inline-block;margin-bottom:8px;font-size:14px}
 .pv-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+details.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"▾";color:var(--text2);font-size:13px;width:14px;flex:none;text-align:center}
+details.fold:not([open])>summary::before{content:"▸"}
+details.fold>summary h3{margin:0;display:flex;gap:8px;align-items:center}
+details.fold[open]>summary{margin-bottom:8px}
+details.sect{margin-top:18px}
+details.sect>summary h3{font-size:16px}
 .pv-head h2{margin:0}
 @media (max-width:600px){.bar{padding:8px 12px;gap:6px}main{padding:12px 12px 48px}.chip{min-width:calc(50% - 4px)}
 nav{flex-wrap:nowrap;overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}nav a{flex:none;padding:7px 12px}
@@ -109,6 +117,18 @@ document.querySelectorAll('input[data-todo]').forEach(function(box){
       .catch(function(){box.checked=!box.checked;box.disabled=false;alert('기록하지 못했습니다');});
   });
 });
+"""
+
+_FOLD_JS: Final = """
+(function(){
+  var key='pb-fold:';
+  document.querySelectorAll('details[data-fold]').forEach(function(d){
+    try{if(localStorage.getItem(key+d.dataset.fold)==='0'){d.open=false;}}catch(e){}
+    d.addEventListener('toggle',function(){
+      try{if(d.open){localStorage.removeItem(key+d.dataset.fold);}else{localStorage.setItem(key+d.dataset.fold,'0');}}catch(e){}
+    });
+  });
+})();
 """
 
 _TABS_JS: Final = """
@@ -261,6 +281,14 @@ def _pills(tab: str, snapshot: BoardSnapshot) -> str:
     return f'<div class="pills" role="group" aria-label="프로젝트 고르기">{"".join(links)}</div>'
 
 
+def _fold(key: str, title: str, count: int, body: str, *, cls: str = "fold sect") -> str:
+    """A list block whose heading folds it; the count stays in the heading, the state is kept per browser."""
+    return (
+        f'<details class="{cls}" data-fold="{escape(key, quote=True)}" open><summary><h3>{title} '
+        f'<span class="badge d-none cnt">{count}</span></h3></summary>{body}</details>'
+    )
+
+
 def _summary(snapshot: BoardSnapshot, today: date) -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
@@ -372,11 +400,9 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
     for project in sorted(groups):
         items = sorted(groups[project], key=_todo_order)
         heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)} →</a>'
-        blocks.append(
-            f'<div class="todo-group card" data-project="{escape(project, quote=True)}" style="margin-bottom:10px">'
-            f'<h3 style="margin-top:0">{heading}</h3>'
-            f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul></div>'
-        )
+        body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
+        fold = _fold(f"t:{project}", heading, len(items), body, cls="todo-group card fold")
+        blocks.append(fold.replace("<details ", f'<details data-project="{escape(project, quote=True)}" style="margin-bottom:10px" ', 1))
     options = "".join(f'<option value="{s}">{s}</option>' for s in ("열림", "진행", "완료", "보류"))
     note = (
         '<p class="note">체크하면 완료로 기록됩니다(다시 풀면 열림).</p>'
@@ -392,7 +418,7 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
     return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{pills}{filters}{note}{"".join(blocks)}</section>'
 
 
-def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date) -> str:
+def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s") -> str:
     """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket."""
     buckets: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
@@ -413,8 +439,8 @@ def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date) -> st
                 f'{" · " + escape(todo.owner) if todo.owner else ""}'
                 f'{" · " + escape(todo.due) if todo.due else ""}</span></li>'
             )
-        parts.append(f'<div class="card bucket" style="margin-bottom:10px"><h3 style="margin-top:0">{name} '
-                     f'<span class="badge d-none cnt">{len(rows)}</span></h3><ul>{"".join(items)}</ul></div>')
+        fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
+        parts.append(fold.replace("<details ", '<details style="margin-bottom:10px" ', 1))
     return "".join(parts)
 
 
@@ -457,8 +483,14 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
     by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in snapshot.todos:
         by_proposal[todo.proposal_id].append(todo)
-    cards = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in snapshot.sources)
-    body = cards or EMPTY_SECTION
+    groups: dict[str, list[SourceRow]] = defaultdict(list)
+    for row in snapshot.sources:
+        groups[row.project].append(row)
+    body = "".join(
+        _fold(f"e:{project}", escape(project), len(rows),
+              "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in rows))
+        for project, rows in sorted(groups.items())
+    ) or EMPTY_SECTION
     hint = (
         '<p class="note">원문 메일과 첨부는 이 사본에 없습니다 — 대시보드(테일넷 주소)의 근거 탭에서 열립니다.</p>'
         if mode == "file" and snapshot.sources
@@ -500,20 +532,23 @@ def _project_page(index: int, view: ProjectView, snapshot: BoardSnapshot, mode: 
     todo_block = f'<div class="card"><ul class="todos">{items}</ul></div>' if items else (
         '<div class="card empty">이 프로젝트의 할 일이 없습니다.</div>'
     )
-    agenda = _agenda_cards(todos, today) or '<div class="card empty">마감이 남은 할 일이 없습니다.</div>'
+    key = f"p:{view.name}"
+    agenda = _agenda_cards(todos, today, f"{key}:s") or '<div class="card empty">마감이 남은 할 일이 없습니다.</div>'
     by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
         by_proposal[todo.proposal_id].append(todo)
     evidence = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in sources) or (
         '<div class="card empty">근거가 없습니다.</div>'
     )
+    todo_fold = _fold(key + ":t", "할 일", len(todos), todo_block)
+    agenda_fold = _fold(key + ":s", "일정", len(open_todos), '<div class="agenda">' + agenda + "</div>")
+    evidence_fold = _fold(key + ":e", "근거 (메일·회의록)", len(sources), evidence)
     return (
         f'<section id="pv-{index}" data-tab="project" data-project="{escape(view.name, quote=True)}">'
         '<a class="back" href="#projects">← 전체 프로젝트</a>'
         f'<div class="pv-head"><h2>{escape(view.name)}</h2>{badges}{owner}</div>'
         f'<div class="chips" style="margin-top:12px">{chips}</div>'
-        f'<h3>할 일</h3>{todo_block}<h3>일정</h3><div class="agenda">{agenda}</div><h3>'
-        f"근거 (메일·회의록)</h3>{evidence}</section>"
+        f"{todo_fold}{agenda_fold}{evidence_fold}</section>"
     )
 
 
@@ -526,7 +561,7 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
             "소유자가 승인(✅)하면 프로젝트와 할 일이 여기에 나타납니다.</div>"
         )
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
-    scripts = _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
+    scripts = _FOLD_JS + _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
     pages = "".join(_project_page(i, view, snapshot, mode, today) for i, view in enumerate(snapshot.projects, 1))
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
