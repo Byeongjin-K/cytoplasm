@@ -12,8 +12,10 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final, Literal, TypeAlias
 
@@ -32,6 +34,8 @@ PATH_KEYS: Final = ("SPEECHTOTEXT_WHISPER_BIN", "SPEECHTOTEXT_WHISPER_MODEL")
 GWS_FILES: Final = ("client_secret.json", "credentials.enc", ".encryption_key")
 _REPO: Final = Path(__file__).resolve().parents[2]
 _ERROR_LIMIT: Final = 120
+#: Hermes 가 자격 하나를 쉬게 하는 가장 긴 기본 쿨다운(429·기타 = 1시간). 공급자가 재개 시각을 주면 그것이 이긴다.
+HERMES_MAX_COOLDOWN_SECONDS: Final = 60 * 60
 _LONG_TOKEN: Final = re.compile(r"Bearer\s+\S+|[A-Za-z0-9_\-]{24,}")
 
 
@@ -78,6 +82,8 @@ class Facts:
     agent_chat_channel: str = ""
     discord_channels: tuple[tuple[str, ...], tuple[str, ...]] | None = ((), ())
     cron_env: tuple[tuple[Gap, ...], int] | str | None = None
+    #: 공급자별로 `exhausted`(일시 쿨다운) 자격이 다시 쓰이기까지 남은 초 — 가장 늦은 것. 알 수 없으면 None.
+    cooldowns: Mapping[str, float | None] | None = None
 
 
 def mask(text: str) -> str:
@@ -123,6 +129,53 @@ def read_env_file(path: Path) -> dict[str, str] | None:
         if separator and key and not key.startswith("#"):
             values[key.strip()] = value.strip().strip('"').strip("'")
     return values
+
+
+def _epoch(value: object) -> float | None:
+    """Hermes 가 쓰는 재개 시각 모양(epoch 초·밀리초·ISO-8601)을 초로 읽는다."""
+    if isinstance(value, bool) or value is None or value == "":
+        return None
+    if isinstance(value, int | float):
+        number = float(value)
+    else:
+        text = str(value).strip()
+        try:
+            number = float(text)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                return None
+    if number <= 0:
+        return None
+    return number / 1000.0 if number > 1_000_000_000_000 else number
+
+
+def _resume_at(entry: Mapping[str, object]) -> float | None:
+    """`exhausted` 자격이 다시 쓰이는 시각의 상한 — 공급자 재개 시각, 없으면 표시 시각 + 1시간."""
+    reset = _epoch(entry.get("last_error_reset_at"))
+    if reset is not None:
+        return reset
+    marked = _epoch(entry.get("last_status_at"))
+    return None if marked is None else marked + HERMES_MAX_COOLDOWN_SECONDS
+
+
+def _cooldowns(path: Path, now: float) -> Mapping[str, float | None]:
+    """`exhausted` 는 Hermes 의 일시 쿨다운이다(영구 인증 실패는 `dead`) — 언제 풀리는지만 옮긴다."""
+    raw = _json(path)
+    pool = raw.get("credential_pool") if isinstance(raw, dict) else None
+    if not isinstance(pool, dict):
+        return {}
+    result: dict[str, float | None] = {}
+    for provider, entries in pool.items():
+        if not isinstance(entries, list):
+            continue
+        resumes = [_resume_at(entry) for entry in entries
+                   if isinstance(entry, dict) and entry.get("last_status") == "exhausted"]
+        if resumes:
+            known = [at for at in resumes if at is not None]
+            result[str(provider)] = max(known) - now if len(known) == len(resumes) else None
+    return result
 
 
 def _auth(path: Path) -> Mapping[str, tuple[str, ...]] | None:
@@ -245,7 +298,7 @@ def _gateway(unit: str, run: Run, uid: int) -> str:
 def gather(
     *, account: str, role: Role, home: Path, gateway_unit: str, online: bool,
     run: Run = _run, discord_probe: DiscordProbe = _discord_probe, uid: int | None = None,
-    repo: Path = _REPO,
+    repo: Path = _REPO, now: float | None = None,
 ) -> Facts:
     hermes_dir = home / ".hermes"
     secrets = read_env_file(home / ".env.secrets")
@@ -270,6 +323,7 @@ def gather(
         hermes=(home / ".local" / "bin" / "hermes").is_file(),
         gateway=_gateway(gateway_unit, run, os.getuid() if uid is None else uid),
         auth=_auth(hermes_dir / "auth.json"),
+        cooldowns=_cooldowns(hermes_dir / "auth.json", time.time() if now is None else now),
         model_provider=provider,
         custom_providers=custom,
         fallback=fallback,

@@ -13,6 +13,11 @@ from automation.doctor import cron_env, guides
 from automation.doctor.facts import DRIVE_KEY, GWS_FILES, PATH_KEYS, TOKEN_KEY, CronJob, Facts, GwsStatus, Role
 from automation.install.checks import CheckResult, Status
 
+#: Hermes credential_pool 의 일시 쿨다운 상태(영구 인증 실패는 "dead").
+COOLDOWN: Final = "exhausted"
+#: 이보다 오래 남은 한도만 소유자에게 알린다 — Hermes 기본 쿨다운(최대 1시간)은 저절로 풀린다.
+COOLDOWN_NOTICE_SECONDS: Final = 60 * 60
+
 CODEX: Final = "openai-codex"
 CUSTOM_PREFIX: Final = "custom:"
 MAILON_KEYS: Final = ("MAILON_ID", "MAILON_PW", "MAILON_TOTP_SECRET")
@@ -97,11 +102,39 @@ def _primary(f: Facts) -> Verdict:
     statuses = (f.auth or {}).get(provider, ())
     if not statuses:
         return _fail(f"{provider} 로그인이 없다 — 대화·요약·배치 모델 호출이 전부 실패한다", (provider,))
+    named = f"{provider}/{f.model_default}" if f.model_default else provider
     if any(status in ("", "ok") for status in statuses):
-        named = f"{provider}/{f.model_default}" if f.model_default else provider
         return _ok(f"주 모델 {named} — 로그인 {len(statuses)}건, 마지막 상태 정상")
+    if set(statuses) == {COOLDOWN}:
+        return _cooldown(f, provider, named)
     states = ", ".join(sorted(set(statuses)))
     return _fail(f"{provider} 로그인은 있으나 마지막 상태가 {states} — 다시 로그인한다", (provider,))
+
+
+def _usable_fallbacks(f: Facts) -> tuple[str, ...]:
+    return tuple(provider for provider in f.fallback
+                 if _custom_name(provider) is not None or (f.auth or {}).get(provider))
+
+
+def _cooldown(f: Facts, provider: str, named: str) -> Verdict:
+    """`exhausted` 는 고장이 아니라 Hermes 의 일시 쿨다운이다 — 다시 로그인해서 풀리는 것이 없다.
+
+    제한에 한 번 걸리면 Hermes 가 그 자격을 잠깐(혼자인 자격은 1분, 길어야 1시간) 쉬게 하고 그동안 폴백이 받는다.
+    영구 인증 실패는 `dead` 로 따로 남으므로 여기서 고장을 내지 않는다(2026-10-15 매시 점검이 이미 풀린 쿨다운을
+    「고장 · 다시 로그인」으로 1시간 내보냈다). 알리는 것은 폴백이 없거나 한도가 1시간을 넘겨 남을 때뿐이다.
+    """
+    remaining = (f.cooldowns or {}).get(provider)
+    if remaining is not None and remaining <= 0:
+        return _ok(f"주 모델 {named} — 직전 사용 한도로 쉬던 시간이 끝났다(다음 호출에서 정상으로 돌아온다)")
+    left = "남은 시간 미상" if remaining is None else f"약 {max(1, round(remaining / 60))}분 남음"
+    fallbacks = _usable_fallbacks(f)
+    if not fallbacks:
+        return _warn(f"주 모델 {named} 이 사용 한도로 쉬는 중({left}) — 폴백이 없어 그동안 응답이 실패한다",
+                     (provider,))
+    if remaining is not None and remaining <= COOLDOWN_NOTICE_SECONDS:
+        return _ok(f"주 모델 {named} 이 사용 한도로 잠깐 쉬는 중({left}) — 그동안 폴백 {', '.join(fallbacks)} 가 받는다")
+    return _warn(f"주 모델 {named} 이 사용 한도로 쉬는 중({left}) — 그동안 폴백 {', '.join(fallbacks)} 가 받는다. "
+                 "다시 로그인할 필요는 없다", (provider,))
 
 
 def _fallback(f: Facts) -> Verdict:
