@@ -19,7 +19,7 @@ _CONVERGE_CONFIG_SAFE='^[A-Za-z0-9_./-]+$'
 _converge_config_module() { # _converge_config_module <algorithm> → "<module> <destination>"
   case "$1" in
     hermes-memory-limits-v1) printf '%s' "automation.hermes_memory_config .hermes/config.yaml" ;;
-    hermes-soul-recall-v1) printf '%s' "automation.hermes_soul_recall .hermes/SOUL.md" ;;
+    hermes-soul-recall-v2) printf '%s' "automation.hermes_soul_recall .hermes/SOUL.md" ;;
     hermes-memory-profile-with-recall-v1) printf '%s' "automation.memory_provider.config .hermes/config.yaml" ;;
     *) return 1 ;;
   esac

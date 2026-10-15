@@ -19,7 +19,7 @@ _ROWS: Final = (
     "v2:config;algorithm=hermes-memory-limits-v1;activation=gateway\n"
     "peer|automation/hermes_memory_config.py|.hermes/config.yaml|"
     "v2:config;algorithm=hermes-memory-limits-v1;activation=gateway\n"
-    "agent|automation/hermes_soul_recall.py|.hermes/SOUL.md|v2:config;algorithm=hermes-soul-recall-v1\n"
+    "agent|automation/hermes_soul_recall.py|.hermes/SOUL.md|v2:config;algorithm=hermes-soul-recall-v2\n"
 )
 
 
@@ -102,6 +102,6 @@ def test_soul_recall_line_is_stale_until_present(tmp_path: Path) -> None:
     soul = homes / "agent" / ".hermes" / "SOUL.md"
     _ = soul.write_text("You are an assistant.\n", encoding="utf-8")
     state = _soul(root, homes)
-    assert (state.status, state.activation, state.details) == ("stale", "none", (("different-line", "-"),))
+    assert (state.status, state.activation, state.details) == ("stale", "none", (("different-block", "-"),))
     _ = soul.write_text(hermes_soul_recall.with_line("You are an assistant.\n"), encoding="utf-8")
     assert _soul(root, homes).status == "ok"
