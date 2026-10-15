@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 
 from dataclasses import replace
 
@@ -23,6 +24,7 @@ SUMMARY_FALLBACK = "(요약 실패)"
 _CATEGORY_BADGES = {"important": "🔴 중요", "normal": "🔵 일반", "spam": "🗑️ 스팸"}
 _FLAG_BADGES = {
     "reply_needed": "↩️ 회신 필요",
+    "replied": "📤 회신함",
     "schedule_needed": "📅 일정",
     "budget": "💳 예산",
     "cc": "👀 참조(CC)",
@@ -46,6 +48,8 @@ _MARKDOWN_ESCAPE = re.compile(r"([\\*_~`|\[\]])")
 # under the (clipped) subject heading.
 _SUBJECT_LIMIT = 200
 _SUMMARY_LIMIT = 1200
+# Newest state.db rows (all folders) searched for the owner's own replies.
+_SENT_LOOKUP_LIMIT = 300
 
 
 def _footer() -> str:
@@ -172,7 +176,11 @@ def build_item(
     )
     if role == "to" and mass_notice and cls.reply_needed:
         cls = replace(cls, reply_needed=False)
-    flags = cls.flags() + (("cc",) if role == "cc" else ())
+    # The owner already answered this thread after it arrived (owner 2026-10-15).
+    replied_at = str(mail_detail.get("replied_at") or "") if cls.reply_needed else ""
+    if replied_at:
+        cls = replace(cls, reply_needed=False)
+    flags = cls.flags() + (("replied",) if replied_at else ()) + (("cc",) if role == "cc" else ())
     if classify_failed:
         flags = flags + (_CLASSIFY_FAILED_FLAG,)
     note = ""
@@ -193,6 +201,7 @@ def build_item(
         "cc": cc_display if role != "unknown" else cc_addresses,
         "summary": summary,
         "flags": flags,
+        "replied_at": replied_at,
     }
     store_item = {
         **shared,
@@ -218,22 +227,50 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _recv_kst(recv_date: str) -> str:
-    """``수신 MM-DD HH:MM`` KST segment; '' when unparseable (fail-safe)."""
+def _kst_stamp(stamp: str) -> str:
+    """``MM-DD HH:MM`` in KST; '' when unparseable (fail-safe)."""
     try:
-        parsed = datetime.fromisoformat(recv_date.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     except ValueError:
         return ""
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)  # wrapper dates are UTC
-    return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("수신 %m-%d %H:%M")
+    return parsed.astimezone(ZoneInfo("Asia/Seoul")).strftime("%m-%d %H:%M")
+
+
+def _recv_kst(recv_date: str) -> str:
+    """``수신 MM-DD HH:MM`` KST segment; '' when unparseable (fail-safe)."""
+    stamp = _kst_stamp(recv_date)
+    return f"수신 {stamp}" if stamp else ""
 
 
 def _badge_line(item: dict) -> str:
     """Category → flags as Korean emoji badges (raw-key fail-safe)."""
     badges = [_CATEGORY_BADGES.get(str(item["category"]), str(item["category"]))]
-    badges.extend(_FLAG_BADGES.get(str(flag), str(flag)) for flag in item["flags"])
+    for flag in item["flags"]:
+        badge = _FLAG_BADGES.get(str(flag), str(flag))
+        stamp = _kst_stamp(str(item.get("replied_at") or "")) if flag == "replied" else ""
+        badges.append(f"{badge} · {stamp}" if stamp else badge)
     return " · ".join(badges)
+
+
+def _owner_replied_at(mail: dict, sent_mails: list[dict]) -> str:
+    """Date of the owner's first reply to this mail's sender in the same thread, or ''.
+
+    A candidate whose body cannot be read is skipped, so a read failure leaves
+    ``회신 필요`` in place rather than hiding it.
+    """
+    candidates = triage_recipient.reply_candidates(
+        str(mail.get("subject") or ""), str(mail.get("date") or ""), sent_mails
+    )
+    for sent in candidates:
+        try:
+            body = str(triage_transport._get_mail(str(sent.get("uid") or "")).get("body") or "")
+        except triage_gate.GateError:
+            continue
+        if triage_recipient.addressed_to(body, str(mail.get("sender") or "")):
+            return str(sent.get("date") or "")
+    return ""
 
 
 def render_item(item: dict, *, kst_now: datetime) -> str:
@@ -328,11 +365,17 @@ def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
         mails = triage_transport._list_mails(limit, False)
         sync_failed = True
     selected = select_new_mails(mails, digested, processed)
+    try:
+        sent_mails = triage_transport._sent_mails(_SENT_LOOKUP_LIMIT) if selected else []
+    except Exception as error:  # noqa: BLE001 — fail-open: keep 회신 필요, say why on stderr
+        sent_mails = []
+        print(f"DIGEST-SENT-LOOKUP-FAIL {type(error).__name__}", file=sys.stderr)
     dm_items: list[dict] = []
     store_items: list[dict] = []
     for item_no, mail in enumerate(selected, start=1):
         uid = str(mail.get("uid") or "")
         detail = {**mail, **triage_transport._get_mail(uid), "uid": uid}
+        detail["replied_at"] = _owner_replied_at(detail, sent_mails)
         try:
             dm_item, store_item = build_item(detail, item_no, digest_day=kst_now.date().isoformat())
         except triage_llm.LlmUnavailableError as error:  # fail closed — no downgraded digest
