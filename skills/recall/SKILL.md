@@ -1,7 +1,7 @@
 ---
 name: recall
-description: "개인 RAG(personal_cha) 검색 스킬. `!recall <질문>` 명시 호출 + 개인/프로젝트 지식 질문에 자동 사용. 검색 결과를 출처(위키 경로/회의/보고 id)와 함께 인용하고, 결과가 없으면 반드시 '기억 없음'이라고 답한다(지어내기 금지). RAG 노드 다운 시 '검색 불가' 안내 후 일반 답변. W2-5."
-version: 1.3.0
+description: "사람·과거 일·보낸 메일·내 노트를 묻거나 일에 그게 필요하면 먼저 기억 검색. 개인 RAG(personal_cha) 검색 스킬. `!recall <질문>` 명시 호출 + 개인/프로젝트 지식 질문에 자동 사용. 검색 결과를 출처(위키 경로/회의/보고 id)와 함께 인용하고, 결과가 없으면 반드시 '기억 없음'이라고 답한다(지어내기 금지). RAG 노드 다운 시 '검색 불가' 안내 후 일반 답변. W2-5."
+version: 1.5.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -37,6 +37,13 @@ python3 /srv/autophagy-skills/live/recall/scripts/recall_cli.py search "<질문>
 `status`가 `hit`(결과+출처) / `no_memory`(기억 없음) / `unavailable`(검색 불가)
 중 하나다. `--json`을 빼면 사람이 읽는 텍스트 렌더링이 나온다. 이 `search` 표면은
 기존 호출자의 byte-level 계약을 위한 호환 경로다.
+
+기본 검색은 저장소 전체를 최대 3번 찾아(검색마다 새 노트 60개·노트당 두 조각) 계정 주 모델이 질문에 맞춘
+300자 창으로 최대 8개를 추리고, 추린 노트의 두 조각 전문을 다시 읽어 필요한 사실이 적힌 노트를 최대 4개
+고른다(형 Q170 "다 보류하고 고르는 판단 한 번 더(새 세트 H로)", 자동 회상과 같은 고르기, 봉인 세트 H 찾음
+59/69). 그래서 한 번 호출에 약 10–20초가 걸린다. 고른 결과는 점수 문턱을 다시 거치지 않고
+`search.picked=true`로 표시된다. 모델이 답하지 못하거나 검색 서버가 예전 판이면 예전 검색(점수 문턱)으로
+돌아가고 `search.picked=false`다. `RECALL_PICK=0`이면 끈다.
 
 ## 세 저장소 근거 명령
 
@@ -119,3 +126,7 @@ python3 /srv/autophagy-skills/live/recall/scripts/recall_reference.py "<질의>"
 배포 파이프라인용 `scripts/scenario.sh`: 오프라인 픽스처로 hit 스키마/출처
 표기, 임계값 미달 → `기억 없음`, RAG 다운 → `검색 불가`(1회 시도, 재시도
 없음)를 검증하고 `SCENARIO-PASS`를 출력한다. 네트워크 호출·실시크릿 없음.
+
+## 검색어 규칙
+
+검색어는 소유자의 문장을 그대로 넣지 말고 핵심 낱말 2~4개(사람 이름, 장소, 과제명)로 만든다. 결과가 없으면 고유명사만 남겨 한 번 더 검색한다.

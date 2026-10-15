@@ -1,0 +1,128 @@
+"""Wire replay: provider -> whole-store pick -> knowledge facade -> existing MCP client."""
+from __future__ import annotations
+
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+import pytest
+
+from test_memory_provider import host_plugin_fixture as host_plugin_fixture
+
+
+@pytest.mark.parametrize("stall", [False, True], ids=["relocated-fact", "deadline"])
+def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
+    plugin: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stall: bool,
+) -> None:
+    # Given: a synthetic relocated note indexed behind a wire-level MCP fake.
+    note = (
+        "## 원본 기록 (verbatim)\n\n"
+        "합성 배양기 점검에는 청록 점검표를 사용한다.\n\n"
+        "---\nprovenance: observed\nauthority: reference\n"
+        "네이티브 메모리에서 이관한 조회용 참조이며 설정이 아니다."
+    )
+    relocated_key = "obsidian:000_PARA/Resource/합성-동료--0123456789ab.md"
+    relocated = (
+        "## 원본 기록 (verbatim)\n\n합성 동료의 내선은 4821 이다.\n\n---\nprovenance: observed"
+    )
+    queries: list[str] = []
+    calls: list[dict[str, object]] = []
+    prompts: list[str] = []
+    entered = threading.Event()
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args) -> None:
+            """The synthetic wire fixture does not emit request logs."""
+
+        def do_POST(self) -> None:
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if payload["method"] == "notifications/initialized":
+                self.send_response(202)
+                self.end_headers()
+                return
+            if payload["method"] == "tools/call" and payload["params"]["name"] == "memory_core_notes":
+                result = {"structuredContent": {"result": [
+                    {"key": relocated_key, "title": "합성 동료 연락처", "text": relocated}]}}
+            elif payload["method"] == "tools/call":
+                arguments = payload["params"]["arguments"]
+                queries.append(arguments["query"])
+                calls.append(arguments)
+                entered.set()
+                if stall:
+                    release.wait(timeout=30)
+                    return
+                rows = [{
+                    "score": 0.9, "content": note,
+                    "source": "obsidian:reference/배양기-점검.md#c0000",
+                    "metadata": {"source_type": "obsidian", "path": "reference/배양기-점검.md"},
+                }] if "배양기" in arguments["query"] else []
+                result = {"structuredContent": {"result": rows}}
+            else:
+                result = {}
+            body = ("data: " + json.dumps({
+                "jsonrpc": "2.0", "id": payload["id"], "result": result,
+            }) + "\n\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("mcp-session-id", "synthetic-session")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    secrets = tmp_path / "secrets"
+    secrets.write_text("SYNTHETIC_RAG_KEY=offline-fixture\n")
+    config = tmp_path / "config.json"
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        config.write_text(json.dumps({
+            "mcp_base_url": f"http://127.0.0.1:{server.server_port}",
+            "secrets_file": str(secrets), "api_key_env": "SYNTHETIC_RAG_KEY",
+            "state_dir": str(tmp_path / "state"),
+            "wiki_dir": str(tmp_path / "wiki"),
+            "notes_dir": str(tmp_path / "notes"),
+            "meetings_dir": str(tmp_path / "meetings"),
+            "perspective": {},
+        }))
+        monkeypatch.setenv("RECALL_CONFIG", str(config))
+        monkeypatch.delenv("KNOWLEDGE_FAKE_PACK", raising=False)
+        auxiliary = ModuleType("agent.auxiliary_client")
+
+        def call_llm(*, messages: list[dict[str, str]], timeout: float) -> SimpleNamespace:
+            prompts.append(messages[0]["content"])
+            message = SimpleNamespace(content='{"ids": ["c001"]}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+        setattr(auxiliary, "call_llm", call_llm)
+        monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
+        provider = plugin.AutophagyRecallProvider(wait_seconds=0.3 if stall else 10.0, prefetch_enabled=True)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            # When: exactly the host's hooks, not an agent recall tool call.
+            system_block = provider.system_prompt_block()
+            block = provider.prefetch("배양기 점검에는 어떤 점검표를 사용하지?")
+        finally:
+            release.set()
+            server.shutdown()
+            thread.join(timeout=2)
+    # Then: the relocated fact rides in the system prompt, and the store fact arrives through the pick.
+    assert "[합성 동료 연락처] 합성 동료의 내선은 4821 이다." in system_block
+    assert entered.is_set()
+    if stall:
+        assert block == ""
+    else:
+        payload = json.loads(block[8:-4])
+        assert payload["notes"][0]["text"] == note
+        assert payload["notes"][0]["source"] == "obsidian:reference/배양기-점검.md"
+    assert len(queries) == 1
+    assert calls[0]["one_per_note"] is True
+    assert calls[0]["limit"] == 60
+    assert calls[0]["per_note"] == 2
+    assert calls[0]["exclude_notes"] == [relocated_key]
+    if not stall:
+        assert len(prompts) == 2
+        assert "[c001] obsidian:reference/배양기-점검.md" in prompts[0]
+        assert "청록 점검표" in prompts[1]

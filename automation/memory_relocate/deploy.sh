@@ -53,7 +53,7 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memo
 # Moved people facts are no longer in every prompt (owner decision Q138 ②): the agent's SOUL.md
 # carries one recall line. Only that line is ensured; the rest of the owner-editable file stays.
 source "$repo_root/automation/deploy_config.sh"
-converge_config agent .hermes/SOUL.md hermes-soul-recall-v1
+converge_config agent .hermes/SOUL.md hermes-soul-recall-v2
 
 # Owner (2026-10-14 22:29): an approved release must need no node work. The choice mailboxes
 # are therefore provisioned here, without root, by the accounts the release already runs as:

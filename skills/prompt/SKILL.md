@@ -1,7 +1,7 @@
 ---
 name: prompt
-description: "버전형 프롬프트 자산을 canonical·overlay·legacy 계층에서 결정적으로 검색·조회·추가한다. 모든 새 본문은 동일한 overlay 형식으로 저장한다. W5-1."
-version: 1.1.0
+description: "저장해 둔 프롬프트를 찾거나 보거나 새로 추가하라고 할 때 사용. 버전형 프롬프트 자산을 canonical·overlay·legacy 계층에서 결정적으로 검색·조회·추가한다. 모든 새 본문은 동일한 overlay 형식으로 저장한다. W5-1."
+version: 1.1.1
 author: autophagy-agents
 license: MIT
 metadata:

@@ -1,7 +1,7 @@
 ---
 name: proposal
-description: "개인 제안서 워크스페이스에서 섹션 Kanban·초안·인간 기여분·취합·Codex 최종 검토를 안전하게 관리한다. W5-4."
-version: 2.4.0
+description: "제안서를 쓰거나 고치거나 섹션 진행을 관리하라고 할 때 사용. 개인 제안서 워크스페이스에서 섹션 Kanban·초안·인간 기여분·취합·Codex 최종 검토를 안전하게 관리한다. W5-4."
+version: 2.4.1
 author: autophagy-agents
 license: MIT
 metadata:

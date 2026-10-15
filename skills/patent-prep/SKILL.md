@@ -1,7 +1,7 @@
 ---
 name: patent-prep
-description: "발명 신고서와 선행기술 체크리스트를 보호된 개인 워크스페이스에서 준비하고, 계정 모델 설정으로 초안을 생성한다. W5-5."
-version: 1.2.0
+description: "발명 신고서나 선행기술 조사를 준비하라고 할 때 사용. 발명 신고서와 선행기술 체크리스트를 보호된 개인 워크스페이스에서 준비하고, 계정 모델 설정으로 초안을 생성한다. W5-5."
+version: 1.2.1
 author: autophagy-agents
 license: MIT
 metadata:

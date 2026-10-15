@@ -1,6 +1,9 @@
 import hashlib
-from dataclasses import dataclass
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from http import HTTPStatus
+from time import monotonic
 from typing import ClassVar, Literal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -15,6 +18,38 @@ _HTTP_LIMITS = httpx.Limits(
     keepalive_expiry=30.0,
 )
 _HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=10.0)
+# Depth of the raw dense pool behind one-passage-per-note search (set A: the needed note is
+# within the first 100 distinct notes of a 500-deep pool for 39/46 questions).
+NOTE_POOL = 500
+_CHUNK_SUFFIX = re.compile(r"#c\d+$")
+_CORE_RESOURCE = re.compile(r"^obsidian:000_PARA/Resource/.+--[0-9a-f]{12}\.md$")
+_CORE_TTL = 600
+
+
+def _note_title(key: str, first: "MemoryPayload") -> str:
+    """Same rule as the catalog the core block was judged on (owner Q163, sealed set H)."""
+    title = str(first.metadata.get("title") or "").strip()
+    if not title:
+        found = re.search(r'^title:\s*"?(.+?)"?\s*$', first.content, re.MULTILINE) or re.search(
+            r"^#\s+(.+)$", first.content, re.MULTILINE
+        )
+        title = found.group(1).strip() if found else ""
+    if not title:
+        body = first.content.strip()
+        title = body.splitlines()[0][:80] if body else key
+    return re.sub(r"\s+", " ", title)[:120]
+
+
+class CollectionInfo(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    points_count: int
+
+
+class CollectionResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    result: CollectionInfo
 
 
 class MemoryPayload(BaseModel):
@@ -108,6 +143,9 @@ class MemoryDeleteResult(BaseModel):
 @dataclass(frozen=True, slots=True)
 class MemoryStore:
     settings: RagSettings
+    _core_cache: dict[int, tuple[float, list[dict[str, str]]]] = field(
+        default_factory=dict, init=False, compare=False, repr=False
+    )
 
     def client(self, base_url: str) -> httpx.AsyncClient:
         transport = httpx.AsyncHTTPTransport(retries=3, limits=_HTTP_LIMITS)
@@ -174,13 +212,30 @@ class MemoryStore:
             chunk_id=chunk_id,
         )
 
-    async def search(
+    async def search(  # noqa: PLR0913 - mirrors the public MCP search arguments
         self,
         query: str,
         limit: int,
         entity_anchors: list[str] | None = None,
+        *,
+        one_per_note: bool = False,
+        per_note: int = 1,
+        exclude_notes: Sequence[str] = (),
     ) -> list[MemorySearchResult]:
         vector = await self.embed(query)
+        if one_per_note:
+            # Owner Q155 (2026-10-15): recall looks at the whole store; long chat logs fill a
+            # raw top-k with chunks of one conversation, so keep the best passage per note.
+            excluded = set(exclude_notes)
+            notes: dict[str, list[MemorySearchResult]] = {}
+            for point in await self._query_points(vector, NOTE_POOL):
+                key = _CHUNK_SUFFIX.sub("", point.payload.source)
+                if key in excluded or (key not in notes and len(notes) == limit):
+                    continue
+                passages = notes.setdefault(key, [])
+                if len(passages) < per_note:
+                    passages.append(self._search_result(point))
+            return [passage for passages in notes.values() for passage in passages]
         if not entity_anchors:
             async with self.client(self.settings.qdrant_url) as client:
                 response = await client.post(
@@ -217,6 +272,50 @@ class MemoryStore:
             key=lambda result: self._rank_key(result, exact_document_ids),
             reverse=True,
         )[:limit]
+
+    async def core_notes(self) -> list[dict[str, str]]:
+        """Read all core notes, caching by collection point count for ten minutes."""
+        async with self.client(self.settings.qdrant_url) as client:
+            response = await client.get(f"/collections/{self.settings.collection_name}")
+            _ = response.raise_for_status()
+        count = CollectionResponse.model_validate(response.json()).result.points_count
+        cached = self._core_cache.get(count)
+        if cached is not None and monotonic() - cached[0] < _CORE_TTL:
+            return [dict(note) for note in cached[1]]
+        grouped: dict[str, list[MemoryPayload]] = {}
+        offset: str | int | None = None
+        while True:
+            body: dict[str, object] = {"limit": 256, "with_payload": True, "with_vector": False}
+            if offset is not None:
+                body["offset"] = offset
+            async with self.client(self.settings.qdrant_url) as client:
+                response = await client.post(
+                    f"/collections/{self.settings.collection_name}/points/scroll", json=body
+                )
+                _ = response.raise_for_status()
+            page = QdrantScrollResponse.model_validate(response.json()).result
+            for point in page.points:
+                key = _CHUNK_SUFFIX.sub("", point.payload.source)
+                if (
+                    key.startswith(("wiki:", "note:"))
+                    or _CORE_RESOURCE.fullmatch(key)
+                    or "person--" in key
+                ):
+                    grouped.setdefault(key, []).append(point.payload)
+            offset = page.next_page_offset
+            if offset is None:
+                break
+        notes: list[dict[str, str]] = []
+        for key, chunks in sorted(grouped.items()):
+            chunks.sort(key=lambda chunk: chunk.source)
+            notes.append({
+                "key": key,
+                "title": _note_title(key, chunks[0]),
+                "text": "\n\n".join(chunk.content for chunk in chunks),
+            })
+        self._core_cache.clear()
+        self._core_cache[count] = (monotonic(), notes)
+        return [dict(note) for note in notes]
 
     async def _query_points(
         self,

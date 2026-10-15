@@ -39,8 +39,9 @@ def test_rag_stack_smoke_reads_health_and_authenticated_search_without_results(
         if payload["method"] == "notifications/initialized":
             return Response(b"")
         if payload["method"] == "tools/call":
-            assert payload["params"]["name"] == "search_memory"
-            assert payload["params"]["arguments"]["limit"] == 1
+            calls[-1] = payload["params"]["name"]
+            if payload["params"]["name"] == "search_memory":
+                assert payload["params"]["arguments"]["limit"] == 1
         body = {"jsonrpc": "2.0", "id": payload["id"],
                 "result": {"structuredContent": {"result": []}}}
         if failure == "search" and payload["method"] == "tools/call":
@@ -52,6 +53,7 @@ def test_rag_stack_smoke_reads_health_and_authenticated_search_without_results(
     result = smoke.main()
 
     assert result == (1 if failure else 0)
-    assert calls == (["health"] if failure == "health" else [
-        "health", "initialize", "notifications/initialized", "tools/call",
-    ])
+    tools = [name for name in calls if name not in {"health", "initialize", "notifications/initialized"}]
+    assert calls[0] == "health"
+    assert tools == {"health": [], "search": ["search_memory"]}.get(
+        failure, ["search_memory", "search_memory", "memory_core_notes"])

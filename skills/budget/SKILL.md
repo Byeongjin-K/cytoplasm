@@ -1,7 +1,7 @@
 ---
 name: budget
-description: "과제비 원장(W0-10 Google Sheet) 조회 + 변경 감지 스킬 — 과제별×년도별 다중 시트 레지스트리(~/.hermes/budget/sheets.json) 지원. `!budget [항목]`은 게이트 없이 즉시 조회. 변경 감지 cron(30분)이 잔액 탭을 SQLite 스냅샷과 diff해 변경 시 규정 요청메일 초안을 만들고, 발송은 반드시 그 요청 전용 승인 스레드(`과제비 메일 · <제목>`)의 승인 메시지에서 cha 본인의 ✅/⛔ 리액션 확인(봇이 두 반응을 미리 추가, 제약 1) 이후에만 일어난다. 승인 표면은 `approval_surface.py` 정책과 초안에 저장된 바인딩으로 결정된다. W4-3."
-version: 1.5.4
+description: "과제비 잔액·집행 내역을 묻거나 과제비 변경에 따른 요청 메일을 보내야 할 때 이 스킬을 사용. 과제비 원장(W0-10 Google Sheet) 조회 + 변경 감지 스킬 — 과제별×년도별 다중 시트 레지스트리(~/.hermes/budget/sheets.json) 지원. `!budget [항목]`은 게이트 없이 즉시 조회. 변경 감지 cron(30분)이 잔액 탭을 SQLite 스냅샷과 diff해 변경 시 규정 요청메일 초안을 만들고, 발송은 반드시 그 요청 전용 승인 스레드(`과제비 메일 · <제목>`)의 승인 메시지에서 cha 본인의 ✅/⛔ 리액션 확인(봇이 두 반응을 미리 추가, 제약 1) 이후에만 일어난다. 승인 표면은 `approval_surface.py` 정책과 초안에 저장된 바인딩으로 결정된다. W4-3."
+version: 1.5.5
 author: autophagy-agents
 license: MIT
 platforms: [linux]

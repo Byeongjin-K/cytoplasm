@@ -70,6 +70,46 @@ Discord id·비공개 경로 세부를 쓰지 않는다. `automation/public_gate
 
 ## 1. 릴리스 절차 — 순서가 전부다
 
+### 매 턴 자동 회상 제공자
+
+`automation/memory_provider/deploy.sh`는 선언된 agent·peer 홈
+`~/.hermes/plugins/autophagy_recall/__init__.py`만 배포한다. Hermes의 **메모리 제공자 로더**가
+이 홈 디렉터리를 직접 검색하므로 일반 플러그인 `register()`나 `hermes plugins enable`을
+사용하지 않는다. 워커는 불변 릴리스 트리에서 실행되고, 파일 배포만으로 기능이 켜지지는 않는다.
+
+활성화는 릴리스의 기존 config 수렴 경로가 한다. `memory_curator/deploy-manifest.txt`의
+agent·peer별 `.hermes/config.yaml` **기존 두 행**이
+`hermes-memory-profile-with-recall-v1`을 선택하고, 소유 배포기가 `converge_config`를 호출한다.
+`automation.memory_provider.config`는 `hermes_memory_config.LIMITS`의 상한과
+`memory.provider: autophagy_recall`을 공용 블록 편집기로 한 번에 작성한다.
+백업·원자 교체·read-back은 기존 상한 writer를 재사용하며, `activation=gateway`가
+agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md는 수정하지 않는다.
+다른 외부 제공자가 이미 선택돼 있으면 `external-provider-selected`(rc 7)로 거부한다.
+운영자가 기존 선택을 정리하기 전에는 조용히 덮어쓰지 않는다.
+중첩 provider·중복 키·지원하지 않는 메모리 매핑은 쓰기 전 rc 3으로 거부한다.
+
+해제는 원하는 릴리스의 기존 config 두 행을 상한 전용 `hermes-memory-limits-v1`로 되돌리고,
+`memory.provider` 키를 지운 뒤 두 게이트웨이를 함께 재시동하는 것이다.
+제공자 파일은 남아 있어도 선택되지 않으면 실행되지 않는다. 선언을 그대로 둔 채 키만
+지우면 다음 수렴이 다시 켜므로 선언과 설정을 함께 바꾼다.
+`codex_app_server` 또는 비문자열 멀티모달 경로는 사용자 API 사본 주입을 우회하므로
+활성화 전 실제 운영 API 경로를 확인한다.
+
+**동일 목적지의 선언을 추가하지 않는다.** `(account, destination)` 유일성은 그대로이며
+제공자 패키지는 홈 플러그인 파일 선언만 소유한다. config 관측 알고리즘 등록은
+`automation/deploy_all_config.py`에 있고 기존 상한·`hermes-soul-recall-v1`도 유지한다.
+`--show`·`--check`·`--apply`는 `python3 -m automation.memory_provider.config`의 계약이다.
+재시동 후 실제 질문으로 회상을 확인하는 것은 릴리스 이후 운영 검증이다.
+
+턴 대기 상한은 같은 프로필이 쓰는 `memory.recall_wait_seconds`(15, 형 Q173)다. 값을 바꾸려면
+`automation/memory_provider/config.py` 의 `RECALL_WAIT_SECONDS` 를 고쳐 릴리스한다 — 노드에서 손으로 고치면 다음 수렴이 되돌린다.
+제공자는 RAG 검색 서버의 `search_memory(per_note, exclude_notes)`와 `memory_core_notes`를 쓴다. 이 둘은
+`configs/rag/mcp`에 있으므로 같은 릴리스 ✅ 아래 `automation/rag_stack`이 RAG 노드의 검색(mcp) 컨테이너만 다시
+빌드해야 들어간다(health·인증 검색 확인, 실패 시 이전 이미지로 되돌림, 임베딩은 그대로). 서버가 예전 판이면
+제공자는 핵심 블록을 비우고 예전 검색으로 돌아갈 뿐 턴을 막지 않는다.
+
+[기능 소개와 설치본 계약·제한](../기능소개/매-턴-자동-회상.md)
+
 ### 1.0 공개 우선 릴리스 — 정상 경로 (2026-10-07~)
 
 1. 변경이 PR 로 cytoplasm main 에 머지됐다(필수 체크 셋 green, `automation/merge-pr.sh`).

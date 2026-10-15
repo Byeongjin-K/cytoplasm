@@ -94,18 +94,24 @@ def build_response(
     classification_query: str | None = None,
     searches: int = 1,
     entity_hint_count: int = 0,
+    picked: bool = False,
 ) -> dict[str, Any]:
     if error is not None or rows is None:
         status, results, message = STATUS_UNAVAILABLE, [], UNAVAILABLE_MESSAGE
     else:
-        results = classify(classification_query or query, rows, threshold, strong_threshold)
+        results = (
+            [_build_result(rank, row, True) for rank, row in enumerate(rows[:limit], start=1)]
+            if picked
+            else classify(classification_query or query, rows, threshold, strong_threshold)
+        )
         status = STATUS_HIT if results else STATUS_NO_MEMORY
         message = None if results else NO_MEMORY_MESSAGE
     return {
         "version": SCHEMA_VERSION, "query": query, "status": status, "message": message,
         "threshold": threshold, "strong_threshold": strong_threshold, "results": results,
         "search": {"base_url": base_url, "limit": limit, "attempts": 1, "searches": searches,
-                   "entity_hint_count": entity_hint_count, "duration_ms": duration_ms, "error": error},
+                   "entity_hint_count": entity_hint_count, "duration_ms": duration_ms, "error": error,
+                   "picked": picked},
     }
 
 
