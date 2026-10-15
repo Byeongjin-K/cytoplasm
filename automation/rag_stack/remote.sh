@@ -45,13 +45,13 @@ previous_tag="autophagy-rag-mcp-rollback:${image_before#sha256:}"
 docker image tag "$image_before" "$previous_tag"
 printf 'services:\n  mcp:\n    image: %s\n' "$previous_tag" > "$stage/rollback.yaml"
 
-smoke() { timeout 120 python3 "$stage/smoke.py" "$root/.env.secrets" "${RAG_MCP_HEALTH_SECONDS:-60}"; }
+smoke() { timeout 120 python3 "$stage/smoke.py" "$root/.env.secrets" "${RAG_MCP_HEALTH_SECONDS:-60}" "${1:-full}"; }
 rollback() {
   # Override the image explicitly: --no-build/--no-deps also protect embedding.
   docker image tag "$image_before" "$previous_tag" \
     && "${compose[@]}" -f "$stage/rollback.yaml" up -d --no-build --pull never --no-deps mcp \
     && [[ "$(docker inspect --format '{{.Image}}' "$("${compose[@]}" ps -q mcp)")" == "$image_before" ]] \
-    && smoke
+    && smoke basic
 }
 if "${compose[@]}" up -d --build --no-deps mcp >&2; then
   cid="$("${compose[@]}" ps -q mcp)" || cid=""

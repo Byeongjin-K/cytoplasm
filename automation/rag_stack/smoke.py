@@ -36,11 +36,22 @@ def main() -> int:
             print("RAG-MCP-SMOKE-FAIL: health", file=sys.stderr)
             return 1
         time.sleep(1)
-    try:
-        McpMemoryClient(url, key).search_memory("release read-back", limit=1)
-    except (McpFatalError, McpUnreachableError, ValueError):
-        print("RAG-MCP-SMOKE-FAIL: search", file=sys.stderr)
-        return 1
+    client = McpMemoryClient(url, key)
+    # The restored previous image predates the recall arguments, so a rollback is checked with search only.
+    basic = len(sys.argv) > 3 and sys.argv[3] == "basic"
+    checks = (
+        ("search", lambda: client.search_memory("release read-back", limit=1)),
+        ("recall-search", lambda: client.search_memory(
+            "release read-back", limit=1, one_per_note=True, per_note=2, exclude_notes=["release:read-back"],
+        )),
+        ("core-notes", client.core_notes),
+    )
+    for name, check in checks[:1] if basic else checks:
+        try:
+            check()
+        except (McpFatalError, McpUnreachableError, ValueError):
+            print(f"RAG-MCP-SMOKE-FAIL: {name}", file=sys.stderr)
+            return 1
     print("RAG-MCP-SMOKE-PASS", file=sys.stderr)
     return 0
 
