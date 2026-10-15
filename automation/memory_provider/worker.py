@@ -21,7 +21,7 @@ class RecalledNote(TypedDict):
     text: str
 
 
-def format_reference(pack: EvidencePack) -> str:
+def format_reference(pack: EvidencePack, *, excerpt_limit: int = EXCERPT_LIMIT, char_limit: int = CHAR_LIMIT) -> str:
     """Keep complete fences under the cap, including adversarial fence strings."""
     notes: list[RecalledNote] = []
 
@@ -39,16 +39,16 @@ def format_reference(pack: EvidencePack) -> str:
             continue
         note: RecalledNote = {
             "source": f"{item.source_type}:{item.ref}"[:160],
-            "text": item.content[:EXCERPT_LIMIT],
+            "text": item.content[:excerpt_limit],
         }
         notes.append(note)
-        if len(encoded()) > CHAR_LIMIT:
+        if len(encoded()) > char_limit:
             text = note["text"]
             low, high = 0, len(text)
             while low < high:
                 middle = (low + high + 1) // 2
                 note["text"] = text[:middle]
-                if len(encoded()) <= CHAR_LIMIT:
+                if len(encoded()) <= char_limit:
                     low = middle
                 else:
                     high = middle - 1

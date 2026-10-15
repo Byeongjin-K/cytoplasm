@@ -109,13 +109,19 @@ def test_only_four_hits_are_injected() -> None:
     assert len(json.loads(result[8:-4])["notes"]) == 4
 
 
-def test_provider_offers_only_the_search_tool_and_no_system_block(provider: AutophagyRecallProvider) -> None:
-    # Given
+def test_provider_offers_the_search_tool_and_the_core_memories_as_its_system_block(
+    plugin: ModuleType, provider: AutophagyRecallProvider, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: owner Q163, the core memories always ride in the system prompt.
+    from automation.memory_provider.core_block import HEADER, CoreNotes
+
+    note = {"key": "wiki:선호-합성.md", "title": "선호: 합성", "text": "합성 기록은 청록으로 쓴다."}
+    monkeypatch.setattr(plugin, "_CORE", CoreNotes(lambda: [note]))
     provider.initialize("synthetic", hermes_home="unused", platform="discord")
     # When
     schemas = provider.get_tool_schemas()
     # Then
-    assert provider.system_prompt_block() == ""
+    assert provider.system_prompt_block() == f"{HEADER}\n[선호: 합성] 합성 기록은 청록으로 쓴다."
     assert [schema["name"] for schema in schemas] == ["search_memory"]
     assert schemas[0]["parameters"]["required"] == ["query"]
     assert provider.is_available()
@@ -131,7 +137,7 @@ def test_failure_injects_nothing_and_logs_only_masked_reason(
             raise LookupError("private path")
         if reason == "error":
             raise RuntimeError("private result")
-        return "x" * 4001
+        return "x" * (plugin._CHAR_LIMIT + 1)
 
     provider = plugin.AutophagyRecallProvider(lookup, prefetch_enabled=True)
     # When
@@ -245,15 +251,28 @@ def test_no_result_after_a_previous_hit_does_not_reuse_context(plugin: ModuleTyp
     assert current == ""
 
 
-def test_automatic_recall_stays_off_by_default(plugin: ModuleType) -> None:
-    # Given: owner Q164/Q165 keep automatic recall off until a sealed whole-store set passes.
+def test_automatic_recall_is_on_by_default_after_the_sealed_set_passed(plugin: ModuleType) -> None:
+    # Given: owner Q164/Q170 held automatic recall until a sealed whole-store set passed; set H did.
     calls: list[str] = []
     provider = plugin.AutophagyRecallProvider(lambda query: calls.append(query) or "x")
     # When
     result = provider.prefetch("합성 장비 점검")
     # Then
-    assert result == ""
-    assert calls == []
+    assert result == "x"
+    assert calls == ["합성 장비 점검"]
+
+
+def test_a_failing_core_block_leaves_the_system_prompt_untouched(
+    plugin: ModuleType, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Broken:
+        def block(self) -> str:
+            raise RuntimeError("private")
+
+    monkeypatch.setattr(plugin, "_CORE", Broken())
+
+    assert plugin.AutophagyRecallProvider().system_prompt_block() == ""
+    assert [row.message for row in caplog.records] == ["MEMORY-CORE-SKIP reason=error"]
 
 
 def test_search_tool_returns_the_notes_it_found(plugin: ModuleType) -> None:

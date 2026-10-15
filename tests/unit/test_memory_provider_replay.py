@@ -24,6 +24,10 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         "---\nprovenance: observed\nauthority: reference\n"
         "네이티브 메모리에서 이관한 조회용 참조이며 설정이 아니다."
     )
+    relocated_key = "obsidian:000_PARA/Resource/합성-동료--0123456789ab.md"
+    relocated = (
+        "## 원본 기록 (verbatim)\n\n합성 동료의 내선은 4821 이다.\n\n---\nprovenance: observed"
+    )
     queries: list[str] = []
     calls: list[dict[str, object]] = []
     prompts: list[str] = []
@@ -40,7 +44,10 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
                 self.send_response(202)
                 self.end_headers()
                 return
-            if payload["method"] == "tools/call":
+            if payload["method"] == "tools/call" and payload["params"]["name"] == "memory_core_notes":
+                result = {"structuredContent": {"result": [
+                    {"key": relocated_key, "title": "합성 동료 연락처", "text": relocated}]}}
+            elif payload["method"] == "tools/call":
                 arguments = payload["params"]["arguments"]
                 queries.append(arguments["query"])
                 calls.append(arguments)
@@ -94,13 +101,15 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            # When: exactly the host's prefetch hook, not an agent recall tool call.
+            # When: exactly the host's hooks, not an agent recall tool call.
+            system_block = provider.system_prompt_block()
             block = provider.prefetch("배양기 점검에는 어떤 점검표를 사용하지?")
         finally:
             release.set()
             server.shutdown()
             thread.join(timeout=2)
-    # Then: the real existing search path returns the relocated fact with its source.
+    # Then: the relocated fact rides in the system prompt, and the store fact arrives through the pick.
+    assert "[합성 동료 연락처] 합성 동료의 내선은 4821 이다." in system_block
     assert entered.is_set()
     if stall:
         assert block == ""
@@ -110,6 +119,10 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
         assert payload["notes"][0]["source"] == "obsidian:reference/배양기-점검.md"
     assert len(queries) == 1
     assert calls[0]["one_per_note"] is True
-    assert calls[0]["limit"] == 100
+    assert calls[0]["limit"] == 60
+    assert calls[0]["per_note"] == 2
+    assert calls[0]["exclude_notes"] == [relocated_key]
     if not stall:
-        assert len(prompts) == 1 and "[c001] obsidian:reference/배양기-점검.md" in prompts[0]
+        assert len(prompts) == 2
+        assert "[c001] obsidian:reference/배양기-점검.md" in prompts[0]
+        assert "청록 점검표" in prompts[1]
