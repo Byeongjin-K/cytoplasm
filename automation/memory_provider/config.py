@@ -15,6 +15,11 @@ from automation import hermes_memory_config as limits
 ALGORITHM: Final = "hermes-memory-profile-with-recall-v1"
 MARKER: Final = "HERMES-MEMORY-PROFILE"
 PROVIDER: Final = "autophagy_recall"
+RECALL_WAIT_KEY: Final = "recall_wait_seconds"
+# Owner Q173 (2026-10-15 17:49 KST): "기다림을 15초로: 바로 답하는 대화도 받지만 첫 대답이 보통 8초쯤 늦어짐"
+# (replaces the earlier 5 s). Written into memory.recall_wait_seconds by the release and read back by the provider.
+RECALL_WAIT_SECONDS: Final = 15
+_RECALL_WAIT_RANGE: Final = range(1, 61)
 _NAME: Final = re.compile(r"[a-z][a-z0-9_-]{0,99}")
 
 
@@ -22,9 +27,11 @@ _NAME: Final = re.compile(r"[a-z][a-z0-9_-]{0,99}")
 class Profile:
     limits: Mapping[str, int | None]
     provider: str | None
+    recall_wait: int | None = None
 
     def identity(self) -> str:
-        return f"{limits.identity(self.limits)},provider={self.provider or '-'}"
+        wait = "-" if self.recall_wait is None else self.recall_wait
+        return f"{limits.identity(self.limits)},provider={self.provider or '-'},recall_wait={wait}"
 
 
 def read_profile(text: str) -> Profile:
@@ -35,8 +42,15 @@ def read_profile(text: str) -> Profile:
         raise limits.ConfigShapeError("multiple YAML documents are unsupported")
     span = limits._section(lines)
     provider = None
+    recall_wait = None
     if span is not None:
         _, found = limits._children(lines, span)
+        if RECALL_WAIT_KEY in found:
+            child = limits._CHILD.match(lines[found[RECALL_WAIT_KEY]])
+            raw = limits._value(child[3]) if child else ""
+            if not limits._INT.fullmatch(raw) or int(raw) not in _RECALL_WAIT_RANGE:
+                raise limits.ConfigShapeError(f"memory.{RECALL_WAIT_KEY} is not 1-60 seconds")
+            recall_wait = int(raw)
         if "provider" in found:
             child = limits._CHILD.match(lines[found["provider"]])
             indent = len(child[1]) if child else 0
@@ -51,11 +65,20 @@ def read_profile(text: str) -> Profile:
                 provider = limits._value(raw)
                 if not _NAME.fullmatch(provider):
                     raise limits.ConfigShapeError("memory.provider is not a provider name")
-    return Profile(MappingProxyType(values), provider)
+    return Profile(MappingProxyType(values), provider, recall_wait)
+
+
+def recall_wait_seconds(hermes_home: str | Path) -> float:
+    """The configured wait; the declared default when the account config does not say or cannot be read."""
+    try:
+        found = read_profile((Path(hermes_home) / "config.yaml").read_text(encoding="utf-8")).recall_wait
+    except (OSError, UnicodeError, limits.ConfigShapeError):
+        found = None
+    return float(RECALL_WAIT_SECONDS if found is None else found)
 
 
 def wanted_identity() -> str:
-    return Profile(limits.LIMITS, PROVIDER).identity()
+    return Profile(limits.LIMITS, PROVIDER, RECALL_WAIT_SECONDS).identity()
 
 
 def apply_profile(text: str) -> str:
@@ -63,7 +86,8 @@ def apply_profile(text: str) -> str:
     before = read_profile(text)
     if before.identity() == wanted_identity():
         return text
-    return limits.apply_memory_values(text, {**limits.LIMITS, "provider": PROVIDER})
+    return limits.apply_memory_values(
+        text, {**limits.LIMITS, "provider": PROVIDER, RECALL_WAIT_KEY: RECALL_WAIT_SECONDS})
 
 
 def main(argv: Sequence[str] | None = None, *, home: Path | None = None) -> int:

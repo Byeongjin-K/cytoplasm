@@ -4,8 +4,8 @@ Owner Q163/Q170 (2026-10-15): the core memories (39 personal notes and 28 digest
 the system prompt, and each turn the rest of the store is searched up to three times, shortlisted
 and confirmed by the account's main model (`automation.knowledge.pick`; sealed set H: found 59/69,
 wrong-only 3/69, unrelated empty 45/45). The pick runs in the background; the turn waits for it
-at most the owner's 5 s (2026-10-14) and otherwise starts at once, and the ``llm_request``
-middleware attaches the result at the next model call of the same turn. Native memory and sync
+at most `memory.recall_wait_seconds` (owner Q173: 15 s) and otherwise starts at once, and the
+``llm_request`` middleware attaches the result at the next model call of the same turn. Native memory and sync
 hooks are untouched.
 """
 from __future__ import annotations
@@ -21,9 +21,9 @@ from typing import Any, Final
 from agent.memory_provider import MemoryProvider
 
 from automation.memory_provider.attach import Recall, attach, claim_turn
+from automation.memory_provider.config import recall_wait_seconds
 from automation.memory_provider.core_block import CoreNotes
 
-_WAIT_SECONDS: Final = 5.0  # owner 2026-10-14: "2초보다 더 길게 해야하는거 아니야?"
 _PICK_TIMEOUT_SECONDS: Final = 30.0
 _CHAR_LIMIT: Final = 8000  # 4,000 raw characters of passages plus JSON escaping
 _QUERY_LIMIT: Final = 2000
@@ -143,7 +143,7 @@ def request_middleware(*, request: dict[str, Any], **context: Any) -> dict[str, 
 
 class AutophagyRecallProvider(MemoryProvider):
     def __init__(
-        self, lookup: Lookup = pick_reference, wait_seconds: float = _WAIT_SECONDS, *,
+        self, lookup: Lookup = pick_reference, wait_seconds: float | None = None, *,
         prefetch_enabled: bool = PREFETCH_ENABLED, search: Search = search_reference,
     ) -> None:
         self._lookup = lookup
@@ -170,6 +170,8 @@ class AutophagyRecallProvider(MemoryProvider):
     def initialize(self, session_id: str, **kwargs: str) -> None:
         """No store or conversation writes; Hermes' prefetch passes no session id, so keep it here."""
         self._session_id = session_id
+        if self._wait_seconds is None:
+            self._wait_seconds = recall_wait_seconds(kwargs.get("hermes_home") or os.path.expanduser("~/.hermes"))
 
     def on_session_switch(self, new_session_id: str, **kwargs: object) -> None:
         with _RECALLS_LOCK:
@@ -204,7 +206,8 @@ class AutophagyRecallProvider(MemoryProvider):
         threading.Thread(
             target=_resolve, args=(recall, self._lookup), daemon=True, name="autophagy-recall",
         ).start()
-        if recall.done.wait(self._wait_seconds):
+        wait = self._wait_seconds if self._wait_seconds is not None else recall_wait_seconds(os.path.expanduser("~/.hermes"))
+        if recall.done.wait(wait):
             recall.delivered = True
             return recall.block
         _LOGGER.info("MEMORY-RECALL-DEFER")

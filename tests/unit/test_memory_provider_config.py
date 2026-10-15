@@ -28,7 +28,7 @@ def test_profile_sets_caps_and_provider_in_one_mapping(text: str) -> None:
     # Then: use the YAML parser Hermes uses, not only the writer's own reader.
     parsed = yaml.safe_load(result)
     assert parsed["memory"] == {**before.get("memory", {}), **hermes_memory_config.LIMITS,
-                                "provider": config.PROVIDER}
+                                "provider": config.PROVIDER, config.RECALL_WAIT_KEY: config.RECALL_WAIT_SECONDS}
     assert {k: v for k, v in parsed.items() if k != "memory"} == {
         k: v for k, v in before.items() if k != "memory"}
     assert config.apply_profile(result) == result
@@ -105,7 +105,7 @@ def test_real_config_observer_detects_provider_drift(tmp_path: Path, enabled: bo
     facts = deploy_all_config.observe_config(decl, _REPO, runner)
     # Then
     assert facts[2] == ("ok" if enabled else "stale")
-    assert facts[3] == (() if enabled else (("different-provider", "-"),))
+    assert facts[3] == (() if enabled else (("different-provider", "-"), ("different-recall_wait", "-")))
     assert hermes_soul_recall.ALGORITHM in deploy_all_observe._CONFIG_MODULES
     assert hermes_memory_config.ALGORITHM in deploy_all_observe._CONFIG_MODULES
 
@@ -145,7 +145,8 @@ def test_shared_converge_helper_runs_apply_and_check(tmp_path: Path) -> None:
     # Then
     assert result.returncode == 0, result.stdout + result.stderr
     assert yaml.safe_load((root / "config.yaml").read_text())["memory"] == {
-        **hermes_memory_config.LIMITS, "provider": config.PROVIDER, "nudge_interval": 10}
+        **hermes_memory_config.LIMITS, "provider": config.PROVIDER, "nudge_interval": 10,
+        config.RECALL_WAIT_KEY: config.RECALL_WAIT_SECONDS}
 
 
 def test_nested_provider_is_refused_before_writing(tmp_path: Path) -> None:
