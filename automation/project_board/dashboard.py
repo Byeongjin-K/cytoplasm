@@ -329,7 +329,28 @@ def _fold(key: str, title: str, count: int, body: str, *, cls: str = "fold sect"
     )
 
 
-def _summary(snapshot: BoardSnapshot, today: date) -> str:
+def _fresh_in_shelf(full: BoardSnapshot, shelf: tuple[ProjectView, ...]) -> dict[str, int]:
+    """Todos approved into a project after it was archived — counted, so archiving never hides new work silently."""
+    counts = {view.name: sum(1 for t in full.todos if t.project == view.name and t.approved_at > view.archived_at)
+              for view in shelf}
+    return {name: count for name, count in counts.items() if count}
+
+
+def _fresh_notice(fresh: dict[str, int]) -> str:
+    if not fresh:
+        return ""
+    items = "".join(
+        f'<li><a href="{escape(project_href(name), quote=True)}">{escape(name)}</a> · 새 할 일 {count}건</li>'
+        for name, count in fresh.items()
+    )
+    return (
+        '<div class="card pending" style="margin-top:12px"><b>보관한 프로젝트에 새 할 일</b>'
+        '<p class="note">보관 뒤 승인된 할 일입니다 — 필요하면 프로젝트 화면에서 「보관 해제」하세요.</p>'
+        f'<ul class="small">{items}</ul></div>'
+    )
+
+
+def _summary(snapshot: BoardSnapshot, today: date, fresh: dict[str, int] | None = None) -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
@@ -368,7 +389,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         projects = f'<h3>프로젝트 <span class="small muted">— 눌러서 그 프로젝트만 보기</span></h3><div class="grid">{cards}</div>'
     return (
         '<section id="summary" data-tab="summary"><h2>요약</h2>'
-        f'<div class="chips">{chips}</div>{pending}{projects}{withheld}'
+        f'<div class="chips">{chips}</div>{pending}{_fresh_notice(fresh or {})}{projects}{withheld}'
         f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
     )
 
@@ -539,9 +560,6 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
     return f'<section id="sources" data-tab="sources"><h2>근거</h2>{hint}{body}</section>'
 
 
-_ARCHIVE_KINDS: Final = frozenset({"archive", "unarchive"})
-
-
 def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
     if not snapshot.events:
         return ""
@@ -549,9 +567,9 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
              "archive": "보관", "unarchive": "보관 해제"}
 
     def detail(event: EventRow) -> str:
-        # who archived is a login; the file copy may be mailed out, so it says only that it happened
-        hidden = mode == "file" and event.kind in _ARCHIVE_KINDS
-        return "" if hidden else f" · {escape(event.detail)}"
+        text = f" · {escape(event.detail)}" if event.detail else ""
+        # who acted is a login; the file copy may be mailed out, so only the owner's screen shows it
+        return text + (f" · {escape(event.actor)}" if mode == "served" and event.actor else "")
 
     items = "".join(
         f'<li><span class="muted">{escape(_kst(e.at))}</span> · {kinds.get(e.kind, escape(e.kind))} · '
@@ -567,16 +585,18 @@ def _archived_line(view: ProjectView, mode: Mode) -> str:
     return f"보관 {escape(_kst(view.archived_at))}{who}"
 
 
-def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date) -> str:
+def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dict[str, int] | None = None) -> str:
     """보관함: archived projects only. Their todos and evidence are kept and open from the card."""
     note = (
         '<p class="note" style="margin-bottom:12px">보관한 프로젝트는 요약·프로젝트·할 일·일정·근거와 프로젝트 고르기에 나오지 않습니다. '
         "할 일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.</p>"
     )
-    cards = "".join(
-        _project_card(view, today, f'<div class="small muted" style="margin-top:4px">{_archived_line(view, mode)}</div>')
-        for view in shelf
-    )
+    def line(view: ProjectView) -> str:
+        count = (fresh or {}).get(view.name, 0)
+        flag = f' <span class="badge d-soon">보관 뒤 새 할 일 {count}</span>' if count else ""
+        return f'<div class="small muted" style="margin-top:4px">{_archived_line(view, mode)}{flag}</div>'
+
+    cards = "".join(_project_card(view, today, line(view)) for view in shelf)
     body = f'<div class="grid">{cards}</div>' if cards else '<div class="card empty">보관한 프로젝트가 없습니다.</div>'
     return f'<section id="archive" data-tab="archive"><h2>보관함</h2>{note}{body}</section>'
 
@@ -650,6 +670,7 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
         sources=tuple(s for s in full.sources if s.project not in hidden),
         events=tuple(e for e in full.events if e.project not in hidden),
     )
+    fresh = _fresh_in_shelf(full, shelf)
     empty = ""
     if not snapshot.todos and not snapshot.pending:
         empty = (
@@ -667,7 +688,7 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"{meta}<title>프로젝트 대시보드</title><style>{_CSS}</style></head><body>"
         f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_NAV}</nav></div></header><main>'
-        f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
-        f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today)}{_events(snapshot, mode)}{pages}</main>"
+        f"{empty}{_summary(snapshot, today, fresh)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
+        f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
         f"<script>{scripts}</script></body></html>"
     )

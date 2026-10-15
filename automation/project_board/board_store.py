@@ -133,6 +133,8 @@ def _migrate(connection: sqlite3.Connection) -> None:
     if "archived_at" not in project_columns:
         connection.execute("ALTER TABLE projects ADD COLUMN archived_at TEXT NOT NULL DEFAULT ''")
         connection.execute("ALTER TABLE projects ADD COLUMN archived_by TEXT NOT NULL DEFAULT ''")
+    if "actor" not in {row[1] for row in connection.execute("PRAGMA table_info(events)")}:
+        connection.execute("ALTER TABLE events ADD COLUMN actor TEXT NOT NULL DEFAULT ''")
 
 
 def utc_stamp(now: datetime | None = None) -> str:
@@ -257,6 +259,7 @@ class BoardStore:
         progress: int | None = None,
         note: str | None = None,
         now: datetime | None = None,
+        by: str = "",
     ) -> TodoRow:
         if status is not None and status not in STATUSES:
             raise ProjectBoardError(f"status must be one of {', '.join(STATUSES)}")
@@ -285,8 +288,8 @@ class BoardStore:
             if note:
                 detail += f" · {new_note}"
             db.execute(
-                "INSERT INTO events (at, todo_id, project, kind, detail) VALUES (?, ?, ?, ?, ?)",
-                (stamp, todo_id, str(row["project"]), "progress", detail),
+                "INSERT INTO events (at, todo_id, project, kind, detail, actor) VALUES (?, ?, ?, ?, ?, ?)",
+                (stamp, todo_id, str(row["project"]), "progress", detail, _who(by)),
             )
             db.execute(
                 "UPDATE projects SET updated_at = ? WHERE name = ?", (stamp, str(row["project"]))
@@ -301,7 +304,7 @@ class BoardStore:
         project row while it is archived, and every change is also an event.
         """
         stamp = utc_stamp(now)
-        who = " ".join(by.split())[:120] or "알 수 없음"
+        who = _who(by) or "알 수 없음"
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute("SELECT archived_at FROM projects WHERE name = ?", (project,)).fetchone()
@@ -314,8 +317,8 @@ class BoardStore:
                 (stamp if archived else "", who if archived else "", project),
             )
             db.execute(
-                "INSERT INTO events (at, todo_id, project, kind, detail) VALUES (?, ?, ?, ?, ?)",
-                (stamp, "", project, "archive" if archived else "unarchive", who),
+                "INSERT INTO events (at, todo_id, project, kind, detail, actor) VALUES (?, ?, ?, ?, ?, ?)",
+                (stamp, "", project, "archive" if archived else "unarchive", "", who),
             )
         return True
 
@@ -391,7 +394,8 @@ class BoardStore:
                 for row in db.execute("SELECT * FROM sources ORDER BY approved_at DESC").fetchall()
             )
             events = tuple(
-                EventRow(str(r["at"]), str(r["todo_id"]), str(r["project"]), str(r["kind"]), str(r["detail"]))
+                EventRow(str(r["at"]), str(r["todo_id"]), str(r["project"]), str(r["kind"]), str(r["detail"]),
+                         str(r["actor"]))
                 for r in db.execute("SELECT * FROM events ORDER BY id DESC LIMIT 30").fetchall()
             )
             projects = db.execute("SELECT * FROM projects ORDER BY name").fetchall()
@@ -428,6 +432,11 @@ class BoardStore:
             archived=tuple(view for view in views if view.archived_at), todos=todos,
             sources=sources, events=events, pending=pending, withheld=withheld,
         )
+
+
+def _who(by: str) -> str:
+    """The dashboard's identity of whoever acted, one line, bounded."""
+    return " ".join(by.split())[:120]
 
 
 def _todo(row: sqlite3.Row) -> TodoRow:

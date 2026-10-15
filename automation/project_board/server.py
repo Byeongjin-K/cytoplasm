@@ -74,6 +74,11 @@ class _Handler(BaseHTTPRequestHandler):
         login = self.headers.get(IDENTITY_HEADER)
         return login is not None and login.strip().lower() in self.tailnet_logins
 
+    def _actor(self) -> str:
+        """Who acted, recorded on every check and archive: the tailnet login, else the node-local address."""
+        login = self.headers.get(IDENTITY_HEADER) if self._via_tailnet() else None
+        return login.strip().lower() if login else f"노드 로컬 접속({self.client_address[0]})"
+
     def _tokenless(self) -> bool:
         """An allowlisted tailnet login stands in for the token unless the config asks for both."""
         return not self.tailnet_token and self._via_tailnet() and self._identity_ok()
@@ -202,15 +207,13 @@ class _Handler(BaseHTTPRequestHandler):
         act(parts[1], form)
 
     def _archive(self, project: str, form: dict[str, list[str]]) -> None:
-        """보관 / 보관 해제 — the same authority as a progress tick; who is the tailnet login, else the token holder."""
+        """보관 / 보관 해제 — the same authority and the same recorded identity as a progress tick."""
         value = form.get("archived", [""])[0]
         if value not in ("0", "1"):
             self._text(400, "archived must be 0 or 1")
             return
-        login = self.headers.get(IDENTITY_HEADER) if self._via_tailnet() else None
-        who = login.strip().lower() if login else "로컬 대시보드(토큰)"
         try:
-            changed = self.store.set_archived(project, value == "1", by=who)
+            changed = self.store.set_archived(project, value == "1", by=self._actor())
         except ProjectBoardError as error:
             self._text(400, str(error))
             return
@@ -228,7 +231,7 @@ class _Handler(BaseHTTPRequestHandler):
             if status is not None and status not in STATUSES:
                 raise ProjectBoardError(f"status must be one of {', '.join(STATUSES)}")
             progress = int(raw_progress) if raw_progress else None
-            todo = self.store.record_progress(todo_id, status=status, progress=progress)
+            todo = self.store.record_progress(todo_id, status=status, progress=progress, by=self._actor())
         except (ProjectBoardError, ValueError) as error:
             self._text(400, str(error))
             return

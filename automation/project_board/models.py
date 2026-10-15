@@ -243,6 +243,7 @@ class EventRow:
     project: str
     kind: str
     detail: str
+    actor: str = ""
 
 
 @dataclass(frozen=True, slots=True)

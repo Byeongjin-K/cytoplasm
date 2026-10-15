@@ -28,6 +28,9 @@ from automation.project_board.server import make_server
 TODAY = date(2026, 10, 15)
 TOKEN = "t" * 40
 NOW = datetime(2026, 10, 15, 6, 30, tzinfo=UTC)
+SEEDED = datetime(2026, 10, 15, 5, 0, tzinfo=UTC)
+ORIGIN = "https://board-host.example-tailnet.ts.net:8810"
+OWNER = "owner@example.com"
 
 
 def _store(tmp_path: Path) -> BoardStore:
@@ -37,7 +40,7 @@ def _store(tmp_path: Path) -> BoardStore:
         store.apply_proposal(pid, proposal_from_dict({
             "project": project, "summary": "요약", "todos": [{"title": title, "due": "2026-10-20"}],
             "source": {"kind": "mail", "source_id": f"{pid}-u", "subject": f"{project} 메일"},
-        }), message_id=pid)
+        }), message_id=pid, now=SEEDED)
     return store
 
 
@@ -79,6 +82,40 @@ def test_archive_is_a_recorded_mark_and_unarchive_brings_it_back(tmp_path: Path)
     assert not back.archived and "가상과제 베타" in [view.name for view in back.projects]
     with pytest.raises(ProjectBoardError):
         store.set_archived("없는 과제", True, by="owner@example.com")
+
+
+def test_work_approved_after_archiving_is_flagged_not_hidden(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.set_archived("가상과제 감마", True, by=OWNER)
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN)
+    assert "보관한 프로젝트에 새 할 일" not in page
+    store.apply_proposal("pb-9", proposal_from_dict({
+        "project": "가상과제 감마", "summary": "요약", "todos": [{"title": "보관 뒤 요청"}, {"title": "하나 더"}],
+        "source": {"kind": "mail", "source_id": "pb-9-u", "subject": "다시 온 메일"},
+    }), message_id="pb-9", now=datetime(2099, 1, 1, tzinfo=UTC))
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN)
+    summary = _section(page, "summary")
+    assert "보관한 프로젝트에 새 할 일" in summary and "가상과제 감마</a> · 새 할 일 2건" in summary
+    assert "보관 뒤 새 할 일 2" in _section(page, "archive")
+    assert "보관 뒤 요청" not in _section(page, "todos")  # still archived: the owner decides
+
+
+def test_the_documented_rollback_leaves_exactly_the_v2_columns(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.set_archived("가상과제 감마", True, by=OWNER)
+    with sqlite3.connect(tmp_path / "board.db") as db:
+        db.executescript(ROLLBACK_SQL)
+        rolled = {t: [r[1] for r in db.execute(f"PRAGMA table_info({t})")] for t in ("projects", "events", "todos")}
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+    with sqlite3.connect(tmp_path / "v2.db") as db:
+        db.executescript(board_store._SCHEMA)
+        db.execute("ALTER TABLE todos ADD COLUMN task_key TEXT NOT NULL DEFAULT ''")
+        v2 = {t: [r[1] for r in db.execute(f"PRAGMA table_info({t})")] for t in ("projects", "events", "todos")}
+    assert rolled == v2
+
+
+ROLLBACK_SQL = (Path(__file__).resolve().parents[2] / "docs" / "guide" / "프로젝트-대시보드.md").read_text(
+    encoding="utf-8").split("```sql\n", 1)[1].split("```", 1)[0]
 
 
 def test_the_file_copy_does_not_carry_who_archived(tmp_path: Path) -> None:
@@ -164,4 +201,29 @@ def test_archive_post_needs_the_same_authority_as_a_progress_tick(served: tuple[
     status, body = _post(port, path, "archived=1", {**cookie, "X-PB-Token": TOKEN})
     assert status == 200 and json.loads(body) == {"ok": True, "project": "가상과제 알파", "archived": True, "changed": True}
     [shelved] = store.snapshot(today=TODAY).archived
-    assert shelved.name == "가상과제 알파" and shelved.archived_by == "로컬 대시보드(토큰)"
+    assert shelved.name == "가상과제 알파" and shelved.archived_by == "노드 로컬 접속(127.0.0.1)"
+
+
+
+def test_on_the_tailnet_archive_and_check_record_the_same_tailscale_login(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    server = make_server(
+        host="127.0.0.1", port=0, token=TOKEN, store=store, today=lambda: TODAY, pending=lambda: (),
+        read_source=lambda *a: None, attachment_path=lambda *a: None, on_change=lambda: None,
+        tailnet_origins=(ORIGIN,), tailnet_logins=(OWNER,),
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        port = int(server.server_address[1])
+        tailnet = {"Host": ORIGIN.removeprefix("https://"), "Tailscale-User-Login": "Owner@Example.com", "Origin": ORIGIN}
+        assert _post(port, "/project/" + quote("가상과제 감마", safe=""), "archived=1", tailnet)[0] == 200
+        assert _post(port, "/todo/pb-2-1", "status=" + quote("완료"), tailnet)[0] == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+    snapshot = store.snapshot(today=TODAY)
+    assert snapshot.archived[0].archived_by == OWNER
+    assert {(e.kind, e.actor) for e in snapshot.events if e.kind in ("archive", "progress")} == {("archive", OWNER), ("progress", OWNER)}
+    served = render_dashboard(snapshot, mode="served", token="")
+    assert f"가상과제 알파 · 열림→완료 0→100% · {OWNER}" in served
+    assert OWNER not in render_dashboard(snapshot, mode="file")
