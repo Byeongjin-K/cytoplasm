@@ -134,6 +134,27 @@ checkout_mirror_release_converging() {
   (( now - drift < grace ))
 }
 
+# Is origin/main ahead only by commits nobody has released yet? 0 = backlog, 1 = not proven.
+#
+# Since merges stopped cutting tags (VA-3), main runs ahead of the release between every
+# merge and the next owner-approved release. The reconciler takes its backlog path only
+# when the runtime already IS the latest signed release, records skip_reason=
+# "release-backlog", and keeps drift_since at the episode start so its own 3-day digest
+# can age. Reading that drift_since as convergence drift graded every backlog older than
+# the grace `release-stale`: one repair card collected 711 such ticks, hours after each
+# merge, for a node running exactly the release the owner approved. The same freshness
+# rule as the grace applies — a file the timer stopped writing proves nothing.
+checkout_mirror_release_backlog() {
+  local state="${HEALTHCHECK_RECONCILE_STATE:?HEALTHCHECK_RECONCILE_STATE must be resolved by the caller}"
+  local grace="${HEALTHCHECK_RECONCILE_GRACE:-600}" now written reason
+  [[ -r "$state" ]] || return 1
+  now="$(date +%s)"
+  written="$(stat -c %Y "$state" 2>/dev/null)" || return 1
+  (( now - written < grace )) || return 1
+  reason="$(python3 -I -c 'import json,sys;v=json.load(open(sys.argv[1])).get("skip_reason");print(v if isinstance(v,str) else "")' "$state" 2>/dev/null)" || return 1
+  [[ "$reason" == "release-backlog" ]]
+}
+
 checkout_mirror_behind_grade() { # checkout_mirror_behind_grade <checkout-path>
   local checkout="$1" release remote
   release="$(checkout_mirror_release_sha)"
@@ -153,6 +174,10 @@ checkout_mirror_behind_grade() { # checkout_mirror_behind_grade <checkout-path>
   if [[ "$release" != "$remote" ]]; then
     if checkout_mirror_release_converging; then
       checkout_mirror_log "RELEASE-CONVERGING-WARN: prod is catching up to origin/main; the reconciler has not called it an incident"
+      return 0
+    fi
+    if checkout_mirror_release_backlog; then
+      checkout_mirror_log "RELEASE-BACKLOG-WARN: prod runs the latest release $release; origin/main $remote has unreleased commits"
       return 0
     fi
     checkout_mirror_log "release-stale: prod runs $release, origin/main is $remote"
@@ -189,6 +214,10 @@ checkout_release_origin_grade() { # checkout_release_origin_grade <checkout-path
   fi
   if checkout_mirror_release_converging; then
     checkout_mirror_log "RELEASE-CONVERGING-WARN: prod is catching up to origin/main"
+    return 0
+  fi
+  if checkout_mirror_release_backlog; then
+    checkout_mirror_log "RELEASE-BACKLOG-WARN: prod runs the latest release $release; origin/main $remote has unreleased commits"
     return 0
   fi
   if [[ "${RELEASE_STALE_PROBE_ENFORCE:-0}" == "1" ]]; then

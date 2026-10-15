@@ -327,7 +327,11 @@ def test_a_live_release_never_softens_dirty_or_ahead(tmp_path: Path) -> None:
 # land.sh side — deciding it a second time here would only move it.
 # --------------------------------------------------------------------------- #
 def _reconcile_state(
-    tmp_path: Path, *, drift_since: float | None, written_ago: float = 0.0
+    tmp_path: Path,
+    *,
+    drift_since: float | None,
+    written_ago: float = 0.0,
+    skip_reason: str | None = None,
 ) -> Path:
     """The reconciler's own state file, with a controlled write time."""
     state = tmp_path / "reconcile-state.json"
@@ -339,6 +343,7 @@ def _reconcile_state(
                 "notified_target": None,
                 "pending_notice": None,
                 "incident_open": False,
+                "skip_reason": skip_reason,
             }
         ),
         encoding="utf-8",
@@ -428,6 +433,58 @@ def test_an_unreadable_reconciler_state_fails_closed(tmp_path: Path) -> None:
     checkout, release = _stale_release(tmp_path)
 
     result = _probe(tmp_path, checkout, release=release)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "release-stale" in (result.stdout + result.stderr)
+
+
+def test_an_unreleased_backlog_is_a_warning_not_a_stale_release(tmp_path: Path) -> None:
+    """Merged-but-unreleased commits are a release backlog, not prod running stale code.
+
+    Since merges stopped cutting tags, main is ahead of the release between every merge
+    and the next owner-approved release. The reconciler records exactly that as
+    ``skip_reason=release-backlog`` — it only takes that path when the runtime already is
+    the latest signed release — and keeps ``drift_since`` at the episode start. Grading
+    it ``release-stale`` once that start is older than the grace opened a repair ticket
+    every five minutes for hours after each merge (711 such ticks on one card).
+    """
+    checkout, release = _stale_release(tmp_path)
+    state = _reconcile_state(
+        tmp_path, drift_since=time.time() - 6 * 3600, skip_reason="release-backlog"
+    )
+
+    result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PROBE-PASS" in result.stdout
+    assert "RELEASE-BACKLOG-WARN" in (result.stdout + result.stderr)
+
+
+def test_a_backlog_reported_by_a_silent_reconciler_still_fails(tmp_path: Path) -> None:
+    """The backlog word is only as good as the tick that wrote it: a stale file is no proof
+    that prod still runs the latest release."""
+    checkout, release = _stale_release(tmp_path)
+    state = _reconcile_state(
+        tmp_path,
+        drift_since=time.time() - 6 * 3600,
+        written_ago=1200,
+        skip_reason="release-backlog",
+    )
+
+    result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "release-stale" in (result.stdout + result.stderr)
+
+
+def test_another_skip_reason_past_the_grace_still_fails(tmp_path: Path) -> None:
+    """Only the backlog verdict is a warning; any other reconciler reason keeps the alarm."""
+    checkout, release = _stale_release(tmp_path)
+    state = _reconcile_state(
+        tmp_path, drift_since=time.time() - 1200, skip_reason="converge-failed"
+    )
+
+    result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert "release-stale" in (result.stdout + result.stderr)
