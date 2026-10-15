@@ -97,3 +97,52 @@ def test_default_search_still_asks_qdrant_for_exactly_the_limit(
         "conversation:chat-a#c0001", "conversation:chat-a#c0002",
     ]
     assert client.bodies[-1]["limit"] == _DEFAULT_LIMIT
+
+
+@pytest.mark.parametrize("per_note", [1, 2, 3])
+def test_passages_are_grouped_in_note_and_pool_order(
+    monkeypatch: pytest.MonkeyPatch, per_note: int,
+) -> None:
+    # Given: interleaved notes, including later passages after the note limit is reached.
+    store, _ = _store(monkeypatch, _responses(
+        _point("wiki:a#c0002", 0.9), _point("note:b#c0001", 0.8),
+        _point("note:outside#c0000", 0.7), _point("wiki:a#c0000", 0.6),
+        _point("note:b#c0000", 0.5), _point("wiki:a#c0001", 0.4),
+        _point("wiki:a#c0003", 0.3),
+    ))
+    # When: limit counts notes rather than passages.
+    results = asyncio.run(store.search("query", 2, one_per_note=True, per_note=per_note))
+    # Then: note order follows first score, and passages keep score rather than source order.
+    assert [row.source for row in results] == (
+        ["wiki:a#c0002", "wiki:a#c0000", "wiki:a#c0001"][:per_note]
+        + ["note:b#c0001", "note:b#c0000"][:per_note]
+    )
+
+
+def test_excluded_notes_do_not_consume_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: the highest-scoring note is excluded by its exact normalized key.
+    store, _ = _store(monkeypatch, _responses(
+        _point("wiki:skip#c0000", 0.9), _point("wiki:skip#c0001", 0.8),
+        _point("wiki:keep#c0000", 0.7), _point("note:keep#c0000", 0.6),
+    ))
+    # When: two notes are requested.
+    results = asyncio.run(store.search(
+        "query", 2, one_per_note=True, exclude_notes=["wiki:skip"],
+    ))
+    # Then: both non-excluded notes are returned.
+    assert [row.source for row in results] == ["wiki:keep#c0000", "note:keep#c0000"]
+
+
+def test_explicit_defaults_preserve_serialized_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: the same pool for implicit and explicit defaults.
+    points = [_point("wiki:a#c0001", 0.9), _point("wiki:a#c0000", 0.8)]
+    store, _ = _store(monkeypatch, _responses(*points) + _responses(*points))
+    # When: each call uses today's one-passage-per-note behavior.
+    implicit = asyncio.run(store.search("query", 1, one_per_note=True))
+    explicit = asyncio.run(store.search(
+        "query", 1, one_per_note=True, per_note=1, exclude_notes=[],
+    ))
+    # Then: the complete serialized results are identical.
+    assert [row.model_dump_json() for row in implicit] == [
+        row.model_dump_json() for row in explicit
+    ]

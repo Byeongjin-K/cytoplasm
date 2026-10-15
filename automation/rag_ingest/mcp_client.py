@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol, TypeAlias, cast
 
@@ -180,18 +180,37 @@ class McpMemoryClient:
         entity_anchors: tuple[str, ...] | None = None,
         *,
         one_per_note: bool = False,
+        per_note: int = 1,
+        exclude_notes: Sequence[str] = (),
     ) -> list[dict[str, JsonValue]]:
         arguments: dict[str, JsonValue] = {"query": query, "limit": limit}
         if entity_anchors is not None:
             arguments["entity_anchors"] = list(entity_anchors)
         if one_per_note:
             arguments["one_per_note"] = True
+        if per_note != 1:
+            arguments["per_note"] = per_note
+        if exclude_notes:
+            arguments["exclude_notes"] = list(exclude_notes)
         found = self.call_tool("search_memory", arguments)
         if not isinstance(found, list):
             raise McpFatalError("search_memory returned non-list result")
         if not all(isinstance(item, dict) for item in found):
             raise McpFatalError("search_memory returned malformed items")
         return [cast(dict[str, JsonValue], item) for item in found]
+
+    def core_notes(self) -> list[dict[str, str]]:
+        found = self.call_tool("memory_core_notes", {})
+        if not isinstance(found, list):
+            raise McpFatalError("memory_core_notes returned non-list result")
+        notes: list[dict[str, str]] = []
+        for item in found:
+            if not isinstance(item, dict) or any(
+                not isinstance(item.get(key), str) for key in ("key", "title", "text")
+            ):
+                raise McpFatalError("memory_core_notes returned malformed items")
+            notes.append({key: str(item[key]) for key in ("key", "title", "text")})
+        return notes
 
     def delete_memory(self, document_id: str) -> dict[str, JsonValue]:
         deleted = self.call_tool("delete_memory", {"document_id": document_id})

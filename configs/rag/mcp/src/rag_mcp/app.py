@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import Annotated, ClassVar, override
+from typing import Annotated, ClassVar, Final, override
 
 from fastapi import FastAPI
 from fastmcp import FastMCP
@@ -38,6 +38,7 @@ class HealthResponse(BaseModel):
 
 
 MAX_PASSAGE_LIMIT = 20
+_NO_EXCLUSIONS: Final[list[str]] = []  # Shared schema default, never mutated.
 settings = RagSettings.from_environment()
 memory_store = MemoryStore(settings)
 mcp = FastMCP("personal-memory")
@@ -53,23 +54,37 @@ async def load_memory(
 
 
 @mcp.tool
-async def search_memory(
+async def search_memory(  # noqa: PLR0913 - public MCP tool arguments are separate JSON fields
     query: Annotated[str, Field(min_length=1, max_length=100_000)],
     limit: Annotated[int, Field(ge=1, le=100)] = 5,
     entity_anchors: Annotated[list[str] | None, Field(max_length=20)] = None,
     one_per_note: bool = False,  # noqa: FBT001, FBT002 - MCP tool arguments are named JSON fields
+    per_note: Annotated[int, Field(ge=1, le=3)] = 1,
+    exclude_notes: Annotated[
+        list[Annotated[str, Field(max_length=300)]], Field(max_length=300)
+    ] = _NO_EXCLUSIONS,
 ) -> list[MemorySearchResult]:
     if one_per_note:
         if entity_anchors is not None:
             message = "one_per_note cannot be combined with entity_anchors"
             raise ValueError(message)
-        return await memory_store.search(query, limit, one_per_note=True)
+        return await memory_store.search(
+            query, limit, one_per_note=True, per_note=per_note, exclude_notes=exclude_notes
+        )
+    if per_note != 1 or exclude_notes:
+        message = "per_note > 1 or exclude_notes needs one_per_note=True"
+        raise ValueError(message)
     if limit > MAX_PASSAGE_LIMIT:
         message = f"limit above {MAX_PASSAGE_LIMIT} needs one_per_note"
         raise ValueError(message)
     if entity_anchors is None:
         return await memory_store.search(query, limit)
     return await memory_store.search(query, limit, entity_anchors)
+
+
+@mcp.tool
+async def memory_core_notes() -> list[dict[str, str]]:
+    return await memory_store.core_notes()
 
 
 @mcp.tool
