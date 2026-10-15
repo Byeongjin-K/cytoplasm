@@ -90,7 +90,7 @@ def test_user_turn_recalls_fact_or_returns_empty_at_deadline(
 
         setattr(auxiliary, "call_llm", call_llm)
         monkeypatch.setitem(sys.modules, "agent.auxiliary_client", auxiliary)
-        provider = plugin.AutophagyRecallProvider(wait_seconds=0.3 if stall else 10.0)
+        provider = plugin.AutophagyRecallProvider(wait_seconds=0.3 if stall else 10.0, prefetch_enabled=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

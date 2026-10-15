@@ -109,14 +109,15 @@ def test_only_four_hits_are_injected() -> None:
     assert len(json.loads(result[8:-4])["notes"]) == 4
 
 
-def test_provider_leaves_system_and_tool_surfaces_empty(provider: AutophagyRecallProvider) -> None:
+def test_provider_offers_only_the_search_tool_and_no_system_block(provider: AutophagyRecallProvider) -> None:
     # Given
     provider.initialize("synthetic", hermes_home="unused", platform="discord")
     # When
-    static = provider.system_prompt_block()
+    schemas = provider.get_tool_schemas()
     # Then
-    assert static == ""
-    assert provider.get_tool_schemas() == []
+    assert provider.system_prompt_block() == ""
+    assert [schema["name"] for schema in schemas] == ["search_memory"]
+    assert schemas[0]["parameters"]["required"] == ["query"]
     assert provider.is_available()
 
 
@@ -132,7 +133,7 @@ def test_failure_injects_nothing_and_logs_only_masked_reason(
             raise RuntimeError("private result")
         return "x" * 4001
 
-    provider = plugin.AutophagyRecallProvider(lookup)
+    provider = plugin.AutophagyRecallProvider(lookup, prefetch_enabled=True)
     # When
     result = provider.prefetch("private query")
     # Then
@@ -150,7 +151,7 @@ def test_a_slow_pick_does_not_hold_the_turn_and_attaches_at_the_next_model_call(
         assert release.wait(5)
         return format_reference(pack("합성 장비는 청록 부품을 쓴다."))
 
-    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05)
+    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05, prefetch_enabled=True)
     provider.initialize("s1", hermes_home="unused", platform="discord")
     caplog.set_level("INFO")
     request = {"input": [{"role": "user", "content": "합성 장비 점검"}]}
@@ -180,7 +181,7 @@ def test_a_pending_recall_follows_a_session_switch(plugin: ModuleType) -> None:
         assert release.wait(5)
         return format_reference(pack("합성 장비는 청록 부품을 쓴다."))
 
-    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05)
+    provider = plugin.AutophagyRecallProvider(lookup, wait_seconds=0.05, prefetch_enabled=True)
     provider.initialize("old", hermes_home="unused", platform="discord")
     assert provider.prefetch("합성 장비 점검") == ""
     # When
@@ -198,7 +199,7 @@ def test_a_pending_recall_follows_a_session_switch(plugin: ModuleType) -> None:
 def test_a_fast_pick_is_returned_at_turn_start_and_not_attached_again(plugin: ModuleType) -> None:
     # Given
     block = format_reference(pack("합성 장비는 청록 부품을 쓴다."))
-    provider = plugin.AutophagyRecallProvider(lambda _query: block)
+    provider = plugin.AutophagyRecallProvider(lambda _query: block, prefetch_enabled=True)
     provider.initialize("s3", hermes_home="unused", platform="discord")
     # When
     started = provider.prefetch("합성 장비")
@@ -236,9 +237,64 @@ def test_no_result_after_a_previous_hit_does_not_reuse_context(plugin: ModuleTyp
     # Given
     previous = format_reference(pack("합성 장비는 청록 부품을 쓴다."))
     replies = iter([previous, ""])
-    provider = plugin.AutophagyRecallProvider(lambda _query: next(replies))
+    provider = plugin.AutophagyRecallProvider(lambda _query: next(replies), prefetch_enabled=True)
     assert provider.prefetch("합성 장비") == previous
     # When
     current = provider.prefetch("다른 주제", session_id="another")
     # Then
     assert current == ""
+
+
+def test_automatic_recall_stays_off_by_default(plugin: ModuleType) -> None:
+    # Given: owner Q164/Q165 keep automatic recall off until a sealed whole-store set passes.
+    calls: list[str] = []
+    provider = plugin.AutophagyRecallProvider(lambda query: calls.append(query) or "x")
+    # When
+    result = provider.prefetch("합성 장비 점검")
+    # Then
+    assert result == ""
+    assert calls == []
+
+
+def test_search_tool_returns_the_notes_it_found(plugin: ModuleType) -> None:
+    # Given
+    provider = plugin.AutophagyRecallProvider(search=lambda query: {"query": query, "status": "hit", "notes": [{"source": "wiki:a.md", "text": "A"}]})
+    # When
+    result = json.loads(provider.handle_tool_call("search_memory", {"query": "  송화 어린이집  "}))
+    # Then
+    assert result["query"] == "송화 어린이집"
+    assert result["notes"] == [{"source": "wiki:a.md", "text": "A"}]
+
+
+@pytest.mark.parametrize("args", [{}, {"query": "   "}])
+def test_search_tool_refuses_an_empty_query(plugin: ModuleType, args: dict[str, str]) -> None:
+    provider = plugin.AutophagyRecallProvider(search=lambda _query: {"notes": ["never"]})
+
+    assert json.loads(provider.handle_tool_call("search_memory", args))["status"] == "invalid"
+
+
+def test_search_tool_answers_unavailable_when_the_store_is_down(plugin: ModuleType) -> None:
+    def down(_query: str) -> dict[str, object]:
+        raise LookupError("rag down")
+
+    provider = plugin.AutophagyRecallProvider(search=down)
+
+    assert json.loads(provider.handle_tool_call("search_memory", {"query": "송화"}))["status"] == "unavailable"
+
+
+def test_an_empty_search_retries_once_with_only_the_proper_nouns(plugin: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: the long query finds nothing; the names alone do.
+    asked: list[str] = []
+    block = format_reference(pack("송화는 늘봄 어린이집에 다닌다."))
+
+    def pick(query: str) -> str:
+        asked.append(query)
+        return block if len(asked) == 2 else ""
+
+    monkeypatch.setattr(plugin, "pick_reference", pick)
+    # When
+    result = plugin.search_reference("최근 송화가 다니는 어린이집 이름이 뭐였는지 알려줘")
+    # Then
+    assert len(asked) == 2 and asked[1] != asked[0]
+    assert result["retried_with"] == asked[1]
+    assert result["notes"][0]["text"] == "송화는 늘봄 어린이집에 다닌다."
