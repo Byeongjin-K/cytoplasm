@@ -101,6 +101,8 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
 `--show`·`--check`·`--apply`는 `python3 -m automation.memory_provider.config`의 계약이다.
 재시동 후 실제 질문으로 회상을 확인하는 것은 릴리스 이후 운영 검증이다.
 
+턴 대기 상한은 같은 프로필이 쓰는 `memory.recall_wait_seconds`(15, 형 Q173)다. 값을 바꾸려면
+`automation/memory_provider/config.py` 의 `RECALL_WAIT_SECONDS` 를 고쳐 릴리스한다 — 노드에서 손으로 고치면 다음 수렴이 되돌린다.
 제공자는 RAG 검색 서버의 `search_memory(per_note, exclude_notes)`와 `memory_core_notes`를 쓴다. 이 둘은
 `configs/rag/mcp`에 있으므로 같은 릴리스 ✅ 아래 `automation/rag_stack`이 RAG 노드의 검색(mcp) 컨테이너만 다시
 빌드해야 들어간다(health·인증 검색 확인, 실패 시 이전 이미지로 되돌림, 임베딩은 그대로). 서버가 예전 판이면
