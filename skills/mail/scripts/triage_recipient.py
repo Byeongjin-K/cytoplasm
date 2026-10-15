@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _ADDR = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -75,6 +75,66 @@ def recipient_role(markdown: str, owner: str) -> str:
     if owner_normalized in cc_addresses:
         return "cc"
     return "unknown"
+
+
+_REPLY_PREFIX = re.compile(
+    r"^\s*(?:(?:re|fw|fwd|회신|답장|전달)\s*(?:\[\d+\])?\s*:|\[(?:re|fw|fwd|회신|답장|전달)\])\s*",
+    re.IGNORECASE,
+)
+
+
+_FORWARD_PREFIX = re.compile(r"^\s*(?:(?:fw|fwd|전달)\s*:|\[(?:fw|fwd|전달)\])", re.IGNORECASE)
+
+
+def thread_subject(subject: str) -> str:
+    """Subject without any leading ``Re:``/``FW:``/``[RE]`` chain, whitespace-folded."""
+    text = " ".join(subject.split())
+    while True:
+        stripped = _REPLY_PREFIX.sub("", text, count=1)
+        if stripped == text:
+            return text.lower()
+        text = stripped
+
+
+def _utc(stamp: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def reply_candidates(subject: str, received: str, sent_mails: Iterable[dict]) -> list[dict]:
+    """Owner sent mails in the same thread after ``received``, oldest first.
+
+    Same thread = equal subject once reply/forward prefixes are stripped (the
+    webmail keeps no In-Reply-To header in state.db). A sent mail that is itself
+    a forward (``FW:``) passes the mail on rather than answering it, so it is not
+    a candidate. An unparseable date on either side matches nothing, so the
+    reply flag stays (fail-open).
+    """
+    received_at = _utc(received)
+    key = thread_subject(subject)
+    if received_at is None or not key:
+        return []
+    hits = []
+    for mail in sent_mails:
+        sent_subject = str(mail.get("subject") or "")
+        if _FORWARD_PREFIX.match(sent_subject):
+            continue
+        sent_at = _utc(str(mail.get("date") or ""))
+        if sent_at and sent_at > received_at and thread_subject(sent_subject) == key:
+            hits.append((sent_at, mail))
+    return [mail for _, mail in sorted(hits, key=lambda pair: pair[0])]
+
+
+def addressed_to(markdown: str, sender: str) -> bool:
+    """True when the sender's address is a To or Cc recipient of this mail."""
+    found = _ADDR.findall(sender)
+    if not found:
+        return False
+    to_addresses, cc_addresses = parse_recipients(markdown)
+    return found[-1].lower() in to_addresses + cc_addresses
 
 
 _SUBJECT_STOPWORDS = frozenset({"re", "fw", "fwd"})

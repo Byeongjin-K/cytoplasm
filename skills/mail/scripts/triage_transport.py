@@ -57,6 +57,14 @@ def _list_mails(limit: int, sync: bool) -> list[dict]:
     return list(payload.get("mails") or [])
 
 
+def _sent_mails(limit: int) -> list[dict]:
+    """Recent owner sent mails from state.db (no sync; the inbox sync already ran)."""
+    rc, payload = _wrapper_json(["list", "--all-folders", "--limit", str(limit)])
+    if rc != 0:
+        raise triage_gate.GateError(f"wrapper list(all-folders) 실패 rc={rc}", 4)
+    return [mail for mail in payload.get("mails") or [] if mail.get("folder") == "sent"]
+
+
 def _get_mail(uid: str) -> dict:
     rc, payload = _wrapper_json(["get", uid, "--body"])
     if rc != 0:
