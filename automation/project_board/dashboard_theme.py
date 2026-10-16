@@ -23,7 +23,7 @@ _TOKENS: Final = """
 --header:rgba(246,247,249,.86);
 --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;--s10:40px;
 --r-sm:6px;--r-md:10px;--r-lg:14px;
---t-xs:12px;--t-sm:13px;--t-md:15px;--t-lg:17px;--t-xl:22px;--t-2xl:28px;
+--t-xs:13px;--t-sm:14px;--t-md:15px;--t-lg:17px;--t-xl:22px;--t-2xl:28px;
 --hit:44px;--max:1200px;--ease:cubic-bezier(.2,.7,.2,1)}
 @media (prefers-color-scheme:dark){:root{
 --bg:#0e1014;--surface:#171a20;--surface-2:#1d2129;--line:#2a2f38;--line-strong:#3b414c;
@@ -65,7 +65,7 @@ main>section{margin-top:0}
 h2{font-size:var(--t-xl);line-height:1.3;margin:0;font-weight:700;letter-spacing:-.02em}
 h3{font-size:var(--t-lg);margin:0;font-weight:650}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;margin-bottom:var(--s5)}
-.sub{color:var(--text-3);font-size:var(--t-sm);margin:var(--s1) 0 0}
+.sub{color:var(--text-3);font-size:var(--t-sm);margin:var(--s1) 0 0;max-width:65ch}
 .muted{color:var(--text-3)} .small{font-size:var(--t-sm)}
 .note{font-size:var(--t-sm);color:var(--text-3);margin:var(--s2) 0 0}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s4) var(--s5);box-shadow:var(--shadow)}
@@ -92,11 +92,13 @@ border-radius:var(--r-lg);border:1px solid var(--line)}
 .section-title h3{font-size:var(--t-lg)}
 .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:var(--r-sm);font-size:var(--t-xs);
 font-weight:600;white-space:nowrap;line-height:1.5}
-.d-over,.g-2,.g-3{background:var(--danger-wash);color:var(--danger)}
+.d-over{background:var(--danger-wash);color:var(--danger)}
 .d-soon{background:var(--warn-wash);color:var(--warn)}
-.d-far,.d-none,.g-1,.st-open,.st-held{background:var(--neutral-wash);color:var(--neutral)}
+.d-far,.d-none,.st-open,.st-held{background:var(--neutral-wash);color:var(--neutral)}
+.grade{background:transparent;color:var(--text-2);border:1px solid var(--line-strong);padding:1px 7px}
+.grade .ico{width:13px;height:13px}
 .st-doing{background:var(--accent-wash);color:var(--accent-ink)}
-.st-done,.g-0{background:var(--ok-wash);color:var(--ok)}
+.st-done{background:var(--ok-wash);color:var(--ok)}
 a.pcard{display:flex;flex-direction:column;gap:var(--s2);color:inherit;text-decoration:none;transition:box-shadow .15s var(--ease),border-color .15s var(--ease)}
 a.pcard:hover{border-color:var(--line-strong);box-shadow:var(--shadow-hover);text-decoration:none}
 .pcard-top{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--s3)}
@@ -132,6 +134,7 @@ ul.todos li:first-child{border-top:0}
 li.done .todo-title{text-decoration:line-through;color:var(--text-3);font-weight:500}
 .meta{display:flex;gap:6px var(--s2);flex-wrap:wrap;align-items:center;font-size:var(--t-sm);color:var(--text-2);margin-top:6px}
 .meta .sep{color:var(--line-strong)}
+.due{display:inline-flex;align-items:center;gap:6px}
 .src-link{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;min-height:28px;color:var(--text-3);font-size:var(--t-sm);margin-top:2px}
 .src-link .ico{width:15px;height:15px}
 .src-link span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -158,6 +161,8 @@ a.title:hover{color:var(--accent-ink)}
 .events{list-style:none;margin:0;padding:0}
 .events li{display:flex;gap:var(--s3);padding:var(--s3) 0;border-top:1px solid var(--line);font-size:var(--t-md)}
 .events li:first-child{border-top:0}
+details.more>summary{list-style:none;cursor:pointer;display:flex;align-items:center;min-height:var(--hit);color:var(--accent-ink);font-weight:600;font-size:var(--t-sm)}
+details.more>summary::-webkit-details-marker{display:none}
 .events time{flex:none;width:5.5em;color:var(--text-3);font-size:var(--t-sm);padding-top:2px}
 .events .what{min-width:0}
 .events .who{color:var(--text-3);font-size:var(--t-sm)}
@@ -188,6 +193,7 @@ details.sect{margin-top:var(--s6)}
 details.card{padding-top:var(--s2);padding-bottom:var(--s2)}
 details.card+details.card{margin-top:var(--s3)}
 .cnt{margin-left:2px}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 code{font:var(--t-sm)/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);border:1px solid var(--line);
 border-radius:var(--r-sm);padding:1px 6px;color:var(--text);overflow-wrap:anywhere}
@@ -213,6 +219,12 @@ dialog p{margin:0 0 var(--s3);color:var(--text-2)}
 .notice .ico{width:32px;height:32px;color:var(--text-3)}
 .notice h1{font-size:var(--t-xl);margin:var(--s3) 0 var(--s2)}
 .notice p{color:var(--text-2);margin:0 0 var(--s5)}
+.notice p:last-child{margin-bottom:0}
+.reader h1{font-size:var(--t-xl);margin:0 0 var(--s4)}
+.cmd{margin:var(--s3) 0 0;padding:var(--s3) var(--s4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);overflow-x:auto}
+.cmd code{background:none;border:0;padding:0;white-space:pre}
+.q{white-space:nowrap}
+dialog h2:focus{outline:none}
 .reader{max-width:860px;margin:0 auto;padding:var(--s6) var(--s4) var(--s10)}
 .reader pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:var(--t-md);line-height:1.7;margin:0}
 footer{max-width:var(--max);margin:0 auto;padding:0 var(--s6) var(--s10);color:var(--text-3);font-size:var(--t-sm);display:flex;gap:var(--s2);flex-wrap:wrap}
@@ -232,8 +244,9 @@ nav a .ico{display:block;width:22px;height:22px}
 nav a .badge{position:absolute;top:2px;left:calc(50% + 6px);padding:0 5px;font-size:10px;min-width:16px;justify-content:center}
 nav a .badge+.badge{display:none}
 nav a .badge.d-none{background:var(--neutral);color:var(--surface)}
-main{padding:var(--s5) var(--s4) calc(96px + env(safe-area-inset-bottom))}
-footer{padding:0 var(--s4) calc(88px + env(safe-area-inset-bottom))}
+main{padding:var(--s5) var(--s4) var(--s6)}
+footer{padding:0 var(--s4) calc(80px + env(safe-area-inset-bottom))}
+:root{--t-md:17px;--t-sm:15px}
 .card{padding:var(--s3) var(--s4)}
 .tile{padding:var(--s3) var(--s4)}
 .tile b{font-size:24px}
@@ -266,13 +279,20 @@ _PATHS: Final = {
     "search": '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     "mail": '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
     "paperclip": '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    "lock": '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     "history": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
     "list": '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
 }
 
 
 def icon(name: str) -> str:
-    return f'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">{_PATHS[name]}</svg>'
+    return f'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-{name}"/></svg>'
+
+
+def sprite() -> str:
+    """Every icon defined once; ``icon()`` refers to it, so a long list does not repeat the paths."""
+    symbols = "".join(f'<symbol id="i-{name}" viewBox="0 0 24 24">{paths}</symbol>' for name, paths in _PATHS.items())
+    return f'<svg class="sprite" aria-hidden="true" focusable="false"><defs>{symbols}</defs></svg>'
 
 
 def page_shell(title: str, body: str, brand: str) -> str:
@@ -282,7 +302,7 @@ def page_shell(title: str, body: str, brand: str) -> str:
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'<title>{escape(title)} · {name}</title><link rel="icon" href="{favicon(brand)}"><style>{CSS}</style></head><body>'
-        f'<header><div class="bar"><a class="brand" href="/">{brand_mark(brand)}{name}</a></div></header>{body}</body></html>'
+        f'{sprite()}<header><div class="bar"><a class="brand" href="/">{brand_mark(brand)}{name}</a></div></header>{body}</body></html>'
     )
 
 

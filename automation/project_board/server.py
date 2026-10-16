@@ -21,6 +21,7 @@ tick a todo through ``tailscale serve``.
 
 from __future__ import annotations
 
+import gzip
 import hmac
 import json
 import logging
@@ -86,6 +87,10 @@ class _Handler(BaseHTTPRequestHandler):
         return not self.tailnet_token and self._via_tailnet() and self._identity_ok()
 
     def _send(self, status: int, body: bytes, content_type: str, extra: dict[str, str] | None = None) -> None:
+        headers = dict(extra or {})
+        if content_type.startswith("text/html") and "gzip" in (self.headers.get("Accept-Encoding") or ""):
+            body = gzip.compress(body, compresslevel=6, mtime=0)
+            headers.update({"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -93,7 +98,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", _CSP)
-        for name, value in (extra or {}).items():
+        for name, value in headers.items():
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
@@ -134,7 +139,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(303, b"", "text/plain", {"Location": parsed.path or "/", "Set-Cookie": cookie})
             return
         if not self._tokenless() and not self._cookie_ok():
-            self._page(401, "로그인이 필요합니다", "처음 한 번은 설치할 때 받은 접속 주소로 열어야 합니다. 그 뒤로는 이 브라우저가 기억합니다.", home=False)
+            self._page(401, "로그인이 필요합니다", "처음 한 번은 설치할 때 받은 접속 주소로 열어야\u00a0합니다. 그 뒤로는 이\u00a0브라우저가 기억합니다.", home=False)
             return
         parts = [unquote(part) for part in parsed.path.split("/") if part]
         if not parts:
@@ -156,11 +161,14 @@ class _Handler(BaseHTTPRequestHandler):
         if text is None:
             self._page(404, "원문을 찾을 수 없습니다", "승인된 근거가 아니거나 원문이 더는 보관되어 있지 않습니다.")
             return
+        first, _, rest = text.partition("\n")
+        heading = first[2:].strip() if first.startswith("# ") else ""
+        title = f"<h1>{escape(heading)}</h1>" if heading else ""
         body = (
             f'<main class="reader"><a class="back" href="/#sources">{icon("chevron-left")}근거 목록</a>'
-            f'<div class="card"><pre>{escape(text)}</pre></div></main>'
+            f'<div class="card">{title}<pre>{escape(rest.strip() if heading else text)}</pre></div></main>'
         )
-        self._send(200, page_shell("원문", body, self.brand).encode("utf-8"), "text/html; charset=utf-8")
+        self._send(200, page_shell(heading or "원문", body, self.brand).encode("utf-8"), "text/html; charset=utf-8")
 
     def _attachment(self, kind: str, source_id: str, name: str) -> None:
         if "/" in name or "\\" in name or ".." in name or not name:

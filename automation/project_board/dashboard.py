@@ -18,7 +18,7 @@ from typing import Final, Literal
 from urllib.parse import quote
 
 from .config import DEFAULT_BRAND
-from .dashboard_theme import CSS, brand_mark, favicon, icon
+from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
 from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
 
 Mode = Literal["served", "file"]
@@ -150,7 +150,7 @@ _TABS_JS: Final = """
     links.forEach(function(a){var n=a.dataset.tab;if(n==='todos'||n==='schedule'){
       a.setAttribute('href','#'+n+(sticky?'?p='+encodeURIComponent(sticky):''));}});
     document.title=page?r.proj+' · '+title:title;
-    var target=hash.indexOf('todo-')===0&&document.getElementById(hash);
+    var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash);
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
   }
   window.addEventListener('hashchange',show);show();
@@ -166,7 +166,7 @@ LOCAL_ACTOR: Final = "노드 로컬 접속"
 
 EMPTY_SECTION: Final = (
     f'<div class="card empty">{icon("inbox")}<b>아직 비어 있습니다</b>'
-    "<p>새 메일과 회의록을 분석한 제안이 승인되면 이곳에 할 일과 일정이 채워집니다.</p></div>"
+    "<p>새 메일과 회의록을 분석한 제안이 승인되면 이곳에 할\u00a0일과 일정이 채워집니다.</p></div>"
 )
 
 _FILTER_JS: Final = """
@@ -194,20 +194,21 @@ _WEEKDAYS: Final = "월화수목금토일"
 
 ONBOARDING: Final = (
     f'<div class="card onboard" data-tab="summary"><div class="onboard-head">{icon("inbox")}<div>'
-    "<b>처음 오셨군요. 대시보드는 승인된 할 일로 채워집니다</b>"
+    "<b>처음 오셨군요. 대시보드는 승인된 할\u00a0일로 채워집니다</b>"
     "<p>세 단계로 데이터가 들어옵니다. 지금은 아무것도 하지 않아도 됩니다.</p></div></div>"
     '<ol class="steps"><li><b>메일과 회의록을 읽습니다</b>'
-    "<span>기관 메일과 확정 회의록에서 할 일, 담당, 마감을 찾아 제안합니다.</span></li>"
+    "<span>기관 메일과 확정 회의록에서 할\u00a0일, 담당, 마감을 찾아 제안합니다.</span></li>"
     "<li><b>승인 카드로 확인합니다</b><span>제안은 승인 카드로 올라오고, 승인 카드에서 승인하면 데이터가 됩니다.</span></li>"
-    "<li><b>여기서 진행을 챙깁니다</b><span>프로젝트별 할 일, 일정, 근거를 보고 체크로 완료를 남깁니다.</span></li></ol>"
-    '<p class="note">실제 데이터 없이 둘러보려면 <code>python3 -m automation.project_board demo</code> 를 실행합니다.</p></div>'
+    "<li><b>여기서 진행을 챙깁니다</b><span>프로젝트별 할\u00a0일, 일정, 근거를 보고 체크로 완료를 남깁니다.</span></li></ol>"
+    '<p class="note">실제 데이터 없이 둘러보려면 이 명령으로 데모 보드를 띄웁니다.</p>'
+    '<pre class="cmd"><code>python3 -m automation.project_board demo</code></pre></div>'
 )
 
 _ARCHIVE_DIALOG: Final = (
     '<dialog id="archive-dialog" aria-labelledby="archive-title"><form method="dialog">'
-    '<h2 id="archive-title">이 프로젝트를 보관할까요?</h2>'
-    '<p>「<b data-name></b>」이(가) 요약, 할 일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
-    "할 일과 근거는 지워지지 않고 프로젝트 화면의 「보관 해제」로 언제든 되돌립니다.</p>"
+    '<h2 id="archive-title" tabindex="-1" autofocus>이 프로젝트를 보관할까요?</h2>'
+    '<p>「<b data-name></b>」이(가) 요약, 할\u00a0일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
+    "할\u00a0일과 근거는 지워지지 않고 프로젝트 화면의 「보관 해제」로 언제든 되돌립니다.</p>"
     '<p class="dialog-error" role="alert"></p>'
     '<div class="dialog-actions"><button class="btn" value="cancel">취소</button>'
     '<button class="btn primary" value="ok" data-confirm>보관하기</button></div></form></dialog>'
@@ -250,6 +251,17 @@ def _ago(stamp: str, now: str) -> str:
     return "어제" if days.days == 1 else f"{days.days}일 전" if days.days < 7 else _md((then + timedelta(hours=9)).date().isoformat())
 
 
+def _keep(text: str) -> str:
+    """Escaped text in which 「할 일」 never breaks across lines (Korean reads it as one word)."""
+    return escape(text).replace("할 일", "할\u00a0일")
+
+
+def _quoted(title: str) -> str:
+    """「title」 kept on one line when short enough to fit any screen; long titles may still wrap."""
+    inner = f"「{_keep(title)}」"
+    return f'<span class="q">{inner}</span>' if len(title) <= 18 else inner
+
+
 def _to(word: str) -> str:
     """The Korean particle 로/으로 after ``word`` (으로 after a final consonant other than ㄹ)."""
     last = word[-1:] or "가"
@@ -290,8 +302,10 @@ def _source_href(mode: Mode, kind: str, source_id: str) -> str | None:
 def _grade_badge(grade: str) -> str:
     """The 업무 security grade; 대외비·기관지정 also say they never leave this screen."""
     css = f"g-{GRADES.index(grade)}" if grade in GRADES else "g-1"
-    hint = " · 외부 비공개" if grade in NEVER_EXPORTED else ""
-    return f'<span class="badge {css}" title="업무 보안 등급">{escape(grade)}{hint}</span>'
+    restricted = grade in NEVER_EXPORTED
+    hint = " · 외부 비공개" if restricted else ""
+    lock = icon("lock") if restricted else ""
+    return f'<span class="badge grade {css}" title="업무 보안 등급">{lock}{escape(grade)}{hint}</span>'
 
 
 def project_href(name: str, tab: str = "project") -> str:
@@ -378,7 +392,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         _tile("alert", "지연", str(overdue), "danger" if overdue else "", "#schedule")
         + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", "#schedule")
         + _tile("activity", "진행 중", str(doing), "info" if doing else "", "#todos")
-        + _tile("inbox", "승인 대기", str(waiting), "info" if waiting else "")
+        + _tile("inbox", "승인 대기", str(waiting), "info" if waiting else "", "#pending" if waiting else "")
     )
     pending = ""
     if snapshot.pending:
@@ -425,7 +439,7 @@ def _project_card(view: ProjectView, today: date, note: str = "") -> str:
     href = escape(project_href(view.name), quote=True)
     return (
         f'<a class="card pcard" href="{href}" data-project="{escape(view.name, quote=True)}">'
-        f'<div class="pcard-top"><b>{escape(view.name)}</b>{icon("chevron-right")}</div>{owner}'
+        f'<div class="pcard-top"><b>{escape(view.name)}<span class="sr-only"> 열기</span></b>{icon("chevron-right")}</div>{owner}'
         f'<div class="meter"><progress class="prog" value="{view.done}" max="{max(view.total, 1)}" '
         f'aria-label="진척 {percent}%"></progress><span>{percent}%</span></div>'
         f'<div class="facts"><span>{view.done}/{view.total} 완료</span>{overdue}</div>'
@@ -451,10 +465,11 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -
     )
     status = f"{todo.status} {todo.progress}%" if todo.status == "진행" else todo.status
     badges = "" if todo.status == "열림" else f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(status)}</span>'
+    due = f"<span>{_md(todo.due)}</span>" if todo.due else ""
     if not done:
         label, css = _dday(todo.due, today)
-        badges += f'<span class="badge {css}">{label}</span>'
-    due = f"<span>{_md(todo.due)}</span>" if todo.due else ""
+        badges += f'<span class="due"><span class="badge {css}">{label}</span>{due}</span>'
+        due = ""
     owner = f"<span>{escape(todo.owner)}</span>" if todo.owner else '<span class="muted">담당 미정</span>'
     href = _source_href(mode, todo.source_kind, todo.source_id)
     subject = escape(todo.source_subject or todo.source_id)
@@ -568,7 +583,7 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_pr
     top += [escape(row.project)] if with_project else []
     return (
         f'<div class="card src-card"><div class="top"><span>{" · ".join(top)}</span>{_grade_badge(row.grade)}</div>'
-        f'{title}<p>{escape(row.summary)}</p>{attachments}'
+        f'{title}<p>{_keep(row.summary)}</p>{attachments}'
         f'<div class="names">{icon("list")}<span>만든 할 일: {todos}</span></div></div>'
     )
 
@@ -601,9 +616,9 @@ _PROGRESS: Final = re.compile(r"^(\S+)→(\S+) (\d+)→(\d+)%(?: · (.*))?$")
 def _event_text(event: EventRow, titles: dict[str, str]) -> str:
     """What happened, as a sentence; a progress record's ``열림→완료 0→100%`` becomes ``… 완료로 바꿈``."""
     title = titles.get(event.todo_id, "")
-    named = f"「{escape(title)}」 " if title else ""
+    named = f"{_quoted(title)} " if title else ""
     if event.kind == "approved":
-        return f"할 일 추가 「{escape(event.detail)}」"
+        return f"할\u00a0일\u00a0추가 {_quoted(event.detail)}"
     if event.kind == "progress":
         match = _PROGRESS.match(event.detail)
         if not match:
@@ -625,15 +640,25 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
         # who acted is a login; the file copy may be mailed out, so only the owner's screen shows it
         return f'<div class="who">{escape(_actor_label(event.actor))}</div>' if mode == "served" and event.actor else ""
 
-    items = "".join(
-        f'<li><time datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
-        f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><b>{escape(e.project)}</b> · "
-        f"{_event_text(e, titles)}{who(e)}</div></li>"
-        for e in sorted(snapshot.events, key=lambda event: event.at, reverse=True)[:8]
+    def row(e: EventRow) -> str:
+        return (
+            f'<li><time datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
+            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><b>{escape(e.project)}</b> · "
+            f"{_event_text(e, titles)}{who(e)}</div></li>"
+        )
+
+    ordered = sorted(snapshot.events, key=lambda event: event.at, reverse=True)
+    first = "".join(row(e) for e in ordered[:8])
+    rest = ordered[8:30]
+    more = (
+        f'<details class="more"><summary>기록 {len(rest)}건 더 보기</summary>'
+        f'<ul class="events">{"".join(row(e) for e in rest)}</ul></details>'
+        if rest
+        else ""
     )
     return (
         '<section id="events" data-tab="summary"><div class="section-title"><h3>최근 기록</h3></div>'
-        f'<div class="card"><ul class="events">{items}</ul></div></section>'
+        f'<div class="card"><ul class="events">{first}</ul>{more}</div></section>'
     )
 
 
@@ -650,8 +675,8 @@ def _archived_line(view: ProjectView, mode: Mode) -> str:
 
 def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dict[str, int] | None = None) -> str:
     """보관함: archived projects only. Their todos and evidence are kept and open from the card."""
-    sub = ("보관한 프로젝트는 요약, 프로젝트, 할 일, 일정, 근거와 프로젝트 고르기에 나오지 않습니다. "
-           "할 일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.")
+    sub = ("보관한 프로젝트는 요약, 프로젝트, 할\u00a0일, 일정, 근거와 프로젝트 고르기에 나오지 않습니다. "
+           "할\u00a0일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.")
 
     def line(view: ProjectView) -> str:
         count = (fresh or {}).get(view.name, 0)
@@ -679,11 +704,12 @@ def _project_page(
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
     owner = f'<span class="small muted">담당 {escape(view.owner)}</span>' if view.owner else ""
+    schedule = escape(project_href(view.name, "schedule"), quote=True)
     tiles = (
-        _tile("alert", "지연", str(overdue), "danger" if overdue else "")
-        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "")
-        + _tile("todos", "완료", f"{view.done}/{view.total}", "")
-        + _tile("inbox", "승인 대기", str(len(pending)), "info" if pending else "")
+        _tile("alert", "지연", str(overdue), "danger" if overdue else "", schedule if not archived else "")
+        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", schedule if not archived else "")
+        + _tile("todos", "완료", f"{view.done}/{view.total}", "", escape(project_href(view.name, "todos"), quote=True) if todos and not archived else "")
+        + _tile("inbox", "승인 대기", str(len(pending)), "info" if pending else "", "#pending" if pending and not archived else "")
     )
     items = "".join(_todo_item(t, mode, today, anchor=False) for t in sorted(todos, key=_todo_order))
     todo_block = f'<div class="card"><ul class="todos">{items}</ul></div>' if items else (
@@ -753,12 +779,12 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", br
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
         f"<style>{CSS}</style></head><body>"
-        '<a class="skip" href="#main">본문으로 건너뛰기</a>'
+        f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
         f'<nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main id="main">'
         f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
         f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
-        f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {escape(snapshot.today)}</span>'
+        f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"
         '<div id="live" class="sr-only" role="status" aria-live="polite"></div>'

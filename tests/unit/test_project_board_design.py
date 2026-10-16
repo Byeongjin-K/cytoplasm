@@ -58,7 +58,7 @@ def test_every_checkbox_sits_in_a_44px_label_and_search_has_a_visible_label(tmp_
 def test_recent_records_read_as_sentences(tmp_path: Path) -> None:
     page = _page(tmp_path, "served")
     events = page.split('<section id="events"', 1)[1].split("</section>", 1)[0]
-    assert "「시험 준비」 진행으로 바꿈" in events and "→" not in events
+    assert "「시험 준비」</span> 진행으로 바꿈" in events and "→" not in events
     assert '<div class="who">owner@example.com</div>' in events
     assert "owner@example.com" not in _page(tmp_path / "f", "file")
 

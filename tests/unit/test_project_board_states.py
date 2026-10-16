@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import http.client
 import json
 import threading
@@ -108,3 +109,27 @@ def test_browser_refusals_are_pages_in_the_product_look_and_the_api_stays_plain(
     assert status == 404 and "첨부 파일을 찾을 수 없습니다" in body
     status, kind, _ = _call(served, "POST", "/todo/pb-1-1", {"Content-Length": "0"})
     assert status == 401 and kind.startswith("text/plain")
+
+
+def test_a_browser_that_accepts_gzip_gets_the_page_compressed(served: int) -> None:
+    conn = http.client.HTTPConnection("127.0.0.1", served, timeout=5)
+    conn.request("GET", "/", headers={"Cookie": f"pb_token={TOKEN}", "Accept-Encoding": "gzip, br"})
+    response = conn.getresponse()
+    raw = response.read()
+    conn.close()
+    assert response.getheader("Content-Encoding") == "gzip" and response.getheader("Vary") == "Accept-Encoding"
+    page = gzip.decompress(raw).decode("utf-8")
+    assert "가상연구소 과제 현황" in page and len(raw) * 3 < len(page.encode("utf-8"))
+
+
+def test_icons_are_defined_once_and_long_records_fold_under_more(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    for _ in range(5):
+        store.record_progress("pb-1-1", status="진행", by="owner@example.com")
+        store.record_progress("pb-1-1", status="열림", by="owner@example.com")
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN)
+    assert page.count('<symbol id="i-mail"') == 1 and '<use href="#i-mail"/>' in page
+    assert "<path" not in page.split("</defs>", 1)[1]
+    events = page.split('<section id="events"', 1)[1].split("</section>", 1)[0]
+    first, more = events.split('<details class="more">', 1)
+    assert first.count("<li>") == 8 and "기록 3건 더 보기" in more and more.count("<li>") == 3
