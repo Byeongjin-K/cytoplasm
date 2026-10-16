@@ -34,7 +34,6 @@ _STATUS: Final = {
 }
 _WORST_FIRST: Final = ("block", "fail", "hold", "warn", "run", "review", "wait", "live", "ok", "done", "ended", "unknown")
 _LANE_ORDER: Final = ("done", "run", "review", "wait", "block", "fail")
-_OPEN_SPAN: Final = {"wait": "대기 중", "block": "막힘"}
 _PEAK: Final = ' class="peak"'
 
 _DEPTS: Final = (
@@ -90,9 +89,16 @@ def _wk(ms: int) -> str:
     return _WEEKDAYS[_at(ms).weekday()]
 
 
-def _span(start: int, end: int | None, ongoing: str = "진행 중") -> str:
+def _started(start: int, end: int | None) -> str:
+    """A lane group's first start (and last end once all ended), with no status word: the badge and the notes say that."""
     if end is None:
-        return f"{_day(start)} {_clock(start)}부터 {ongoing}"
+        return f"{_day(start)} {_clock(start)} 시작"
+    return _span(start, end)
+
+
+def _span(start: int, end: int | None) -> str:
+    if end is None:
+        return f"{_day(start)} {_clock(start)}부터 진행 중"
     a, b = _at(start), _at(end)
     tail = _clock(end) if a.date() == b.date() else (f"{b.day}일 {_clock(end)}" if a.month == b.month else f"{_day(end)} {_clock(end)}")
     return f"{_day(start)} {_clock(start)}부터 {tail}까지"
@@ -149,12 +155,13 @@ def _note(lane: Lane, now: int) -> tuple[str, str, str]:
     """What one waiting or blocked lane waits on, and when, as two short phrases."""
     if lane.st == "block":
         return "block", _plain(lane.why) or "작업이 멈췄습니다", ""
+    # how long it has waited is said here only: since is when the reason was written, i.e. when the lane was parked
     when = []  # each phrase stays on one line on a phone (U+00A0); a line breaks only between phrases
+    if lane.since is not None:
+        when.append(f"{_day(lane.since)} {_clock(lane.since)}부터 대기".replace(" ", "\u00a0"))
     if lane.until is not None:
         when.append(f"{_day(lane.until)} {_clock(lane.until)} 예정".replace(" ", "\u00a0")
                     + (", 시각\u00a0지남" if lane.until < now else ""))
-    if lane.since is not None:
-        when.append(f"{_day(lane.since)} {_clock(lane.since)}에 적은 사유".replace(" ", "\u00a0"))
     what = _WAIT_WORD.sub("", _plain(lane.why), count=1).strip(" ,")
     return "wait", what or "사유를 적지 않았습니다", ", ".join(when)
 
@@ -166,11 +173,9 @@ def _lane_members(lanes: list[Lane], now: int) -> list[_Member]:
     rows = sorted(themes.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     out = []
     for theme, g in rows:
-        open_states = {x.st for x in g if x.end is None}
-        ongoing = next((_OPEN_SPAN[s] for s in ("block", "wait") if open_states == {s}), "진행 중")
         out.append(_Member(
             theme, f"{_n(len(g))}건", _worst(x.st for x in g), _lane_counts(x.st for x in g),
-            _span(min(x.start for x in g), None if any(x.end is None for x in g) else max(x.end or 0 for x in g), ongoing),
+            _started(min(x.start for x in g), None if any(x.end is None for x in g) else max(x.end or 0 for x in g)),
             f"걸린 시간 합계 {_dur(sum(x.dur for x in g))}", "",
             tuple(_note(x, now) for x in sorted(g, key=lambda x: (x.st != "block", x.start)) if x.st in ("wait", "block"))))
     return out

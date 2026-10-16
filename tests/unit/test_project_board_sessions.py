@@ -105,8 +105,12 @@ def test_a_lane_that_waits_reads_as_waiting_with_what_and_when_and_a_stuck_one_a
     panel = _panel(_page(tmp_path, data, now_ms=data.now))
     shown = _text(panel)
     assert "멈춤" not in shown
-    assert "대기 아침 다이제스트 화면 확인 10월 17일 08:00 예정" in shown
-    assert "대기 소유자 승인(✅), v2.4.0 릴리스 카드" in shown and "에 적은 사유" in shown
+    assert re.search(r"대기 아침 다이제스트 화면 확인 10월 16일 \d\d:\d\d부터 대기, 10월 17일 08:00 예정", shown)
+    assert "대기 소유자 승인(✅), v2.4.0 릴리스 카드" in shown
+    # a group's own line is its start, never a status: a lane parked this morning must not read as waiting since the group began
+    starts = re.findall(r'<p class="ss-line">([^<]*)</p>', panel.split('data-kind="lanes"', 1)[1].split('data-kind="agents"', 1)[0])
+    assert starts and all("대기" not in s and "진행 중" not in s for s in starts)
+    assert any(s.endswith(" 시작") for s in starts) and any(s.endswith("까지") for s in starts)
     assert "막힘 작업 창이 오류로 멈췄습니다" in shown
     assert re.search(r"에이전트 운영 \d+건 · 완료 \d+, 진행 \d+, 대기 1", shown)
     assert re.search(r"웹·대시보드 \d+건 · 완료 \d+, 진행 \d+, 막힘 1", shown)
