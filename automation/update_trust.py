@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import hashlib
 import os
 import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, TypeVar
 
@@ -57,10 +60,17 @@ UPDATE_TRUST_PRINCIPAL: Final = "update-trust@autophagy"
 _GIT_TIMEOUT_SECONDS: Final = 120.0
 
 
+#: Rejections that mean "this node's trust file does not name the key that signed it".
+#: Transport and race failures are not here: they say nothing about the key.
+_SIGNATURE_REJECTIONS: Final = frozenset({"BAD-SIGNATURE", "WRONG-PRINCIPAL"})
+_SSH_SIGNATURE: Final = ("-----BEGIN SSH SIGNATURE-----", "-----END SSH SIGNATURE-----")
+
+
 @dataclass(frozen=True, slots=True)
 class UpdateTrustError(Exception):
     prefix: str
     detail: str
+    signer_fingerprint: str = ""
 
     @override
     def __str__(self) -> str:
@@ -68,9 +78,66 @@ class UpdateTrustError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class StaleTrustKey:
+    """A release newer than the one installed whose signature this node cannot verify.
+
+    2026-10-16: a third-party node sat on v1.22.2 for days after the update key rotated,
+    because the resolver skipped every newer tag and returned the last old-key tag with
+    rc 0 — the reconciler, the healthcheck and the owner all saw "healthy".
+    """
+
+    tag: str
+    reason: str
+    signer_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
 class TrustedUpdate:
     tag: str
     commit_sha: str
+    stale_key: StaleTrustKey | None = None
+
+
+def stale_key_warning(update: TrustedUpdate) -> str:
+    """One line an operator can act on: which release is stuck, why, and which key signed it."""
+    stale = update.stale_key
+    if stale is None:
+        return ""
+    signer = stale.signer_fingerprint or "알 수 없음"
+    return (
+        f"UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: 더 새 릴리스 {stale.tag} 가 이 서버의 "
+        f"신뢰 키({UPDATE_ALLOWED_SIGNERS_PATH})로 검증되지 않아 {update.tag} 에 머물러 있다. "
+        f"새 태그 서명 키 지문 {signer} ({stale.reason}). 공개 릴리스 노트·README 의 지문과 "
+        "같을 때만 docs/guide/install.md 「업데이트 신뢰키가 바뀌었을 때」 절차로 추가한다."
+    )
+
+
+def ssh_signature_fingerprint(tag_object: str) -> str:
+    """SHA256 fingerprint of the public key embedded in a tag's SSH signature, or "".
+
+    An SSHSIG blob carries the signer's public key (PROTOCOL.sshsig): magic, uint32
+    version, then the key as an SSH string. The fingerprint is ssh-keygen's: unpadded
+    base64 of sha256 over that key blob. Reading it is not trusting it — the value only
+    names which key to compare against the published fingerprint.
+    """
+    begin, end = _SSH_SIGNATURE
+    start = tag_object.find(begin)
+    stop = tag_object.find(end, start + 1)
+    if start < 0 or stop < 0:
+        return ""
+    armored = "".join(tag_object[start + len(begin):stop].split())
+    try:
+        blob = base64.b64decode(armored, validate=True)
+    except (binascii.Error, ValueError):
+        return ""
+    if not blob.startswith(b"SSHSIG") or len(blob) < 14:
+        return ""
+    length = int.from_bytes(blob[10:14], "big")
+    key = blob[14:14 + length]
+    if length == 0 or len(key) != length:
+        return ""
+    digest = base64.b64encode(hashlib.sha256(key).digest()).decode("ascii").rstrip("=")
+    return f"SHA256:{digest}"
 
 
 class _Arguments(argparse.Namespace):
@@ -173,7 +240,14 @@ def _verify_remote_tag(
                 ),
             )
         except TagSignatureError as error:
-            raise UpdateTrustError(error.prefix, error.detail) from error
+            try:
+                shown = verifier.git.run(
+                    ("git", "-C", str(repository), "cat-file", "tag", tag_ref), "TAG-SIGNER",
+                ).stdout
+            except UpdateTrustError:
+                shown = ""  # the rejection stands; only the signer's name is unknown
+            signer = ssh_signature_fingerprint(shown)
+            raise UpdateTrustError(error.prefix, error.detail, signer) from error
         commit_sha = verifier.git.run(
             ("git", "-C", str(repository), "rev-parse", f"{tag_ref}^{{commit}}"),
             "TAG-BINDING",
@@ -248,6 +322,7 @@ def resolve_signed_update(
         allowed_signers=allowed_signers,
     )
     last_error: UpdateTrustError | None = None
+    stale: StaleTrustKey | None = None
     for tag in _release_candidates(release):
         try:
             update = _verify_remote_tag(verifier, tag)
@@ -257,10 +332,15 @@ def resolve_signed_update(
             advance_release_floor(floor_path, update.tag, update.commit_sha)
         except UpdateTrustError as error:
             last_error = error
+            # Candidates run newest first, so the first signature rejection is the
+            # newest release this node cannot verify. Keep it: falling back to an older
+            # verified tag is correct, doing so silently is what froze a node for days.
+            if stale is None and error.prefix in _SIGNATURE_REJECTIONS:
+                stale = StaleTrustKey(tag.name, error.prefix, error.signer_fingerprint)
         except ReleaseFloorError as error:
             last_error = UpdateTrustError(error.prefix, error.detail)
         else:
-            return update
+            return update if stale is None else replace(update, stale_key=stale)
     if last_error is not None:
         raise last_error
     raise UpdateTrustError("UNSIGNED-HEAD", "origin has no trusted signed release tag")
@@ -308,6 +388,10 @@ def _resolve(args: _Arguments) -> tuple[str, bool]:
         if args.floor_path is None:
             raise UpdateTrustError("FLOOR-PATH", "--floor-path is required")
         signed = resolve_signed_update(args.mirror, args.allowed_signers, floor_path=args.floor_path)
+        warning = stale_key_warning(signed)
+        if warning:
+            # stderr, never stdout: the root helper reads stdout as the install target.
+            print(warning, file=sys.stderr)
         return signed.commit_sha, False
     config = load_node_config(args.node_config)
     target = resolve_update_target(

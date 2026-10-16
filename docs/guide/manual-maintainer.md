@@ -286,7 +286,7 @@ rm -f /tmp/update-trust.pub
 
 노트에 **반드시** 들어가야 하는 것:
 
-- 업데이트 신뢰키 **지문**(현재 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`).
+- 업데이트 신뢰키 **지문**(현재 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`).
   신규 설치는 설치기 번들의 키를 **설치기가 아닌 경로로** 대조해야 하는데, 그 대역외
   경로가 바로 README와 이 릴리스 노트다(P0-6 부트스트랩).
 - 이 릴리스가 MAJOR라면 무엇이 거부되는지·어떤 오류 문자열이 보이는지·운영자가 무엇을
@@ -399,7 +399,7 @@ ssh-keygen -lf ~/.ssh/autophagy_update_trust.pub
 > **이 저장소는 아직 한 번도 회전한 적이 없다.** 아래는 랜딩된 코드의 실제 거동에서
 > 역산한 절차이며, 첫 실수행 때 관측값으로 갱신한다.
 >
-> **첫 회전(2026-10-13, 진행 중)**: 릴리스 호스트를 옮기면서(루트 `AGENTS.md` 「릴리스 태그 규칙」) 키를 복사하지 않고 새 머신에서 새 키를 만들었다. 구 키 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA` → 신 키 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`(ED25519, `update-trust@autophagy`). 신 키 첫 릴리스의 노트가 신 지문을 공지한다. 병기 기간에는 두 지문이 모두 유효하고, 6단계(구 키 줄 제거)는 노드가 신 키 릴리스로 전진한 것을 확인한 뒤에 한다.
+> **첫 회전(2026-10-13, 소유자 노드 6단계·구 개인키 폐기 2026-10-15 완료)**: 릴리스 호스트를 옮기면서(루트 `AGENTS.md` 「릴리스 태그 규칙」) 키를 복사하지 않고 새 머신에서 새 키를 만들었다. 구 키 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA` → 신 키 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`(ED25519, `update-trust@autophagy`). 신 키 첫 릴리스(v1.22.3)의 노트가 신 지문을 공지했다. 그 공지를 놓친 제3자 서버 하나가 v1.22.2 에 조용히 멈췄고(2026-10-16 확인), 그래서 지금은 §3.1 의 정체 경고가 그 서버 운영자에게 원인과 새 지문을 알린다.
 
 ### 3.1 불변식 — 이것 하나만 지키면 된다
 
@@ -410,14 +410,22 @@ ssh-keygen -lf ~/.ssh/autophagy_update_trust.pub
 (`main`과 같은 커밋이므로), `git verify-tag`가 실패해
 `BAD-SIGNATURE: git returned <n>: ...`가 되거나, 키는 통과하지만 principal이 다르면
 `WRONG-PRINCIPAL: verified principal is not update-trust@autophagy`가 된다.
-`resolve_signed_update`는 그 후보를 버리고 다음 후보로 넘어가며, 후보가 다 떨어지면
-마지막 오류를 올린다. 리컨실러는 그것을 잡아
-`[deploy-reconcile] UPDATE-TRUST-BLOCK <오류> — skipping tick`을 찍고 **rc 0으로
-정상 종료**한다.
+`resolve_signed_update`는 그 후보를 버리고 다음 후보로 넘어가며, 옛 키로 서명된 더 낮은
+릴리스가 있으면 **그것을 설치 대상으로 돌려준다** — 노드는 옛 릴리스에 머문다.
 
-즉 **아무도 알람을 받지 않는다.** 노드는 조용히 옛 릴리스에 머물고, 매 2분 같은
-저널 줄만 쌓인다. 노드 소유자 쪽에서는 healthcheck의 signed-update probe가 기존 repair
-티켓 경로로 사유를 올려 주지만, **유지보수자는 남의 노드를 관측할 수 없다.**
+2026-10-16 까지는 이 상태가 **완전히 조용했다**: 검증기가 rc 0 이라 리컨실러도 헬스체크도
+아무 신호를 내지 않았고, 제3자 노드 하나가 v1.22.2 에 며칠 멈춘 뒤에야 드러났다. 지금은
+더 새 태그가 서명 검증에 실패하면 검증기가 그 태그와 **서명 키 지문**을 함께 돌려주고,
+
+- 리컨실러가 매 틱 `[deploy-reconcile] UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: …` 한 줄을
+  저널에 남기며 같은 (태그, 키) 에 대해 소유자 통지를 **한 번** 보낸다
+  (`automation/deploy_reconcile_trust.py`, 기록 `/srv/autophagy-private/deploy-reconcile/trust-key-notice.txt`),
+- healthcheck 의 signed-update probe 가 같은 줄로 **FAIL** 한다.
+
+후보가 전부 실패하면(옛 키 태그도 없으면) 예전처럼 `UPDATE-TRUST-BLOCK` 이다. 그래도
+**유지보수자는 남의 노드를 관측할 수 없다** — 경고는 그 노드의 운영자에게만 간다. 운영자가
+할 일은 [install.md 「업데이트 신뢰키가 바뀌었을 때」](install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)가
+소유한다. 회전 공지(릴리스 노트)에 그 절의 링크를 함께 싣는다.
 
 ### 3.2 왜 자동화할 수 없나
 
