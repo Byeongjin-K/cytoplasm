@@ -17,10 +17,12 @@ from automation.interop.approval_lease import FileKeyLease, ReminderJournal
 from automation.interop.approval_lifecycle import (
     ApprovalRequest,
     Probe,
-    remind_owner_approval,
     resolve_owner_decision,
 )
-from automation.interop.approval_reminder import ReminderContext, channel_guild_resolver, stored_reminder_space
+from automation.interop.approval_reminder import (
+    ReminderCall, ReminderContext, channel_guild_resolver,
+    dispatch_owner_approval_reminder, dispatch_owner_approval_reminders, stored_reminder_space,
+)
 from automation.interop.approval_reminder_config import (
     ApprovalReminderConfig,
     load_approval_reminder_config,
@@ -126,10 +128,18 @@ class RepairApprovalWatcher:
 
     def run_once(self) -> None:
         """Process every active request without accepting unbound or ambiguous reactions."""
+        reminders: list[ReminderCall] = []
+        resolutions: list[Callable[[], None]] = []
         for pending in self.store.all():
-            self._process(pending)
+            self._process(pending, reminders, resolutions)
+        dispatch_owner_approval_reminders(reminders)
+        for resolve in resolutions:
+            resolve()
 
-    def _process(self, pending: PendingRepairApproval) -> None:
+    def _process(
+        self, pending: PendingRepairApproval, reminders: list[ReminderCall] | None = None,
+        resolutions: list[Callable[[], None]] | None = None,
+    ) -> None:
         if self.now().astimezone(UTC) - pending.created_at.astimezone(UTC) >= APPROVAL_TTL:
             self._expire(pending)
             return
@@ -150,27 +160,7 @@ class RepairApprovalWatcher:
                 return guild_id
 
             def deliver(channel_id: str, content: str) -> None:
-                try:
-                    from automation.interop.owner_message import Action, Approval, OwnerMessage, OwnerMessageError, Ref, render
-                except Exception:  # noqa: BLE001 - optional initialization must preserve the reminder
-                    body = content  # 구런타임도 기존 리마인더를 그대로 보낸다.
-                else:
-                    try:
-                        location = Ref(
-                            scope="message", channel_id=channel_id,
-                            message_id=pending.message_id, guild_id=guild_id,
-                            space="guild" if guild_id is not None else stored_reminder_space(pending.surface),
-                        )
-                        body = render(OwnerMessage(
-                            subject_key=pending.ticket_id, subject="수리", fact="승인 대기",
-                            location=location,
-                            owner=Action("react", location, "✅ / ⛔"),
-                            agent_next="승인 후 실행", recovery="not_applicable",
-                            detail=Approval(pending.created_at + APPROVAL_TTL, "실행 안 함"),
-                        ), destination=Ref(scope="channel", channel_id=channel_id))
-                    except OwnerMessageError:
-                        body = content  # 봉투 거부는 기존 통지를 막지 않는다.
-                _ = discord.post_message(channel_id, body)
+                _ = discord.post_message(channel_id, content)
 
             context = ReminderContext(
                 config=self.reminder_config,
@@ -182,8 +172,17 @@ class RepairApprovalWatcher:
                 guild_id_for=resolve_guild,
                 space_for=lambda _channel: stored_reminder_space(pending.surface),
             )
-            _ = remind_owner_approval(request, decision, lease, context)
-        _ = resolve_owner_decision(request, decision, lease)
+            if reminders is None:
+                dispatch_owner_approval_reminder(request, decision, lease, context)
+            else:
+                reminders.append(ReminderCall(request, decision, lease, context))
+        if resolutions is None:
+            resolve_owner_decision(request, decision, lease)
+        else:
+            def resolve() -> None:
+                resolve_owner_decision(request, decision, lease)
+
+            resolutions.append(resolve)
 
     def _discord_for(self, pending: PendingRepairApproval) -> ApprovalPollTransport:
         """Use the record's stored binding when the transport can validate it."""

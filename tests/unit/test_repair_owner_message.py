@@ -32,11 +32,10 @@ PENDING = PendingRepairApproval(
     surface=ApprovalSurface.AGENT_CHAT_THREAD, channel_id="222",
     policy_version=POLICY_VERSION,
 )
-# Frozen fallback wire bytes, independent of the production renderer.
-LEGACY_FALLBACK: Final = "승인 리마인더\n요청 유형: repair\n경과시간: 3시간"
+# Reminder wire bytes are shared minimum-information pointers, not approval cards.
+LEGACY_FALLBACK: Final = "⏰ 승인 대기 3시간"
 GUILD_FALLBACK: Final = (
-    "승인 리마인더\n요청 유형: repair\n경과시간: 3시간\n"
-    "원문 링크: https://discord.com/channels/111/222/333"
+    "⏰ 승인 대기 3시간 · https://discord.com/channels/111/222/333"
 )
 
 
@@ -169,7 +168,7 @@ def test_dedup_signature_bytes_stay_fixed_when_notice_rendering_changes(
 
 
 @pytest.mark.parametrize("guild_id", [None, "666"])
-def test_reminder_renders_envelope_without_self_link_when_posted_in_approval_thread(
+def test_reminder_sends_pointer_without_rendering_an_approval_envelope(
     runtime: tuple[RepairApprovalWatcher, Wire], monkeypatch: pytest.MonkeyPatch,
     guild_id: str | None,
 ) -> None:
@@ -189,22 +188,18 @@ def test_reminder_renders_envelope_without_self_link_when_posted_in_approval_thr
     monkeypatch.setattr(owner_message, "render", capture)
     # When: the real watcher, scheduler, journal, binding and HTTP adapter run.
     watcher.run_once()
-    # Then: only the reminder becomes an envelope, with no redundant self URL.
-    assert len(envelopes) == 1
-    message, destination = envelopes[0]
-    assert message.subject_key == pending.ticket_id
-    assert message.location.channel_id == destination.channel_id == "222"
-    assert message.location.message_id == "333"
-    assert message.location.guild_id == guild_id
-    assert message.owner.verb == "react"
-    assert isinstance(message.detail, owner_message.Approval)
-    assert message.detail.expires_at == POSTED + timedelta(hours=24)
+    # Then: reminders retain the card pointer, without approval-request reactions.
+    assert envelopes == []
     assert len(wire.posts) == 1
     path, body = wire.posts[0]
     assert path == "/channels/222/messages"
-    assert "https://" not in body
+    expected = "⏰ 승인 대기 3시간"
+    if guild_id:
+        expected += f" · https://discord.com/channels/{guild_id}/222/333"
+    assert body == expected
     assert "@me" not in body
-    assert len(body.splitlines()) <= 5
+    assert len(body.splitlines()) == 1
+    assert "✅" not in body and "⛔" not in body
     assert wire.reads.count("/channels/222") == int(guild_id is None)
     assert all(path == "/channels/222" or path.startswith("/channels/222/messages/333") for path in wire.reads)
 
@@ -267,7 +262,7 @@ def test_entrypoint_posts_reminder_when_tick_is_due(
     assert len(wire.posts) == 1
     path, body = wire.posts[0]
     assert path == "/channels/222/messages"
-    assert ("https://" not in body) if available else body == expected
+    assert body == expected
 
 
 def test_reminder_delivers_without_link_when_injected_guild_is_non_string(

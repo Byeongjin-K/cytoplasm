@@ -86,10 +86,7 @@ def test_reminder_contains_only_type_elapsed_and_link() -> None:
     )
     body = compose_reminder(reminder)
     assert body == (
-        "승인 리마인더\n"
-        "요청 유형: mail-compose\n"
-        "경과시간: 4시간 7분\n"
-        "원문 링크: https://discord.com/channels/@me/222/333"
+        "⏰ 승인 대기 4시간 · https://discord.com/channels/@me/222/333"
     )
     for sensitive in ("recipient@example.com", "/tmp/attachment.pdf", "--execute", "제목:"):
         assert sensitive not in body

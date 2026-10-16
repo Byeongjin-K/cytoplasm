@@ -69,9 +69,7 @@ def test_shared_facade_sends_minimum_information_pointer_at_three_hours(tmp_path
     assert delivery.messages == [
         (
             "222",
-            "승인 리마인더\n"
-            "요청 유형: mail-compose\n"
-            "경과시간: 3시간",
+            "⏰ 승인 대기 3시간",
         )
     ]
 
@@ -174,11 +172,11 @@ def test_existing_approval_watchers_call_the_shared_facade() -> None:
         assert any(
             (
                 isinstance(call.func, ast.Attribute)
-                and call.func.attr == "remind_owner_approval"
+                and call.func.attr in ("remind_owner_approval", "dispatch_owner_approval_reminders")
             )
             or (
                 isinstance(call.func, ast.Name)
-                and call.func.id == "remind_owner_approval"
+                and call.func.id in ("remind_owner_approval", "dispatch_owner_approval_reminders")
             )
             for call in calls
         ), path

@@ -103,11 +103,11 @@ def test_repair_watcher_reminder_links_original_card_with_guild_id(
         ApprovalReminderConfig(initial_delay=timedelta(minutes=1), repeat_interval=timedelta(hours=1)),
     ).run_once()
 
-    # Main's resolved guild survives in the envelope, without a redundant local URL.
+    # The shared one-line reminder links the card even inside its own thread.
     assert len(posts) == 1
     assert posts[0][0] == f"/channels/{CHANNEL_ID}/messages"
-    assert "https://" not in posts[0][1]
+    assert posts[0][1] == (
+        f"⏰ 승인 대기 1시간 · https://discord.com/channels/{GUILD_ID}/{CHANNEL_ID}/{MESSAGE_ID}"
+    )
     assert "@me" not in posts[0][1]
-    assert captured[-1].location.guild_id == GUILD_ID
-    elsewhere = render(captured[-1], destination=owner_message.Ref(scope="channel", channel_id="999"))
-    assert f"https://discord.com/channels/{GUILD_ID}/{CHANNEL_ID}/{MESSAGE_ID}" in elsewhere
+    assert captured == []

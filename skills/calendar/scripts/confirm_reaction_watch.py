@@ -373,6 +373,9 @@ def _process_entries(
     draft_record: Callable[[str], dict] = _load_draft_record,
 ) -> tuple[PendingConfirm, ...]:
     retained: list[PendingConfirm] = []
+    reminders = []
+    resolutions = []
+    failed_reminders: set[str] = set()
     for entry in entries:
         try:
             decision = OwnerDecision(
@@ -408,25 +411,13 @@ def _process_entries(
                         deliver=lambda channel_id, content: discord.post_message(channel_id, content),
                         clock=lambda: now,
                         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
-                        space_for=lambda _channel: reminder.stored_reminder_space(entry.surface),
+                        space_for=lambda _channel, surface=entry.surface: reminder.stored_reminder_space(surface),
                         guild_id_for=reminder.channel_guild_resolver(
                             lambda channel_id: discord.fetch_channel(channel_id)
                         ),
                     )
-                    calendar_approval.lifecycle().remind_owner_approval(
-                        request, decision, lease, context
-                    )
-                verdict = calendar_approval.lifecycle().resolve_owner_decision(
-                    request, decision, lease,
-                )
-                outcome = calendar_approval.lifecycle().WatchOutcome
-                match verdict.outcome:
-                    case outcome.CONSUMED:
-                        pass
-                    case outcome.WAITING | outcome.SKIPPED:
-                        retained.append(entry)
-                    case unreachable:
-                        assert_never(unreachable)
+                    reminders.append(reminder.ReminderCall(request, decision, lease, context))
+                resolutions.append((entry, request, decision, lease))
         except ConfirmWatchError as error:
             _log_failure(error, entry)
             if failures is not None:
@@ -444,7 +435,45 @@ def _process_entries(
             if failures is not None:
                 failures.append(wrapped)
             retained.append(entry)
-    return tuple(retained)
+    if reminders:
+        def reminder_failed(request, error):
+            failed_reminders.add(request.key)
+            entry = next(entry for entry in entries if entry.key == request.key)
+            wrapped = ConfirmWatchError(
+                "pending confirmation operation raised", stage="entry.process",
+                fatal=True, stderr=str(error), cause_type=type(error).__name__,
+            )
+            _log_failure(wrapped, entry)
+            if failures is not None:
+                failures.append(wrapped)
+
+        reminder.dispatch_owner_approval_reminders(reminders, on_error=reminder_failed)
+    for entry, request, decision, lease in resolutions:
+        if request.key in failed_reminders:
+            retained.append(entry)
+            continue
+        try:
+            verdict = calendar_approval.lifecycle().resolve_owner_decision(
+                request, decision, lease,
+            )
+            outcome = calendar_approval.lifecycle().WatchOutcome
+            match verdict.outcome:
+                case outcome.CONSUMED:
+                    pass
+                case outcome.WAITING | outcome.SKIPPED:
+                    retained.append(entry)
+                case unreachable:
+                    assert_never(unreachable)
+        except Exception as error:  # noqa: BLE001 — per-entry cron failure boundary.
+            wrapped = error if isinstance(error, ConfirmWatchError) else ConfirmWatchError(
+                "pending confirmation operation raised", stage="entry.process",
+                fatal=True, stderr=str(error), cause_type=type(error).__name__,
+            )
+            _log_failure(wrapped, entry)
+            if failures is not None:
+                failures.append(wrapped)
+            retained.append(entry)
+    return tuple(entry for entry in entries if entry in retained)
 
 
 def _has_thread(record: Mapping[str, object]) -> bool:

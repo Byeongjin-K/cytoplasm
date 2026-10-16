@@ -5,7 +5,8 @@ observe lifecycle state and use minimum-information links to the original messag
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -118,41 +119,59 @@ def dispatch_due_reminder(
     if not config.enabled:
         return ReminderVerdict(ReminderOutcome.DISABLED)
     now = clock().astimezone(UTC)
-    posted_at = _parse_posted_at(request.created_at)
+    _parse_posted_at(request.created_at)
     with lease.hold(request.key) as owned:
         if not owned:
             return ReminderVerdict(ReminderOutcome.SKIPPED)
-        if journal.is_retired(request.key, request.message_id):
-            return ReminderVerdict(ReminderOutcome.RETIRED)
-        status = observer.status_for(request)
-        match status:
-            case ReminderStatus.UNVERIFIABLE:
-                return ReminderVerdict(ReminderOutcome.DEFERRED, status=status)
-            case ReminderStatus.PENDING:
-                pass
-            case terminal if terminal in _TERMINAL:
-                journal.retire(request.key, request.message_id, terminal.value, _timestamp(now))
-                return ReminderVerdict(ReminderOutcome.RETIRED, status=terminal)
-            case unexpected:
-                raise ValueError(f"unknown reminder status: {unexpected!r}")
-        slot = due_slot(posted_at, now, config)
-        if slot is None:
-            return ReminderVerdict(ReminderOutcome.NOT_DUE)
-        due_at = slot_due_at(posted_at, slot, config)
-        next_due = slot_due_at(posted_at, slot + 1, config)
-        if not journal.claim(
-            request.key, request.message_id, slot, _timestamp(due_at),
-            _timestamp(next_due), _timestamp(now)
-        ):
-            return ReminderVerdict(ReminderOutcome.ALREADY_CLAIMED, slot=slot, due_at=due_at)
-        # The claim deliberately survives every send failure, including SIGKILL.  A
-        # transport error may happen after remote delivery, so releasing it would turn
-        # an uncertain result into a duplicate.  Later wall-clock slots remain eligible.
-        sender.send(request, slot, due_at)
-        journal.mark_sent(
-            request.key, request.message_id, slot, _timestamp(now), _timestamp(next_due)
-        )
-        return ReminderVerdict(ReminderOutcome.SENT, slot=slot, due_at=due_at)
+        verdict = _claim_due_reminder(request, observer, journal, config, now)
+        if verdict.outcome is ReminderOutcome.SENT:
+            assert verdict.slot is not None and verdict.due_at is not None
+            sender.send(request, verdict.slot, verdict.due_at)
+            _mark_sent(request, verdict, journal, config, now)
+        return verdict
+
+
+def _claim_due_reminder(
+    request: ApprovalRequest, observer: ReminderObserver, journal: ReminderJournal,
+    config: ReminderConfig, now: datetime,
+) -> ReminderVerdict:
+    posted_at = _parse_posted_at(request.created_at)
+    if journal.is_retired(request.key, request.message_id):
+        return ReminderVerdict(ReminderOutcome.RETIRED)
+    status = observer.status_for(request)
+    match status:
+        case ReminderStatus.UNVERIFIABLE:
+            return ReminderVerdict(ReminderOutcome.DEFERRED, status=status)
+        case ReminderStatus.PENDING:
+            pass
+        case terminal if terminal in _TERMINAL:
+            journal.retire(request.key, request.message_id, terminal.value, _timestamp(now))
+            return ReminderVerdict(ReminderOutcome.RETIRED, status=terminal)
+        case unexpected:
+            raise ValueError(f"unknown reminder status: {unexpected!r}")
+    slot = due_slot(posted_at, now, config)
+    if slot is None:
+        return ReminderVerdict(ReminderOutcome.NOT_DUE)
+    due_at = slot_due_at(posted_at, slot, config)
+    next_due = slot_due_at(posted_at, slot + 1, config)
+    if not journal.claim(
+        request.key, request.message_id, slot, _timestamp(due_at),
+        _timestamp(next_due), _timestamp(now),
+    ):
+        return ReminderVerdict(ReminderOutcome.ALREADY_CLAIMED, slot=slot, due_at=due_at)
+    # Claims survive send failures: uncertain delivery must not duplicate a slot.
+    return ReminderVerdict(ReminderOutcome.SENT, slot=slot, due_at=due_at)
+
+
+def _mark_sent(
+    request: ApprovalRequest, verdict: ReminderVerdict, journal: ReminderJournal,
+    config: ReminderConfig, now: datetime,
+) -> None:
+    assert verdict.slot is not None
+    next_due = slot_due_at(_parse_posted_at(request.created_at), verdict.slot + 1, config)
+    journal.mark_sent(
+        request.key, request.message_id, verdict.slot, _timestamp(now), _timestamp(next_due)
+    )
 
 
 class ReminderBoundaryError(ValueError):
@@ -271,27 +290,17 @@ def _elapsed_text(elapsed: timedelta) -> str:
     seconds = elapsed.total_seconds()
     if seconds < 0:
         raise ReminderBoundaryError("elapsed time cannot be negative")
-    total_minutes = int(seconds // 60)
-    hours, minutes = divmod(total_minutes, 60)
-    if hours and minutes:
-        return f"{hours}시간 {minutes}분"
-    if hours:
-        return f"{hours}시간"
-    return f"{minutes}분"
+    return f"{int(seconds // 3600)}시간"
 
 
 def compose_reminder(reminder: ApprovalReminder) -> str:
-    """기존 문구를 유지하되 좌표 미상일 때는 원문 링크 줄만 생략한다."""
-    request_type = _request_type_text(reminder.request_type)
+    """한 카드 한 줄. 좌표 미상일 때는 링크만 생략한다."""
+    _request_type_text(reminder.request_type)
     link_line = ""
     if reminder.source_url is not None:
-        link_line = f"\n원문 링크: {_validate_source_url(reminder.source_url)}"
+        link_line = f" · {_validate_source_url(reminder.source_url)}"
     elapsed = _elapsed_text(reminder.elapsed)
-    return (
-        "승인 리마인더\n"
-        f"요청 유형: {request_type}\n"
-        f"경과시간: {elapsed}{link_line}"
-    )
+    return f"⏰ 승인 대기 {elapsed}{link_line}"
 
 
 def authorize_delivery(scope: DeliveryScope, target: DeliveryTarget) -> bool:
@@ -379,6 +388,10 @@ class _PointerSender:
 
     def send(self, request: ApprovalRequest, slot: int, due_at: datetime) -> None:
         del slot, due_at
+        channel_id, body = self.pointer(request)
+        self.context.deliver(channel_id, body)
+
+    def pointer(self, request: ApprovalRequest) -> tuple[str, str]:
         source_channel_id = (
             self.context.source_channel_id_for(request)
             if self.context.source_channel_id_for is not None
@@ -408,7 +421,7 @@ class _PointerSender:
         body = compose_reminder(
             ApprovalReminder(self.context.request_type, elapsed, link.url)
         )
-        self.context.deliver(target.channel_id, body)
+        return target.channel_id, body
 
 
 def dispatch_owner_approval_reminder(
@@ -427,3 +440,68 @@ def dispatch_owner_approval_reminder(
         context.config,
         clock=context.clock,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ReminderCall:
+    request: ApprovalRequest
+    watcher: ApprovalProbe
+    lease: ApprovalLease
+    context: ReminderContext
+
+
+def dispatch_owner_approval_reminders(
+    calls: Iterable[ReminderCall],
+    *,
+    on_error: Callable[[ApprovalRequest, Exception], None] | None = None,
+) -> tuple[ReminderVerdict, ...]:
+    """Claim each card under its existing lease, then send once per destination.
+
+    All leases remain held through delivery and per-card sent markers. A failed
+    channel keeps its claims but no sent markers, just like a failed single send.
+    """
+    verdicts: list[ReminderVerdict | None] = []
+    groups: dict[str, list[tuple[ReminderCall, ReminderVerdict, datetime, str, int]]] = {}
+    with ExitStack() as leases:
+        for call in calls:
+            request, context = call.request, call.context
+            try:
+                if not context.config.enabled:
+                    verdicts.append(ReminderVerdict(ReminderOutcome.DISABLED))
+                    continue
+                now = context.clock().astimezone(UTC)
+                _parse_posted_at(request.created_at)
+                if not leases.enter_context(call.lease.hold(request.key)):
+                    verdicts.append(ReminderVerdict(ReminderOutcome.SKIPPED))
+                    continue
+                verdict = _claim_due_reminder(
+                    request, _LifecycleObserver(call.watcher), context.journal, context.config, now
+                )
+                if verdict.outcome is ReminderOutcome.SENT:
+                    assert verdict.slot is not None and verdict.due_at is not None
+                    channel, body = _PointerSender(context).pointer(request)
+                    groups.setdefault(channel, []).append((call, verdict, now, body, len(verdicts)))
+                verdicts.append(verdict)
+            except Exception as error:
+                if on_error is None:
+                    raise
+                on_error(request, error)
+        for channel, group in groups.items():
+            try:
+                group[0][0].context.deliver(channel, "\n".join(item[3] for item in group))
+            except Exception as error:
+                if on_error is None:
+                    raise
+                for call, _, _, _, index in group:
+                    verdicts[index] = None
+                    on_error(call.request, error)
+                continue
+            for call, verdict, now, _, index in group:
+                try:
+                    _mark_sent(call.request, verdict, call.context.journal, call.context.config, now)
+                except Exception as error:
+                    if on_error is None:
+                        raise
+                    verdicts[index] = None
+                    on_error(call.request, error)
+    return tuple(verdict for verdict in verdicts if verdict is not None)

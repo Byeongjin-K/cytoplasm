@@ -74,10 +74,7 @@ def test_hourly_reminder_links_to_original_approval_message(tmp_path: Path) -> N
     assert delivered == [
         (
             _CHANNEL_ID,
-            "승인 리마인더\n"
-            "요청 유형: skill-deploy\n"
-            "경과시간: 1시간\n"
-            f"원문 링크: {expected_link}",
+            f"⏰ 승인 대기 1시간 · {expected_link}",
         )
     ]
 

@@ -29,6 +29,7 @@ import importlib
 import json
 import os
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -274,6 +275,12 @@ def cmd_digest_items(args: argparse.Namespace) -> int:
 _DM_NOTIFIABLE_METHODS: Final = frozenset({"manual_reaction"})
 
 
+#: Set by ``cmd_watch`` for one tick so due reminders of one thread go as one message;
+#: unset, ``_remind_pending`` sends at once (direct callers and stubbed tests keep the
+#: two-argument call).
+_REMINDER_BATCH: ContextVar[list | None] = ContextVar("mail_reminder_batch", default=None)
+
+
 def _remind_pending(draft: dict, config: object | None) -> None:
     if config is None:
         return
@@ -294,12 +301,17 @@ def _remind_pending(draft: dict, config: object | None) -> None:
         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
         space_for=lambda _channel: reminder.stored_reminder_space(draft.get("surface")),
     )
-    lifecycle.remind_owner_approval(
+    call = reminder.ReminderCall(
         triage_approval.request_of(draft),
         triage_approval.MailApprovalGate(draft),
         triage_approval.confirm_lease(),
         context,
     )
+    batch = _REMINDER_BATCH.get()
+    if batch is None:
+        lifecycle.remind_owner_approval(call.request, call.watcher, call.lease, call.context)
+    else:
+        batch.append(call)
 
 
 def _notify_sent(draft: dict, method: str) -> None:
@@ -393,22 +405,51 @@ def cmd_watch(_args: argparse.Namespace) -> int:
         return 0
     owner = triage_confirm.owner_id()
     failed_rc = 0
-    for draft in triage_gate.list_drafts():
-        if draft.get("status") != "pending":
-            continue
-        try:
-            if triage_approval.expire_retired_approval(draft):
-                print(f"EXPIRED draft={draft['id']} reason=approval-surface-retired")
+    reminders = []
+    pending_drafts = []
+    failed_reminders = set()
+    batch = _REMINDER_BATCH.set(reminders)
+    try:
+        for draft in triage_gate.list_drafts():
+            if draft.get("status") != "pending":
                 continue
-        except triage_gate.GateError as error:
-            if error.exit_code != 1:
-                raise
+            try:
+                if triage_approval.expire_retired_approval(draft):
+                    print(f"EXPIRED draft={draft['id']} reason=approval-surface-retired")
+                    continue
+            except triage_gate.GateError as error:
+                if error.exit_code != 1:
+                    raise
+                continue
+            if not draft.get("message_id"):
+                draft = {**draft, "message_id": triage_pipeline._post_draft_for_approval(draft)}
+                print(f"REPOSTED draft={draft['id']} message={draft['message_id']}")
+            try:
+                _remind_pending(draft, getattr(_args, "reminder_config", None))
+                pending_drafts.append(draft)
+            except triage_gate.GateError as error:
+                if error.exit_code != 1:
+                    raise
+            except OSError as error:
+                print(f"REACTION-RETRY draft={draft['id']} "
+                      f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
+    finally:
+        _REMINDER_BATCH.reset(batch)
+    if reminders:
+        def reminder_failed(request, error):
+            if not isinstance(error, OSError):
+                raise error
+            failed_reminders.add(request.key)
+            print(f"REACTION-RETRY key={request.key} "
+                  f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
+
+        triage_approval._repo_module("approval_reminder").dispatch_owner_approval_reminders(
+            reminders, on_error=reminder_failed,
+        )
+    for draft in pending_drafts:
+        if failed_reminders and triage_approval.request_of(draft).key in failed_reminders:
             continue
-        if not draft.get("message_id"):
-            draft = {**draft, "message_id": triage_pipeline._post_draft_for_approval(draft)}
-            print(f"REPOSTED draft={draft['id']} message={draft['message_id']}")
         try:
-            _remind_pending(draft, getattr(_args, "reminder_config", None))
             action = triage_confirm.resolve_reaction(draft)
         except triage_gate.GateError as error:
             if error.exit_code != 1:
