@@ -16,6 +16,15 @@
 
 </div>
 
+> [!IMPORTANT]
+> **릴리스 서명키 교체 공지 (2026-10-13)** — 업데이트를 검증하는 서명키를 바꿨는데 공지가 늦었습니다. 죄송합니다.
+>
+> - v1.22.2 까지는 옛 키, **v1.22.3 부터는 새 키**로 서명합니다. 새 키 지문: `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`
+> - 이미 설치한 서버가 옛 키만 믿고 있으면 **v1.22.2 에서 조용히 멈춰** 더 업데이트되지 않습니다.
+> - 운영자가 할 일: 새 공개키를 신뢰 파일에 덧붙입니다 — `trust_key_bootstrap.py install --add` 명령 전체는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있습니다.
+> - 확인: `python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'` 의 마지막 줄이 `TRUSTED` 이면 됩니다(2분 안에 최신 릴리스로 따라옵니다).
+> - 이 경고가 들어간 버전부터는 같은 일로 멈추면 리컨실러 로그·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 경고와 새 지문이 남습니다.
+
 ---
 
 ## 한눈에
