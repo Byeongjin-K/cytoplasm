@@ -151,3 +151,43 @@ def test_update_trust_probe_fails_closed_when_the_floor_cannot_be_resolved(
 
     assert completed.returncode == 1
     assert "UPDATE-TRUST-BLOCK" in completed.stderr
+
+
+def test_update_trust_probe_when_a_newer_release_fails_the_trust_key_then_fails_with_the_reason(
+    tmp_path: Path,
+) -> None:
+    # Given: the verifier resolves an older release (rc 0) but names a stale trust key.
+    fake_python = tmp_path / "python3"
+    script = "\n".join(
+        (
+            "#!/usr/bin/env bash",
+            f"printf '{'a' * 40}\\n'",
+            "printf 'UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: v1.40.0 SHA256:new\\n' >&2",
+            "exit 0",
+            "",
+        )
+    )
+    _ = fake_python.write_text(script, encoding="utf-8")
+    fake_python.chmod(0o755)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    command = (
+        f'source "{PROBE}"; '
+        f'UPDATE_TRUST_PYTHON="{fake_python}" '
+        f'UPDATE_TRUST_SCRIPT="{tmp_path / "update_trust.py"}" '
+        f'probe_update_trust ignored ignored "{mirror}"'
+    )
+
+    # When: healthcheck executes its local update-trust probe.
+    completed = subprocess.run(
+        ("bash", "-c", command),
+        env={**os.environ, "NODE_PRIVATE_ROOT": str(tmp_path / "private")},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    # Then: a frozen node is not reported healthy, and the operator sees why.
+    assert completed.returncode == 1
+    assert "[update-trust] UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요" in completed.stderr

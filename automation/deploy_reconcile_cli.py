@@ -27,6 +27,7 @@ from automation.deploy_reconcile_mirror import (
     sync_mirror as _sync_mirror,
 )
 from automation.deploy_reconcile_state import DEFAULT_STATE_PATH, load_state, save_state
+from automation.deploy_reconcile_trust import observe_stale_trust_key
 from automation.deploy_reconcile_unsigned import IncidentRecorder, observe_release_backlog
 from automation.deploy_update_channel import (
     UpdateChannelSource,
@@ -115,11 +116,13 @@ def candidate_update_sha(update_channel: str | None = None) -> str:
     not succeed, counted as a hard failure. Both halves exist to close a TOCTOU window by
     verifying the same thing; they can only do that if they ask the same question.
     """
-    return resolve_signed_update(
+    update = resolve_signed_update(
         MIRROR,
         remote_url=update_channel,
         floor_path=RELEASE_FLOOR,
-    ).commit_sha
+    )
+    observe_stale_trust_key(update)
+    return update.commit_sha
 
 
 def run_converge(command: Sequence[str] | None = None) -> int:

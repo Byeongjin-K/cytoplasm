@@ -19,7 +19,15 @@ probe_update_trust() {
     return 1
   fi
   output="$("$python" "$script" resolve-signed --mirror "$target" --floor-path "$floor" 2>&1)" || command_status=$?
-  (( command_status == 0 )) && return 0
+  if (( command_status == 0 )); then
+    # A verified OLDER release while a newer one fails its signature is a frozen node,
+    # not a healthy one: the resolver still answers rc 0 there (2026-10-16).
+    local stale
+    stale="$(grep -m1 '^UPDATE-TRUST-STALE-KEY' <<<"$output" || true)"
+    [[ -z "$stale" ]] && return 0
+    printf '[update-trust] %s\n' "$stale" >&2
+    return 1
+  fi
   if [[ "$output" == UPDATE-TRUST-BLOCK* ]]; then
     printf '[update-trust] %s\n' "$output" >&2
   else

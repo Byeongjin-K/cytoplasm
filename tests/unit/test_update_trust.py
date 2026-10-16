@@ -830,3 +830,86 @@ def test_save_release_floor_round_trips_atomically_without_leaving_temporaries(
     assert reloaded is not None
     assert (reloaded.tag, reloaded.commit_sha, reloaded.ordering) == ("v2.0.0", "b" * 40, (2, 0, 0))
     assert sorted(p.name for p in path.parent.iterdir()) == ["release-floor.json"]
+
+
+def _fingerprint(key: Path) -> str:
+    return _run("ssh-keygen", "-lf", str(key.with_suffix(".pub"))).split()[1]
+
+
+def _publish_rotation(repository: UpdateRepository) -> str:
+    """v1.0.0 under the old key, v1.1.0 under the new key; the node trusts only the old."""
+    _sign_tag(repository, "v1.0.0", repository.old_key)
+    old_release = _run("git", "rev-parse", "v1.0.0^{commit}", cwd=repository.publisher)
+    _ = _commit(repository, "after rotation")
+    _sign_tag(repository, "v1.1.0", repository.new_key)
+    _ = _run(
+        "git", "push", "origin", "main", "refs/tags/v1.0.0", "refs/tags/v1.1.0",
+        cwd=repository.publisher,
+    )
+    return old_release
+
+
+def test_resolve_signed_update_when_a_newer_release_needs_a_key_the_node_lacks_then_reports_it(
+    update_repository: UpdateRepository,
+    floor: Path,
+) -> None:
+    """2026-10-16: a third-party node sat on the last old-key release for days, rc 0."""
+    old_release = _publish_rotation(update_repository)
+
+    release = resolve_signed_update(
+        update_repository.mirror,
+        update_repository.allowed_signers,
+        floor_path=floor,
+    )
+
+    assert (release.tag, release.commit_sha) == ("v1.0.0", old_release)
+    assert release.stale_key is not None
+    assert release.stale_key.tag == "v1.1.0"
+    assert release.stale_key.reason == "BAD-SIGNATURE"
+    assert release.stale_key.signer_fingerprint == _fingerprint(update_repository.new_key)
+
+
+def test_resolve_signed_update_when_every_release_verifies_then_reports_no_stale_key(
+    update_repository: UpdateRepository,
+    floor: Path,
+) -> None:
+    _ = _publish_rotation(update_repository)
+    _write_allowed_signers(update_repository.allowed_signers, update_repository.new_key)
+
+    release = resolve_signed_update(
+        update_repository.mirror,
+        update_repository.allowed_signers,
+        floor_path=floor,
+    )
+
+    assert release.tag == "v1.1.0"
+    assert release.stale_key is None
+
+
+def test_resolve_signed_cli_when_the_trust_key_is_stale_then_says_what_to_do_on_stderr(
+    update_repository: UpdateRepository,
+    floor: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    old_release = _publish_rotation(update_repository)
+
+    code = update_trust_main([
+        "resolve-signed",
+        "--mirror", str(update_repository.mirror),
+        "--allowed-signers", str(update_repository.allowed_signers),
+        "--floor-path", str(floor),
+    ])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out.strip() == old_release
+    warning = captured.err.strip()
+    assert warning.startswith("UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요")
+    assert "v1.1.0" in warning and "v1.0.0" in warning
+    assert _fingerprint(update_repository.new_key) in warning
+
+
+def test_ssh_signature_fingerprint_when_the_tag_has_no_ssh_signature_then_is_empty() -> None:
+    assert update_trust_module.ssh_signature_fingerprint("object 0\ntag v1\n\nno signature\n") == ""
+    broken = "-----BEGIN SSH SIGNATURE-----\n@@@\n-----END SSH SIGNATURE-----\n"
+    assert update_trust_module.ssh_signature_fingerprint(broken) == ""
