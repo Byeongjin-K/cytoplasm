@@ -145,6 +145,45 @@ def test_a_lane_row_outside_the_contract_makes_the_feed_unreadable(extra: dict[s
         parse_sessions(_wait_row(**extra))
 
 
+def _timer_cards(panel: str) -> dict[str, str]:
+    timers = panel.split('data-fold="ss-svc-timer"', 1)[1]
+    cards = re.findall(r'<li class="ss-member">(.*?)</li>', timers)
+    return {re.search(r"<b>([^<]+)</b>", c).group(1): _text(c).replace("\u00a0", " ") for c in cards}  # type: ignore[union-attr]
+
+
+def test_a_timer_reads_by_how_its_last_run_ended_and_keeps_the_weeks_failures_as_a_line(tmp_path: Path) -> None:
+    data = demo.sessions(datetime(2026, 10, 16, 12, 0, tzinfo=UTC))
+    panel = _panel(_page(tmp_path, data, now_ms=data.now))
+    cards = _timer_cards(panel)
+    # failed twice earlier this week, fine since: 정상, and the two failures stay on the card
+    assert cards["백업"].startswith("백업 매일 정상")
+    assert re.search(r"7일간 7번 중 실패 2번, 마지막 실패 10월 14일 \d\d:\d\d$", cards["백업"])
+    # its latest run failed: 실패 in red, whatever the rest of the week did
+    assert cards["업데이트 확인"].startswith("업데이트 확인 30분마다 실패")
+    assert '<span class="badge d-over">실패</span>' in panel
+    assert re.search(r"7일간 336번 중 실패 3번, 마지막 실패 10월 16일 \d\d:\d\d$", cards["업데이트 확인"])
+    assert cards["아침 점검"].endswith("7일간 7번 실행, 실패 없음")
+    assert "실패 있음" not in _text(panel)
+
+
+def test_a_feed_without_the_last_result_still_shows_the_weeks_failures(tmp_path: Path) -> None:
+    raw = _raw()
+    for row in raw["services"]:  # type: ignore[union-attr]
+        row.pop("lastOk", None)  # type: ignore[union-attr]
+        row.pop("lastFail", None)  # type: ignore[union-attr]
+    cards = _timer_cards(_panel(_page(tmp_path, parse_sessions(raw))))
+    assert cards["상태 확인"].startswith("상태 확인 30분마다 실패 있음 실패 2회")
+    assert cards["정기 백업"].startswith("정기 백업 매일 정상")
+
+
+@pytest.mark.parametrize("extra", [{"lastOk": "yes"}, {"lastOk": 1}, {"lastFail": -1}])
+def test_a_service_row_with_a_bad_last_result_makes_the_feed_unreadable(extra: dict[str, object]) -> None:
+    raw = _raw()
+    next(r for r in raw["services"] if r["group"] == "timer").update(extra)  # type: ignore[union-attr]
+    with pytest.raises(ValueError):
+        parse_sessions(raw)
+
+
 def test_the_summary_links_to_the_tab_when_sessions_arrived(tmp_path: Path) -> None:
     page = _page(tmp_path, parse_sessions(_raw()))
     summary = page.split('<section id="summary"', 1)[1].split("</section>", 1)[0]

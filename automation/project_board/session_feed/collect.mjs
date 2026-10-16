@@ -8,7 +8,8 @@
 //   SB_LANE_RULES     JSON file: [["<regex on lane key>", "<dept id>", "<generic theme label>"], ...]
 //                     dept id is one of ops|assistant|research|web|study|infra; unmatched lanes become etc / "세션 N"
 //   SB_SERVICES       JSON file: [{"label", "group": "watch|web|timer", "tag", "units": ["<user unit>", ...], "every"?}];
-//                     state, start, restarts, runs, fails and last run are read from systemd --user and its journal
+//                     state, start, restarts, runs, fails, last run, whether that last run ended well (lastOk)
+//                     and the last failure (lastFail) are read from systemd --user and its journal
 //   SB_CACHE          optional private JSON file that remembers, per session file, how far it was read and what it held
 //                     (paths stay in that file only). Without it every run reads the last week's transcripts in full.
 //   SB_NOW            optional ISO time to freeze "now" (default: the current time)
@@ -239,7 +240,17 @@ for (const s of JSON.parse(await Bun.file(env('SB_SERVICES')).text())) {
   if (s.group === 'timer') {
     const done = units.flatMap(u => u.finished), failed = units.flatMap(u => u.failed);
     const last = Math.max(0, ...done.map(l => l.at), ...failed.map(l => l.at));
-    Object.assign(row, { st: failed.length ? 'warn' : 'ok', runs: done.length + failed.length || null, fails: failed.length, last: last || null });
+    const lastFail = Math.max(0, ...failed.map(l => l.at));
+    // how each unit's own latest run ended; the service is failing now only when one of them is
+    const ends = units.map(u => {
+      const ok = Math.max(0, ...u.finished.map(l => l.at)), bad = Math.max(0, ...u.failed.map(l => l.at));
+      return ok || bad ? bad <= ok : null;
+    }).filter(v => v != null);
+    const lastOk = ends.length ? ends.every(Boolean) : null;
+    Object.assign(row, {
+      st: lastOk === false ? 'fail' : 'ok', runs: done.length + failed.length || null, fails: failed.length, last: last || null,
+      lastOk, lastFail: lastFail || null,
+    });
   } else {
     const entered = units.map(u => u.entered).filter(v => v != null);
     Object.assign(row, {

@@ -159,10 +159,17 @@ def sessions(now: datetime) -> Sessions:
     services = [
         {"label": label, "group": group, "tag": tag, "units": units, "st": "live" if group != "timer" else "ok",
          "start": w0 - 86_400_000, "restarts": rng.randint(1, 4) if group != "timer" else None,
-         "runs": 7 if group == "timer" else None, "fails": 1 if label == "백업" else 0, "every": "매일" if group == "timer" else "",
-         "last": end - 3 * 3_600_000 if group == "timer" else None}
+         "runs": 7 if group == "timer" else None, "fails": 0, "every": "매일" if group == "timer" else "",
+         "last": end - 3 * 3_600_000 if group == "timer" else None, "lastOk": True if group == "timer" else None}
         for label, group, tag, units in _SERVICES
     ]
+    # one timer failed twice earlier in the week and has run fine since; one is failing right now
+    for row in services:
+        if row["label"] == "백업":
+            row.update({"fails": 2, "lastFail": end - 53 * 3_600_000})
+        elif row["label"] == "업데이트 확인":
+            last = end - 25 * 60_000
+            row.update({"st": "fail", "every": "30분마다", "runs": 336, "fails": 3, "last": last, "lastOk": False, "lastFail": last})
     return parse_sessions({"w0": w0, "now": end, "lanes": lanes, "agents": agents, "aoe": aoe, "services": services})
 
 
