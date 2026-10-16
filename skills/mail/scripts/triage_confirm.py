@@ -189,7 +189,9 @@ def digest_thread(header_message_id: str, name: str) -> str:
         return ""
 
 
-def post_in(channel_id: str, content: str) -> str:
+def post_in(channel_id: str, content: str, *, reply_to: str = "") -> str:
+    if reply_to:  # under its mail card in the digest thread (owner Q187)
+        return post_approval_request(content, channel_id, reply_to=reply_to)
     return _dm_transport(channel_id).send(content)[-1].message_id
 
 

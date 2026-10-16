@@ -165,6 +165,7 @@ def close_thread(
     outcome: ThreadOutcome,
     *,
     record_id: str = "",
+    base_name: str = "",
 ) -> bool:
     """Rename the request thread with its status prefix and archive it (best-effort).
 
@@ -172,8 +173,11 @@ def close_thread(
     marker and ``False`` — the notice already landed and nothing downstream may change.
     """
     try:
-        current = api("GET", f"/channels/{thread_id}")
-        name = str(current.get("name") or "") if isinstance(current, dict) else ""
+        if base_name:  # a caller that owns the name (digest marks) closes it without a re-read
+            name = base_name
+        else:
+            current = api("GET", f"/channels/{thread_id}")
+            name = str(current.get("name") or "") if isinstance(current, dict) else ""
         for prefix in _STATUS_PREFIXES:
             if name.startswith(prefix):
                 name = name[len(prefix):]

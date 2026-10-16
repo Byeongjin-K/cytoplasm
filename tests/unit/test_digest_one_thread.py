@@ -83,7 +83,7 @@ def test_a_draft_reaction_puts_the_reply_card_in_the_digest_thread_under_its_mai
     calls: list[argparse.Namespace] = []
     monkeypatch.setattr(triage_cli, "cmd_draft", lambda args: calls.append(args) or 0)
     monkeypatch.setattr(digest_reaction_actions, "_pending_draft", lambda _uid: None)
-    monkeypatch.setattr(triage_confirm, "post_in", lambda *_a: "m")
+    monkeypatch.setattr(triage_confirm, "post_in", lambda *_a, **_k: "m")
 
     # When ✍️ asks for that mail's reply draft.
     digest_reaction_actions._write_draft({"uid": "u-1", "channel_id": THREAD, "message_id": CARD})
@@ -255,3 +255,14 @@ def test_the_stored_binding_file_is_private(_state: Path) -> None:
 
     assert json.loads(path.read_text(encoding="utf-8"))["channel_id"] == THREAD
     assert path.stat().st_mode & 0o077 == 0
+
+
+def test_thread_marks_follow_cards_even_while_mail_sending_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    settled: list[str] = []
+    monkeypatch.delenv("E2E_TEST_MODE", raising=False)
+    monkeypatch.setattr(triage_cli.triage_mode, "effective_mode", lambda: "no-go")
+    monkeypatch.setattr(triage_digest_thread, "settle", lambda: settled.append("x"))
+
+    assert triage_cli.cmd_watch(argparse.Namespace()) == 0
+
+    assert settled == ["x"]

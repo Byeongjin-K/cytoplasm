@@ -93,6 +93,8 @@ _EXEMPT: Final[Mapping[str, str]] = {
     "skills/calendar/scripts/calendar_confirm.py::send_owner_dm": "확정 결과 알림 DM이며 pending 승인 메시지를 만들지 않는다.",
     "skills/calendar/scripts/calendar_confirm.py::post_message": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
     "skills/calendar/scripts/confirm_reaction_watch.py::DiscordApi.post_message": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
+    "skills/calendar/scripts/confirm_reaction_watch.py::DiscordApi.post_reminder_message": "같은 무반응 최소정보 리마인더를 게시하고 그 메시지 id를 돌려준다(다이제스트 스레드에서 다음 리마인더가 편집해 붙는다) — 승인 포인터를 저장하지 않는다.",
+    "skills/calendar/scripts/confirm_reaction_watch.py::_deliver_reminder": "리마인더 전달 경로 선택(다이제스트 스레드면 한 메시지로 모으기, 아니면 기존 게시) — 승인 요청을 게시하지 않는다.",
     "skills/calendar/scripts/confirm_reaction_watch.py::_process_entries": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
     "skills/coordination/scripts/confirm_reaction_watch.py::DiscordApi.send_owner_dm": "워처의 처리 결과 알림이며 승인 요청을 게시하지 않는다.",
     "skills/coordination/scripts/coordination_lifecycle.py::finish": "피어 조율 완료 통지이며 승인 메시지 포인터를 만들지 않는다.",

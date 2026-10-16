@@ -83,9 +83,29 @@ def card_for(draft: dict, channel_id: str) -> str:
 
 
 def is_digest_draft(draft: dict) -> bool:
-    """Whether this draft's approval card sits in a digest thread (results must not close it)."""
+    """Whether this draft's approval card sits in a digest thread (results must not close it).
+
+    Decided by structure, not by the state file: only a draft asked inside a thread has
+    that thread as both its origin and its approval thread (a new request thread hangs on
+    a channel message instead), so an unreadable state file can never let a result close
+    a thread other cards still wait in.
+    """
     thread = str(draft.get("approval_thread_id") or "")
-    return bool(thread) and thread == str(draft.get("origin_channel_id") or "") and _thread(thread) is not None
+    return bool(thread) and thread == str(draft.get("origin_channel_id") or "")
+
+
+def deliver_reminder(channel_id: str, content: str) -> None:
+    """Mail's reminder delivery: inside a digest thread, join a fresh reminder message (Q187)."""
+    try:
+        shared = _shared()
+    except triage_gate.GateError:
+        triage_confirm.post_approval_request(content, channel_id)
+        return
+    shared.post_reminder(
+        channel_id, content,
+        post=lambda channel, body: triage_confirm.post_approval_request(body, channel),
+        edit=triage_confirm.edit_message,
+    )
 
 
 def settle() -> None:

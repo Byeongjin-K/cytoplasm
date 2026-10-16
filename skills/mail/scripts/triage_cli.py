@@ -283,6 +283,12 @@ _DM_NOTIFIABLE_METHODS: Final = frozenset({"manual_reaction"})
 _REMINDER_BATCH: ContextVar[list | None] = ContextVar("mail_reminder_batch", default=None)
 
 
+def _deliver_reminder(channel_id: str, content: str) -> None:
+    import triage_digest_thread
+
+    triage_digest_thread.deliver_reminder(channel_id, content)
+
+
 def _remind_pending(draft: dict, config: object | None) -> None:
     if config is None:
         return
@@ -295,9 +301,7 @@ def _remind_pending(draft: dict, config: object | None) -> None:
         config=config,
         journal=lease_module.ReminderJournal(triage_gate.gate_dir() / "reminder-journal"),
         request_type=triage_approval.triage_binding.approval_kind(draft),
-        deliver=lambda channel_id, content: triage_confirm.post_approval_request(
-            content, channel_id
-        ),
+        deliver=_deliver_reminder,
         guild_id_for=guild_id_for,
         clock=lambda: datetime.now(UTC),
         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
@@ -393,9 +397,6 @@ def _digest_reactions() -> None:
     except Exception as error:  # noqa: BLE001 — approvals below must still be processed
         print(f"DIGEST-REACTION-TICK-FAIL err={triage_core.redact(str(error))[:160]}",
               file=sys.stderr)
-    import triage_digest_thread
-
-    triage_digest_thread.settle()
 
 
 def cmd_watch(_args: argparse.Namespace) -> int:
@@ -405,6 +406,9 @@ def cmd_watch(_args: argparse.Namespace) -> int:
     mode = triage_mode.effective_mode()
     if mode != "no-go":
         _digest_reactions()
+    import triage_digest_thread  # marks only rename threads, so they follow cards in every mode
+
+    triage_digest_thread.settle()
     if mode != "full-go":
         print(f"MODE-SKIP mode={mode} (W4-1N 분기 — 자동 발송 정지)")
         return 0

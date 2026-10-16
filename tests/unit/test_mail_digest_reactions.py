@@ -78,7 +78,7 @@ def _discord(
     monkeypatch.setattr(triage_confirm, "owner_id", lambda: OWNER_ID)
     monkeypatch.setattr(
         triage_confirm, "post_in",
-        lambda channel, body: posted.append((channel, body)) or f"m-{len(posted)}",
+        lambda channel, body, reply_to="": posted.append((channel, body)) or f"m-{len(posted)}",
     )
     return posted
 

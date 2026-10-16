@@ -89,6 +89,10 @@ class DiscordClient(Protocol):
 
     def fetch_channel(self, channel_id: str) -> object: ...
 
+    def post_reminder_message(self, channel_id: str, content: str) -> str: ...
+
+    def edit_message(self, channel_id: str, message_id: str, content: str) -> None: ...
+
 
 class CommandRunner(Protocol):
     def confirm(self, entry: PendingConfirm, owner_id: str) -> None: ...
@@ -120,10 +124,20 @@ class DiscordApi:
 
     def post_message(self, channel_id: str, content: str) -> None:
         """Post a reminder to the channel authorized by the shared policy."""
+        self.post_reminder_message(channel_id, content)
+
+    def post_reminder_message(self, channel_id: str, content: str) -> str:
+        """Post a reminder and return its id (a digest thread may edit it later)."""
         try:
-            calendar_confirm.post_message(channel_id, content)
+            return calendar_confirm.post_message(channel_id, content)
         except (calendar_gate.GateError, HTTPError, URLError, OSError) as error:
             raise _transport_failure("reminder post failed", "discord.notify", error) from error
+
+    def edit_message(self, channel_id: str, message_id: str, content: str) -> None:
+        try:
+            calendar_confirm.edit_message(channel_id, message_id, content)
+        except (calendar_gate.GateError, HTTPError, URLError, OSError) as error:
+            raise _transport_failure("reminder edit failed", "discord.notify", error) from error
 
     def fetch_channel(self, channel_id: str) -> object:
         """Read channel metadata for the reminder's server-aware source link."""
@@ -408,7 +422,7 @@ def _process_entries(
                             store.path.parent / "reminder-journal"
                         ),
                         request_type=kind,
-                        deliver=lambda channel_id, content: discord.post_message(channel_id, content),
+                        deliver=lambda channel_id, content: _deliver_reminder(discord, channel_id, content),
                         clock=lambda: now,
                         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
                         space_for=lambda _channel, surface=entry.surface: reminder.stored_reminder_space(surface),
@@ -479,6 +493,18 @@ def _process_entries(
 def _has_thread(record: Mapping[str, object]) -> bool:
     """A request thread to answer in — this request's own, else the instructing channel."""
     return bool(record.get("approval_thread_id") or record.get("origin_channel_id"))
+
+
+def _deliver_reminder(discord: object, channel_id: str, content: str) -> None:
+    """Calendar's reminder delivery: inside a digest thread, join a fresh reminder message (Q187)."""
+    try:
+        shared = calendar_approval._repo_module("digest_thread")
+    except calendar_gate.GateError:
+        shared = None
+    if shared is None or shared.find(channel_id) is None:
+        discord.post_message(channel_id, content)
+        return
+    shared.post_reminder(channel_id, content, post=discord.post_reminder_message, edit=discord.edit_message)
 
 
 def _notify_result(

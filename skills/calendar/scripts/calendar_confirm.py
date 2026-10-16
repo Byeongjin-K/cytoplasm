@@ -158,6 +158,11 @@ def post_message(channel_id: str, content: str, *, reply_to: str = "") -> str:
     return _required_string(_api("POST", f"/channels/{channel_id}/messages", {"content": content, **reference}), "id", "메시지 id가 없습니다")
 
 
+def edit_message(channel_id: str, message_id: str, content: str) -> None:
+    """Rewrite an already-posted reminder (one digest-thread reminder message, Q187)."""
+    _api("PATCH", f"/channels/{channel_id}/messages/{message_id}", {"content": content})
+
+
 def fetch_channel(channel_id: str) -> object:
     """Read channel metadata for the reminder's server-aware source link."""
     return _api("GET", f"/channels/{channel_id}")

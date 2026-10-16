@@ -19,6 +19,7 @@ import fcntl
 import json
 import os
 import sys
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -32,6 +33,10 @@ PENDING_MARK: Final = "🔔 "
 MARK_PENDING: Final = "pending"
 MARK_DONE: Final = "done"
 MARK_NONE: Final = ""
+#: Reminders reaching one digest thread within this window share one message (Q187):
+#: mail and calendar remind from different crons, so the second one edits the first.
+REMINDER_WINDOW_SECONDS: Final = 120
+_MESSAGE_LIMIT: Final = 2000
 
 
 def state_dir() -> Path:
@@ -101,7 +106,7 @@ def _write(thread: DigestThread) -> None:
 
 
 class _DayLock:
-    """Exclusive lock for one day's state file (class-based so a raise is never masked)."""
+    """Exclusive lock for one state file (class-based so a raise is never masked)."""
 
     def __init__(self, day: str) -> None:
         self._path = state_dir() / f"{day}.lock"
@@ -139,6 +144,52 @@ def binding(surface: object, kind: object, thread: DigestThread, directory: obje
     )
 
 
+def post_reminder(
+    channel_id: str, body: str, *,
+    post: Callable[[str, str], object], edit: Callable[[str, str, str], object],
+    now: float | None = None,
+) -> None:
+    """Deliver a reminder; inside a digest thread, join one still-fresh reminder message.
+
+    Outside a digest thread this is ``post`` unchanged. A failed edit posts a new
+    message instead, so a reminder line is never dropped.
+    """
+    if find(channel_id) is None:
+        post(channel_id, body)
+        return
+    moment = time.time() if now is None else now
+    record = state_dir() / f"reminder-{channel_id}.json"
+    with _DayLock(f"reminder-{channel_id}"):
+        try:
+            last = json.loads(record.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            last = None
+        if (isinstance(last, dict) and isinstance(last.get("message_id"), str) and last["message_id"]
+                and isinstance(last.get("at"), (int, float)) and isinstance(last.get("body"), str)
+                and 0 <= moment - last["at"] <= REMINDER_WINDOW_SECONDS):
+            combined = f"{last['body']}\n{body}"
+            if len(combined) <= _MESSAGE_LIMIT:
+                try:
+                    edit(channel_id, last["message_id"], combined)
+                except Exception as error:  # noqa: BLE001 — the line goes out as its own message
+                    print(f"DIGEST-REMINDER-EDIT-FAIL thread={channel_id} err={type(error).__name__}",
+                          file=sys.stderr)
+                else:
+                    _write_json(record, {**last, "body": combined})
+                    return
+        message_id = post(channel_id, body)
+        if isinstance(message_id, str) and message_id:
+            _write_json(record, {"message_id": message_id, "at": moment, "body": body})
+
+
+def _write_json(path: Path, data: Mapping[str, object]) -> None:
+    temporary = path.with_suffix(".tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(dict(data), handle, ensure_ascii=False)
+    os.replace(temporary, path)
+
+
 def wanted_mark(thread: DigestThread, *, pending: int, latest: bool) -> str:
     if pending > 0:
         return MARK_PENDING
@@ -165,7 +216,8 @@ def settle(counts: Mapping[str, int], api: Callable[..., object]) -> None:
             continue
         if mark == MARK_DONE:
             changed = origin_notice.close_thread(
-                api, thread.channel_id, origin_notice.ThreadOutcome.DONE, record_id=f"digest:{thread.day}")
+                api, thread.channel_id, origin_notice.ThreadOutcome.DONE, record_id=f"digest:{thread.day}",
+                base_name=thread.name)
         else:
             name = f"{PENDING_MARK}{thread.name}" if mark == MARK_PENDING else thread.name
             changed = origin_notice.rename_thread(api, thread.channel_id, name, record_id=f"digest:{thread.day}")
