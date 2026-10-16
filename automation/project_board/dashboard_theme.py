@@ -224,7 +224,7 @@ dialog p{margin:0 0 var(--s3);color:var(--text-2)}
 .notice p:last-child{margin-bottom:0}
 .reader h1{font-size:var(--t-xl);margin:0 0 var(--s4)}
 .cmd{margin:var(--s3) 0 0;padding:var(--s3) var(--s4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);overflow-x:auto}
-.cmd code{background:none;border:0;padding:0;white-space:pre}
+.cmd code{background:none;border:0;padding:0;white-space:pre-wrap}
 .q{white-space:nowrap}
 dialog h2:focus{outline:none}
 .reader{max-width:860px;margin:0 auto;padding:var(--s6) var(--s4) var(--s10)}

@@ -208,7 +208,7 @@ _ARCHIVE_DIALOG: Final = (
     '<dialog id="archive-dialog" aria-labelledby="archive-title"><form method="dialog">'
     '<h2 id="archive-title" tabindex="-1" autofocus>이 프로젝트를 보관할까요?</h2>'
     '<p>「<b data-name></b>」 프로젝트는 요약, 할\u00a0일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
-    "할\u00a0일과 근거는 지워지지 않고 프로젝트 화면의 「보관 해제」로 언제든 되돌립니다.</p>"
+    "할\u00a0일과 근거는 지워지지 않고 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 언제든 되돌립니다.</p>"
     '<p class="dialog-error" role="alert"></p>'
     '<div class="dialog-actions"><button class="btn" value="cancel">취소</button>'
     '<button class="btn primary" value="ok" data-confirm>보관하기</button></div></form></dialog>'
@@ -401,7 +401,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
                 f"<li><b>{escape(p.project)}</b> {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
-                f"근거 「{escape(p.source_subject)}」{link}</li>"
+                f"근거 {_quoted(p.source_subject)}{link}</li>"
             )
         pending = (
             f'<div class="callout" id="pending">{icon("inbox")}<div><b>승인을 기다리는 제안 {len(items)}건</b>'
@@ -676,7 +676,7 @@ def _archived_line(view: ProjectView, mode: Mode) -> str:
 def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dict[str, int] | None = None) -> str:
     """보관함: archived projects only. Their todos and evidence are kept and open from the card."""
     sub = ("보관한 프로젝트는 요약, 프로젝트, 할\u00a0일, 일정, 근거와 프로젝트 고르기에 나오지 않습니다. "
-           "할\u00a0일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.")
+           "할\u00a0일과 근거는 지워지지 않고, 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 되돌립니다.")
 
     def line(view: ProjectView) -> str:
         count = (fresh or {}).get(view.name, 0)
@@ -686,7 +686,7 @@ def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dic
     cards = "".join(_project_card(view, today, line(view)) for view in shelf)
     body = f'<div class="grid">{cards}</div>' if cards else (
         f'<div class="card empty">{icon("archive")}<b>보관한 프로젝트가 없습니다</b>'
-        "<p>끝난 프로젝트는 프로젝트 화면의 「보관」으로 이곳에 옮길 수 있습니다.</p></div>"
+        "<p>끝난 프로젝트는 프로젝트 화면의 <span class=\"q\">「보관」으로</span> 이곳에 옮길 수 있습니다.</p></div>"
     )
     return f'<section id="archive" data-tab="archive">{_head("보관함", sub)}{body}</section>'
 
