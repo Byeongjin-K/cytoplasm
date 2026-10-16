@@ -370,11 +370,24 @@ def _notify_cancelled(draft: dict) -> None:
               f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
 
 
+def _digest_reactions() -> None:
+    """Digest card 📄/✍️ reactions (read + draft only, never a send); never fails the tick."""
+    import digest_reaction_actions
+
+    try:
+        digest_reaction_actions.run_tick()
+    except Exception as error:  # noqa: BLE001 — approvals below must still be processed
+        print(f"DIGEST-REACTION-TICK-FAIL err={triage_core.redact(str(error))[:160]}",
+              file=sys.stderr)
+
+
 def cmd_watch(_args: argparse.Namespace) -> int:
     """Production cron tick: repost pending, resolve ✅/⛔, send approved (초안 생성 없음)."""
     if os.environ.get("E2E_TEST_MODE"):
         raise triage_gate.GateError("watch는 프로덕션 전용 — E2E_TEST_MODE 거부", 3)
     mode = triage_mode.effective_mode()
+    if mode != "no-go":
+        _digest_reactions()
     if mode != "full-go":
         print(f"MODE-SKIP mode={mode} (W4-1N 분기 — 자동 발송 정지)")
         return 0
