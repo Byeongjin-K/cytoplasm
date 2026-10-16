@@ -1,0 +1,565 @@
+{
+ "w0": 1791471600000,
+ "now": 1792134000000,
+ "lanes": [
+  {
+   "dept": "ops",
+   "theme": "지침·브리프",
+   "st": "done",
+   "start": 1791478800000,
+   "end": 1791489600000,
+   "dur": 10800000,
+   "carried": false
+  },
+  {
+   "dept": "ops",
+   "theme": "지침·브리프",
+   "st": "done",
+   "start": 1791579600000,
+   "end": 1791583200000,
+   "dur": 3600000,
+   "carried": false
+  },
+  {
+   "dept": "ops",
+   "theme": "품질 점검",
+   "st": "done",
+   "start": 1791651600000,
+   "end": 1791680400000,
+   "dur": 28800000,
+   "carried": false
+  },
+  {
+   "dept": "ops",
+   "theme": "세션 관리·복구",
+   "st": "hold",
+   "start": 1791759600000,
+   "end": null,
+   "dur": 374400000,
+   "carried": false
+  },
+  {
+   "dept": "assistant",
+   "theme": "메일 정리·전달",
+   "st": "done",
+   "start": 1791507600000,
+   "end": 1791522000000,
+   "dur": 14400000,
+   "carried": false
+  },
+  {
+   "dept": "assistant",
+   "theme": "릴리스·점검",
+   "st": "review",
+   "start": 1791831600000,
+   "end": 1791903600000,
+   "dur": 72000000,
+   "carried": false
+  },
+  {
+   "dept": "research",
+   "theme": "강화학습 실험",
+   "st": "run",
+   "start": 1791399600000,
+   "end": null,
+   "dur": 662400000,
+   "carried": true
+  },
+  {
+   "dept": "research",
+   "theme": "논문·자료 검토",
+   "st": "done",
+   "start": 1791687600000,
+   "end": 1791723600000,
+   "dur": 36000000,
+   "carried": false
+  },
+  {
+   "dept": "web",
+   "theme": "프로젝트 대시보드",
+   "st": "done",
+   "start": 1791615600000,
+   "end": 1791687600000,
+   "dur": 72000000,
+   "carried": false
+  },
+  {
+   "dept": "web",
+   "theme": "세션 보드(UI 작업)",
+   "st": "done",
+   "start": 1792083600000,
+   "end": 1792090800000,
+   "dur": 7200000,
+   "carried": false
+  },
+  {
+   "dept": "study",
+   "theme": "뉴스 정리",
+   "st": "done",
+   "start": 1791543600000,
+   "end": 1791547200000,
+   "dur": 3600000,
+   "carried": false
+  },
+  {
+   "dept": "study",
+   "theme": "세미나 준비",
+   "st": "fail",
+   "start": 1791795600000,
+   "end": 1791831600000,
+   "dur": 36000000,
+   "carried": false
+  },
+  {
+   "dept": "infra",
+   "theme": "GPU 관리",
+   "st": "done",
+   "start": 1791741600000,
+   "end": 1791752400000,
+   "dur": 10800000,
+   "carried": false
+  }
+ ],
+ "agents": [
+  {
+   "platform": "senpi",
+   "fam": "Opus 5.5",
+   "start": 1791471600000,
+   "end": 1791475200000,
+   "dur": 3600000,
+   "calls": 20,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791486720000,
+   "end": 1791493920000,
+   "dur": 7200000,
+   "calls": 27,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1791501840000,
+   "end": 1791512640000,
+   "dur": 10800000,
+   "calls": 34,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1791516960000,
+   "end": 1791531360000,
+   "dur": 14400000,
+   "calls": 41,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "기타 모델",
+   "start": 1791532080000,
+   "end": 1791550080000,
+   "dur": 18000000,
+   "calls": 48,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791547200000,
+   "end": 1791550800000,
+   "dur": 3600000,
+   "calls": 55,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791562320000,
+   "end": 1791569520000,
+   "dur": 7200000,
+   "calls": 62,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1791577440000,
+   "end": 1791588240000,
+   "dur": 10800000,
+   "calls": 69,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Haiku",
+   "start": 1791592560000,
+   "end": 1791606960000,
+   "dur": 14400000,
+   "calls": 76,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1791607680000,
+   "end": 1791625680000,
+   "dur": 18000000,
+   "calls": 83,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791622800000,
+   "end": 1791626400000,
+   "dur": 3600000,
+   "calls": 90,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791637920000,
+   "end": 1791645120000,
+   "dur": 7200000,
+   "calls": 97,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Sonnet 5.5",
+   "start": 1791653040000,
+   "end": 1791663840000,
+   "dur": 10800000,
+   "calls": 104,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1791668160000,
+   "end": 1791682560000,
+   "dur": 14400000,
+   "calls": 111,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1791683280000,
+   "end": 1791701280000,
+   "dur": 18000000,
+   "calls": 118,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791698400000,
+   "end": 1791702000000,
+   "dur": 3600000,
+   "calls": 125,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Opus 5.5",
+   "start": 1791713520000,
+   "end": 1791720720000,
+   "dur": 7200000,
+   "calls": 132,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1791728640000,
+   "end": 1791739440000,
+   "dur": 10800000,
+   "calls": 139,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1791743760000,
+   "end": 1791758160000,
+   "dur": 14400000,
+   "calls": 146,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1791758880000,
+   "end": 1791776880000,
+   "dur": 18000000,
+   "calls": 153,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Opus 5.5",
+   "start": 1791774000000,
+   "end": 1791777600000,
+   "dur": 3600000,
+   "calls": 160,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791789120000,
+   "end": 1791796320000,
+   "dur": 7200000,
+   "calls": 167,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1791804240000,
+   "end": 1791815040000,
+   "dur": 10800000,
+   "calls": 174,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1791819360000,
+   "end": 1791833760000,
+   "dur": 14400000,
+   "calls": 181,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "기타 모델",
+   "start": 1791834480000,
+   "end": 1791852480000,
+   "dur": 18000000,
+   "calls": 188,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791849600000,
+   "end": 1791853200000,
+   "dur": 3600000,
+   "calls": 195,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791864720000,
+   "end": 1791871920000,
+   "dur": 7200000,
+   "calls": 202,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1791879840000,
+   "end": 1791890640000,
+   "dur": 10800000,
+   "calls": 209,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Haiku",
+   "start": 1791894960000,
+   "end": 1791909360000,
+   "dur": 14400000,
+   "calls": 216,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1791910080000,
+   "end": 1791928080000,
+   "dur": 18000000,
+   "calls": 223,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791925200000,
+   "end": 1791928800000,
+   "dur": 3600000,
+   "calls": 230,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1791940320000,
+   "end": 1791947520000,
+   "dur": 7200000,
+   "calls": 237,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Sonnet 5.5",
+   "start": 1791955440000,
+   "end": 1791966240000,
+   "dur": 10800000,
+   "calls": 244,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1791970560000,
+   "end": 1791984960000,
+   "dur": 14400000,
+   "calls": 251,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1791985680000,
+   "end": 1792003680000,
+   "dur": 18000000,
+   "calls": 258,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Opus 5.5",
+   "start": 1792000800000,
+   "end": 1792004400000,
+   "dur": 3600000,
+   "calls": 265,
+   "live": false
+  },
+  {
+   "platform": "senpi",
+   "fam": "Opus 5.5",
+   "start": 1792015920000,
+   "end": 1792023120000,
+   "dur": 7200000,
+   "calls": 272,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Sonnet 5.5",
+   "start": 1792031040000,
+   "end": 1792041840000,
+   "dur": 10800000,
+   "calls": 279,
+   "live": false
+  },
+  {
+   "platform": "claude",
+   "fam": "Haiku",
+   "start": 1792046160000,
+   "end": 1792134000000,
+   "dur": 87840000,
+   "calls": 286,
+   "live": true
+  },
+  {
+   "platform": "claude",
+   "fam": "기타 모델",
+   "start": 1792061280000,
+   "end": 1792134000000,
+   "dur": 72720000,
+   "calls": 293,
+   "live": true
+  }
+ ],
+ "aoe": [
+  {
+   "kind": "lead",
+   "start": 1791507600000
+  },
+  {
+   "kind": "lane",
+   "start": 1792123200000
+  },
+  {
+   "kind": "lane",
+   "start": 1792130400000
+  },
+  {
+   "kind": "proj",
+   "start": 1791687600000
+  }
+ ],
+ "services": [
+  {
+   "label": "메신저 수신",
+   "group": "watch",
+   "tag": "상시",
+   "units": 1,
+   "st": "run",
+   "start": 1791831600000,
+   "restarts": 5
+  },
+  {
+   "label": "레인 감시",
+   "group": "watch",
+   "tag": "상시",
+   "units": 1,
+   "st": "run",
+   "start": 1791543600000,
+   "restarts": 2
+  },
+  {
+   "label": "예시 웹 화면",
+   "group": "web",
+   "tag": "상시",
+   "units": 1,
+   "st": "run",
+   "start": 1791489600000,
+   "restarts": 1
+  },
+  {
+   "label": "정기 백업",
+   "group": "timer",
+   "tag": "예약",
+   "units": 1,
+   "st": "run",
+   "runs": 7,
+   "fails": 0,
+   "every": "매일",
+   "last": 1792116000000
+  },
+  {
+   "label": "상태 확인",
+   "group": "timer",
+   "tag": "예약",
+   "units": 1,
+   "st": "warn",
+   "runs": 300,
+   "fails": 2,
+   "every": "30분마다",
+   "last": 1792133400000
+  },
+  {
+   "label": "주간 정리",
+   "group": "timer",
+   "tag": "예약",
+   "units": 1,
+   "st": "unknown",
+   "runs": null,
+   "fails": null,
+   "every": "매주 월 03:15",
+   "last": null
+  }
+ ]
+}
