@@ -40,6 +40,8 @@ html{scroll-padding-top:80px;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font:var(--t-md)/1.55 system-ui,-apple-system,BlinkMacSystemFont,
 "Apple SD Gothic Neo","Pretendard","Malgun Gothic","Noto Sans KR",sans-serif;letter-spacing:-.01em;
 word-break:keep-all;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+p,li,.note,.sub,.what,dd,span{text-wrap:pretty}
+h1,h2,h3,summary b{text-wrap:balance}
 a{color:var(--accent-ink);text-decoration:none}
 a:hover{text-decoration:underline;text-underline-offset:3px}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
@@ -246,7 +248,7 @@ nav a .badge+.badge{display:none}
 nav a .badge.d-none{background:var(--neutral);color:var(--surface)}
 main{padding:var(--s5) var(--s4) var(--s6)}
 footer{padding:0 var(--s4) calc(80px + env(safe-area-inset-bottom))}
-:root{--t-md:17px;--t-sm:15px}
+:root{--t-md:17px;--t-sm:15px;--t-xs:15px}
 .card{padding:var(--s3) var(--s4)}
 .tile{padding:var(--s3) var(--s4)}
 .tile b{font-size:24px}

@@ -38,7 +38,7 @@ _SERVED_JS: Final = """
     var code=String(error&&error.message||'');
     if(code==='401'||code==='403'){return '권한이 없어 저장하지 못했습니다. 대시보드를 다시 열어 주세요.';}
     if(/^[0-9]+$/.test(code)){return '저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.';}
-    return '연결이 끊겨 저장하지 못했습니다. 연결을 확인하고 다시 눌러 주세요.';
+    return '연결이 끊겨 저장하지 못했습니다. 연결을\u00a0확인하고 다시 눌러 주세요.';
   }
   function note(after,text){
     var box=after.parentNode.querySelector('.row-error');
@@ -198,16 +198,16 @@ ONBOARDING: Final = (
     "<p>세 단계로 데이터가 들어옵니다. 지금은 아무것도 하지 않아도 됩니다.</p></div></div>"
     '<ol class="steps"><li><b>메일과 회의록을 읽습니다</b>'
     "<span>기관 메일과 확정 회의록에서 할\u00a0일, 담당, 마감을 찾아 제안합니다.</span></li>"
-    "<li><b>승인 카드로 확인합니다</b><span>제안은 승인 카드로 올라오고, 승인 카드에서 승인하면 데이터가 됩니다.</span></li>"
+    "<li><b>승인\u00a0카드로 확인합니다</b><span>제안은 승인\u00a0카드로 올라오고, 승인 카드에서 승인하면 데이터가 됩니다.</span></li>"
     "<li><b>여기서 진행을 챙깁니다</b><span>프로젝트별 할\u00a0일, 일정, 근거를 보고 체크로 완료를 남깁니다.</span></li></ol>"
-    '<p class="note">실제 데이터 없이 둘러보려면 이 명령으로 데모 보드를 띄웁니다.</p>'
+    '<p class="note">실제 데이터 없이 둘러보려면 이 명령으로 데모\u00a0보드를 띄웁니다.</p>'
     '<pre class="cmd"><code>python3 -m automation.project_board demo</code></pre></div>'
 )
 
 _ARCHIVE_DIALOG: Final = (
     '<dialog id="archive-dialog" aria-labelledby="archive-title"><form method="dialog">'
     '<h2 id="archive-title" tabindex="-1" autofocus>이 프로젝트를 보관할까요?</h2>'
-    '<p>「<b data-name></b>」이(가) 요약, 할\u00a0일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
+    '<p>「<b data-name></b>」 프로젝트는 요약, 할\u00a0일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
     "할\u00a0일과 근거는 지워지지 않고 프로젝트 화면의 「보관 해제」로 언제든 되돌립니다.</p>"
     '<p class="dialog-error" role="alert"></p>'
     '<div class="dialog-actions"><button class="btn" value="cancel">취소</button>'
@@ -231,7 +231,7 @@ def _md(day: str) -> str:
         moment = date.fromisoformat(day[:10])
     except ValueError:
         return day
-    return f"{moment.month}월 {moment.day}일({_WEEKDAYS[moment.weekday()]})"
+    return f"{moment.month}월\u00a0{moment.day}일\u2060({_WEEKDAYS[moment.weekday()]})"
 
 
 def _ago(stamp: str, now: str) -> str:
@@ -400,7 +400,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         for p in snapshot.pending:
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li><b>{escape(p.project)}</b> {_grade_badge(p.grade)} · 할 일 {p.todo_count}건 · "
+                f"<li><b>{escape(p.project)}</b> {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
                 f"근거 「{escape(p.source_subject)}」{link}</li>"
             )
         pending = (
@@ -409,7 +409,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
             f'<ul class="small">{"".join(items)}</ul></div></div>'
         )
     withheld = (
-        f'<p class="note">보안 등급(대외비·기관지정) 할 일 {snapshot.withheld}건은 이 사본에서 뺐습니다.</p>'
+        f'<p class="note">보안 등급(대외비·기관지정) 할\u00a0일\u00a0{snapshot.withheld}건은 이 사본에서 뺐습니다.</p>'
         if snapshot.withheld
         else ""
     )
@@ -584,7 +584,7 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_pr
     return (
         f'<div class="card src-card"><div class="top"><span>{" · ".join(top)}</span>{_grade_badge(row.grade)}</div>'
         f'{title}<p>{_keep(row.summary)}</p>{attachments}'
-        f'<div class="names">{icon("list")}<span>만든 할 일: {todos}</span></div></div>'
+        f'<div class="names">{icon("list")}<span>만든 할\u00a0일: {todos}</span></div></div>'
     )
 
 
