@@ -9,8 +9,10 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 import threading
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -202,6 +204,30 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    from .demo import demo_handlers, demo_token, make_demo_board
+    from .server import make_server
+
+    directory = nullcontext(args.root) if args.root is not None else tempfile.TemporaryDirectory(
+        prefix="project-board-demo-"
+    )
+    with directory as root:
+        store = make_demo_board(Path(root).expanduser(), today_kst())
+        token = demo_token()
+        server = make_server(
+            host="127.0.0.1", port=args.port, token=token, store=store, today=today_kst,
+            **demo_handlers(today_kst),
+        )
+        try:
+            print(f"DEMO http://127.0.0.1:{server.server_address[1]}/?t={token}", flush=True)
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+    return 0
+
+
 def cmd_digest(args: argparse.Namespace) -> int:
     board = Board.default()
     config = load_config()
@@ -314,6 +340,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=0)
     serve.set_defaults(handler=cmd_serve)
+
+    demo = commands.add_parser("demo", help="show an invented board without touching real data")
+    demo.add_argument("--port", type=int, default=0)
+    demo.add_argument("--root", help="empty demo directory, retained after Ctrl-C")
+    demo.set_defaults(handler=cmd_demo)
 
     digest = commands.add_parser("digest", help="dated dashboard snapshot; --request-mail posts a mail card")
     digest.add_argument("--request-mail", action="store_true")
