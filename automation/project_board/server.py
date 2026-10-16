@@ -139,7 +139,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(303, b"", "text/plain", {"Location": parsed.path or "/", "Set-Cookie": cookie})
             return
         if not self._tokenless() and not self._cookie_ok():
-            self._page(401, "로그인이 필요합니다", "처음 한 번은 설치할 때 받은 접속\u00a0주소로 열어야\u00a0합니다. 그 뒤로는 이\u00a0브라우저가 기억합니다.", home=False)
+            self._page(401, "로그인이 필요합니다", "처음 한 번은 설치할 때 받은 접속\u00a0주소로 열어야\u00a0합니다. 그\u00a0뒤로는 이\u00a0브라우저가 기억합니다.", home=False)
             return
         parts = [unquote(part) for part in parsed.path.split("/") if part]
         if not parts:

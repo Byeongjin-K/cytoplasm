@@ -194,7 +194,7 @@ _WEEKDAYS: Final = "월화수목금토일"
 
 ONBOARDING: Final = (
     f'<div class="card onboard" data-tab="summary"><div class="onboard-head">{icon("inbox")}<div>'
-    "<b>처음 오셨군요. 대시보드는 승인된 할\u00a0일로 채워집니다</b>"
+    "<b>처음 오셨군요. 대시보드는 승인된\u00a0할\u00a0일로 채워집니다</b>"
     "<p>세 단계로 데이터가 들어옵니다. 지금은 아무것도 하지 않아도 됩니다.</p></div></div>"
     '<ol class="steps"><li><b>메일과 회의록을 읽습니다</b>'
     "<span>기관 메일과 확정 회의록에서 할\u00a0일, 담당, 마감을 찾아 제안합니다.</span></li>"
@@ -208,7 +208,7 @@ _ARCHIVE_DIALOG: Final = (
     '<dialog id="archive-dialog" aria-labelledby="archive-title"><form method="dialog">'
     '<h2 id="archive-title" tabindex="-1" autofocus>이 프로젝트를 보관할까요?</h2>'
     '<p>「<b data-name></b>」 프로젝트는 요약, 할\u00a0일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
-    "할\u00a0일과 근거는 지워지지 않고 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 언제든 되돌립니다.</p>"
+    "할\u00a0일과\u00a0근거는 지워지지 않고 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 언제든 되돌립니다.</p>"
     '<p class="dialog-error" role="alert"></p>'
     '<div class="dialog-actions"><button class="btn" value="cancel">취소</button>'
     '<button class="btn primary" value="ok" data-confirm>보관하기</button></div></form></dialog>'
@@ -249,6 +249,9 @@ def _ago(stamp: str, now: str) -> str:
         return f"{minutes // 60}시간 전"
     days = (current + timedelta(hours=9)).date() - (then + timedelta(hours=9)).date()
     return "어제" if days.days == 1 else f"{days.days}일 전" if days.days < 7 else _md((then + timedelta(hours=9)).date().isoformat())
+
+
+_SEP: Final = "\u00a0· "  # a separator never starts a line
 
 
 def _keep(text: str) -> str:
@@ -541,7 +544,7 @@ def _agenda_cards(
             items.append(
                 f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
                 f'<b>{escape(todo.title)}</b>{_grade_badge(todo.grade)}'
-                f'<span class="where">{" · ".join(where)}</span></li>'
+                f'<span class="where">{_SEP.join(where)}</span></li>'
             )
         parts.append(_fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold"))
     return "".join(parts)
@@ -582,7 +585,7 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_pr
     top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
     top += [escape(row.project)] if with_project else []
     return (
-        f'<div class="card src-card"><div class="top"><span>{" · ".join(top)}</span>{_grade_badge(row.grade)}</div>'
+        f'<div class="card src-card"><div class="top"><span>{_SEP.join(top)}</span>{_grade_badge(row.grade)}</div>'
         f'{title}<p>{_keep(row.summary)}</p>{attachments}'
         f'<div class="names">{icon("list")}<span>만든 할\u00a0일: {todos}</span></div></div>'
     )
@@ -676,7 +679,7 @@ def _archived_line(view: ProjectView, mode: Mode) -> str:
 def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dict[str, int] | None = None) -> str:
     """보관함: archived projects only. Their todos and evidence are kept and open from the card."""
     sub = ("보관한 프로젝트는 요약, 프로젝트, 할\u00a0일, 일정, 근거와 프로젝트 고르기에 나오지 않습니다. "
-           "할\u00a0일과 근거는 지워지지 않고, 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 되돌립니다.")
+           "할\u00a0일과\u00a0근거는 지워지지 않고, 프로젝트 화면의 <span class=\"q\">「보관 해제」로</span> 되돌립니다.")
 
     def line(view: ProjectView) -> str:
         count = (fresh or {}).get(view.name, 0)
