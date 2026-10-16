@@ -134,3 +134,25 @@ release_helper_probe_script() {
     release_helper_probe_guidance probe_release_helper_drift
   printf '%s\n' 'probe_release_helper_drift node account target'
 }
+
+#: The same check, judged against the release about to be CUT rather than the one the
+#: node runs now. release.sh asks "will the root helper accept this candidate?", and the
+#: node's current tree cannot answer that: on 2026-10-16 v1.40.1 changed update_trust.py,
+#: the fix that restored its bytes could not be released because the check kept comparing
+#: the helper with v1.40.1. The candidate's sources (and its renderer) travel inside the
+#: script as a tar on stdin, unpack into a private temporary directory that is removed on
+#: exit, and render with the node's own config — nothing outside that directory is written.
+release_helper_probe_candidate_script() { # <git-repo> <commit>
+  local repo="$1" commit="$2" payload
+  payload="$(set -o pipefail
+    git -C "$repo" archive --format=tar "$commit" -- automation configs/node.example.toml \
+      | gzip -9 | base64 -w0)" || return 1
+  declare -f release_helper_probe_log release_helper_probe_render \
+    release_helper_probe_guidance probe_release_helper_drift
+  printf '%s\n' 'candidate="$(mktemp -d)" || exit 70' \
+    "trap 'rm -rf -- \"\$candidate\"' EXIT" \
+    "base64 -d <<'CANDIDATE' | tar -xzf - -C \"\$candidate\" || exit 70" \
+    "$payload" \
+    'CANDIDATE' \
+    'HEALTHCHECK_RELEASE_SOURCE_ROOT="$candidate" probe_release_helper_drift node account target'
+}
