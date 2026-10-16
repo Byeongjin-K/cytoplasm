@@ -52,13 +52,13 @@ def test_pending_proposals_are_waiting_not_data(tmp_path: Path) -> None:
     pending = (PendingView("pb-9", "프로젝트B", 3, "새 요청", "2026-10-13T00:00:00Z"),)
     snapshot = _store(tmp_path).snapshot(today=TODAY, pending=pending)
     page = render_dashboard(snapshot, mode="file")
-    assert "소유자 승인을 기다리는 제안" in page and "프로젝트B" in page
+    assert "승인을 기다리는 제안 1건" in page and "프로젝트B" in page
     assert all(todo.project == "프로젝트A" for todo in snapshot.todos)
 
 
 def test_empty_board_explains_where_data_comes_from(tmp_path: Path) -> None:
     page = render_dashboard(BoardStore(tmp_path / "b.db").snapshot(today=TODAY), mode="file")
-    assert "승인(✅)하면" in page
+    assert "승인 카드에서 승인하면" in page and "✅" not in page
 
 
 @pytest.fixture

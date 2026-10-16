@@ -26,7 +26,7 @@ def test_every_menu_item_owns_exactly_one_panel_and_none_is_hidden_in_the_markup
         panels = re.findall(r'<section id="(\w+)" data-tab="(\w+)"', page)
         assert [tab for _, tab in panels if _ != "events"] == [tab for tab, _ in TABS]
         assert ("events", "summary") in panels
-        assert " hidden" not in page.split("<main>", 1)[1].split("<script>", 1)[0]
+        assert " hidden" not in page.split('<main id="main">', 1)[1].split("<script>", 1)[0]
         assert "window.addEventListener('hashchange'" in page
 
 

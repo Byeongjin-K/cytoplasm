@@ -76,5 +76,5 @@ def test_the_mailed_copy_points_to_the_dashboard_instead_of_linking(tmp_path: Pa
         "source": {"kind": "mail", "source_id": "u-1", "subject": "설계 검토", "attachments": ["a.pdf"]},
     }), message_id="m1")
     page = render_dashboard(store.snapshot(today=TODAY, exported=True), mode="file")
-    assert "/source/" not in page and "대시보드(테일넷 주소)의 근거 탭에서 열립니다" in page
+    assert "/source/" not in page and "대시보드 화면의 근거 탭에서 열립니다" in page
     assert "/source/mail/u-1" in render_dashboard(store.snapshot(today=TODAY), mode="served")

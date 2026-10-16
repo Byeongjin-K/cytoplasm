@@ -8,6 +8,7 @@ from outside: no fonts, no CDN, inline CSS and a few lines of inline script.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
@@ -16,100 +17,12 @@ from html import escape
 from typing import Final, Literal
 from urllib.parse import quote
 
+from .dashboard_theme import CSS, brand_mark, favicon, icon
 from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
 
 Mode = Literal["served", "file"]
 
 _STATUS_CLASS: Final = {"열림": "st-open", "진행": "st-doing", "완료": "st-done", "보류": "st-held"}
-
-_CSS: Final = """
-:root{--bg:#f5f5f7;--card:#fff;--text:#1d1d1f;--text2:#515154;--line:rgba(0,0,0,.09);
---accent:#0071e3;--red:#b3001b;--red-bg:#fde8ea;--orange:#9a3c00;--orange-bg:#fff0dc;
---green:#1b6b34;--green-bg:#e3f5e8;--gray-bg:#ececef;--r:12px}
-*{box-sizing:border-box}
-html{scroll-padding-top:64px;-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,
-"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;letter-spacing:-.2px}
-a{color:#0058b0}
-:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
-header{position:sticky;top:0;z-index:5;background:rgba(245,245,247,.92);backdrop-filter:blur(12px);
-border-bottom:1px solid var(--line)}
-.bar{max-width:1180px;margin:0 auto;padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.bar h1{font-size:17px;margin:0;font-weight:700}
-nav{display:flex;gap:4px;flex-wrap:wrap}
-nav a{padding:5px 11px;border-radius:999px;color:var(--text);text-decoration:none;font-size:14px}
-nav a:hover{background:var(--gray-bg)}
-nav a.on{background:var(--text);color:#fff}
-main>[hidden],main [hidden]{display:none!important}
-main{max-width:1180px;margin:0 auto;padding:18px 18px 64px}
-section{margin-top:30px}
-h2{font-size:21px;margin:0 0 12px}
-h3{font-size:16px;margin:18px 0 8px}
-.muted{color:var(--text2)} .small{font-size:13px}
-.chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{background:var(--card);border-radius:var(--r);padding:10px 14px;min-width:120px;border:1px solid var(--line)}
-.chip b{display:block;font-size:24px;line-height:1.2}
-.chip.over b{color:var(--red)} .chip.soon b{color:var(--orange)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-.prog{height:8px;background:var(--gray-bg);border-radius:999px;overflow:hidden;margin:8px 0 4px}
-.prog i{display:block;height:100%;background:#34a853}
-.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
-.d-over{background:var(--red-bg);color:var(--red)} .d-soon{background:var(--orange-bg);color:var(--orange)}
-.d-far,.d-none{background:var(--gray-bg);color:var(--text2)}
-.st-open{background:var(--gray-bg);color:var(--text)} .st-doing{background:#e1ecfb;color:#0b4a8f}
-.st-done{background:var(--green-bg);color:var(--green)} .st-held{background:var(--gray-bg);color:var(--text2)}
-.pending{border-left:4px solid var(--orange)}
-.g-0{background:var(--green-bg);color:var(--green)} .g-1{background:var(--gray-bg);color:var(--text2)}
-.g-2,.g-3{background:var(--red-bg);color:var(--red)}
-ul.todos{list-style:none;margin:0;padding:0}
-ul.todos li{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
-ul.todos li:first-child{border-top:0}
-ul.todos input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:var(--accent)}
-.todo-main{flex:1;min-width:0}
-.todo-title{font-weight:600;overflow-wrap:anywhere}
-li.done .todo-title{text-decoration:line-through;color:var(--text2)}
-.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--text2);margin-top:3px}
-.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.filters input,.filters select{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
-.filters input{flex:1;min-width:160px}
-.agenda h3{display:flex;gap:8px;align-items:center}
-.agenda ul{list-style:none;margin:0;padding:0}
-.agenda li{padding:8px 0;border-top:1px solid var(--line);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-.agenda li:first-child{border-top:0}
-.src{margin-bottom:10px}
-.src .names{font-size:13px;color:var(--text2);overflow-wrap:anywhere}
-.empty{padding:28px;text-align:center;color:var(--text2)}
-.note{font-size:13px;color:var(--text2);margin:6px 0 0}
-a.pcard{display:block;color:inherit;text-decoration:none}
-a.pcard:hover{border-color:var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.06)}
-.go{color:#0058b0;font-size:13px;margin-top:6px}
-h3 a{color:inherit;text-decoration:none} h3 a:hover{color:#0058b0}
-.picker{display:flex;gap:8px;align-items:center;margin:0 0 12px}
-.picker select{font:inherit;padding:8px 34px 8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);
-color:var(--text);min-width:240px;max-width:100%;min-height:40px;cursor:pointer}
-.picker select:hover{border-color:var(--accent)}
-.btn{font:inherit;font-size:14px;padding:6px 14px;min-height:36px;border-radius:8px;border:1px solid var(--line);
-background:var(--card);color:var(--text);cursor:pointer}
-.btn:hover{border-color:var(--accent)} .btn:disabled{opacity:.5;cursor:default}
-.pv-head .btn{margin-left:auto}
-.shelf-note{margin-top:12px}
-.back{display:inline-block;margin-bottom:8px;font-size:14px}
-.pv-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-details.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}
-details.fold>summary::-webkit-details-marker{display:none}
-details.fold>summary::before{content:"▾";color:var(--text2);font-size:13px;width:14px;flex:none;text-align:center}
-details.fold:not([open])>summary::before{content:"▸"}
-details.fold>summary h3{margin:0;display:flex;gap:8px;align-items:center}
-details.fold[open]>summary{margin-bottom:8px}
-details.sect{margin-top:18px}
-details.sect>summary h3{font-size:16px}
-.pv-head h2{margin:0}
-@media (max-width:600px){.bar{padding:8px 12px;gap:6px}main{padding:12px 12px 48px}.chip{min-width:calc(50% - 4px)}
-nav{flex-wrap:nowrap;overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}nav a{flex:none;padding:7px 12px}
-.picker select{flex:1;min-width:0;width:100%}
-h2{font-size:19px}}
-"""
 
 _SERVED_JS: Final = """
 document.querySelectorAll('input[data-todo]').forEach(function(box){
@@ -214,10 +127,13 @@ TABS: Final = (
     ("summary", "요약"), ("projects", "프로젝트"), ("todos", "할 일"), ("schedule", "일정"), ("sources", "근거"),
     ("archive", "보관함"),
 )
-_NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{label}</a>' for tab, label in TABS)
+_NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{icon(tab)}{label}</a>' for tab, label in TABS)
+DEFAULT_BRAND: Final = "프로젝트 대시보드"
+LOCAL_ACTOR: Final = "노드 로컬 접속"
 
 EMPTY_SECTION: Final = (
-    '<div class="card empty">아직 없음 — 자동 분석이 새 메일에서 할 일을 찾고 카드에서 ✅ 하면 여기 나와요.</div>'
+    f'<div class="card empty">{icon("inbox")}<b>아직 비어 있습니다</b>'
+    "<p>새 메일과 회의록을 분석한 제안이 승인되면 이곳에 할 일과 일정이 채워집니다.</p></div>"
 )
 
 _FILTER_JS: Final = """
@@ -234,12 +150,14 @@ _FILTER_JS: Final = """
     document.querySelectorAll('#todos .todo-group').forEach(function(g){
       g.hidden=!g.querySelector('li:not([hidden])');
     });
-    c.textContent=shown+' / '+total+' 건';
+    c.textContent=total+'건 중 '+shown+'건';
   }
   q.addEventListener('input',apply);s.addEventListener('change',apply);
   document.addEventListener('pb-project',apply);apply();
 })();
 """
+
+_WEEKDAYS: Final = "월화수목금토일"
 
 
 def _kst(stamp: str) -> str:
@@ -247,7 +165,43 @@ def _kst(stamp: str) -> str:
         moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     except ValueError:
         return stamp
-    return (moment + timedelta(hours=9)).strftime("%m-%d %H:%M") + " KST" if moment.tzinfo else stamp
+    if not moment.tzinfo:
+        return stamp
+    local = moment + timedelta(hours=9)
+    return f"{local.month}월 {local.day}일 {local:%H:%M}"
+
+
+def _md(day: str) -> str:
+    try:
+        moment = date.fromisoformat(day[:10])
+    except ValueError:
+        return day
+    return f"{moment.month}월 {moment.day}일({_WEEKDAYS[moment.weekday()]})"
+
+
+def _ago(stamp: str, now: str) -> str:
+    try:
+        then = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        current = datetime.fromisoformat(now.replace("Z", "+00:00"))
+    except ValueError:
+        return stamp
+    minutes = int((current - then).total_seconds() // 60)
+    if minutes < 1:
+        return "방금"
+    if minutes < 60:
+        return f"{minutes}분 전"
+    if minutes < 24 * 60:
+        return f"{minutes // 60}시간 전"
+    days = (current + timedelta(hours=9)).date() - (then + timedelta(hours=9)).date()
+    return "어제" if days.days == 1 else f"{days.days}일 전" if days.days < 7 else _md((then + timedelta(hours=9)).date().isoformat())
+
+
+def _to(word: str) -> str:
+    """The Korean particle 로/으로 after ``word`` (으로 after a final consonant other than ㄹ)."""
+    last = word[-1:] or "가"
+    code = ord(last) - 0xAC00
+    final = code % 28 if 0 <= code < 11172 else 0
+    return f"{word}으로" if final and final != 8 else f"{word}로"
 
 
 def _dday(due: str | None, today: date) -> tuple[str, str]:
@@ -315,10 +269,7 @@ def _picker(tab: str, snapshot: BoardSnapshot) -> str:
         f"{escape(view.name)}</option>"
         for view in snapshot.projects
     ]
-    return (
-        f'<label class="picker"><span class="small muted">프로젝트</span>'
-        f'<select data-picker aria-label="프로젝트 고르기">{"".join(options)}</select></label>'
-    )
+    return f'<label class="picker">프로젝트<select data-picker aria-label="프로젝트 고르기">{"".join(options)}</select></label>'
 
 
 def _fold(key: str, title: str, count: int, body: str, *, cls: str = "fold sect") -> str:
@@ -327,6 +278,18 @@ def _fold(key: str, title: str, count: int, body: str, *, cls: str = "fold sect"
         f'<details class="{cls}" data-fold="{escape(key, quote=True)}" open><summary><h3>{title} '
         f'<span class="badge d-none cnt">{count}</span></h3></summary>{body}</details>'
     )
+
+
+def _head(title: str, sub: str = "", extra: str = "") -> str:
+    lead = f'<p class="sub">{sub}</p>' if sub else ""
+    return f'<div class="head"><div><h2>{title}</h2>{lead}</div>{extra}</div>'
+
+
+def _tile(name: str, label: str, value: str, tone: str, href: str = "") -> str:
+    tag, link = ("a", f' href="{href}"') if href else ("div", "")
+    css = f" is-{tone}" if tone else ""
+    return (f'<{tag} class="tile{css}"{link}><span class="tile-top">{icon(name)}{label}</span>'
+            f"<b>{value}</b></{tag}>")
 
 
 def _fresh_in_shelf(full: BoardSnapshot, shelf: tuple[ProjectView, ...]) -> dict[str, int]:
@@ -344,7 +307,11 @@ def _nav(shelf: tuple[ProjectView, ...], fresh: dict[str, int]) -> str:
     badges = f' <span class="badge d-none">{len(shelf)}</span>' + (
         f' <span class="badge d-soon">새 {new}</span>' if new else ""
     )
-    return _NAV.replace('data-tab="archive">보관함</a>', f'data-tab="archive">보관함{badges}</a>')
+    return _NAV.replace("보관함</a>", f"보관함{badges}</a>")
+
+
+def _long_day(today: date) -> str:
+    return f"{today.year}년 {today.month}월 {today.day}일 {_WEEKDAYS[today.weekday()]}요일"
 
 
 def _summary(snapshot: BoardSnapshot, today: date) -> str:
@@ -352,28 +319,26 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
     doing = sum(1 for t in snapshot.todos if t.status == "진행")
-    chips = (
-        f'<div class="chip over"><span class="muted small">지연</span><b>{overdue}</b></div>'
-        f'<div class="chip soon"><span class="muted small">이번 주 마감</span><b>{week}</b></div>'
-        f'<div class="chip"><span class="muted small">진행 중</span><b>{doing}</b></div>'
-        f'<div class="chip"><span class="muted small">검토 대기</span><b>{len(snapshot.pending)}</b></div>'
+    waiting = len(snapshot.pending)
+    tiles = (
+        _tile("alert", "지연", str(overdue), "danger" if overdue else "", "#schedule")
+        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", "#schedule")
+        + _tile("activity", "진행 중", str(doing), "info" if doing else "", "#todos")
+        + _tile("inbox", "승인 대기", str(waiting), "info" if waiting else "")
     )
     pending = ""
     if snapshot.pending:
         items = []
         for p in snapshot.pending:
-            title = escape(p.project)
-            link = (
-                f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드</a>' if p.thread_url else ""
-            )
+            link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li><b>{title}</b> {_grade_badge(p.grade)} · 할 일 {p.todo_count}건 · "
+                f"<li><b>{escape(p.project)}</b> {_grade_badge(p.grade)} · 할 일 {p.todo_count}건 · "
                 f"근거 「{escape(p.source_subject)}」{link}</li>"
             )
         pending = (
-            '<div class="card pending" style="margin-top:12px"><b>소유자 승인을 기다리는 제안</b>'
-            '<p class="note">아직 프로젝트 데이터가 아닙니다 — 카드에서 ✅ 하면 반영됩니다.</p>'
-            f'<ul class="small">{"".join(items)}</ul></div>'
+            f'<div class="callout" id="pending">{icon("inbox")}<div><b>승인을 기다리는 제안 {len(items)}건</b>'
+            '<p class="note">아직 할 일로 들어오지 않았습니다. 승인 카드에서 승인하면 반영됩니다.</p>'
+            f'<ul class="small">{"".join(items)}</ul></div></div>'
         )
     withheld = (
         f'<p class="note">보안 등급(대외비·기관지정) 할 일 {snapshot.withheld}건은 이 사본에서 뺐습니다.</p>'
@@ -383,64 +348,74 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
     projects = ""
     if snapshot.projects:
         cards = "".join(_project_card(view, today) for view in snapshot.projects)
-        projects = f'<h3>프로젝트 <span class="small muted">— 눌러서 그 프로젝트만 보기</span></h3><div class="grid">{cards}</div>'
+        projects = (
+            '<div class="section-title"><h3>프로젝트</h3><span class="small muted">눌러서 그 프로젝트만 봅니다</span></div>'
+            f'<div class="grid">{cards}</div>'
+        )
     return (
-        '<section id="summary" data-tab="summary"><h2>요약</h2>'
-        f'<div class="chips">{chips}</div>{pending}{projects}{withheld}'
-        f'<p class="note">기준일 {escape(snapshot.today)} · 생성 {escape(_kst(snapshot.generated_at))}</p></section>'
+        f'<section id="summary" data-tab="summary">{_head("오늘의 현황", "기준일 " + _long_day(today))}'
+        f'<div class="tiles">{tiles}</div>{pending}{projects}{withheld}</section>'
     )
 
 
 def _project_card(view: ProjectView, today: date, note: str = "") -> str:
     percent = round(100 * view.done / view.total) if view.total else 0
-    owner = f'<div class="muted small">담당 {escape(view.owner)}</div>' if view.owner else ""
-    overdue = f' <span class="badge d-over">지연 {view.overdue}</span>' if view.overdue else ""
+    owner = f'<div class="small muted">담당 {escape(view.owner)}</div>' if view.owner else ""
+    overdue = f'<span class="badge d-over">지연 {view.overdue}건</span>' if view.overdue else ""
     if view.next_due:
         label, css = _dday(view.next_due, today)
-        upcoming = f'다음 마감 {escape(view.next_due)} <span class="badge {css}">{label}</span>'
+        upcoming = f'<span>다음 마감 {_md(view.next_due)}</span><span class="badge {css}">{label}</span>'
     else:
-        upcoming = "다음 마감 없음"
+        upcoming = "" if view.overdue else "<span>남은 마감 없음</span>"
+    upcoming_row = f'<div class="facts">{upcoming}</div>' if upcoming else ""
     href = escape(project_href(view.name), quote=True)
     return (
-        f'<a class="card pcard" href="{href}" data-project="{escape(view.name, quote=True)}"><b>{escape(view.name)}</b>{owner}'
-        f'<div class="prog" role="img" aria-label="진척 {percent}%"><i style="width:{percent}%"></i></div>'
-        f'<div class="small">{view.done}/{view.total} 완료{overdue}</div>'
-        f'<div class="small muted" style="margin-top:4px">{upcoming}</div>{note}'
-        '<div class="go">할 일·일정 보기 →</div></a>'
+        f'<a class="card pcard" href="{href}" data-project="{escape(view.name, quote=True)}">'
+        f'<div class="pcard-top"><b>{escape(view.name)}</b>{icon("chevron-right")}</div>{owner}'
+        f'<div class="meter"><progress class="prog" value="{view.done}" max="{max(view.total, 1)}" '
+        f'aria-label="진척 {percent}%"></progress><span>{percent}%</span></div>'
+        f'<div class="facts"><span>{view.done}/{view.total} 완료</span>{overdue}</div>'
+        f"{upcoming_row}{note}</a>"
     )
 
 
 def _projects(snapshot: BoardSnapshot, today: date) -> str:
     cards = "".join(_project_card(view, today) for view in snapshot.projects)
     body = f'<div class="grid">{cards}</div>' if cards else EMPTY_SECTION
-    return f'<section id="projects" data-tab="projects"><h2>프로젝트</h2>{body}</section>'
+    sub = f"진행 중인 프로젝트 {len(snapshot.projects)}개" if cards else ""
+    return f'<section id="projects" data-tab="projects">{_head("프로젝트", sub)}{body}</section>'
 
 
 def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -> str:
     done = todo.status == "완료"
-    label, css = _dday(todo.due, today) if not done else ("완료", "d-far")
+    name = escape(todo.title, quote=True)
     box = (
-        f'<input type="checkbox" data-todo="{escape(todo.todo_id, quote=True)}"'
-        f'{" checked" if done else ""} aria-label="완료 표시: {escape(todo.title, quote=True)}">'
+        f'<label class="check"><input type="checkbox" data-todo="{escape(todo.todo_id, quote=True)}"'
+        f'{" checked" if done else ""} aria-label="완료 표시: {name}"></label>'
         if mode == "served"
-        else f'<input type="checkbox" disabled{" checked" if done else ""} aria-label="완료 여부">'
+        else f'<label class="check"><input type="checkbox" disabled{" checked" if done else ""} aria-label="완료 여부"></label>'
     )
+    status = f"{todo.status} {todo.progress}%" if todo.status == "진행" else todo.status
+    badges = "" if todo.status == "열림" else f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(status)}</span>'
+    if not done:
+        label, css = _dday(todo.due, today)
+        badges += f'<span class="badge {css}">{label}</span>'
+    due = f"<span>{_md(todo.due)}</span>" if todo.due else ""
+    owner = f"<span>{escape(todo.owner)}</span>" if todo.owner else '<span class="muted">담당 미정</span>'
     href = _source_href(mode, todo.source_kind, todo.source_id)
     subject = escape(todo.source_subject or todo.source_id)
-    source = f'<a href="{escape(href, quote=True)}">근거: {subject}</a>' if href else f"근거: {subject}"
-    owner = f"<span>{escape(todo.owner)}</span>" if todo.owner else '<span>담당 미정</span>'
-    due = f"<span>{escape(todo.due)}</span>" if todo.due else ""
-    progress = f"<span>{todo.progress}%</span>" if todo.status == "진행" else ""
+    kind = "mail" if todo.source_kind == "mail" else "sources"
+    source = (
+        f'<a class="src-link" href="{escape(href, quote=True)}" title="근거 원문 열기">{icon(kind)}<span>{subject}</span></a>'
+        if href else f'<span class="src-link">{icon(kind)}<span>{subject}</span></span>'
+    )
     note = f'<div class="note">{escape(todo.note)}</div>' if todo.note else ""
     done_class = ' class="done"' if done else ""
     ident = f'id="todo-{escape(todo.todo_id, quote=True)}" ' if anchor else ""
     return (
         f'<li {ident}data-project="{escape(todo.project, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
-        f"{done_class}>{box}<div class=\"todo-main\">"
-        f'<div class="todo-title">{escape(todo.title)}</div><div class="meta">'
-        f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(todo.status)}</span>'
-        f'<span class="badge {css}">{label}</span>{_grade_badge(todo.grade)}{owner}{due}{progress}<span>{source}</span>'
-        f"</div>{note}</div></li>"
+        f'{done_class}>{box}<div class="todo-main"><div class="todo-title">{escape(todo.title)}</div>'
+        f'<div class="meta">{badges}{_grade_badge(todo.grade)}{owner}{due}</div>{source}{note}</div></li>'
     )
 
 
@@ -449,34 +424,35 @@ def _todo_order(todo: TodoRow) -> tuple[bool, str, str]:
 
 
 def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
+    sub = "체크하면 완료로 기록됩니다. 다시 풀면 열림으로 돌아갑니다." if mode == "served" else (
+        "읽기 전용 사본입니다. 진행 기록은 대시보드 화면에서 남깁니다."
+    )
     if not snapshot.todos:
-        return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{EMPTY_SECTION}</section>'
+        return f'<section id="todos" data-tab="todos">{_head("할 일")}{EMPTY_SECTION}</section>'
     groups: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in snapshot.todos:
         groups[todo.project].append(todo)
     blocks = []
     for project in _in_project_order(groups, snapshot):
         items = sorted(groups[project], key=_todo_order)
-        heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)} →</a>'
+        heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)}</a>'
         body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
         fold = _fold(f"t:{project}", heading, len(items), body, cls="todo-group card fold")
-        blocks.append(fold.replace("<details ", f'<details data-project="{escape(project, quote=True)}" style="margin-bottom:10px" ', 1))
+        blocks.append(fold.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))
     options = "".join(f'<option value="{s}">{s}</option>' for s in ("열림", "진행", "완료", "보류"))
-    note = (
-        '<p class="note">체크하면 완료로 기록됩니다(다시 풀면 열림).</p>'
-        if mode == "served"
-        else '<p class="note">읽기 전용 사본입니다 — 진행 기록은 로컬 대시보드나 명령으로 남깁니다.</p>'
-    )
     filters = (
-        '<div class="filters"><input id="todo-q" type="search" placeholder="검색 (제목·담당·프로젝트)" '
-        'aria-label="할 일 검색"><select id="todo-s" aria-label="상태 필터"><option value="">전체 상태</option>'
-        f'{options}</select><span id="todo-count" class="small muted"></span></div>'
+        f'<div class="filters">{_picker("todos", snapshot)}'
+        f'<label class="field field-search">검색<span class="control">{icon("search")}'
+        '<input id="todo-q" type="search" placeholder="제목, 담당, 프로젝트" autocomplete="off"></span></label>'
+        f'<label class="field">상태<select id="todo-s"><option value="">전체 상태</option>{options}</select></label>'
+        '<span id="todo-count" class="count" aria-live="polite"></span></div>'
     )
-    picker = _picker("todos", snapshot)
-    return f'<section id="todos" data-tab="todos"><h2>할 일</h2>{picker}{filters}{note}{"".join(blocks)}</section>'
+    return f'<section id="todos" data-tab="todos">{_head("할 일", sub)}{filters}{"".join(blocks)}</section>'
 
 
-def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s") -> str:
+def _agenda_cards(
+    todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s", *, with_project: bool = True
+) -> str:
     """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket."""
     buckets: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
@@ -490,35 +466,40 @@ def _agenda_cards(todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: 
         items = []
         for todo in rows:
             label, css = _dday(todo.due, today)
+            where = [escape(todo.project)] if with_project else []
+            where += [escape(todo.owner)] if todo.owner else []
+            where += [_md(todo.due)] if todo.due else []
             items.append(
                 f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
                 f'<b>{escape(todo.title)}</b>{_grade_badge(todo.grade)}'
-                f'<span class="small muted">{escape(todo.project)}'
-                f'{" · " + escape(todo.owner) if todo.owner else ""}'
-                f'{" · " + escape(todo.due) if todo.due else ""}</span></li>'
+                f'<span class="where">{" · ".join(where)}</span></li>'
             )
-        fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
-        parts.append(fold.replace("<details ", '<details style="margin-bottom:10px" ', 1))
+        parts.append(_fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold"))
     return "".join(parts)
 
 
 def _agenda(snapshot: BoardSnapshot, today: date) -> str:
     cards = _agenda_cards(snapshot.todos, today)
-    fallback = '<div class="card empty">마감이 남은 할 일이 없습니다.</div>' if snapshot.todos else EMPTY_SECTION
+    fallback = (
+        f'<div class="card empty">{icon("schedule")}<b>남은 마감이 없습니다</b><p>열린 할 일에 모두 마감이 지났거나 끝났습니다.</p></div>'
+        if snapshot.todos else EMPTY_SECTION
+    )
     none = (
-        '<div id="schedule-none" class="card empty" style="display:none">이 프로젝트에는 마감이 남은 할 일이 없습니다.</div>'
+        f'<div id="schedule-none" class="card empty" style="display:none">{icon("schedule")}'
+        "<b>이 프로젝트에는 남은 마감이 없습니다</b><p>다른 프로젝트를 고르거나 전체 프로젝트로 돌아가 보세요.</p></div>"
         if cards
         else ""
     )
     body = (cards + none) or fallback
-    picker = _picker("schedule", snapshot)
-    return f'<section id="schedule" data-tab="schedule" class="agenda"><h2>일정</h2>{picker}{body}</section>'
+    picker = f'<div class="picker-row">{_picker("schedule", snapshot)}</div>' if snapshot.projects else ""
+    head = _head("일정", "열린 할 일을 마감 주별로 묶었습니다.")
+    return f'<section id="schedule" data-tab="schedule" class="agenda">{head}{picker}{body}</section>'
 
 
-def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode) -> str:
+def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_project: bool = True) -> str:
     href = _source_href(mode, row.source_kind, row.source_id)
     subject = escape(row.source_subject or row.source_id)
-    title = f'<a href="{escape(href, quote=True)}">{subject}</a>' if href else subject
+    title = f'<a class="title" href="{escape(href, quote=True)}">{subject}</a>' if href else f'<span class="title">{subject}</span>'
     kind = "기관 메일" if row.source_kind == "mail" else "회의록"
     files = []
     for name in row.attachments:
@@ -527,13 +508,14 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode) -> str:
                          f"{escape(name)}</a>")
         else:
             files.append(escape(name))
-    attachments = f'<div class="names">첨부: {", ".join(files)}</div>' if files else ""
+    attachments = f'<div class="names">{icon("paperclip")}<span>{", ".join(files)}</span></div>' if files else ""
     todos = ", ".join(escape(t.title) for t in produced) or "없음"
-    sender = f" · {escape(row.source_sender)}" if row.source_sender else ""
+    top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
+    top += [escape(row.project)] if with_project else []
     return (
-        f'<div class="card src"><div class="small muted">{escape(row.source_date[:10])} · {kind}{sender} · '
-        f'{escape(row.project)} {_grade_badge(row.grade)}</div><b>{title}</b><p class="small" style="margin:6px 0">{escape(row.summary)}</p>'
-        f'{attachments}<div class="names">만든 할 일: {todos}</div></div>'
+        f'<div class="card src-card"><div class="top"><span>{" · ".join(top)}</span>{_grade_badge(row.grade)}</div>'
+        f'{title}<p>{escape(row.summary)}</p>{attachments}'
+        f'<div class="names">{icon("list")}<span>만든 할 일: {todos}</span></div></div>'
     )
 
 
@@ -546,56 +528,88 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
         groups[row.project].append(row)
     body = "".join(
         _fold(f"e:{project}", escape(project), len(rows),
-              "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in rows))
+              '<div class="stack">' + "".join(_source_card(row, by_proposal[row.proposal_id], mode, with_project=False)
+                                              for row in rows) + "</div>")
         for project, rows in ((name, groups[name]) for name in _in_project_order(groups, snapshot))
     ) or EMPTY_SECTION
     hint = (
-        '<p class="note">원문 메일과 첨부는 이 사본에 없습니다 — 대시보드(테일넷 주소)의 근거 탭에서 열립니다.</p>'
+        '<p class="note">원문 메일과 첨부는 이 사본에 없습니다. 대시보드 화면의 근거 탭에서 열립니다.</p>'
         if mode == "file" and snapshot.sources
         else ""
     )
-    return f'<section id="sources" data-tab="sources"><h2>근거</h2>{hint}{body}</section>'
+    head = _head("근거", "할 일을 만든 메일과 회의록입니다.")
+    return f'<section id="sources" data-tab="sources">{head}{hint}{body}</section>'
+
+
+_PROGRESS: Final = re.compile(r"^(\S+)→(\S+) (\d+)→(\d+)%(?: · (.*))?$")
+
+
+def _event_text(event: EventRow, titles: dict[str, str]) -> str:
+    """What happened, as a sentence; a progress record's ``열림→완료 0→100%`` becomes ``… 완료로 바꿈``."""
+    title = titles.get(event.todo_id, "")
+    named = f"「{escape(title)}」 " if title else ""
+    if event.kind == "approved":
+        return f"할 일 추가 「{escape(event.detail)}」"
+    if event.kind == "progress":
+        match = _PROGRESS.match(event.detail)
+        if not match:
+            return f"{named}진행 기록"
+        old, new, before, after, note = match.groups()
+        text = f"{named}{escape(_to(new))} 바꿈" if old != new else f"{named}진행률 {after}%" if before != after else f"{named}메모"
+        return text + (f" · {escape(note)}" if note else "")
+    if event.kind == "grade":
+        return f"보안 등급 변경 {escape(event.detail)}"
+    return {"archive": "프로젝트를 보관함으로 옮김", "unarchive": "보관 해제"}.get(event.kind, escape(event.kind))
 
 
 def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
     if not snapshot.events:
         return ""
-    kinds = {"approved": "승인 반영", "progress": "진행 기록", "grade": "보안 등급 변경",
-             "archive": "보관", "unarchive": "보관 해제"}
+    titles = {todo.todo_id: todo.title for todo in snapshot.todos}
 
-    def detail(event: EventRow) -> str:
-        text = f" · {escape(event.detail)}" if event.detail else ""
+    def who(event: EventRow) -> str:
         # who acted is a login; the file copy may be mailed out, so only the owner's screen shows it
-        return text + (f" · {escape(event.actor)}" if mode == "served" and event.actor else "")
+        return f'<div class="who">{escape(_actor_label(event.actor))}</div>' if mode == "served" and event.actor else ""
 
     items = "".join(
-        f'<li><span class="muted">{escape(_kst(e.at))}</span> · {kinds.get(e.kind, escape(e.kind))} · '
-        f"{escape(e.project)}{detail(e)}</li>"
-        for e in snapshot.events[:15]
+        f'<li><time datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
+        f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><b>{escape(e.project)}</b> · "
+        f"{_event_text(e, titles)}{who(e)}</div></li>"
+        for e in sorted(snapshot.events, key=lambda event: event.at, reverse=True)[:8]
     )
-    return f'<section id="events" data-tab="summary"><h2>최근 기록</h2><div class="card"><ul class="small">{items}</ul></div></section>'
+    return (
+        '<section id="events" data-tab="summary"><div class="section-title"><h3>최근 기록</h3></div>'
+        f'<div class="card"><ul class="events">{items}</ul></div></section>'
+    )
+
+
+def _actor_label(actor: str) -> str:
+    """Who acted, in words a buyer reads: the stored local-access marker (with its address) shows as 「이 기기에서」."""
+    return "이 기기에서" if actor.startswith(LOCAL_ACTOR) else actor
 
 
 def _archived_line(view: ProjectView, mode: Mode) -> str:
     """When (and, on the owner's own screen, by whom) a project was archived."""
-    who = f" · {escape(view.archived_by)}" if mode == "served" and view.archived_by else ""
+    who = f" · {escape(_actor_label(view.archived_by))}" if mode == "served" and view.archived_by else ""
     return f"보관 {escape(_kst(view.archived_at))}{who}"
 
 
 def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dict[str, int] | None = None) -> str:
     """보관함: archived projects only. Their todos and evidence are kept and open from the card."""
-    note = (
-        '<p class="note" style="margin-bottom:12px">보관한 프로젝트는 요약·프로젝트·할 일·일정·근거와 프로젝트 고르기에 나오지 않습니다. '
-        "할 일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.</p>"
-    )
+    sub = ("보관한 프로젝트는 요약, 프로젝트, 할 일, 일정, 근거와 프로젝트 고르기에 나오지 않습니다. "
+           "할 일과 근거는 지워지지 않고, 프로젝트 화면의 「보관 해제」로 되돌립니다.")
+
     def line(view: ProjectView) -> str:
         count = (fresh or {}).get(view.name, 0)
         flag = f' <span class="badge d-soon">보관 뒤 새 할 일 {count}</span>' if count else ""
-        return f'<div class="small muted" style="margin-top:4px">{_archived_line(view, mode)}{flag}</div>'
+        return f'<div class="small muted">{_archived_line(view, mode)}{flag}</div>'
 
     cards = "".join(_project_card(view, today, line(view)) for view in shelf)
-    body = f'<div class="grid">{cards}</div>' if cards else '<div class="card empty">보관한 프로젝트가 없습니다.</div>'
-    return f'<section id="archive" data-tab="archive"><h2>보관함</h2>{note}{body}</section>'
+    body = f'<div class="grid">{cards}</div>' if cards else (
+        f'<div class="card empty">{icon("archive")}<b>보관한 프로젝트가 없습니다</b>'
+        "<p>끝난 프로젝트는 프로젝트 화면의 「보관」으로 이곳에 옮길 수 있습니다.</p></div>"
+    )
+    return f'<section id="archive" data-tab="archive">{_head("보관함", sub)}{body}</section>'
 
 
 def _project_page(
@@ -611,27 +625,29 @@ def _project_page(
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
     owner = f'<span class="small muted">담당 {escape(view.owner)}</span>' if view.owner else ""
-    chips = (
-        f'<div class="chip over"><span class="muted small">지연</span><b>{overdue}</b></div>'
-        f'<div class="chip soon"><span class="muted small">이번 주 마감</span><b>{week}</b></div>'
-        f'<div class="chip"><span class="muted small">완료</span><b>{view.done}/{view.total}</b></div>'
-        f'<div class="chip"><span class="muted small">검토 대기</span><b>{len(pending)}</b></div>'
+    tiles = (
+        _tile("alert", "지연", str(overdue), "danger" if overdue else "")
+        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "")
+        + _tile("todos", "완료", f"{view.done}/{view.total}", "")
+        + _tile("inbox", "승인 대기", str(len(pending)), "info" if pending else "")
     )
     items = "".join(_todo_item(t, mode, today, anchor=False) for t in sorted(todos, key=_todo_order))
     todo_block = f'<div class="card"><ul class="todos">{items}</ul></div>' if items else (
-        '<div class="card empty">이 프로젝트의 할 일이 없습니다.</div>'
+        f'<div class="card empty">{icon("todos")}<b>할 일이 없습니다</b><p>이 프로젝트에서 승인된 할 일이 아직 없습니다.</p></div>'
     )
     key = f"p:{view.name}"
-    agenda = _agenda_cards(todos, today, f"{key}:s") or '<div class="card empty">마감이 남은 할 일이 없습니다.</div>'
+    agenda = _agenda_cards(todos, today, f"{key}:s", with_project=False) or (
+        f'<div class="card empty">{icon("schedule")}<b>남은 마감이 없습니다</b><p>열린 할 일이 없거나 모두 끝났습니다.</p></div>'
+    )
     by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
         by_proposal[todo.proposal_id].append(todo)
-    evidence = "".join(_source_card(row, by_proposal[row.proposal_id], mode) for row in sources) or (
-        '<div class="card empty">근거가 없습니다.</div>'
+    evidence = "".join(_source_card(row, by_proposal[row.proposal_id], mode, with_project=False) for row in sources) or (
+        f'<div class="card empty">{icon("sources")}<b>근거가 없습니다</b><p>이 프로젝트에 연결된 메일이나 회의록이 아직 없습니다.</p></div>'
     )
     todo_fold = _fold(key + ":t", "할 일", len(todos), todo_block)
     agenda_fold = _fold(key + ":s", "일정", len(open_todos), '<div class="agenda">' + agenda + "</div>")
-    evidence_fold = _fold(key + ":e", "근거 (메일·회의록)", len(sources), evidence)
+    evidence_fold = _fold(key + ":e", "근거 (메일·회의록)", len(sources), '<div class="stack">' + evidence + "</div>")
     name_attr = escape(view.name, quote=True)
     button = (
         f'<button type="button" class="btn" data-archive="{"0" if archived else "1"}" data-archive-project="{name_attr}">'
@@ -639,9 +655,10 @@ def _project_page(
         if mode == "served"
         else ""
     )
-    back = '<a class="back" href="#archive">← 보관함</a>' if archived else '<a class="back" href="#projects">← 전체 프로젝트</a>'
+    back = (f'<a class="back" href="#archive">{icon("chevron-left")}보관함</a>' if archived
+            else f'<a class="back" href="#projects">{icon("chevron-left")}전체 프로젝트</a>')
     shelf = (
-        f'<div class="card note shelf-note">보관한 프로젝트입니다 — 요약·할 일·일정·근거에 나오지 않습니다. '
+        f'<div class="card note shelf-note">보관한 프로젝트입니다. 요약, 할 일, 일정, 근거에 나오지 않습니다. '
         f"{_archived_line(view, mode)}</div>"
         if archived
         else ""
@@ -650,12 +667,12 @@ def _project_page(
     return (
         f'<section id="pv-{index}" data-tab="project" data-project="{name_attr}"{flag}>{back}'
         f'<div class="pv-head"><h2>{escape(view.name)}</h2>{badges}{owner}{button}</div>{shelf}'
-        f'<div class="chips" style="margin-top:12px">{chips}</div>'
+        f'<div class="tiles">{tiles}</div>'
         f"{todo_fold}{agenda_fold}{evidence_fold}</section>"
     )
 
 
-def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") -> str:
+def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND) -> str:
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
     hidden = {view.name for view in shelf}
@@ -671,8 +688,8 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
     empty = ""
     if not snapshot.todos and not snapshot.pending:
         empty = (
-            '<div class="card empty" data-tab="summary" style="margin-top:18px">아직 데이터가 없습니다. 메일·회의록 분석 제안을 '
-            "소유자가 승인(✅)하면 프로젝트와 할 일이 여기에 나타납니다.</div>"
+            '<div class="card empty" data-tab="summary">아직 데이터가 없습니다. 메일·회의록 분석 제안을 '
+            "승인 카드에서 승인하면 프로젝트와 할 일이 여기에 나타납니다.</div>"
         )
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
     scripts = _FOLD_JS + _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
@@ -680,12 +697,18 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "") ->
         _project_page(i, view, full, mode, today, archived=view in shelf)
         for i, view in enumerate(snapshot.projects + shelf, 1)
     )
+    name = escape(brand or DEFAULT_BRAND)
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"{meta}<title>프로젝트 대시보드</title><style>{_CSS}</style></head><body>"
-        f'<header><div class="bar"><h1>프로젝트 대시보드</h1><nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main>'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
+        f"<style>{CSS}</style></head><body>"
+        '<a class="skip" href="#main">본문으로 건너뛰기</a>'
+        f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
+        f'<nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main id="main">'
         f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
         f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
+        f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {escape(snapshot.today)}</span>'
+        f'<span aria-hidden="true">·</span><span>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"<script>{scripts}</script></body></html>"
     )
