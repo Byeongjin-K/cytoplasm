@@ -35,7 +35,7 @@ from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .board_store import BoardStore
-from .dashboard import render_dashboard
+from .dashboard import LOCAL_ACTOR, render_dashboard
 from .models import STATUSES, PendingView, ProjectBoardError
 
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -77,7 +77,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _actor(self) -> str:
         """Who acted, recorded on every check and archive: the tailnet login, else the node-local address."""
         login = self.headers.get(IDENTITY_HEADER) if self._via_tailnet() else None
-        return login.strip().lower() if login else f"노드 로컬 접속({self.client_address[0]})"
+        return login.strip().lower() if login else f"{LOCAL_ACTOR}({self.client_address[0]})"
 
     def _tokenless(self) -> bool:
         """An allowlisted tailnet login stands in for the token unless the config asks for both."""

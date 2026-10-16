@@ -61,7 +61,7 @@ def test_archived_project_leaves_every_main_screen_and_shows_only_in_the_shelf(t
     assert "감마 보고" not in _section(page, "todos") and "알파 보고" in _section(page, "todos")
     shelf = _section(page, "archive")
     assert "가상과제 감마" in shelf and "가상과제 알파" not in shelf
-    assert "owner@example.com" in shelf and "10-15 15:30 KST" in shelf  # who and when, on the owner's screen
+    assert "owner@example.com" in shelf and "10월 15일 15:30" in shelf  # who and when, on the owner's screen
     archived_page = re.search(r'<section id="pv-\d+" data-tab="project" data-project="가상과제 감마" data-archived="1">(.*?)</section>',
                               page, re.S)
     assert archived_page and "감마 보고" in archived_page.group(1)  # nothing deleted: its todos still open
@@ -225,5 +225,5 @@ def test_on_the_tailnet_archive_and_check_record_the_same_tailscale_login(tmp_pa
     assert snapshot.archived[0].archived_by == OWNER
     assert {(e.kind, e.actor) for e in snapshot.events if e.kind in ("archive", "progress")} == {("archive", OWNER), ("progress", OWNER)}
     served = render_dashboard(snapshot, mode="served", token="")
-    assert f"가상과제 알파 · 열림→완료 0→100% · {OWNER}" in served
+    assert "「알파 보고」 완료로 바꿈" in served and f'<div class="who">{OWNER}</div>' in served
     assert OWNER not in render_dashboard(snapshot, mode="file")
