@@ -1,13 +1,14 @@
-// Collects the 7-day session board data (metadata only) into data.json for gen.mjs.
+// Collects the 7-day session summary (metadata only) that the dashboard's 세션 tab reads as sessions.json.
 //
 // Usage:
-//   bun collect.mjs <out-data.json>
+//   bun collect.mjs <out.json>        (feed.sh runs it and copies the result to the node)
 // Environment (all required unless marked optional):
 //   SB_LANE_DIRS      colon-separated lane registry folders (each holds <key>.json lane files);
 //                     earlier folders win when two registries hold the same key
 //   SB_LANE_RULES     JSON file: [["<regex on lane key>", "<dept id>", "<generic theme label>"], ...]
 //                     dept id is one of ops|assistant|research|web|study|infra; unmatched lanes become etc / "세션 N"
-//   SB_SERVICES       JSON file: the hand-made service table (see the guide, section 2.4), times as ISO strings
+//   SB_SERVICES       JSON file: [{"label", "group": "watch|web|timer", "tag", "units": ["<user unit>", ...], "every"?}];
+//                     state, start, restarts, runs, fails and last run are read from systemd --user and its journal
 //   SB_SESSION_FINDER path to the coding-agent-sessions skill's find-agent-sessions.py
 //   SB_NOW            optional ISO time to freeze "now" (default: the current time)
 //   SB_LEAD_WINDOWS   optional regex for aoe_ window names that are lead windows (default: none)
@@ -80,9 +81,39 @@ const aoe = tmux.filter(([n, c]) => n.startsWith('aoe_') && +c * 1000 <= NOW).ma
   return { kind: lead?.test(core) ? 'lead' : proj?.test(core) ? 'proj' : 'lane', start: +c * 1000 };
 });
 
-// ---- services: the hand-made table, times converted to epoch ms
-const t = v => v == null ? null : Date.parse(v);
-const services = JSON.parse(await Bun.file(env('SB_SERVICES')).text()).map(s => ({ ...s, start: t(s.start), last: t(s.last) }));
+// ---- services: labels from the config, everything else from systemd (unit names are never emitted)
+const since = `@${Math.floor(W0 / 1000)}`;
+const journal = async unit => (await Bun.$`journalctl --user -u ${unit} --since ${since} -o short-unix --no-pager`.nothrow().quiet().text())
+  .split('\n').map(line => { const m = line.match(/^(\d+(?:\.\d+)?) \S+ \S+: (.*)$/); return m ? { at: Math.round(+m[1] * 1000), text: m[2] } : null; })
+  .filter(Boolean);
+const services = [];
+for (const s of JSON.parse(await Bun.file(env('SB_SERVICES')).text())) {
+  const units = await Promise.all(s.units.map(async unit => {
+    const show = Object.fromEntries((await Bun.$`systemctl --user show ${unit} -p ActiveState -p ActiveEnterTimestamp --timestamp=unix`.nothrow().quiet().text())
+      .trim().split('\n').map(l => l.split('=')));
+    const lines = await journal(unit);
+    const entered = /^@\d+/.test(show.ActiveEnterTimestamp ?? '') ? +show.ActiveEnterTimestamp.slice(1) * 1000 : null;
+    return {
+      active: show.ActiveState === 'active', entered,
+      starts: lines.filter(l => /^Started /.test(l.text)).length,
+      finished: lines.filter(l => /^Finished /.test(l.text)),
+      failed: lines.filter(l => /Failed with result/.test(l.text)),
+    };
+  }));
+  const row = { label: s.label, group: s.group, tag: s.tag, units: s.units.length, every: s.every ?? '' };
+  if (s.group === 'timer') {
+    const done = units.flatMap(u => u.finished), failed = units.flatMap(u => u.failed);
+    const last = Math.max(0, ...done.map(l => l.at), ...failed.map(l => l.at));
+    Object.assign(row, { st: failed.length ? 'warn' : 'ok', runs: done.length + failed.length || null, fails: failed.length, last: last || null });
+  } else {
+    const entered = units.map(u => u.entered).filter(v => v != null);
+    Object.assign(row, {
+      st: units.every(u => u.active) ? 'live' : 'hold', start: entered.length ? Math.min(...entered) : null,
+      restarts: units.reduce((a, u) => a + u.starts, 0),
+    });
+  }
+  services.push(row);
+}
 
 await Bun.write(outPath, JSON.stringify({ w0: W0, now: NOW, lanes, agents, aoe, services }));
 console.log(JSON.stringify({ lanes: lanes.length, unclassified: unknown, agents: agents.length, aoe: aoe.length, services: services.length }));

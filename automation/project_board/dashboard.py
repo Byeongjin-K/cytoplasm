@@ -12,7 +12,7 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from html import escape
 from typing import Final, Literal
 from urllib.parse import quote
@@ -20,6 +20,8 @@ from urllib.parse import quote
 from .config import DEFAULT_BRAND
 from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
 from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
+from .sessions import SessionsState
+from .sessions_view import render_sessions, summary_line
 
 Mode = Literal["served", "file"]
 
@@ -159,7 +161,7 @@ _TABS_JS: Final = """
 
 TABS: Final = (
     ("summary", "요약"), ("projects", "프로젝트"), ("todos", "할 일"), ("schedule", "일정"), ("sources", "근거"),
-    ("archive", "보관함"),
+    ("archive", "보관함"), ("sessions", "세션"),
 )
 _NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{icon(tab)}{label}</a>' for tab, label in TABS)
 LOCAL_ACTOR: Final = "노드 로컬 접속"
@@ -390,7 +392,7 @@ def _long_day(today: date) -> str:
     return f"{today.year}년 {today.month}월 {today.day}일 {_WEEKDAYS[today.weekday()]}요일"
 
 
-def _summary(snapshot: BoardSnapshot, today: date) -> str:
+def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
     open_todos = [t for t in snapshot.todos if t.status in OPEN_STATUSES]
     overdue = sum(1 for t in open_todos if _bucket(t.due, today) == "지연")
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
@@ -430,7 +432,7 @@ def _summary(snapshot: BoardSnapshot, today: date) -> str:
         )
     return (
         f'<section id="summary" data-tab="summary">{_head("오늘의 현황", "기준일 " + _long_day(today))}'
-        f'<div class="tiles">{tiles}</div>{pending}{projects}{withheld}</section>'
+        f'<div class="tiles">{tiles}</div>{sessions}{pending}{projects}{withheld}</section>'
     )
 
 
@@ -760,7 +762,10 @@ def _project_page(
     )
 
 
-def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND) -> str:
+def render_dashboard(
+    snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
+    sessions: SessionsState = "missing", now: datetime | None = None,
+) -> str:
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
     hidden = {view.name for view in shelf}
@@ -774,6 +779,7 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", br
         pending=tuple(p for p in full.pending if p.project not in hidden),
     )
     fresh = _fresh_in_shelf(full, shelf)
+    now_ms = int((now or datetime.now(UTC)).timestamp() * 1000)
     empty = ONBOARDING if not snapshot.todos and not snapshot.pending else ""
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
     scripts = _FOLD_JS + _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
@@ -790,8 +796,9 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", br
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
         f'<nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main id="main">'
-        f"{empty}{_summary(snapshot, today)}{_projects(snapshot, today)}{_todos(snapshot, mode, today)}"
-        f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
+        f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today)}"
+        f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}"
+        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"

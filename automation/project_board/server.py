@@ -39,6 +39,7 @@ from .board_store import BoardStore
 from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError
+from .sessions import SessionsState
 
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 MIN_TOKEN: Final = 32
@@ -66,6 +67,7 @@ class _Handler(BaseHTTPRequestHandler):
     tailnet_logins: frozenset[str] = frozenset()
     tailnet_token: bool = False
     brand: str = DEFAULT_BRAND
+    sessions: Callable[[], SessionsState]
 
     def _via_tailnet(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -153,7 +155,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _dashboard(self) -> None:
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
-        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand)
+        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
+                                sessions=self.sessions())
         self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _source(self, kind: str, source_id: str) -> None:
@@ -285,6 +288,7 @@ def make_server(
     tailnet_logins: tuple[str, ...] = (),
     tailnet_token: bool = False,
     brand: str = DEFAULT_BRAND,
+    sessions: Callable[[], SessionsState] = lambda: "missing",
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -306,6 +310,7 @@ def make_server(
             "tailnet_logins": frozenset(x.lower() for x in tailnet_logins),
             "tailnet_token": tailnet_token,
             "brand": brand or DEFAULT_BRAND,
+            "sessions": staticmethod(sessions),
         },
     )
     server = ThreadingHTTPServer((host, port), handler)
