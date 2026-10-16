@@ -31,6 +31,7 @@ _STATUS: Final = {
 }
 _WORST_FIRST: Final = ("fail", "hold", "warn", "run", "review", "live", "ok", "done", "ended", "unknown")
 _LANE_ORDER: Final = ("done", "run", "review", "hold", "fail")
+_PEAK: Final = ' class="peak"'
 
 _DEPTS: Final = (
     ("ops", "에이전트 운영", "wrench"), ("assistant", "업무 비서·메일", "mail"), ("research", "연구·실험", "flask"),
@@ -207,7 +208,7 @@ def _pillar(glyph: str, label: str, big: str, unit: str, sub: str) -> str:
 def _bars(title: str, unit: str, days: list[int], values: list[int], peak: int) -> str:
     top = max(values + [1])
     rows = "".join(
-        f'<li{" class=\"peak\"" if i == peak else ""}><span class="ss-dday">{_at(t).day}일 {_wk(t)}</span>'
+        f'<li{_PEAK if i == peak else ""}><span class="ss-dday">{_at(t).day}일 {_wk(t)}</span>'
         f'<meter min="0" max="{top}" value="{v}" aria-hidden="true"></meter><span class="ss-dval">{_n(v)}{unit}</span></li>'
         for i, (t, v) in enumerate(zip(days, values, strict=True))
     )

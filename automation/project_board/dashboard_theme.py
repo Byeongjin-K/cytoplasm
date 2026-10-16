@@ -308,7 +308,9 @@ background:var(--surface);border:1px solid var(--line-strong);border-radius:999p
 .ss-days meter::-webkit-meter-bar{background:var(--neutral-wash);border:0;border-radius:var(--r-sm);height:12px}
 .ss-days meter::-webkit-meter-optimum-value{background:var(--accent);border-radius:var(--r-sm)}
 .ss-days meter::-moz-meter-bar{background:var(--accent);border-radius:var(--r-sm)}
-details.ss-group>summary{gap:var(--s3);min-height:52px;flex-wrap:wrap}
+details.ss-group>summary{gap:var(--s3);min-height:52px;flex-wrap:wrap;margin:0 calc(-1 * var(--s2));padding:0 var(--s2)}
+details.ss-group>summary:hover{background:var(--surface-2)}
+details.ss-group>summary:active{background:var(--neutral-wash)}
 .ss-gname{display:flex;flex-direction:column;flex:1;min-width:0}
 .ss-gname b{font-size:var(--t-lg);line-height:1.3}
 .ss-gsum{font-size:var(--t-sm);color:var(--text-2)}
