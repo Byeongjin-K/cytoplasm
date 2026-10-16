@@ -73,7 +73,7 @@ python3 automation/install/trust_key_bootstrap.py install --key <bundle>/update-
 ```bash
 python3 automation/install/trust_key_bootstrap.py install \
     --key <bundle>/update-trust.pub --dry-run \
-    --expect-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 > 신뢰키는 두 개가 아니라 두 **종류**다. 여기서 다루는 것은 업스트림 코드 릴리스를
@@ -155,7 +155,7 @@ python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA' \
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' \
     --dry-run
 ```
 
@@ -305,7 +305,7 @@ sudo python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 **`sudo`는 환경변수를 지운다.** §5에서 `DISCORD_BOT_TOKEN`을 올려두었더라도 위 명령에는
@@ -320,7 +320,7 @@ sudo --preserve-env=DISCORD_BOT_TOKEN python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 `sudo`가 `--preserve-env`를 거부하는 배포판이면 그대로 진행해도 된다 — Discord 전제는 설치
@@ -398,7 +398,7 @@ sudo runuser -u ops -- ssh-keyscan github.com >> /home/ops/.ssh/known_hosts   # 
 언제든 다시 확인할 수 있다:
 
 ```bash
-python3 automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+python3 automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 파일이 없으면 이렇게 나오고, 그 상태에서는 리컨실러가 **어떤 릴리스도 적용하지 않는다**:
@@ -495,6 +495,78 @@ best-effort로 호출한다. `pending`이 1 이상인데 둘째 명령이 실패
 | `SYNC-BLOCK` · `UPDATE-TRUST-BLOCK` · `EnableTimer`/`EnsureRepository` 실패 | 신규 노드에서만 드러나는 설치기 공백 | [신규 노드 설치에서 막히는 6곳](../troubleshooting/신규-노드-설치-공백.md) |
 
 ---
+
+### 업데이트 신뢰키가 바뀌었을 때 (이미 설치한 서버)
+
+유지보수자가 업데이트 신뢰키를 바꾸면(회전), 새 키로 서명된 릴리스는 이 서버의
+`/etc/autophagy/update-allowed-signers` 에 새 키가 들어가기 전까지 **설치되지 않는다** —
+서버는 옛 키로 검증되는 마지막 릴리스에 머문다. 업데이트 채널은 일부러 `/etc` 를 고치지
+않으므로(자기 신뢰 근원을 스스로 바꾸는 채널은 한 번 장악되면 끝이다) 이 단계는 서버
+운영자가 손으로 한다. 2026-10-13 회전이 처음이었다: v1.22.2 까지는 옛 키
+`SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3 부터는 새 키
+`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 다.
+
+**알아채는 법.** 리컨실러 저널과 헬스체크에 이런 줄이 남고, 소유자 통지가 설정돼 있으면
+같은 내용이 한 번 온다.
+
+```
+[deploy-reconcile] UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: 더 새 릴리스 v1.40.0 가 이 서버의 신뢰 키(/etc/autophagy/update-allowed-signers)로 검증되지 않아 v1.22.2 에 머물러 있다. 새 태그 서명 키 지문 SHA256:… (BAD-SIGNATURE). …
+```
+
+```bash
+journalctl --user -u autophagy-deploy-reconcile.service --since today | grep UPDATE-TRUST   # ops 계정에서
+```
+
+**고치는 법.** 줄에 찍힌 지문이 **README·공개 릴리스 노트의 지문과 같을 때만** 진행한다.
+다르면 멈추고 유지보수자에게 확인한다 — 태그를 위조한 사람도 같은 경고를 만들 수 있다.
+
+```bash
+# 1. 최신 릴리스에 동봉된 공개키를 받아 지문을 본다
+curl -fsSL -o /tmp/update-trust.pub \
+    https://github.com/orientpine/cytoplasm/releases/latest/download/update-trust.pub
+python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py fingerprint \
+    --key /tmp/update-trust.pub
+
+# 2. 기존 줄을 보존한 채 새 키를 덧붙인다(먼저 --dry-run 으로 두 줄이 렌더되는지 본다)
+sudo python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py install --add \
+    --key /tmp/update-trust.pub \
+    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' --dry-run
+sudo python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py install --add \
+    --key /tmp/update-trust.pub \
+    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+```
+
+다음 리컨실러 틱(2분 이내)에 서버가 최신 릴리스로 전진하고 경고 줄이 사라진다.
+`readlink /srv/autophagy-agent-current` 가 새 커밋을 가리키면 끝이다. 옛 키 줄은 남아 있어도
+해가 없다 — 옛 키로는 이제 새 릴리스가 서명되지 않는다. 지우려면 `--add` 없이 같은 명령을
+한 번 더 실행해 새 키 한 줄로 바꾼다.
+
+### 프로젝트 대시보드를 이 서버에서 켜려면
+
+자동 업데이트는 코드 트리(`/srv/autophagy-agent-current`)를 바꾸고 게이트웨이를 다시 띄울 뿐,
+계정 홈의 Hermes cron 과 사용자 유닛은 놓지 않는다. 그래서 프로젝트 대시보드(v1.23.0~)는
+서버가 최신 릴리스로 따라잡아도 **저절로 켜지지 않는다** — 소유자 노드에서는 릴리스 승인 뒤
+`deploy_all.sh` 가 놓지만, 그 경로는 유지보수자 워크스테이션에서 SSH 로 도는 것이라 이 서버에는
+닿지 않는다. 대시보드를 쓰려면 agent 계정으로 한 번 실행한다(다시 실행해도 같은 상태가 된다):
+
+```bash
+sudo -u agent -H bash -lc '
+  set -e
+  r=/srv/autophagy-agent-current/automation/project_board
+  install -D -m 0755 "$r/cron/project_board_watch.py"   ~/.hermes/scripts/project_board_watch.py
+  install -D -m 0755 "$r/cron/project_board_analyze.py" ~/.hermes/scripts/project_board_analyze.py
+  install -D -m 0644 "$r/systemd/autophagy-project-board.service" ~/.config/systemd/user/autophagy-project-board.service
+  hermes cron list --all | grep -q project-board-watch   || hermes cron create "every 2m"  --name project-board-watch   --no-agent --script project_board_watch.py   --deliver local
+  hermes cron list --all | grep -q project-board-analyze || hermes cron create "every 30m" --name project-board-analyze --no-agent --script project_board_analyze.py --deliver local
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  systemctl --user daemon-reload
+  systemctl --user enable --now autophagy-project-board.service
+  systemctl --user is-active autophagy-project-board.service'
+```
+
+분석 cron 은 노드 설정 `analyze.enabled` 를 켜기 전까지 아무것도 하지 않는다. 설정·접속 주소는
+[프로젝트 대시보드 가이드](프로젝트-대시보드.md)가 소유한다. 래퍼 두 파일은 릴리스마다 바뀔 수
+있으므로, 대시보드가 이상하면 위 `install` 세 줄을 다시 실행한다.
 
 ## 9. 이 문서가 실제로 검증된 범위
 

@@ -139,7 +139,7 @@ action_hash : sha256:7f3c…a19b
 넘겨 대조하는 것이 이 부트스트랩의 핵심입니다. 마법사도 설치기도 지문을 지어내지 않아요.
 
 ```
-SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA
+SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang
 ```
 
 사람이 직접 판단해야 하는 지점은 사실상 여기 하나뿐입니다.
@@ -149,7 +149,7 @@ SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA
 ```bash
 python3 -m automation.install.wizard \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 마법사는 프로필(`core`·`rag`·`report-hub`·`full`), 업데이트 origin URL, 호스트 이름, 운영자
@@ -177,7 +177,7 @@ python3 -m automation.install \
     --config ~/.config/autophagy/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA' \
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' \
     --dry-run
 
 # 실제 설치 — 멱등입니다. 막히면 고치고 같은 명령을 다시 실행하세요
@@ -185,7 +185,7 @@ sudo python3 -m automation.install \
     --config ~/.config/autophagy/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA'
+    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
 `--profile` 은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로 고정해요. 생략하면
@@ -274,6 +274,11 @@ flowchart TD
 
 소프트웨어 업데이트와 스킬 배포는 **완전히 다른 채널**이에요. 스킬은 받아 두는 것까지만 자동이고,
 실제로 켜는 일(live 마운트)은 언제나 그 설치 소유자의 ✅ 입니다.
+
+업데이트 신뢰키가 바뀌면(2026-10-13 첫 회전 — v1.22.3 부터 위 새 지문) 이미 설치한 서버는
+새 키를 `/etc/autophagy/update-allowed-signers` 에 덧붙이기 전까지 옛 릴리스에 머뭅니다. 그때
+리컨실러 저널·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 한 줄과 새 서명 키
+지문이 남고, 덧붙이는 절차는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있어요.
 
 ---
 
