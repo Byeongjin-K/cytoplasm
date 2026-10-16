@@ -117,11 +117,15 @@ helper_drift_probe() { # helper_drift_probe → 노드의 판정을 그대로 �
   [[ -n "$host" ]] || return 70
   # shellcheck source=automation/release_helper_probe.sh
   source "$SCRIPT_DIR/release_helper_probe.sh" || return 70
-  script="$(release_helper_probe_script)" || return 70
+  script="$(release_helper_probe_candidate_script "$REPO_ROOT" "$head")" || return 70
   ssh "$host" "sudo -n -u ${NODE_OPS_ACCOUNT:-ops} bash -s" <<< "$script"
 }
 
 # 전제 ④: 노드의 root 수렴 도우미가 이 릴리스와 같은 판인가 — 승인을 쓰기 **전에** 본다.
+#
+# 비교 대상은 노드가 지금 돌리는 릴리스가 아니라 **자르려는 후보**(HEAD)다(2026-10-16).
+# 지금 릴리스와 비교하면, 지난 릴리스가 도우미 사본 파일을 바꾸고 이번 릴리스가 그것을
+# 되돌리는 경우 되돌리는 릴리스 자체를 영영 자를 수 없다(v1.40.1→v1.40.2 실측).
 #
 # 그 도우미는 릴리스 트리 **밖** root 정적 사본이라 머지만으로 갱신되지 않는다(MD-1: 자동
 # 갱신은 "PR 병합 = root 임의 코드 실행"이 된다). 낡은 사본은 조용히 실패하는 대신 수렴을
