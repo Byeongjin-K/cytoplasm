@@ -15,11 +15,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-from automation.update_trust import TrustedUpdate, stale_key_warning
+from automation.update_trust_stale import StaleTrustKey, stale_key_warning
 
 TRUST_NOTICE_PATH: Final = Path("/srv/autophagy-private/deploy-reconcile/trust-key-notice.txt")
 
-Notify = Callable[[TrustedUpdate, str], bool]
+Notify = Callable[[StaleTrustKey, str], bool]
 
 
 def _read(path: Path) -> str:
@@ -42,23 +42,22 @@ def _write(path: Path, key: str) -> None:
         raise
 
 
-def notify_stale_key(update: TrustedUpdate, warning: str) -> bool:
+def notify_stale_key(stale: StaleTrustKey, warning: str) -> bool:
     """소유자 통지 파사드로 한 건. 봉투를 만들 수 없으면 같은 문구를 그대로 보낸다."""
     from automation import owner_notice
     from automation.owner_notice import notify_owner
 
-    stale = update.stale_key
     try:
         from automation.interop.owner_message import Action, OwnerMessage, Ref, Result
     except Exception:  # noqa: BLE001 - optional module initialization must preserve string delivery
         return notify_owner(warning)
-    if stale is None or not getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
+    if not getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
         return notify_owner(warning)
     message = OwnerMessage(
         subject_key=stale.tag,
         subject="업데이트 신뢰 키 갱신 필요",
         fact=(
-            f"더 새 릴리스 {stale.tag} 가 이 서버의 신뢰 키로 검증되지 않아 {update.tag} 에 머묾; "
+            f"더 새 릴리스 {stale.tag} 가 이 서버의 신뢰 키로 검증되지 않아 {stale.installed_tag} 에 머묾; "
             f"새 태그 서명 키 지문 {stale.signer_fingerprint or '알 수 없음'}"
         ),
         location=Ref(scope="resource", search=("릴리스", stale.tag)),
@@ -75,22 +74,22 @@ def notify_stale_key(update: TrustedUpdate, warning: str) -> bool:
 
 
 def observe_stale_trust_key(
-    update: TrustedUpdate,
+    stale: StaleTrustKey | None,
     *,
     path: Path = TRUST_NOTICE_PATH,
     notify: Notify = notify_stale_key,
 ) -> None:
     """매 틱 저널에 한 줄, 같은 (태그, 키) 의 소유자 통지는 배달될 때까지 한 번. 예외를 던지지 않는다."""
-    warning = stale_key_warning(update)
+    warning = stale_key_warning(stale)
     try:
-        if not warning or update.stale_key is None:
+        if stale is None:
             path.unlink(missing_ok=True)
             return
         print(f"[deploy-reconcile] {warning}", file=sys.stderr)
-        key = f"{update.stale_key.tag} {update.stale_key.signer_fingerprint}"
+        key = f"{stale.tag} {stale.signer_fingerprint}"
         if _read(path) == key:
             return
-        if notify(update, warning):
+        if notify(stale, warning):
             _write(path, key)
     except OSError as error:
         # 기록 실패가 수렴 틱을 막으면 안 된다 — 다음 틱이 다시 알린다.

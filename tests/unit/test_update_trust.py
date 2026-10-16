@@ -23,6 +23,12 @@ from automation.update_trust import (
 from automation import update_trust as update_trust_module
 from automation.node_config import NodeConfig
 from automation.update_trust import main as update_trust_main
+from automation.update_trust_stale import (
+    StaleTrustKey,
+    find_stale_trust_key,
+    ssh_signature_fingerprint,
+)
+from automation.update_trust_stale import main as update_trust_stale_main
 from automation.update_trust_state import (
     ReleaseFloorError,
     load_release_floor,
@@ -849,67 +855,60 @@ def _publish_rotation(repository: UpdateRepository) -> str:
     return old_release
 
 
-def test_resolve_signed_update_when_a_newer_release_needs_a_key_the_node_lacks_then_reports_it(
+def test_find_stale_trust_key_when_a_newer_release_needs_a_key_the_node_lacks_then_reports_it(
     update_repository: UpdateRepository,
     floor: Path,
 ) -> None:
     """2026-10-16: a third-party node sat on the last old-key release for days, rc 0."""
     old_release = _publish_rotation(update_repository)
-
     release = resolve_signed_update(
-        update_repository.mirror,
-        update_repository.allowed_signers,
-        floor_path=floor,
+        update_repository.mirror, update_repository.allowed_signers, floor_path=floor,
     )
 
+    stale = find_stale_trust_key(update_repository.mirror, release, update_repository.allowed_signers)
+
     assert (release.tag, release.commit_sha) == ("v1.0.0", old_release)
-    assert release.stale_key is not None
-    assert release.stale_key.tag == "v1.1.0"
-    assert release.stale_key.reason == "BAD-SIGNATURE"
-    assert release.stale_key.signer_fingerprint == _fingerprint(update_repository.new_key)
+    assert stale == StaleTrustKey(
+        "v1.0.0", "v1.1.0", "BAD-SIGNATURE", _fingerprint(update_repository.new_key),
+    )
 
 
-def test_resolve_signed_update_when_every_release_verifies_then_reports_no_stale_key(
+def test_find_stale_trust_key_when_every_release_verifies_then_reports_nothing(
     update_repository: UpdateRepository,
     floor: Path,
 ) -> None:
     _ = _publish_rotation(update_repository)
     _write_allowed_signers(update_repository.allowed_signers, update_repository.new_key)
-
     release = resolve_signed_update(
-        update_repository.mirror,
-        update_repository.allowed_signers,
-        floor_path=floor,
+        update_repository.mirror, update_repository.allowed_signers, floor_path=floor,
     )
 
     assert release.tag == "v1.1.0"
-    assert release.stale_key is None
+    assert find_stale_trust_key(update_repository.mirror, release, update_repository.allowed_signers) is None
 
 
-def test_resolve_signed_cli_when_the_trust_key_is_stale_then_says_what_to_do_on_stderr(
+def test_stale_check_cli_when_the_trust_key_is_stale_then_says_what_to_do_and_exits_3(
     update_repository: UpdateRepository,
     floor: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    old_release = _publish_rotation(update_repository)
+    _ = _publish_rotation(update_repository)
 
-    code = update_trust_main([
-        "resolve-signed",
+    code = update_trust_stale_main([
+        "check",
         "--mirror", str(update_repository.mirror),
         "--allowed-signers", str(update_repository.allowed_signers),
         "--floor-path", str(floor),
     ])
 
-    captured = capsys.readouterr()
-    assert code == 0
-    assert captured.out.strip() == old_release
-    warning = captured.err.strip()
+    warning = capsys.readouterr().err.strip()
+    assert code == 3
     assert warning.startswith("UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요")
     assert "v1.1.0" in warning and "v1.0.0" in warning
     assert _fingerprint(update_repository.new_key) in warning
 
 
 def test_ssh_signature_fingerprint_when_the_tag_has_no_ssh_signature_then_is_empty() -> None:
-    assert update_trust_module.ssh_signature_fingerprint("object 0\ntag v1\n\nno signature\n") == ""
+    assert ssh_signature_fingerprint("object 0\ntag v1\n\nno signature\n") == ""
     broken = "-----BEGIN SSH SIGNATURE-----\n@@@\n-----END SSH SIGNATURE-----\n"
-    assert update_trust_module.ssh_signature_fingerprint(broken) == ""
+    assert ssh_signature_fingerprint(broken) == ""

@@ -21,11 +21,13 @@ probe_update_trust() {
   output="$("$python" "$script" resolve-signed --mirror "$target" --floor-path "$floor" 2>&1)" || command_status=$?
   if (( command_status == 0 )); then
     # A verified OLDER release while a newer one fails its signature is a frozen node,
-    # not a healthy one: the resolver still answers rc 0 there (2026-10-16).
-    local stale
-    stale="$(grep -m1 '^UPDATE-TRUST-STALE-KEY' <<<"$output" || true)"
-    [[ -z "$stale" ]] && return 0
-    printf '[update-trust] %s\n' "$stale" >&2
+    # not a healthy one: the resolver still answers rc 0 there (2026-10-16). The check
+    # lives in its own module because update_trust.py is a root helper copy.
+    local stale_script="${UPDATE_TRUST_STALE_SCRIPT:-$UPDATE_TRUST_PROBE_DIR/update_trust_stale.py}"
+    local stale stale_status=0
+    stale="$("$python" "$stale_script" check --mirror "$target" --floor-path "$floor" 2>&1)" || stale_status=$?
+    (( stale_status == 3 )) || return 0
+    printf '[update-trust] %s\n' "$(grep -m1 '^UPDATE-TRUST-STALE-KEY' <<<"$stale")" >&2
     return 1
   fi
   if [[ "$output" == UPDATE-TRUST-BLOCK* ]]; then
