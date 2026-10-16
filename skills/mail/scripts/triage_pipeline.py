@@ -84,9 +84,10 @@ def compose_and_post(
 def _draft_and_post(
     detail: dict, cls, *, post: bool, instruction: str = "",
     attachments: tuple[str, ...] = (), evidence_pack: object | None = None,
-    reply_all: bool = False,
+    reply_all: bool = False, digest_card: dict | None = None,
 ) -> list[str]:
     actions: list[str] = []
+    card = digest_card or {}
     to = triage_core.extract_reply_address(detail.get("sender") or "")
     if not to:
         return ["reply-no-address"]
@@ -110,6 +111,8 @@ def _draft_and_post(
         mail_subject=detail.get("subject") or "", to=to, subject=subject, body=body,
          category=cls.category, flags=cls.flags(),
         attachment_paths=attachments, cc=cc, quote=mail_quote.render_quote(original),
+        origin_channel_id=str(card.get("channel_id") or ""),
+        origin_message_id=str(card.get("message_id") or ""),
     )
     actions.append(f"draft:{draft['id']}")
     if post:

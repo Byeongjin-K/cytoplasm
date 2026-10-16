@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -51,6 +52,9 @@ def daily_binding(draft: Mapping[str, object]) -> calendar_binding.ApprovalBindi
     import calendar_approval
 
     day = date.fromisoformat(str(draft["digest_day"])).isoformat()
+    shared = _mail_digest_binding(day)
+    if shared is not None:
+        return shared
     path = calendar_gate._gate_dir() / "daily-threads" / f"{day}.json"
     with calendar_approval.confirm_lease().hold(f"digest-day:{day}") as owned:
         if not owned:
@@ -69,6 +73,45 @@ def daily_binding(draft: Mapping[str, object]) -> calendar_binding.ApprovalBindi
         return binding
 
 
+def _mail_digest_binding(day: str) -> calendar_binding.ApprovalBindingLike | None:
+    """The mail digest's thread for that day, so its event cards stand under their mail (Q187).
+
+    Absent (the digest posted flat, or an older mail skill) means this skill's own daily
+    thread as before; a stored thread that no longer validates is a refusal, not a guess.
+    """
+    try:
+        shared = calendar_binding._repo_module("digest_thread")
+    except calendar_gate.GateError:
+        return None
+    thread = shared.load(day)
+    if thread is None:
+        return None
+    surface = calendar_binding._surface()
+    try:
+        return shared.binding(surface, surface.ApprovalKind.CALENDAR, thread,
+                              calendar_binding.approval_directory(), calendar_confirm.owner_id())
+    except (surface.ApprovalSurfaceError, TypeError, ValueError) as error:
+        raise calendar_gate.GateError(f"다이제스트 승인 스레드 검증 실패 — 게시 거부: {error}", 1) from error
+
+
+def _reply_target() -> dict[str, str]:
+    """The mail card this event card replies under (env from the mail digest; never hashed)."""
+    reply_to = os.environ.get("CALENDAR_DIGEST_REPLY_TO", "")
+    channel = os.environ.get("CALENDAR_DIGEST_REPLY_CHANNEL", "")
+    return {"digest_reply_to": reply_to, "digest_reply_channel": channel} if reply_to and channel else {}
+
+
+def pending_by_thread(thread_ids: list[str]) -> dict[str, int]:
+    """Undecided digest event cards per thread — read only, for the digest thread's mark."""
+    from calendar_pending import PendingConfirmStore
+
+    counts = dict.fromkeys(thread_ids, 0)
+    for entry in PendingConfirmStore().load():
+        if entry.channel_id in counts:
+            counts[entry.channel_id] += 1
+    return counts
+
+
 def submit(draft: DraftRecord, day: str) -> DraftRecord:
     """초안을 저장하고, 다이제스트 건(``day`` 지정)이면 그날 스레드에 카드까지 올린 뒤 돌려준다.
 
@@ -83,7 +126,8 @@ def submit(draft: DraftRecord, day: str) -> DraftRecord:
     import calendar_approval
 
     key = event_key(draft)
-    candidate: DraftRecord = {**draft, "id": key, "digest_key": key, "digest_day": date.fromisoformat(day).isoformat()}
+    candidate: DraftRecord = {**draft, "id": key, "digest_key": key, "digest_day": date.fromisoformat(day).isoformat(),
+                              **_reply_target()}
     with calendar_approval.confirm_lease().hold(f"digest-submit:{key}") as owned:
         if not owned:
             raise calendar_gate.GateError("같은 일정을 게시하는 중 — 다음 틱에 재시도", 1)

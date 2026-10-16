@@ -110,8 +110,11 @@ def _with_card(note: str, stdout: str) -> ScheduleNote:
     return ScheduleNote(note, url, start, end, match["title"].strip())
 
 
-def _delegate_schedule(schedule_text: str, uid_opaque: str, digest_day: str = "") -> ScheduleNote:
-    proc_or_note = _run_calendar(schedule_text, uid_opaque, digest_day)
+def _delegate_schedule(
+    schedule_text: str, uid_opaque: str, digest_day: str = "", *,
+    reply_to: str = "", reply_channel: str = "",
+) -> ScheduleNote:
+    proc_or_note = _run_calendar(schedule_text, uid_opaque, digest_day, reply_to, reply_channel)
     if isinstance(proc_or_note, str):
         return ScheduleNote(proc_or_note)
     proc = proc_or_note
@@ -131,6 +134,7 @@ def _delegate_schedule(schedule_text: str, uid_opaque: str, digest_day: str = ""
 
 def _run_calendar(
     schedule_text: str, uid_opaque: str, digest_day: str,
+    reply_to: str = "", reply_channel: str = "",
 ) -> subprocess.CompletedProcess[str] | str:
     calendar_cli = _env_path(
         "TRIAGE_CALENDAR_CLI", "/srv/autophagy-skills/live/calendar/scripts/calendar_cli.py"
@@ -142,6 +146,10 @@ def _run_calendar(
             [sys.executable, str(calendar_cli), "draft-create", "--text", schedule_text,
              *(["--digest-day", digest_day] if digest_day else [])],
             capture_output=True, text=True, timeout=CALENDAR_TIMEOUT_SECONDS, check=False,
+            # The card replies under its mail card in the digest thread (owner Q187). An env
+            # pair, not a flag: a calendar CLI older than this ignores it instead of exit 2.
+            env={**os.environ, "CALENDAR_DIGEST_REPLY_TO": reply_to,
+                 "CALENDAR_DIGEST_REPLY_CHANNEL": reply_channel},
         )
     except subprocess.TimeoutExpired:  # 느린 캘린더 CLI 가 다이제스트 전체를 죽이지 못한다
         print(f"CAL-TIMEOUT uid={uid_opaque} timeout={CALENDAR_TIMEOUT_SECONDS}s", file=sys.stderr)
@@ -150,3 +158,27 @@ def _run_calendar(
         print(f"CAL-SPAWN-FAIL uid={uid_opaque} error={_clip(str(error))}", file=sys.stderr)
         return "calendar-spawn-failed"
     return proc
+
+
+def _calendar_digest_pending(thread_ids: list[str]) -> dict[str, int] | None:
+    """Undecided calendar cards per digest thread, or None when calendar cannot say."""
+    calendar_cli = _env_path(
+        "TRIAGE_CALENDAR_CLI", "/srv/autophagy-skills/live/calendar/scripts/calendar_cli.py"
+    )
+    if not thread_ids or not calendar_cli.exists():
+        return None
+    argv = [sys.executable, str(calendar_cli), "digest-pending"]
+    for thread_id in thread_ids:
+        argv += ["--thread", thread_id]
+    try:
+        proc = subprocess.run(  # noqa: S603 — read-only count from calendar's own store
+            argv, capture_output=True, text=True, timeout=CALENDAR_TIMEOUT_SECONDS, check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode != 0:
+        return None
+    counts: dict[str, int] = {}
+    for match in re.finditer(r"^DIGEST-PENDING thread=(\d+) count=(\d+)$", proc.stdout, re.M):
+        counts[match.group(1)] = int(match.group(2))
+    return counts if set(counts) == set(thread_ids) else None

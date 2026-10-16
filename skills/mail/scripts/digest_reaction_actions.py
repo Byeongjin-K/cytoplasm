@@ -203,6 +203,7 @@ def _write_draft(card: dict) -> str:
             triage_cli.cmd_draft(argparse.Namespace(
                 uid=uid, instruction=DRAFT_INSTRUCTION, attachment=[], no_post=False,
                 with_evidence=False, reply_all=False,
+                digest_card={"channel_id": card["channel_id"], "message_id": card["message_id"]},
             ))
     draft = _pending_draft(uid)
     if draft is None:  # a draft exists but is no longer pending (sent/discarded)

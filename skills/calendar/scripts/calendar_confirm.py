@@ -134,7 +134,11 @@ def render_confirmation(draft: DraftRecord) -> str:
 def post_confirmation_message(draft: DraftRecord, channel_id: str) -> tuple[str, str]:
     """Post only the card prepared before surface resolution, or replay a stored version."""
     content = draft.get("approval_content") or render_confirmation(draft)
-    message = _api("POST", f"/channels/{channel_id}/messages", {"content": content})
+    payload: dict[str, object] = {"content": content}
+    if draft.get("digest_reply_to") and draft.get("digest_reply_channel") == channel_id:
+        # Under its mail card in the morning digest thread (owner Q187, 2026-10-16).
+        payload["message_reference"] = {"message_id": draft["digest_reply_to"], "fail_if_not_exists": False}
+    message = _api("POST", f"/channels/{channel_id}/messages", payload)
     message_id = _required_string(message, "id", "확정 DM 메시지 id가 없습니다")
     _api("PUT", f"/channels/{channel_id}/messages/{message_id}/reactions/{quote(APPROVE_EMOJI, safe='')}/@me")
     _api("PUT", f"/channels/{channel_id}/messages/{message_id}/reactions/{quote(CANCEL_EMOJI, safe='')}/@me")

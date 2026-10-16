@@ -99,6 +99,7 @@ def cmd_draft(args: argparse.Namespace) -> int:
         attachments=tuple(getattr(args, "attachment", ()) or ()),
         evidence_pack=pack,
         reply_all=bool(getattr(args, "reply_all", False)),
+        digest_card=getattr(args, "digest_card", None),
     )
     if "reply-no-address" in actions:
         raise triage_gate.GateError("회신 주소를 찾을 수 없음 — 초안 생성 불가", 2)
@@ -247,6 +248,7 @@ def cmd_reply_request(args: argparse.Namespace) -> int:
         return cmd_draft(argparse.Namespace(
             uid=str(item["uid"]), instruction=args.instruction, attachment=[],
             no_post=args.no_post, with_evidence=args.with_evidence, reply_all=args.reply_all,
+            digest_card={"channel_id": item.get("channel_id", ""), "message_id": item["message_id"]},
         ))
 
 
@@ -391,6 +393,9 @@ def _digest_reactions() -> None:
     except Exception as error:  # noqa: BLE001 — approvals below must still be processed
         print(f"DIGEST-REACTION-TICK-FAIL err={triage_core.redact(str(error))[:160]}",
               file=sys.stderr)
+    import triage_digest_thread
+
+    triage_digest_thread.settle()
 
 
 def cmd_watch(_args: argparse.Namespace) -> int:

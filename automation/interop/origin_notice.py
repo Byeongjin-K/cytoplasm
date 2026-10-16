@@ -191,6 +191,19 @@ def close_thread(
     return True
 
 
+def rename_thread(api: ApiCall, thread_id: str, name: str, *, record_id: str = "") -> bool:
+    """Rename a thread and keep it open (best-effort, same contract as ``close_thread``)."""
+    try:
+        api("PATCH", f"/channels/{thread_id}", {"name": name[:_THREAD_NAME_LIMIT], "archived": False})
+    except Exception as error:  # noqa: BLE001 — a mark never breaks the tick that set it
+        print(
+            f"THREAD-RENAME-FAIL id={record_id} thread={thread_id} err={type(error).__name__}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def deliver(
     *,
     api: ApiCall,

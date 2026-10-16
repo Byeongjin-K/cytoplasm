@@ -217,6 +217,14 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--origin-message-id", default="")
 
 
+def cmd_digest_pending(args: argparse.Namespace) -> int:
+    """Read only: undecided digest event cards per thread, for the digest thread's mark."""
+    counts = import_module("calendar_digest").pending_by_thread(list(args.thread))
+    for thread_id, count in counts.items():
+        print(f"DIGEST-PENDING thread={thread_id} count={count}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="calendar", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -263,6 +271,10 @@ def build_parser() -> argparse.ArgumentParser:
     discard.set_defaults(func=cmd_discard)
 
     sub.add_parser("list-drafts", help="초안 목록").set_defaults(func=cmd_list_drafts)
+
+    pending = sub.add_parser("digest-pending", help="다이제스트 스레드별 미결 일정 카드 수 (읽기 전용)")
+    pending.add_argument("--thread", action="append", default=[], required=True)
+    pending.set_defaults(func=cmd_digest_pending)
 
     sign = sub.add_parser("sign", help="E2E 전용: 서명된 주입 승인 생성")
     sign.add_argument("--draft", required=True)
