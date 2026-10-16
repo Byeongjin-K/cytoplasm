@@ -60,7 +60,7 @@ def _fake_cli(tmp_path: Path, *, rc: int, stdout: str = "", stderr: str = "") ->
 
 def _delegate(monkeypatch: pytest.MonkeyPatch, cli: Path) -> str:
     monkeypatch.setenv("TRIAGE_CALENDAR_CLI", str(cli))
-    return triage_transport._delegate_schedule(SCHEDULE_TEXT, UID_OPAQUE)
+    return triage_transport._delegate_schedule(SCHEDULE_TEXT, UID_OPAQUE).note
 
 
 def _cal_lines(stderr: str) -> list[str]:
@@ -174,6 +174,40 @@ def test_delegation_when_the_draft_is_created_then_its_id_is_returned(
     cli = _fake_cli(tmp_path, rc=0, stdout="CHANGE summary\nDRAFT-CREATED id=cal7f3a action=create\n")
 
     assert _delegate(monkeypatch, cli) == "calendar:cal7f3a"
+
+
+def test_delegation_when_the_card_is_posted_then_its_link_and_event_come_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given a calendar CLI that posted the digest card and printed its DIGEST-CARD line.
+    cli = _fake_cli(tmp_path, rc=0, stdout=(
+        "DRAFT-CREATED id=cal7f3a action=create\n"
+        "DIGEST-CARD draft=cal7f3a url=https://discord.com/channels/11/22/33 "
+        "start=2026-10-19T13:30:00+09:00 end=2026-10-19T14:30:00+09:00 summary=Synthetic review meeting\n"
+    ))
+    monkeypatch.setenv("TRIAGE_CALENDAR_CLI", str(cli))
+
+    note = triage_transport._delegate_schedule(SCHEDULE_TEXT, UID_OPAQUE)
+
+    # Then the note keeps its id and the card link and event travel beside it.
+    assert note == triage_transport.ScheduleNote(
+        "calendar:cal7f3a", "https://discord.com/channels/11/22/33",
+        "2026-10-19T13:30:00+09:00", "2026-10-19T14:30:00+09:00", "Synthetic review meeting",
+    )
+
+
+def test_delegation_when_the_card_link_is_unavailable_then_no_link_is_invented(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cli = _fake_cli(tmp_path, rc=0, stdout=(
+        "DRAFT-CREATED id=cal7f3a action=create\n"
+        "DIGEST-CARD draft=cal7f3a url=unavailable start=- end=- summary=\n"
+    ))
+    monkeypatch.setenv("TRIAGE_CALENDAR_CLI", str(cli))
+
+    assert triage_transport._delegate_schedule(SCHEDULE_TEXT, UID_OPAQUE) == triage_transport.ScheduleNote(
+        "calendar:cal7f3a"
+    )
 
 
 def test_delegation_when_the_cli_is_absent_then_it_reports_unavailable(

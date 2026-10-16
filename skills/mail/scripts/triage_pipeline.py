@@ -158,7 +158,7 @@ def _process_one(uid: str, *, post: bool) -> tuple[str, str]:
         actions.append("cc-no-reply")
     if cls.schedule_needed:
         if cls.schedule_text:
-            actions.append(_delegate_schedule(cls.schedule_text, triage_core.mask_value(uid)))
+            actions.append(_delegate_schedule(cls.schedule_text, triage_core.mask_value(uid)).note)
         else:
             actions.append("calendar-no-text")
     if cls.reply_needed:
