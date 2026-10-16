@@ -95,6 +95,29 @@ KIND_LABELS: Final[Mapping[ApprovalKind, str]] = MappingProxyType({
     ApprovalKind.PROJECT_BOARD: "프로젝트 제안",
 })
 
+# Each kind's icon leads its thread name and the big title on the thread's first message
+# (owner 2026-10-16: every thread opens with a large emoji title, like the mail digest).
+# ✅/⛔ are left out on purpose: they are the decision reactions and closing prefixes.
+KIND_ICONS: Final[Mapping[ApprovalKind, str]] = MappingProxyType({
+    ApprovalKind.MAIL_REPLY: "↩️",
+    ApprovalKind.MAIL_COMPOSE: "✉️",
+    ApprovalKind.BUDGET_MAIL: "💳",
+    ApprovalKind.PATENT_EXPORT: "📜",
+    ApprovalKind.REPAIR: "🛠️",
+    ApprovalKind.CALENDAR: "🗓️",
+    ApprovalKind.COORDINATION: "🤝",
+    ApprovalKind.WIKI: "📚",
+    ApprovalKind.SKILL_DEPLOY: "🚀",
+    ApprovalKind.SKILL_ATTEST: "🔎",
+    ApprovalKind.SKILL_PUBLISH: "📦",
+    ApprovalKind.SKILL_SUBMIT: "📥",
+    ApprovalKind.MANAGED_ACTIVATE: "🔌",
+    ApprovalKind.RELEASE: "🏷️",
+    ApprovalKind.OBSIDIAN_WRITE: "📝",
+    ApprovalKind.TODO: "📋",
+    ApprovalKind.PROJECT_BOARD: "📊",
+})
+
 REQUEST_TITLE_LIMIT: Final = 40
 THREAD_NAME_LIMIT: Final = 100  # Discord channel/thread name limit
 
@@ -105,8 +128,18 @@ def _request_title(request: RequestThread) -> str:
 
 
 def request_thread_name(kind: ApprovalKind, request: RequestThread) -> str:
-    """``<kind label> · <title≤40>`` clipped to Discord's 100-char thread name."""
-    return f"{KIND_LABELS[kind]} · {_request_title(request)}"[:THREAD_NAME_LIMIT]
+    """``<icon> <kind label> · <title≤40>`` clipped to Discord's 100-char thread name."""
+    return f"{KIND_ICONS[kind]} {KIND_LABELS[kind]} · {_request_title(request)}"[:THREAD_NAME_LIMIT]
+
+
+def thread_title(icon: str, text: str) -> str:
+    """The big first line of a bot-opened thread: ``## <icon> <what>`` on one line."""
+    return f"## {icon} {' '.join(text.split())}"
+
+
+def request_thread_title(kind: ApprovalKind, request: RequestThread) -> str:
+    """The request thread's title line — the same masked words its name already shows."""
+    return thread_title(KIND_ICONS[kind], f"{KIND_LABELS[kind]} · {_request_title(request)}")
 
 
 def request_thread_notice(kind: ApprovalKind, request: RequestThread) -> str:
@@ -132,10 +165,11 @@ def request_thread_notice(kind: ApprovalKind, request: RequestThread) -> str:
             agent_next="이 메시지에 승인 스레드를 열고 그 안에 승인 카드를 게시합니다",
             recovery="not_applicable", detail=Approval(expires_at=None, cancel_effect="실행 안 함"),
         )
-        return render(message, destination=anchor)
+        return f"{request_thread_title(kind, request)}\n{render(message, destination=anchor)}"
     except (ImportError, ValueError):
         # Optional/older envelope runtimes must not prevent a valid approval post.
         return (
+            f"{request_thread_title(kind, request)}\n"
             f"🔔 승인 대기 · {KIND_LABELS[kind]} · {_request_title(request)}\n"
             "이 메시지의 스레드에서 ✅ 실행 / ⛔ 취소로 결정해 주세요."
         )

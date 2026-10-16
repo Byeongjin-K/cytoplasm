@@ -37,7 +37,7 @@ THREAD_ID = "300000000000000001"
 APPROVAL_CHANNEL = "1526487936065952385"
 #: 요청별 승인 스레드 — 승인 카드가 여기 있었고 결과도 여기서 끝난다.
 REQUEST_THREAD = "400000000000000001"
-REQUEST_THREAD_NAME = "할 일 · 장보기"
+REQUEST_THREAD_NAME = "📋 할 일 · 장보기"
 NOW = datetime(2026, 8, 23, 12, tzinfo=UTC)
 
 
@@ -184,7 +184,10 @@ def test_notify_result_routes_to_the_origin_thread() -> None:
         transport=transport,
         transport_factory=_thread_factory(posts),
     )
-    assert transport.api_calls == [("POST", f"/channels/{ORIGIN_CHANNEL}/messages/{ORIGIN_MESSAGE}/threads")]
+    assert transport.api_calls == [
+        ("POST", f"/channels/{ORIGIN_CHANNEL}/messages/{ORIGIN_MESSAGE}/threads"),
+        ("POST", f"/channels/{THREAD_ID}/messages"),  # the new thread's big title (2026-10-16)
+    ]
     assert posts == [(THREAD_ID, "✅ 할일 등록 완료: 장보기 (task t-1)")]
     assert transport.posts == []
 
@@ -324,6 +327,7 @@ def test_watch_cancel_notice_routes_to_the_origin_thread(tmp_path: Path) -> None
     # Then: the notice still anchors on the instruction message, and that thread is closed
     assert transport.api_calls == [
         ("POST", f"/channels/{ORIGIN_CHANNEL}/messages/{ORIGIN_MESSAGE}/threads"),
+        ("POST", f"/channels/{THREAD_ID}/messages"),  # the new thread's big title (2026-10-16)
         ("GET", f"/channels/{THREAD_ID}"),
         ("PATCH", f"/channels/{THREAD_ID}"),
     ]

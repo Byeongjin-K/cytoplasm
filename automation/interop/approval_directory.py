@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import urllib.error
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +37,7 @@ from automation.interop.approval_surface import (
     kind_thread_name,
     request_thread_name,
     request_thread_notice,
+    request_thread_title,
 )
 
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
@@ -188,9 +190,9 @@ class DiscordChannelDirectory:
         """
         channel_id = self.agent_chat()
         name = request_thread_name(kind, request)
+        on_instruction = bool(request.origin_message_id and request.origin_channel_id == channel_id)
         anchor = (
-            request.origin_message_id
-            if request.origin_message_id and request.origin_channel_id == channel_id
+            request.origin_message_id if on_instruction
             else self._announce_request(channel_id, kind, request)
         )
         try:
@@ -207,7 +209,21 @@ class DiscordChannelDirectory:
         body = _json_object(created, "request thread")
         thread_id = _required_string(body, "id", "request thread")
         self._remember_guild(body.get("guild_id"))
+        if on_instruction:
+            self._post_title(thread_id, kind, request)
         return thread_id
+
+    def _post_title(self, thread_id: str, kind: ApprovalKind, request: RequestThread) -> None:
+        """Open a thread hung on the owner's own message with the big title line.
+
+        The announcement already carries it when the thread hangs on that announcement.
+        A title is a convenience: failing to post it never blocks the approval card.
+        """
+        try:
+            self._request("POST", f"/channels/{thread_id}/messages",
+                          {"content": request_thread_title(kind, request)})
+        except ApprovalSurfaceError as error:
+            print(f"THREAD-TITLE-FAIL thread={thread_id} err={type(error).__name__}", file=sys.stderr)
 
     def _announce_request(
         self, channel_id: str, kind: ApprovalKind, request: RequestThread

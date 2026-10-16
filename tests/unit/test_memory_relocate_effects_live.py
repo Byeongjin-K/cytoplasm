@@ -306,7 +306,7 @@ def test_post_effect_opens_a_request_thread_titled_by_the_note_filename(
 
     # And: the Discord name uses the shipped label without exposing the entry or path.
     name = request_thread_name(ApprovalKind.OBSIDIAN_WRITE, specs[0])
-    assert name == f"{KIND_LABELS[ApprovalKind.OBSIDIAN_WRITE]} · relocated.md"
+    assert name == f"📝 {KIND_LABELS[ApprovalKind.OBSIDIAN_WRITE]} · relocated.md"
     assert len(name) <= 100
     for secret in (entry_text, record.note_relpath):
         assert secret not in name

@@ -266,7 +266,7 @@ def test_new_export_request_names_its_thread_with_the_export_id_only(env: Bindin
     patent_export.prepare_export(env.paths, SLUG, mode="enc")
 
     # Then: exactly one thread was opened, named by the export id and nothing else.
-    assert env.fake.threads == [f"특허 반출 · {SLUG}"]
+    assert env.fake.threads == [f"📜 특허 반출 · {SLUG}"]
     for secret in (DOC_TITLE, DOC_BODY, "draft.md", SHA):
         assert secret not in env.fake.threads[0]
 

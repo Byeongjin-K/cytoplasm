@@ -179,7 +179,7 @@ def test_post_confirm_message_adds_confirm_message_id(wiki_env: FakeDiscordRest,
     ]
     assert wiki_env.request_thread_calls == [(
         f"/channels/{AGENT_CHAT_CHANNEL_ID}/messages/wiki-notice-1/threads",
-        {"name": f"위키 · {draft['id']}", "auto_archive_duration": 10080},
+        {"name": f"📚 위키 · {draft['id']}", "auto_archive_duration": 10080},
     )]
 
 
@@ -362,7 +362,7 @@ def test_second_prepare_for_the_same_slug_never_replaces_the_message_id(
         ):
             assert payload is not None
             assert payload == {
-                "name": f"특허 반출 · {SLUG}",
+                "name": f"📜 특허 반출 · {SLUG}",
                 "auto_archive_duration": 10080,
             }
             request_thread_calls.append((path, payload))
@@ -382,7 +382,7 @@ def test_second_prepare_for_the_same_slug_never_replaces_the_message_id(
             return {
                 "id": path.rsplit("/", 1)[-1],
                 "type": 11,
-                "name": f"특허 반출 · {SLUG}",
+                "name": f"📜 특허 반출 · {SLUG}",
                 "parent_id": AGENT_CHAT_CHANNEL_ID,
             }
         if method == "PUT":
@@ -415,7 +415,7 @@ def test_second_prepare_for_the_same_slug_never_replaces_the_message_id(
     ]
     assert request_thread_calls == [(
         f"/channels/{AGENT_CHAT_CHANNEL_ID}/messages/patent-notice-1/threads",
-        {"name": f"특허 반출 · {SLUG}", "auto_archive_duration": 10080},
+        {"name": f"📜 특허 반출 · {SLUG}", "auto_archive_duration": 10080},
     )]
     assert posted == ["msg-1"]
     assert post_channels == [REQUEST_THREAD_ID]

@@ -58,7 +58,7 @@ class AgentChatDirectory:
     def describe(self, channel_id: str):
         assert channel_id in {AGENT_CHAT_THREAD_ID, REQUEST_THREAD_ID}
         surface = importlib.import_module("automation.interop.approval_surface")
-        return surface.ChannelFacts(11, "일정 조율 · 요청", (), AGENT_CHAT_CHANNEL_ID)
+        return surface.ChannelFacts(11, "🤝 일정 조율 · 요청", (), AGENT_CHAT_CHANNEL_ID)
 
 
 class FakeDiscord:
@@ -117,7 +117,7 @@ class FakeDiscord:
             and parts[1] in {self.request_thread_id(index) for index in range(8)}
         ):
             return {
-                "id": parts[1], "name": "일정 조율 · 요청",
+                "id": parts[1], "name": "🤝 일정 조율 · 요청",
                 "parent_id": AGENT_CHAT_CHANNEL_ID, "type": 11,
             }
         if method == "GET" and path == f"/channels/{OWNER_DM_CHANNEL_ID}":
@@ -331,7 +331,7 @@ def test_owner_leg_opens_a_request_thread_labelled_as_the_team_post_does(
     assert request.title == "coord-run"
     assert request.origin_channel_id == ORIGIN_CHANNEL
     assert request.origin_message_id == ORIGIN_MESSAGE
-    assert surface.request_thread_name(kind, request) == "일정 조율 · coord-run"
+    assert surface.request_thread_name(kind, request) == "🤝 일정 조율 · coord-run"
 
 
 def test_new_binding_falls_back_to_the_pending_id_without_a_label(

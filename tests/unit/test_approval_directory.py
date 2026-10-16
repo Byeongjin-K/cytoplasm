@@ -533,6 +533,7 @@ def test_request_thread_anchors_on_an_agent_chat_instruction_message(interop_con
     _agent_chat_config(interop_config, "chan-1")
     fake = FakeApi("bot-a", {
         ("POST", "/channels/chan-1/messages/msg-1/threads"): {"id": "thread-anchored"},
+        ("POST", "/channels/thread-anchored/messages"): {"id": "title-1"},
     })
     directory = _directory(fake)
 
@@ -546,8 +547,28 @@ def test_request_thread_anchors_on_an_agent_chat_instruction_message(interop_con
     assert thread_id == "thread-anchored"
     assert fake.calls == [(
         "POST", "/channels/chan-1/messages/msg-1/threads",
-        {"name": "메일 발신 · 세미나 안내", "auto_archive_duration": 10080},
+        {"name": "✉️ 메일 발신 · 세미나 안내", "auto_archive_duration": 10080},
+    ), (
+        # The owner's message is the thread's starter, so the title goes in first.
+        "POST", "/channels/thread-anchored/messages", {"content": "## ✉️ 메일 발신 · 세미나 안내"},
     )]
+
+
+def test_request_thread_title_failure_never_blocks_the_approval(interop_config: Path) -> None:
+    # Given: the thread opens on the owner's message but the title post is refused.
+    _agent_chat_config(interop_config, "chan-1")
+    fake = FakeApi("bot-a", {
+        ("POST", "/channels/chan-1/messages/msg-1/threads"): {"id": "thread-anchored"},
+        ("POST", "/channels/thread-anchored/messages"): HTTPError(
+            "https://discord.test/x", 403, "forbidden", None, None,
+        ),
+    })
+
+    # When / Then: the thread still resolves, so the approval card can be posted.
+    assert _directory(fake).agent_chat_request_thread(
+        ApprovalKind.MAIL_COMPOSE,
+        _request_thread(origin_channel_id="chan-1", origin_message_id="msg-1"),
+    ) == "thread-anchored"
 
 
 def test_request_thread_reuses_the_message_thread_on_400(interop_config: Path) -> None:
@@ -605,7 +626,7 @@ def test_request_thread_creates_a_channel_thread_without_an_origin(interop_confi
     assert thread_id == "thread-new"
     assert fake.calls[-1] == (
         "POST", "/channels/chan-1/messages/msg-new/threads",
-        {"name": "수리 · t_abc", "auto_archive_duration": 10080},
+        {"name": "🛠️ 수리 · t_abc", "auto_archive_duration": 10080},
     )
     assert ("POST", "/channels/chan-1/threads") not in [
         (method, path) for method, path, _payload in fake.calls

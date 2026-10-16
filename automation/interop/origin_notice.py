@@ -35,6 +35,19 @@ _RecordValue = TypeVar("_RecordValue")
 _PUBLIC_THREAD = 11
 _AUTO_ARCHIVE_MINUTES = 1440
 _THREAD_NAME_LIMIT = 100
+#: Icons of the threads opened here, by the leading words of the name the caller already
+#: passes (owner 2026-10-16: every bot-opened thread's name and first message start with
+#: an emoji title). Keyed on the name so no caller and no older runtime has to change.
+RESULT_THREAD_ICON: Final = "🧵"
+_THREAD_ICONS: Final = (
+    ("메일", "✉️"), ("캘린더", "🗓️"), ("과제비", "💳"), ("할일", "📋"), ("일정 조율", "🤝"),
+    ("회의록", "🎙️"), ("메모리", "🧠"), ("대리 요청", "🙋"), ("음성 메시지", "🎤"),
+)
+
+
+def thread_icon(name: str) -> str:
+    """The icon a result thread named ``name`` opens with; the generic one otherwise."""
+    return next((icon for word, icon in _THREAD_ICONS if name.startswith(word)), RESULT_THREAD_ICON)
 
 
 class _SentChunk(Protocol):
@@ -104,28 +117,46 @@ def approval_location(
 
 
 def resolve_thread_id(api: ApiCall, origin: OriginRef, name: str) -> str:
-    """The approval thread as-is; else anchor on the instruction message (400 = exists)."""
+    """The approval thread as-is; else anchor on the instruction message (400 = exists).
+
+    A thread opened here is named ``<icon> <name>`` and starts with the big title line;
+    an existing thread is reused untouched.
+    """
     if origin.thread_id:
         return origin.thread_id
-    name = name[:_THREAD_NAME_LIMIT]
+    label = " ".join(name.split())
+    icon = thread_icon(label)
+    titled = f"{icon} {label}"[:_THREAD_NAME_LIMIT]
     if origin.message_id:
         try:
             thread = api(
                 "POST",
                 f"/channels/{origin.channel_id}/messages/{origin.message_id}/threads",
-                {"name": name},
+                {"name": titled},
             )
         except HTTPError as error:
             if error.code != 400:
                 raise
             return origin.message_id  # 이미 스레드가 달린 메시지 — thread id == message id
-        return str(thread["id"])  # type: ignore[index]
-    thread = api(
-        "POST",
-        f"/channels/{origin.channel_id}/threads",
-        {"name": name, "type": _PUBLIC_THREAD, "auto_archive_duration": _AUTO_ARCHIVE_MINUTES},
-    )
-    return str(thread["id"])  # type: ignore[index]
+    else:
+        thread = api(
+            "POST",
+            f"/channels/{origin.channel_id}/threads",
+            {"name": titled, "type": _PUBLIC_THREAD, "auto_archive_duration": _AUTO_ARCHIVE_MINUTES},
+        )
+    thread_id = str(thread["id"])  # type: ignore[index]
+    _post_title(api, thread_id, icon, label)
+    return thread_id
+
+
+def _post_title(api: ApiCall, thread_id: str, icon: str, label: str) -> None:
+    """The new thread's first message: the big title. Never fails the notice behind it."""
+    from .approval_surface import thread_title
+
+    try:
+        api("POST", f"/channels/{thread_id}/messages", {"content": thread_title(icon, label)})
+    except Exception as error:  # noqa: BLE001 — 제목은 편의다, 통지는 그대로 간다
+        print(f"THREAD-TITLE-FAIL thread={thread_id} err={type(error).__name__}", file=sys.stderr)
 
 
 def close_thread(

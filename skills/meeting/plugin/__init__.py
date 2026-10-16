@@ -241,6 +241,10 @@ def _post(chat_id: str, content: str) -> None:
     _discord_post(f"/channels/{chat_id}/messages", {"content": content})
 
 
+_THREAD_ICON = "🎙️"
+_THREAD_NAME = "회의록 처리"
+
+
 def _thread_for(chat_id: str, message_id: str) -> str:
     """Thread anchored on the instruction message; 400 means it already exists (id == message id).
 
@@ -250,7 +254,7 @@ def _thread_for(chat_id: str, message_id: str) -> str:
     """
     try:
         thread = _discord_post(
-            f"/channels/{chat_id}/messages/{message_id}/threads", {"name": "회의록 처리"}
+            f"/channels/{chat_id}/messages/{message_id}/threads", {"name": f"{_THREAD_ICON} {_THREAD_NAME}"}
         )
     except HTTPError as error:
         if error.code != 400:
@@ -258,7 +262,12 @@ def _thread_for(chat_id: str, message_id: str) -> str:
         return message_id
     if not isinstance(thread, dict) or not thread.get("id"):
         return message_id
-    return str(thread["id"])
+    thread_id = str(thread["id"])
+    try:  # 새 스레드의 첫 메시지는 큰 제목(2026-10-16 소유자 지시) — 실패해도 ACK 는 간다
+        _discord_post(f"/channels/{thread_id}/messages", {"content": f"## {_THREAD_ICON} {_THREAD_NAME}"})
+    except Exception as error:  # noqa: BLE001
+        print(f"THREAD-TITLE-FAIL thread={thread_id} err={type(error).__name__}", file=sys.stderr)
+    return thread_id
 
 
 def _ack_target(trigger: Trigger) -> str:

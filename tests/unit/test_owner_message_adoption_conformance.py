@@ -97,6 +97,8 @@ _RAW_CONTENT_EXEMPT: dict[str, str] = {}
 
 # Permanent means structural, not unchecked: every row must still be raw and live.
 _PERMANENT_RAW_CONTENT_EXEMPT: dict[str, str] = {
+    "automation/interop/approval_directory.py::DiscordChannelDirectory._post_title": "영구 스레드 제목 — 새 요청 스레드 첫 줄 `## <아이콘> <라벨> · <제목>` 은 봉투(사실·위치·인계)가 없는 머리글이고 스레드 이름의 마스킹된 낱말만 되풀이한다(2026-10-16 소유자 지시)",
+    "automation/interop/origin_notice.py::_post_title": "영구 스레드 제목 — 새 결과 스레드 첫 줄 `## <아이콘> <이름>` 은 봉투가 없는 머리글이고 호출자가 준 스레드 이름만 되풀이한다; 통지 본문은 뒤따르는 deliver 가 봉투로 렌더한다(2026-10-16 소유자 지시)",
     "automation/interop/approval_reminder.py::_PointerSender.send": "영구 최소정보 포인터 — context.deliver(channel_id, content) 계약으로 compose_reminder의 유형·경과시간·공용 정의 링크만 전송",
     "automation/obsidian_write/gate_binding.py::request_approval": "영구 위임 경계 — 주입 ApprovalGate에 lifecycle을 위임하며 자체 카드·구체 게시 어댑터가 없다; 어댑터 도입 시 재감사",
     "skills/budget/scripts/budget_confirm.py::dm_owner": "영구 문자열 수신 경계 — deliver가 목적지별 렌더한 본문 또는 import·능력 폴백의 기존 바이트를 notify_owner로 전달; 재렌더 금지",

@@ -134,7 +134,9 @@ print(json.dumps({{"result": result, "requests": requests, "automation": False}}
     assert payload == {
         "result": {"action": "skip", "reason": "meeting_ingest"},
         "requests": [
-            ["/api/v10/channels/111/messages/222/threads", {"name": "회의록 처리"}],
+            ["/api/v10/channels/111/messages/222/threads", {"name": "🎙️ 회의록 처리"}],
+            # A newly opened thread starts with its big title line (owner 2026-10-16).
+            *([["/api/v10/channels/333/messages", {"content": "## 🎙️ 회의록 처리"}]] if thread_status == 200 else []),
             [f"/api/v10/channels/{target}/messages", {"content": "회의록 접수 — 처리 중입니다 (수 분 내 결과 통지)."}],
         ],
         "automation": False,
