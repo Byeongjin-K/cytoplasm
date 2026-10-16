@@ -25,6 +25,7 @@ from .config import load_config
 from .llm import describe, provider_from_config
 from .models import GRADES, STATUSES, ProjectBoardError
 from .proposals import ProposalRecord
+from .sessions import load_sessions
 from .service import (
     Board,
     Revision,
@@ -189,7 +190,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         pending=lambda: pending_views(board), read_source=read_source, attachment_path=attachment,
         on_change=lambda: rebuild_dashboard(board, today=today_kst()),
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
-        tailnet_token=config.tailnet_token, brand=config.brand,
+        tailnet_token=config.tailnet_token, brand=config.brand, sessions=lambda: load_sessions(board.root),
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()

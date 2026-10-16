@@ -8,6 +8,7 @@ Dates are relative to today, so the demo always has overdue, this-week and later
 
 from __future__ import annotations
 
+import random
 import secrets
 import tempfile
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from typing import Final
 
 from .board_store import BoardStore, _live_board
 from .models import PendingView, ProjectBoardError, proposal_from_dict
+from .sessions import Sessions, parse_sessions
 
 _PROJECTS: Final = (
     ("고체전해질 소재 개발", "윤서진", "과제내부", (
@@ -105,6 +107,51 @@ def make_demo_board(root: Path | None, today: date) -> BoardStore:
     return store
 
 
+_THEMES: Final = (
+    ("ops", "지침 정리", 9), ("ops", "알림 표시", 6), ("ops", "세션 복구", 4), ("assistant", "메일 정리", 7),
+    ("assistant", "일정 안내", 3), ("research", "실험 기록", 5), ("research", "자료 검토", 3),
+    ("web", "대시보드 화면", 6), ("study", "동향 조사", 4), ("infra", "장비 점검", 3),
+)
+_SERVICES: Final = (
+    ("메신저 수신", "watch", "상시", 2), ("레인 감시", "watch", "상시", 1), ("일정 감시", "watch", "상시", 1),
+    ("웹 대시보드", "web", "상시", 1), ("팀 할 일 화면", "web", "상시", 2),
+    ("아침 점검", "timer", "예약", 1), ("백업", "timer", "예약", 1), ("업데이트 확인", "timer", "자동", 1),
+)
+
+
+def sessions(now: datetime) -> Sessions:
+    """An invented week of sessions ending a few minutes before ``now``; the same shape the collector writes."""
+    rng = random.Random(16)
+    end = int(now.timestamp() * 1000) - 4 * 60_000
+    kst = timedelta(hours=9)
+    w0 = int((datetime.combine((now + kst).date() - timedelta(days=7), datetime.min.time(), UTC) - kst).timestamp() * 1000)
+    lanes = []
+    for dept, theme, count in _THEMES:
+        for i in range(count):
+            start = rng.randint(w0 - 86_400_000, end - 3_600_000)
+            open_ = i == 0 and dept in ("web", "ops")
+            stop = None if open_ else min(end, max(w0, start + rng.randint(20, 600) * 60_000))
+            st = "run" if open_ else ("review" if i == 1 and dept == "research" else ("hold" if i == 2 and dept == "ops" else "done"))
+            lanes.append({"dept": dept, "theme": theme, "st": st, "start": start, "end": stop,
+                          "dur": (stop or end) - max(start, w0), "carried": start < w0})
+    agents = []
+    for platform, families in (("claude", ("Opus 5.5", "Sonnet 5.5", "Haiku")), ("senpi", ("Opus 5.5", "기타 모델"))):
+        for n in range(48 if platform == "claude" else 22):
+            start = rng.randint(w0 - 43_200_000, end - 600_000)
+            stop = min(end, max(w0, start + rng.randint(5, 240) * 60_000))
+            agents.append({"platform": platform, "fam": families[n % len(families)], "start": max(start, w0), "end": stop,
+                           "dur": stop - max(start, w0), "calls": rng.randint(3, 400), "live": stop > end - 15 * 60_000})
+    aoe = [{"kind": kind, "start": end - hours * 3_600_000} for kind, hours in (("lead", 90), ("lane", 5), ("lane", 2), ("proj", 30))]
+    services = [
+        {"label": label, "group": group, "tag": tag, "units": units, "st": "live" if group != "timer" else "ok",
+         "start": w0 - 86_400_000, "restarts": rng.randint(1, 4) if group != "timer" else None,
+         "runs": 7 if group == "timer" else None, "fails": 1 if label == "백업" else 0, "every": "매일" if group == "timer" else "",
+         "last": end - 3 * 3_600_000 if group == "timer" else None}
+        for label, group, tag, units in _SERVICES
+    ]
+    return parse_sessions({"w0": w0, "now": end, "lanes": lanes, "agents": agents, "aoe": aoe, "services": services})
+
+
 def demo_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -115,4 +162,5 @@ def demo_handlers(today: Callable[[], date]) -> dict[str, Callable[..., object]]
         "read_source": lambda kind, source_id: mail_text(source_id) if kind == "mail" else None,
         "attachment_path": lambda kind, source_id, name: None,
         "on_change": lambda: None,
+        "sessions": lambda: sessions(datetime.now(UTC)),
     }
