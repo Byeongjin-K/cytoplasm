@@ -89,6 +89,10 @@ class DiscordClient(Protocol):
 
     def fetch_channel(self, channel_id: str) -> object: ...
 
+    def post_reminder_message(self, channel_id: str, content: str) -> str: ...
+
+    def edit_message(self, channel_id: str, message_id: str, content: str) -> None: ...
+
 
 class CommandRunner(Protocol):
     def confirm(self, entry: PendingConfirm, owner_id: str) -> None: ...
@@ -120,10 +124,20 @@ class DiscordApi:
 
     def post_message(self, channel_id: str, content: str) -> None:
         """Post a reminder to the channel authorized by the shared policy."""
+        self.post_reminder_message(channel_id, content)
+
+    def post_reminder_message(self, channel_id: str, content: str) -> str:
+        """Post a reminder and return its id (a digest thread may edit it later)."""
         try:
-            calendar_confirm.post_message(channel_id, content)
+            return calendar_confirm.post_message(channel_id, content)
         except (calendar_gate.GateError, HTTPError, URLError, OSError) as error:
             raise _transport_failure("reminder post failed", "discord.notify", error) from error
+
+    def edit_message(self, channel_id: str, message_id: str, content: str) -> None:
+        try:
+            calendar_confirm.edit_message(channel_id, message_id, content)
+        except (calendar_gate.GateError, HTTPError, URLError, OSError) as error:
+            raise _transport_failure("reminder edit failed", "discord.notify", error) from error
 
     def fetch_channel(self, channel_id: str) -> object:
         """Read channel metadata for the reminder's server-aware source link."""
@@ -373,6 +387,9 @@ def _process_entries(
     draft_record: Callable[[str], dict] = _load_draft_record,
 ) -> tuple[PendingConfirm, ...]:
     retained: list[PendingConfirm] = []
+    reminders = []
+    resolutions = []
+    failed_reminders: set[str] = set()
     for entry in entries:
         try:
             decision = OwnerDecision(
@@ -405,28 +422,16 @@ def _process_entries(
                             store.path.parent / "reminder-journal"
                         ),
                         request_type=kind,
-                        deliver=lambda channel_id, content: discord.post_message(channel_id, content),
+                        deliver=lambda channel_id, content: _deliver_reminder(discord, channel_id, content),
                         clock=lambda: now,
                         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
-                        space_for=lambda _channel: reminder.stored_reminder_space(entry.surface),
+                        space_for=lambda _channel, surface=entry.surface: reminder.stored_reminder_space(surface),
                         guild_id_for=reminder.channel_guild_resolver(
                             lambda channel_id: discord.fetch_channel(channel_id)
                         ),
                     )
-                    calendar_approval.lifecycle().remind_owner_approval(
-                        request, decision, lease, context
-                    )
-                verdict = calendar_approval.lifecycle().resolve_owner_decision(
-                    request, decision, lease,
-                )
-                outcome = calendar_approval.lifecycle().WatchOutcome
-                match verdict.outcome:
-                    case outcome.CONSUMED:
-                        pass
-                    case outcome.WAITING | outcome.SKIPPED:
-                        retained.append(entry)
-                    case unreachable:
-                        assert_never(unreachable)
+                    reminders.append(reminder.ReminderCall(request, decision, lease, context))
+                resolutions.append((entry, request, decision, lease))
         except ConfirmWatchError as error:
             _log_failure(error, entry)
             if failures is not None:
@@ -444,12 +449,62 @@ def _process_entries(
             if failures is not None:
                 failures.append(wrapped)
             retained.append(entry)
-    return tuple(retained)
+    if reminders:
+        def reminder_failed(request, error):
+            failed_reminders.add(request.key)
+            entry = next(entry for entry in entries if entry.key == request.key)
+            wrapped = ConfirmWatchError(
+                "pending confirmation operation raised", stage="entry.process",
+                fatal=True, stderr=str(error), cause_type=type(error).__name__,
+            )
+            _log_failure(wrapped, entry)
+            if failures is not None:
+                failures.append(wrapped)
+
+        reminder.dispatch_owner_approval_reminders(reminders, on_error=reminder_failed)
+    for entry, request, decision, lease in resolutions:
+        if request.key in failed_reminders:
+            retained.append(entry)
+            continue
+        try:
+            verdict = calendar_approval.lifecycle().resolve_owner_decision(
+                request, decision, lease,
+            )
+            outcome = calendar_approval.lifecycle().WatchOutcome
+            match verdict.outcome:
+                case outcome.CONSUMED:
+                    pass
+                case outcome.WAITING | outcome.SKIPPED:
+                    retained.append(entry)
+                case unreachable:
+                    assert_never(unreachable)
+        except Exception as error:  # noqa: BLE001 — per-entry cron failure boundary.
+            wrapped = error if isinstance(error, ConfirmWatchError) else ConfirmWatchError(
+                "pending confirmation operation raised", stage="entry.process",
+                fatal=True, stderr=str(error), cause_type=type(error).__name__,
+            )
+            _log_failure(wrapped, entry)
+            if failures is not None:
+                failures.append(wrapped)
+            retained.append(entry)
+    return tuple(entry for entry in entries if entry in retained)
 
 
 def _has_thread(record: Mapping[str, object]) -> bool:
     """A request thread to answer in — this request's own, else the instructing channel."""
     return bool(record.get("approval_thread_id") or record.get("origin_channel_id"))
+
+
+def _deliver_reminder(discord: object, channel_id: str, content: str) -> None:
+    """Calendar's reminder delivery: inside a digest thread, join a fresh reminder message (Q187)."""
+    try:
+        shared = calendar_approval._repo_module("digest_thread")
+    except calendar_gate.GateError:
+        shared = None
+    if shared is None or shared.find(channel_id) is None:
+        discord.post_message(channel_id, content)
+        return
+    shared.post_reminder(channel_id, content, post=discord.post_reminder_message, edit=discord.edit_message)
 
 
 def _notify_result(

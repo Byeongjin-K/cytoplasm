@@ -96,15 +96,12 @@ def test_release_older_than_interval_gets_one_reminder_per_interval(
     )
     assert delivered[0] == (
         _CHANNEL_ID,
-        "승인 리마인더\n"
-        "요청 유형: release\n"
-        "경과시간: 1시간\n"
-        f"원문 링크: {expected_link}",
+        f"⏰ 승인 대기 1시간 · {expected_link}",
     )
 
 
-def test_skill_deploy_reminder_bytes_are_unchanged(tmp_path: Path) -> None:
-    """Given the same unanswered skill-deploy card, the pointer body stays byte-identical."""
+def test_skill_deploy_reminder_uses_shared_one_line(tmp_path: Path) -> None:
+    """Given an unanswered skill-deploy card, send the shared compact pointer."""
     _write_pending(tmp_path, "demo")
     result = TickResult(_pending("skill-deploy", "demo"), "retain", "unanswered")
     delivered: list[tuple[str, str]] = []
@@ -124,10 +121,7 @@ def test_skill_deploy_reminder_bytes_are_unchanged(tmp_path: Path) -> None:
     assert delivered == [
         (
             _CHANNEL_ID,
-            "승인 리마인더\n"
-            "요청 유형: skill-deploy\n"
-            "경과시간: 1시간\n"
-            f"원문 링크: {expected_link}",
+            f"⏰ 승인 대기 1시간 · {expected_link}",
         )
     ]
 

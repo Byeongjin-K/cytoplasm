@@ -14,8 +14,9 @@ from automation.interop.approval_lease import (
     ReminderJournal,
     ReminderJournalError,
 )
-from automation.interop.approval_lifecycle import remind_owner_approval
-from automation.interop.approval_reminder import ReminderContext, ReminderVerdict
+from automation.interop.approval_reminder import (
+    ReminderCall, ReminderContext, ReminderVerdict, dispatch_owner_approval_reminders,
+)
 from automation.interop.approval_reminder_config import ApprovalReminderConfig
 from automation.interop.approval_surface import ApprovalKind, ApprovalSurfaceError
 from automation.interop.approval_types import ApprovalRequest, Probe
@@ -156,7 +157,7 @@ def remind_unanswered(
     on_error: ReportError,
 ) -> tuple[ReminderVerdict, ...]:
     """Send due pointers only for records this tick proved are still unanswered."""
-    verdicts: list[ReminderVerdict] = []
+    reminders: list[ReminderCall] = []
     for result in results:
         try:
             kind = ApprovalKind(result.request.kind)
@@ -179,11 +180,7 @@ def remind_unanswered(
                 guild_id_for=guild_of,
                 source_channel_id_for=_StoredChannel(record, channel_of),
             )
-            verdicts.append(
-                remind_owner_approval(
-                    request, _DecisionWatcher(decision_of), lease, context
-                )
-            )
+            reminders.append(ReminderCall(request, _DecisionWatcher(decision_of), lease, context))
         except (
             OSError,
             ValueError,
@@ -193,4 +190,11 @@ def remind_unanswered(
             ReminderJournalError,
         ) as error:
             on_error(result.request.key, type(error).__name__)
-    return tuple(verdicts)
+    def reminder_failed(request: ApprovalRequest, error: Exception) -> None:
+        if not isinstance(error, (
+            OSError, ValueError, KeyError, TypeError, ApprovalSurfaceError, ReminderJournalError,
+        )):
+            raise error
+        on_error(request.key, type(error).__name__)
+
+    return dispatch_owner_approval_reminders(reminders, on_error=reminder_failed)

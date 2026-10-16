@@ -145,6 +145,11 @@ def _request_binding(
     reused = surface_module.reuse_request_thread(kind, outstanding, directory, owner_id)
     if reused is not None:
         return reused
+    import triage_digest_thread  # a reply asked for on a digest card joins that day's thread
+
+    shared = triage_digest_thread.digest_binding(surface_module, kind, directory, draft)
+    if shared is not None:
+        return shared
     return surface_module.resolve_new_binding(
         kind,
         directory,

@@ -144,7 +144,7 @@ def _show_body(card: dict) -> str:
     posted = 0
     try:
         for part in parts:
-            triage_confirm.post_in(str(card["channel_id"]), part)
+            triage_confirm.post_in(str(card["channel_id"]), part, reply_to=str(card["message_id"]))
             posted += 1
     except Exception:
         if posted:  # the owner already sees part of it — a retry would repeat it
@@ -203,15 +203,18 @@ def _write_draft(card: dict) -> str:
             triage_cli.cmd_draft(argparse.Namespace(
                 uid=uid, instruction=DRAFT_INSTRUCTION, attachment=[], no_post=False,
                 with_evidence=False, reply_all=False,
+                digest_card={"channel_id": card["channel_id"], "message_id": card["message_id"]},
             ))
     draft = _pending_draft(uid)
     if draft is None:  # a draft exists but is no longer pending (sent/discarded)
         triage_confirm.post_in(
             str(card["channel_id"]),
             "✍️ 이 메일의 초안은 이미 처리됐습니다(발송 또는 폐기). 새 초안은 이 메시지에 답장으로 요청해 주세요.",
+            reply_to=str(card["message_id"]),
         )
         return "done"
-    triage_confirm.post_in(str(card["channel_id"]), draft_preview(draft, existed=existed))
+    triage_confirm.post_in(str(card["channel_id"]), draft_preview(draft, existed=existed),
+                           reply_to=str(card["message_id"]))
     return "done"
 
 

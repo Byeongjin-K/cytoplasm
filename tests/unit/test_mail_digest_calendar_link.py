@@ -1,8 +1,8 @@
 """The digest's calendar line links to the approval card instead of showing a bare hash.
 
 Owner 2026-10-16: the line ``🗓️ 일정 초안 `calendar:<hash>``` did not say where to approve.
-The card is posted in the day's digest thread before the mail card, so its link is
-known when the mail card is rendered.
+Since 2026-10-16 (owner Q187) the mail card is posted first and the calendar card replies
+under it, so the line with the link is written by editing the posted mail card.
 """
 from __future__ import annotations
 
@@ -48,9 +48,16 @@ def test_render_when_the_draft_failed_then_the_cause_is_still_shown() -> None:
 
 
 def _calendar_line(monkeypatch) -> list[str]:
+    """The final text of each edited mail card (the flat layout: no digest thread opens)."""
     posts: list[str] = []
-    monkeypatch.setattr(triage_digest.triage_confirm, "dm_owner", lambda body: posts.append(body))
-    return posts
+    edits: list[str] = []
+    monkeypatch.setattr(triage_digest.triage_confirm, "dm_owner",
+                        lambda body: posts.append(body) or f"m-{len(posts)}")
+    monkeypatch.setattr(triage_digest.triage_confirm, "edit_message",
+                        lambda _channel, _message, content: edits.append(content))
+    monkeypatch.setattr(triage_digest, "_flat_channel", lambda: "owner-channel")
+    monkeypatch.setattr(triage_digest, "_open_thread", lambda _now, _count: "")
+    return edits
 
 
 def test_digest_card_links_the_real_approval_card_message(flow, monkeypatch) -> None:

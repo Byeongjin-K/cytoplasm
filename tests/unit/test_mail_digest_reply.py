@@ -141,7 +141,7 @@ def test_run_digest_sends_one_message_per_mail_and_records_reply_keys(
         ("thread-1", "### 1. 합성 제목"), ("thread-1", "### 2. 합성 제목"),
     ]
     assert triage_store.digest_item_by_reply_key(db, "1008-0800-2") == {
-        "run_id": 1, "item_no": 2, "uid": "u-2", "message_id": "m-2",
+        "run_id": 1, "item_no": 2, "uid": "u-2", "message_id": "m-2", "channel_id": "thread-1",
     }
 
 

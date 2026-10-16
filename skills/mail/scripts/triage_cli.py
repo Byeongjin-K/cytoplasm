@@ -29,6 +29,7 @@ import importlib
 import json
 import os
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -98,6 +99,7 @@ def cmd_draft(args: argparse.Namespace) -> int:
         attachments=tuple(getattr(args, "attachment", ()) or ()),
         evidence_pack=pack,
         reply_all=bool(getattr(args, "reply_all", False)),
+        digest_card=getattr(args, "digest_card", None),
     )
     if "reply-no-address" in actions:
         raise triage_gate.GateError("회신 주소를 찾을 수 없음 — 초안 생성 불가", 2)
@@ -246,6 +248,7 @@ def cmd_reply_request(args: argparse.Namespace) -> int:
         return cmd_draft(argparse.Namespace(
             uid=str(item["uid"]), instruction=args.instruction, attachment=[],
             no_post=args.no_post, with_evidence=args.with_evidence, reply_all=args.reply_all,
+            digest_card={"channel_id": item.get("channel_id", ""), "message_id": item["message_id"]},
         ))
 
 
@@ -274,6 +277,18 @@ def cmd_digest_items(args: argparse.Namespace) -> int:
 _DM_NOTIFIABLE_METHODS: Final = frozenset({"manual_reaction"})
 
 
+#: Set by ``cmd_watch`` for one tick so due reminders of one thread go as one message;
+#: unset, ``_remind_pending`` sends at once (direct callers and stubbed tests keep the
+#: two-argument call).
+_REMINDER_BATCH: ContextVar[list | None] = ContextVar("mail_reminder_batch", default=None)
+
+
+def _deliver_reminder(channel_id: str, content: str) -> None:
+    import triage_digest_thread
+
+    triage_digest_thread.deliver_reminder(channel_id, content)
+
+
 def _remind_pending(draft: dict, config: object | None) -> None:
     if config is None:
         return
@@ -286,20 +301,23 @@ def _remind_pending(draft: dict, config: object | None) -> None:
         config=config,
         journal=lease_module.ReminderJournal(triage_gate.gate_dir() / "reminder-journal"),
         request_type=triage_approval.triage_binding.approval_kind(draft),
-        deliver=lambda channel_id, content: triage_confirm.post_approval_request(
-            content, channel_id
-        ),
+        deliver=_deliver_reminder,
         guild_id_for=guild_id_for,
         clock=lambda: datetime.now(UTC),
         guild_id=guild_id if isinstance(guild_id, str) and guild_id else None,
         space_for=lambda _channel: reminder.stored_reminder_space(draft.get("surface")),
     )
-    lifecycle.remind_owner_approval(
+    call = reminder.ReminderCall(
         triage_approval.request_of(draft),
         triage_approval.MailApprovalGate(draft),
         triage_approval.confirm_lease(),
         context,
     )
+    batch = _REMINDER_BATCH.get()
+    if batch is None:
+        lifecycle.remind_owner_approval(call.request, call.watcher, call.lease, call.context)
+    else:
+        batch.append(call)
 
 
 def _notify_sent(draft: dict, method: str) -> None:
@@ -388,27 +406,59 @@ def cmd_watch(_args: argparse.Namespace) -> int:
     mode = triage_mode.effective_mode()
     if mode != "no-go":
         _digest_reactions()
+    import triage_digest_thread  # marks only rename threads, so they follow cards in every mode
+
+    triage_digest_thread.settle()
     if mode != "full-go":
         print(f"MODE-SKIP mode={mode} (W4-1N 분기 — 자동 발송 정지)")
         return 0
     owner = triage_confirm.owner_id()
     failed_rc = 0
-    for draft in triage_gate.list_drafts():
-        if draft.get("status") != "pending":
-            continue
-        try:
-            if triage_approval.expire_retired_approval(draft):
-                print(f"EXPIRED draft={draft['id']} reason=approval-surface-retired")
+    reminders = []
+    pending_drafts = []
+    failed_reminders = set()
+    batch = _REMINDER_BATCH.set(reminders)
+    try:
+        for draft in triage_gate.list_drafts():
+            if draft.get("status") != "pending":
                 continue
-        except triage_gate.GateError as error:
-            if error.exit_code != 1:
-                raise
+            try:
+                if triage_approval.expire_retired_approval(draft):
+                    print(f"EXPIRED draft={draft['id']} reason=approval-surface-retired")
+                    continue
+            except triage_gate.GateError as error:
+                if error.exit_code != 1:
+                    raise
+                continue
+            if not draft.get("message_id"):
+                draft = {**draft, "message_id": triage_pipeline._post_draft_for_approval(draft)}
+                print(f"REPOSTED draft={draft['id']} message={draft['message_id']}")
+            try:
+                _remind_pending(draft, getattr(_args, "reminder_config", None))
+                pending_drafts.append(draft)
+            except triage_gate.GateError as error:
+                if error.exit_code != 1:
+                    raise
+            except OSError as error:
+                print(f"REACTION-RETRY draft={draft['id']} "
+                      f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
+    finally:
+        _REMINDER_BATCH.reset(batch)
+    if reminders:
+        def reminder_failed(request, error):
+            if not isinstance(error, OSError):
+                raise error
+            failed_reminders.add(request.key)
+            print(f"REACTION-RETRY key={request.key} "
+                  f"err={triage_core.redact(str(error))[:120]}", file=sys.stderr)
+
+        triage_approval._repo_module("approval_reminder").dispatch_owner_approval_reminders(
+            reminders, on_error=reminder_failed,
+        )
+    for draft in pending_drafts:
+        if failed_reminders and triage_approval.request_of(draft).key in failed_reminders:
             continue
-        if not draft.get("message_id"):
-            draft = {**draft, "message_id": triage_pipeline._post_draft_for_approval(draft)}
-            print(f"REPOSTED draft={draft['id']} message={draft['message_id']}")
         try:
-            _remind_pending(draft, getattr(_args, "reminder_config", None))
             action = triage_confirm.resolve_reaction(draft)
         except triage_gate.GateError as error:
             if error.exit_code != 1:

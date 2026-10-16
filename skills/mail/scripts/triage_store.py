@@ -313,7 +313,7 @@ def digest_item_by_reply_key(db_path: Path, reply_key: str) -> dict[str, int | s
         return None
     with _connect(db_path) as connection:
         row = connection.execute(
-            "SELECT run_id, item_no, uid, message_id FROM digest_items "
+            "SELECT run_id, item_no, uid, message_id, channel_id FROM digest_items "
             "WHERE reply_key = ? ORDER BY run_id DESC LIMIT 1",
             (reply_key,),
         ).fetchone()
@@ -321,7 +321,7 @@ def digest_item_by_reply_key(db_path: Path, reply_key: str) -> dict[str, int | s
         return None
     return {
         "run_id": int(row[0]), "item_no": int(row[1]),
-        "uid": str(row[2]), "message_id": str(row[3]),
+        "uid": str(row[2]), "message_id": str(row[3]), "channel_id": str(row[4]),
     }
 
 

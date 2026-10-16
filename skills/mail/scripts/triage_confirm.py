@@ -8,6 +8,7 @@ import sys
 import uuid
 from pathlib import Path
 import time
+from types import SimpleNamespace
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -96,8 +97,30 @@ def fetch_channel(channel_id: str) -> object:
     return _api("GET", f"/channels/{channel_id}")
 
 
-def post_approval_request(content: str, channel_id: str) -> str:
-    return str(_api("POST", f"/channels/{channel_id}/messages", {"content": content})["id"])
+def post_approval_request(content: str, channel_id: str, *, reply_to: str = "") -> str:
+    payload: dict[str, object] = {"content": content}
+    if reply_to:
+        payload["message_reference"] = {"message_id": reply_to, "fail_if_not_exists": False}
+    return str(_api("POST", f"/channels/{channel_id}/messages", payload)["id"])
+
+
+def edit_message(channel_id: str, message_id: str, content: str) -> None:
+    _api("PATCH", f"/channels/{channel_id}/messages/{message_id}", {"content": content})
+
+
+class _CardReply:
+    """A result posted as a reply under its own approval card (digest thread, owner Q187)."""
+
+    def __init__(self, channel_id: str, card_id: str) -> None:
+        self.channel_id, self.card_id = channel_id, card_id
+
+    def send(self, body: str) -> tuple[object, ...]:
+        from automation.interop.chunker import chunk_message
+
+        return tuple(
+            SimpleNamespace(message_id=post_approval_request(chunk, self.channel_id, reply_to=self.card_id))
+            for chunk in chunk_message(body)
+        )
 
 
 def add_reaction(message_id: str, emoji: str, channel_id: str) -> None:
@@ -166,7 +189,9 @@ def digest_thread(header_message_id: str, name: str) -> str:
         return ""
 
 
-def post_in(channel_id: str, content: str) -> str:
+def post_in(channel_id: str, content: str, *, reply_to: str = "") -> str:
+    if reply_to:  # under its mail card in the digest thread (owner Q187)
+        return post_approval_request(content, channel_id, reply_to=reply_to)
     return _dm_transport(channel_id).send(content)[-1].message_id
 
 
@@ -197,9 +222,14 @@ def notify_result(draft: dict, content: str, *, outcome: str = "") -> str:
         )
         return dm_owner(content)
     message = result_message(draft, content, outcome)
+    transport = _dm_transport
+    if _in_digest_thread(draft):  # other cards in the thread still wait — never close it
+        outcome = ""
+        card = str(draft.get("message_id") or "")
+        transport = lambda channel: _CardReply(channel, card)  # noqa: E731
     if message is not None and getattr(origin_notice, "ACCEPTS_OWNER_MESSAGE", False):
         return str(origin_notice.deliver(
-            api=_api, transport_factory=_dm_transport, record=draft,
+            api=_api, transport_factory=transport, record=draft,
             thread_name=f"메일: {draft['subject']} (draft {draft['id']})",
             content=content, fallback=dm_owner,
             outcome=origin_notice.ThreadOutcome[outcome] if outcome else None,
@@ -207,13 +237,23 @@ def notify_result(draft: dict, content: str, *, outcome: str = "") -> str:
         ))
     return str(origin_notice.deliver(
         api=_api,
-        transport_factory=_dm_transport,
+        transport_factory=transport,
         record=draft,
         thread_name=f"메일: {draft['subject']} (draft {draft['id']})",
         content=content,
         fallback=dm_owner,
         outcome=origin_notice.ThreadOutcome[outcome] if outcome else None,
     ))
+
+
+def _in_digest_thread(draft: dict) -> bool:
+    try:
+        import triage_digest_thread
+
+        return triage_digest_thread.is_digest_draft(draft)
+    except Exception as error:  # noqa: BLE001 — the result notice still goes out the usual way
+        print(f"DIGEST-THREAD-CHECK-FAIL draft={draft.get('id')} err={type(error).__name__}", file=sys.stderr)
+        return False
 
 
 def _owner_reacted(users: list[dict], owner: str) -> bool:

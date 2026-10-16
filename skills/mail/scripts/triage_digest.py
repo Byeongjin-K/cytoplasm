@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sys
 
+from contextvars import ContextVar
 from dataclasses import replace
 
 from datetime import UTC, datetime
@@ -89,6 +90,11 @@ def select_new_mails(
         if str(mail.get("uid") or "") and str(mail.get("uid")) not in known
     ]
     return sorted(fresh, key=lambda mail: str(mail.get("date") or ""))
+
+
+#: Set by ``run_digest`` while it builds a delivered digest: the calendar card must reply
+#: under its mail card, which does not exist yet, so the event is handed over after posting.
+_DEFER_SCHEDULE: ContextVar[bool] = ContextVar("digest_defer_schedule", default=False)
 
 
 def build_item(
@@ -186,8 +192,10 @@ def build_item(
     if classify_failed:
         flags = flags + (_CLASSIFY_FAILED_FLAG,)
     schedule = triage_transport.ScheduleNote("")
-    if cls.category == "important" and cls.schedule_needed and cls.schedule_text:
-        schedule = triage_transport._delegate_schedule(cls.schedule_text, uid_opaque, digest_day)
+    schedule_text = cls.schedule_text if cls.category == "important" and cls.schedule_needed else ""
+    deferred = bool(schedule_text) and _DEFER_SCHEDULE.get()
+    if schedule_text and not deferred:
+        schedule = triage_transport._delegate_schedule(schedule_text, uid_opaque, digest_day)
     shared = {
         "item_no": item_no,
         "uid": uid,
@@ -207,6 +215,7 @@ def build_item(
         "calendar_card": schedule.card_url,
         "calendar_when": _event_when(schedule.start, schedule.end),
         "calendar_title": schedule.title,
+        **({"schedule_text": schedule_text} if deferred else {}),
     }
     store_item = {
         **shared,
@@ -362,6 +371,26 @@ def render_digest_parts(dm_items: list[dict], *, kst_now: datetime) -> list[str]
     return [header_text, *(render_item(item, kst_now=kst_now) for item in dm_items)]
 
 
+def thread_intro(dm_items: list[dict], *, kst_now: datetime) -> str:
+    """The digest's first message inside its own approval thread (owner Q187, 2026-10-16).
+
+    The thread's name, big title and pending notice come from the standard request path;
+    this says what arrived and how to act on a card. Never asks for a ✅ — decisions are
+    made on the approval cards themselves, which reply under their mail card here.
+    """
+    stamp = kst_now.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M")
+    counts = [
+        (label, sum(1 for item in dm_items if flag in item["flags"]))
+        for flag, label in (("reply_needed", "회신 필요"), ("schedule_needed", "일정"), ("budget", "예산"))
+    ]
+    tally = " · ".join(f"{label} {count}" for label, count in counts if count)
+    return "\n".join([
+        f"{stamp} KST · 신규 {len(dm_items)}건" + (f" ({tally})" if tally else ""),
+        "👇 메일 카드에서 📄 전문 · ✍️ 회신 초안 · 답장하면 그 말대로 초안",
+        "회신 초안과 일정의 승인 카드는 그 메일 카드 아래 답글로 이 스레드에 올라옵니다",
+    ])
+
+
 def render_digest_dm(dm_items: list[dict], *, kst_now: datetime) -> str:
     """The whole digest as one text (dry-run preview); messages are blank-line joined."""
     return "\n\n".join(render_digest_parts(dm_items, kst_now=kst_now))
@@ -401,6 +430,64 @@ def _attach_reactions(channel_id: str, message_id: str) -> None:
               file=sys.stderr)
 
 
+def _open_thread(kst_now: datetime, count: int) -> str:
+    """Today's standard approval thread id, or '' to keep the older flat layout."""
+    try:
+        import triage_digest_thread
+
+        return str(triage_digest_thread.open_for(kst_now, count).channel_id)
+    except Exception as error:  # noqa: BLE001 — the digest must still reach the owner
+        print(f"DIGEST-THREAD-FAIL stage=open err={type(error).__name__}", file=sys.stderr)
+        return ""
+
+
+def _deliver(parts: list[str], dm_items: list[dict], kst_now: datetime) -> tuple[list[str], str]:
+    """Post the digest; ids are [header, card…] and the channel the cards went to."""
+    thread_id = _open_thread(kst_now, len(dm_items)) if len(parts) > 1 else ""
+    if thread_id:
+        intro = thread_intro(dm_items, kst_now=kst_now)
+        if parts[0].startswith("⚠️"):  # the sync warning stays the first thing seen
+            intro = parts[0].split("\n", 1)[0] + "\n" + intro
+        ids = [triage_confirm.post_in(thread_id, intro)]
+    else:
+        ids = [triage_confirm.dm_owner(parts[0])]
+        thread_id = (
+            triage_confirm.digest_thread(ids[0], thread_name(kst_now, len(dm_items)))
+            if len(parts) > 1 else ""
+        )
+    ids.extend(
+        triage_confirm.post_in(thread_id, part) if thread_id else triage_confirm.dm_owner(part)
+        for part in parts[1:]
+    )
+    return ids, thread_id
+
+
+def _delegate_after_post(
+    dm_item: dict, store_item: dict, message_id: str, channel_id: str, *, kst_now: datetime,
+) -> None:
+    """Hand a mail's event to calendar now that its card exists, then show the result on it.
+
+    Calendar posts its approval card as a reply under this mail card when both sit in the
+    day's digest thread. A failed card edit leaves the card readable and is logged.
+    """
+    uid_opaque = triage_core.mask_value(str(dm_item["uid"]))
+    schedule = triage_transport._delegate_schedule(
+        str(dm_item["schedule_text"]), uid_opaque, kst_now.date().isoformat(),
+        reply_to=message_id, reply_channel=channel_id,
+    )
+    dm_item.update(
+        note=schedule.note, calendar_card=schedule.card_url,
+        calendar_when=_event_when(schedule.start, schedule.end), calendar_title=schedule.title,
+    )
+    store_item["note"] = schedule.note
+    if not (schedule.note and channel_id and message_id):
+        return
+    try:
+        triage_confirm.edit_message(channel_id, message_id, render_item(dm_item, kst_now=kst_now))
+    except Exception as error:  # noqa: BLE001 — the card stays; only its calendar line is late
+        print(f"DIGEST-CARD-EDIT-FAIL msg={message_id} err={type(error).__name__}", file=sys.stderr)
+
+
 def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
     """One digest tick: list → select → build → DM first → record after.
 
@@ -438,6 +525,7 @@ def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
         uid = str(mail.get("uid") or "")
         detail = {**mail, **triage_transport._get_mail(uid), "uid": uid}
         detail["replied_at"] = _owner_replied_at(detail, sent_mails)
+        defer = _DEFER_SCHEDULE.set(not dry_run)
         try:
             dm_item, store_item = build_item(detail, item_no, digest_day=kst_now.date().isoformat())
         except triage_llm.LlmUnavailableError as error:  # fail closed — no downgraded digest
@@ -446,6 +534,8 @@ def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
             ) from error
         except Exception as error:  # noqa: BLE001 — cron alert needs one structured marker
             raise triage_gate.GateError(_fail_marker("build", "llm_call_failed", error), 4) from error
+        finally:
+            _DEFER_SCHEDULE.reset(defer)
         dm_items.append(dm_item)
         store_items.append(store_item)
     parts = render_digest_parts(dm_items, kst_now=kst_now)
@@ -456,20 +546,15 @@ def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
         print(f"DIGEST dry-run items={len(dm_items)} messages={len(parts)}")
         return 0
     try:  # Delivery first — failure leaves every mail undigested
-        message_ids = [triage_confirm.dm_owner(parts[0])]
-        thread_id = (
-            triage_confirm.digest_thread(message_ids[0], thread_name(kst_now, len(dm_items)))
-            if len(parts) > 1 else ""
-        )
-        message_ids.extend(
-            triage_confirm.post_in(thread_id, part) if thread_id else triage_confirm.dm_owner(part)
-            for part in parts[1:]
-        )
+        message_ids, thread_id = _deliver(parts, dm_items, kst_now)
     except Exception as error:  # noqa: BLE001 — cron alert needs one structured marker
         raise triage_gate.GateError(
             _fail_marker("deliver", "discord_delivery_failed", error), 4
         ) from error
     card_channel = thread_id or _flat_channel()
+    for dm_item, store_item, message_id in zip(dm_items, store_items, message_ids[1:], strict=True):
+        if dm_item.get("schedule_text"):
+            _delegate_after_post(dm_item, store_item, str(message_id or ""), card_channel, kst_now=kst_now)
     for store_item, message_id in zip(store_items, message_ids[1:], strict=True):
         store_item["reply_key"] = reply_key(kst_now, int(store_item["item_no"]))
         store_item["message_id"] = str(message_id or "")

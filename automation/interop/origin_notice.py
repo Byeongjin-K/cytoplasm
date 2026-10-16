@@ -165,6 +165,7 @@ def close_thread(
     outcome: ThreadOutcome,
     *,
     record_id: str = "",
+    base_name: str = "",
 ) -> bool:
     """Rename the request thread with its status prefix and archive it (best-effort).
 
@@ -172,8 +173,11 @@ def close_thread(
     marker and ``False`` — the notice already landed and nothing downstream may change.
     """
     try:
-        current = api("GET", f"/channels/{thread_id}")
-        name = str(current.get("name") or "") if isinstance(current, dict) else ""
+        if base_name:  # a caller that owns the name (digest marks) closes it without a re-read
+            name = base_name
+        else:
+            current = api("GET", f"/channels/{thread_id}")
+            name = str(current.get("name") or "") if isinstance(current, dict) else ""
         for prefix in _STATUS_PREFIXES:
             if name.startswith(prefix):
                 name = name[len(prefix):]
@@ -185,6 +189,19 @@ def close_thread(
     except Exception as error:  # noqa: BLE001 — 종결 표시는 결과 통지를 깨지 않는다
         print(
             f"THREAD-CLOSE-FAIL id={record_id} thread={thread_id} err={type(error).__name__}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def rename_thread(api: ApiCall, thread_id: str, name: str, *, record_id: str = "") -> bool:
+    """Rename a thread and keep it open (best-effort, same contract as ``close_thread``)."""
+    try:
+        api("PATCH", f"/channels/{thread_id}", {"name": name[:_THREAD_NAME_LIMIT], "archived": False})
+    except Exception as error:  # noqa: BLE001 — a mark never breaks the tick that set it
+        print(
+            f"THREAD-RENAME-FAIL id={record_id} thread={thread_id} err={type(error).__name__}",
             file=sys.stderr,
         )
         return False

@@ -137,7 +137,9 @@ class MailApprovalGate:
                 case _:
                     raise triage_gate.GateError("승인 첨부 게시 응답에 메시지 id 없음 — 거부", 3)
         else:
-            message_id = triage_confirm.post_approval_request(content, intent.channel_id)
+            card = _digest_card(self.draft, intent.channel_id)
+            reply = {"reply_to": card} if card else {}
+            message_id = triage_confirm.post_approval_request(content, intent.channel_id, **reply)
         for emoji in (triage_confirm.APPROVE_EMOJI, triage_confirm.CANCEL_EMOJI):
             try:
                 triage_confirm.add_reaction(message_id, emoji, intent.channel_id)
@@ -158,6 +160,17 @@ class MailApprovalGate:
             intent.channel_id,
             approval_created_at=created_at,
         )
+
+
+def _digest_card(draft: dict[str, JsonValue], channel_id: str) -> str:
+    """The digest mail card to reply under; '' outside a digest thread or on any doubt."""
+    try:
+        import triage_digest_thread
+
+        return triage_digest_thread.card_for(draft, channel_id)
+    except Exception as error:  # noqa: BLE001 — a reply reference never blocks the card
+        print(f"DIGEST-CARD-REF-FAIL draft={draft.get('id')} err={type(error).__name__}", file=sys.stderr)
+        return ""
 
 
 def prepare_request(draft: dict[str, JsonValue], notice: str) -> tuple[ApprovalIntent, MailApprovalGate]:

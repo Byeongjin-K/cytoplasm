@@ -120,6 +120,8 @@ def run_once(
     moment = now.astimezone(UTC)
     try:
         records = store.all_outstanding()
+        reminders = []
+        resolutions = []
         for record in records:
             if moment - record.created_at >= approval_ttl():
                 _expire(store, lease, record)
@@ -153,9 +155,13 @@ def run_once(
                     guild_id=(record.approval_guild_id or None)
                     if isinstance(record.approval_guild_id, str) else None,
                     guild_id_for=reminder.channel_guild_resolver(transport.fetch_channel),
-                    space_for=lambda _channel: reminder.stored_reminder_space(record.surface),
+                    space_for=lambda _channel, surface=record.surface: reminder.stored_reminder_space(surface),
                 )
-                lifecycle().remind_owner_approval(request, decision, lease, context)
+                reminders.append(reminder.ReminderCall(request, decision, lease, context))
+            resolutions.append((request, decision))
+        if reminders:
+            reminder.dispatch_owner_approval_reminders(reminders)
+        for request, decision in resolutions:
             lifecycle().resolve_owner_decision(request, decision, lease)
         execute_approved_writes(
             store=store, approval_log=approval_log, owner_id=owner_id, now=moment, lease=lease

@@ -67,11 +67,15 @@ class RequestThread:
     private surface. It is truncated here, not by the caller. The origin pair is the
     owner's instruction message; it only anchors the thread when that
     message lives in ``#agent-chat`` (owner-only surface), otherwise it is ignored.
+    ``label``/``icon`` replace the kind's label and icon in the name, title and notice
+    when one thread holds several kinds of card (the morning digest, 2026-10-16).
     """
 
     title: str
     origin_channel_id: str = ""
     origin_message_id: str = ""
+    label: str = ""
+    icon: str = ""
 
 
 #: Owner-facing thread label per kind — the thread name is ``<label> · <title>``.
@@ -127,9 +131,17 @@ def _request_title(request: RequestThread) -> str:
     return " ".join(request.title.split())[:REQUEST_TITLE_LIMIT] or "요청"
 
 
+def _label(kind: ApprovalKind, request: RequestThread) -> str:
+    return request.label or KIND_LABELS[kind]
+
+
+def _icon(kind: ApprovalKind, request: RequestThread) -> str:
+    return request.icon or KIND_ICONS[kind]
+
+
 def request_thread_name(kind: ApprovalKind, request: RequestThread) -> str:
     """``<icon> <kind label> · <title≤40>`` clipped to Discord's 100-char thread name."""
-    return f"{KIND_ICONS[kind]} {KIND_LABELS[kind]} · {_request_title(request)}"[:THREAD_NAME_LIMIT]
+    return f"{_icon(kind, request)} {_label(kind, request)} · {_request_title(request)}"[:THREAD_NAME_LIMIT]
 
 
 def thread_title(icon: str, text: str) -> str:
@@ -139,7 +151,7 @@ def thread_title(icon: str, text: str) -> str:
 
 def request_thread_title(kind: ApprovalKind, request: RequestThread) -> str:
     """The request thread's title line — the same masked words its name already shows."""
-    return thread_title(KIND_ICONS[kind], f"{KIND_LABELS[kind]} · {_request_title(request)}")
+    return thread_title(_icon(kind, request), f"{_label(kind, request)} · {_request_title(request)}")
 
 
 def request_thread_notice(kind: ApprovalKind, request: RequestThread) -> str:
@@ -159,18 +171,21 @@ def request_thread_notice(kind: ApprovalKind, request: RequestThread) -> str:
         # Name that native relationship, never guess a link or invite reactions here.
         anchor = Ref(scope="self")
         message = OwnerMessage(
-            subject_key=_request_title(request), subject=KIND_LABELS[kind],
+            subject_key=_request_title(request), subject=_label(kind, request),
             fact="🔔 승인 대기 — 이 메시지의 스레드에서 ✅ 실행 / ⛔ 취소로 결정해 주세요.",
             location=anchor, owner=Action(verb="open", target=anchor),
             agent_next="이 메시지에 승인 스레드를 열고 그 안에 승인 카드를 게시합니다",
             recovery="not_applicable", detail=Approval(expires_at=None, cancel_effect="실행 안 함"),
+            # owner Q187 2026-10-16: the five raw v1 labels read as noise above every thread;
+            # v3 is the v2 layout with the whole key (v2's 8-char cut turns a title into noise).
+            render_version="owner-ko-v3",
         )
         return f"{request_thread_title(kind, request)}\n{render(message, destination=anchor)}"
     except (ImportError, ValueError):
         # Optional/older envelope runtimes must not prevent a valid approval post.
         return (
             f"{request_thread_title(kind, request)}\n"
-            f"🔔 승인 대기 · {KIND_LABELS[kind]} · {_request_title(request)}\n"
+            f"🔔 승인 대기 · {_label(kind, request)} · {_request_title(request)}\n"
             "이 메시지의 스레드에서 ✅ 실행 / ⛔ 취소로 결정해 주세요."
         )
 

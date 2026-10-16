@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
-version: 1.5.0
+version: 1.6.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -209,6 +209,8 @@ draft id, 결과, 사유뿐이다. 결과 통지는 `OwnerMessage` 봉투로 보
 - 결과(실행 완료/취소/실행 실패)는 그 카드 **아래 답글**로 올라가고, 일별 스레드는 다른
   카드가 남아 있으므로 개별 결과로 닫지 않는다. 실행 실패는 `⚠️ … 실행 실패` 로 카드
   아래에 알린 뒤 항목을 남겨 다음 틱에 재시도한다.
+
+- **메일 다이제스트 스레드와 하나로 (2026-10-16, 소유자 결정 Q187)**: 그날 메일 다이제스트가 표준 승인 스레드를 열었으면(`~/.hermes/digest-threads/<날짜>.json`, `automation/interop/digest_thread.py`) 일정 카드는 `캘린더 · 다이제스트` 스레드를 따로 열지 않고 그 스레드에, 환경변수 `CALENDAR_DIGEST_REPLY_TO`·`CALENDAR_DIGEST_REPLY_CHANNEL` 이 가리키는 **메일 카드 아래 답글**로 선다(해시 밖 필드 `digest_reply_to`·`digest_reply_channel`, 채널이 다르면 답글 표시 없이 게시). 그 파일이 없으면(메일이 평면 배치로 갔거나 옛 메일 스킬) 예전처럼 이 스킬의 일별 스레드를 쓰고, 파일이 있는데 검증되지 않으면 게시하지 않는다. `digest-pending --thread <id>…` 는 스레드별 미결 일정 카드 수(`DIGEST-PENDING thread=<id> count=<n>`)를 읽기 전용으로 내며 메일 다이제스트가 스레드 표시(🔔 / ✅ 완료)를 정할 때 쓴다.
 
 ## 반응 감시 cron
 
