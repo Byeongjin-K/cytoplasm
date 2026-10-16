@@ -97,7 +97,9 @@ def test_demo_when_served_opens_invented_dashboard_and_mail(tmp_path: Path) -> N
         with opener.open(f"{base}/source/mail/demo-1", timeout=5) as response:
             # Then only the invented source is served.
             assert response.status == 200
-            assert mail_text("demo-1").strip() in response.read().decode()
+            heading, _, body = (mail_text("demo-1") or "").partition("\n")
+            page = response.read().decode()
+            assert f"<h1>{heading[2:]}</h1>" in page and body.strip().splitlines()[-1] in page
     finally:
         server.shutdown()
         server.server_close()
