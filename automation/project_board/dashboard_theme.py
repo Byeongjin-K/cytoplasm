@@ -322,6 +322,16 @@ details.ss-group>summary:active{background:var(--neutral-wash)}
 .ss-mhead b{font-weight:650;line-height:1.35}
 .ss-count{flex:none;font-weight:600;color:var(--text-2);font-size:var(--t-sm)}
 .ss-tag{color:var(--text-3)}
+.st-wait{background:var(--neutral-wash);color:var(--text)}
+.st-wait .ico{width:13px;height:13px;color:var(--text-2)}
+.ss-notes{list-style:none;margin:var(--s2) 0 0;padding:0;display:flex;flex-direction:column;gap:var(--s1)}
+.ss-note{display:flex;gap:var(--s2);align-items:flex-start;padding:var(--s2) var(--s3);border-radius:var(--r-sm);
+background:var(--surface);border:1px solid var(--line);font-size:var(--t-sm);line-height:1.45;color:var(--text)}
+.ss-note>.ico{flex:none;width:16px;height:16px;margin-top:2px;color:var(--text-2)}
+.ss-note b{font-weight:650;margin-right:2px}
+.ss-note.is-block{background:var(--danger-wash);border-color:transparent}
+.ss-note.is-block>.ico,.ss-note.is-block b{color:var(--danger)}
+.ss-when{display:block;color:var(--text-2)}
 .ss-strip{display:flex;align-items:center;gap:var(--s3);margin-top:var(--s5);min-height:var(--hit);color:var(--text);text-decoration:none}
 .ss-strip>span{display:flex;flex-direction:column;flex:1;min-width:0}
 .ss-strip .ico{color:var(--accent-ink)}

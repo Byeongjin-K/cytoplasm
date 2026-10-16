@@ -131,9 +131,23 @@ def sessions(now: datetime) -> Sessions:
             start = rng.randint(w0 - 86_400_000, end - 3_600_000)
             open_ = i == 0 and dept in ("web", "ops")
             stop = None if open_ else min(end, max(w0, start + rng.randint(20, 600) * 60_000))
-            st = "run" if open_ else ("review" if i == 1 and dept == "research" else ("hold" if i == 2 and dept == "ops" else "done"))
+            st = "run" if open_ else ("review" if i == 1 and dept == "research" else "done")
             lanes.append({"dept": dept, "theme": theme, "st": st, "start": start, "end": stop,
                           "dur": (stop or end) - max(start, w0), "carried": start < w0})
+    # what the collector writes for a lane parked on a person or a time, and for one whose agent stopped
+    tomorrow_8 = int((datetime.combine((now + kst).date() + timedelta(days=1), datetime.min.time(), UTC) - kst).timestamp() * 1000) + 8 * 3_600_000
+    for theme, start_h, since_h, extra in (
+        ("메일 정리", 30, 3, {"why": "아침 다이제스트 화면 확인 대기", "until": tomorrow_8}),
+        ("지침 정리", 20, 5, {"why": "소유자 승인(✅) 대기, v2.4.0 릴리스 카드"}),
+        ("실험 기록", 9, 2, {"why": "소유자 결정 대기, 질문 Q12"}),
+    ):
+        dept = next(d for d, t, _ in _THEMES if t == theme)
+        start = end - start_h * 3_600_000
+        lanes.append({"dept": dept, "theme": theme, "st": "wait", "start": start, "end": None, "dur": end - max(start, w0),
+                      "carried": False, "since": end - since_h * 3_600_000, **extra})
+    start = end - 7 * 3_600_000
+    lanes.append({"dept": "web", "theme": "대시보드 화면", "st": "block", "start": start, "end": None, "dur": end - start,
+                  "carried": False, "why": "작업 창이 오류로 멈췄습니다"})
     agents = []
     for platform, families in (("claude", ("Opus 5.5", "Sonnet 5.5", "Haiku")), ("senpi", ("Opus 5.5", "기타 모델"))):
         for n in range(48 if platform == "claude" else 22):
