@@ -545,7 +545,7 @@ class RequestThreadDirectory(FakeDirectory):
         super().__init__()
         self.request_threads: list[tuple[ApprovalKind, object]] = []
         self.facts[REQUEST_THREAD_ID] = ChannelFacts(
-            11, "메일 발신 · 세미나 안내", (), AGENT_CHAT_CHANNEL_ID,
+            11, "✉️ 메일 발신 · 세미나 안내", (), AGENT_CHAT_CHANNEL_ID,
         )
 
     def agent_chat_request_thread(self, kind: ApprovalKind, request: object) -> str:
@@ -596,11 +596,11 @@ def test_request_thread_name_labels_and_truncates() -> None:
     )
 
     # Then: label + separator + a 40-char title, never beyond Discord's 100-char limit
-    assert name == "메일 발신 · " + "가" * 40
+    assert name == "✉️ 메일 발신 · " + "가" * 40
     assert len(name) <= 100
     assert module.request_thread_name(
         ApprovalKind.CALENDAR, module.RequestThread(title="draft-42"),
-    ) == "캘린더 · draft-42"
+    ) == "🗓️ 캘린더 · draft-42"
 
 
 @pytest.mark.parametrize("title", ["2026-09-08 라이프로그 회의 준비.md", "가" * 57 + ".md"])
@@ -612,7 +612,7 @@ def test_obsidian_request_thread_name_preserves_the_bounded_note_filename(title:
     )
 
     label, separator, filename = name.partition(" · ")
-    assert label == module.KIND_LABELS[ApprovalKind.OBSIDIAN_WRITE]
+    assert label == f"{module.KIND_ICONS[ApprovalKind.OBSIDIAN_WRITE]} {module.KIND_LABELS[ApprovalKind.OBSIDIAN_WRITE]}"
     assert separator == " · "
     assert filename == title[:module.REQUEST_TITLE_LIMIT]
     assert len(name) <= module.THREAD_NAME_LIMIT == 100
@@ -670,7 +670,7 @@ class LiveRequest:
 def _reuse_directory() -> RequestThreadDirectory:
     directory = RequestThreadDirectory()
     directory.facts[LIVE_REQUEST_THREAD_ID] = ChannelFacts(
-        11, "메일 발신 · 세미나 안내", (), AGENT_CHAT_CHANNEL_ID,
+        11, "✉️ 메일 발신 · 세미나 안내", (), AGENT_CHAT_CHANNEL_ID,
     )
     return directory
 

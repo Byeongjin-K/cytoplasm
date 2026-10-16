@@ -138,7 +138,7 @@ def test_post_confirm_message_preadds_reactions_and_records_bound_message(
         (
             "POST",
             f"/channels/{AGENT_CHAT_ID}/messages/{NOTICE_ID}/threads",
-            {"name": f"위키 · {draft['id']}", "auto_archive_duration": 10080},
+            {"name": f"📚 위키 · {draft['id']}", "auto_archive_duration": 10080},
         ),
         ("GET", f"/channels/{CHANNEL_ID}", None),
         ("POST", f"/channels/{CHANNEL_ID}/messages", {"content": wiki_gate.confirm_text(draft)}),

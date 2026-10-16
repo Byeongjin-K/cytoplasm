@@ -206,7 +206,7 @@ def test_duplicate_and_superseding_requests_reuse_the_first_request_thread(env: 
     patent_export.prepare_export(env.paths, SLUG, mode="plaintext")
 
     # Then: one approval key keeps ONE thread — no empty orphan per retry or supersede
-    assert env.fake.threads == [f"특허 반출 · {SLUG}"]
+    assert env.fake.threads == [f"📜 특허 반출 · {SLUG}"]
     assert env.fake.post_channels == [env.fake.request_thread_id(0)] * 2
 
 

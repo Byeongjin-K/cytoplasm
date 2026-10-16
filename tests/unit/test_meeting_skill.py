@@ -867,7 +867,7 @@ def test_cli_notify_routes_to_the_origin_thread_when_anchored(monkeypatch):
     # When: the notice is delivered live
     meeting_cli._notify("C1", "회의록 처리 완료: x", offline_dir=None, message_id="M1")
     # Then: the thread is anchored on the instruction and the notice lands inside it
-    assert calls == [("POST", "/channels/C1/messages/M1/threads")]
+    assert calls == [("POST", "/channels/C1/messages/M1/threads"), ("POST", "/channels/T1/messages")]
     assert posts == [("T1", "회의록 처리 완료: x")]
 
 

@@ -208,7 +208,7 @@ def test_new_binding_opens_a_request_thread_titled_by_the_draft_id_only(
 
     # And: the owner-visible thread name carries the id and no note title, body or slug
     name = request_thread_name(ApprovalKind.WIKI, spec)
-    assert name == f"위키 · {draft['id']}"
+    assert name == f"📚 위키 · {draft['id']}"
     for secret in ("Single Live", "본문 A", SLUG):
         assert secret not in name
 
@@ -227,7 +227,7 @@ def test_fresh_draft_posts_into_its_own_request_thread_on_the_live_path(
 
     # Then: the request's own thread was opened, titled by the draft id, and the
     # confirm message and the persisted binding both live in it
-    assert fake.threads == [f"위키 · {draft['id']}"]
+    assert fake.threads == [f"📚 위키 · {draft['id']}"]
     stored = _stored(tmp_path, draft["id"])
     assert stored["channel_id"] == REQUEST_THREAD_ID
     assert stored["approval_thread_id"] == REQUEST_THREAD_ID
@@ -290,7 +290,7 @@ def test_duplicate_and_superseding_requests_reuse_the_first_request_thread(
     posted = wiki_gate.post_confirm_message(superseding)
 
     # Then: one approval key keeps ONE thread — no empty orphan per re-request or supersede
-    assert fake.threads == [f"위키 · {first['id']}"]
+    assert fake.threads == [f"📚 위키 · {first['id']}"]
 
     # …and every confirm post of that key landed in that one thread
     assert set(fake.channels.values()) == {REQUEST_THREAD_ID}

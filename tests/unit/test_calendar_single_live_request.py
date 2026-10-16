@@ -106,7 +106,7 @@ class FakeDiscord:
             and parts[1] in {self.request_thread_id(index) for index in range(8)}
         ):
             return {
-                "id": parts[1], "name": "캘린더 · 요청", "parent_id": AGENT_CHAT_CHANNEL_ID,
+                "id": parts[1], "name": "🗓️ 캘린더 · 요청", "parent_id": AGENT_CHAT_CHANNEL_ID,
                 "type": 11,
             }
         if method == "GET" and path == f"/channels/{OWNER_DM_CHANNEL_ID}":
@@ -409,7 +409,7 @@ def test_new_binding_asks_for_a_request_thread_named_with_the_draft_id_only(
 
     # …and no calendar content reaches the thread name (SKILL.md 절대 규칙 3)
     name = surface.request_thread_name(kind, request)
-    assert name == f"캘린더 · {draft['id']}"
+    assert name == f"🗓️ 캘린더 · {draft['id']}"
     for secret in (SECRET_SUMMARY, SECRET_START, SECRET_EVENT_ID, "secret-calendar"):
         assert secret not in request.title
         assert secret not in name
@@ -432,7 +432,7 @@ def test_post_confirm_persists_the_approval_thread_id_outside_the_draft_hash(
         )
     )
     [entry] = [row for row in _store().load() if row.draft_id == draft["id"]]
-    assert fake.request_threads == [f"캘린더 · {draft['id']}"]
+    assert fake.request_threads == [f"🗓️ 캘린더 · {draft['id']}"]
     assert stored["approval_thread_id"] == entry.channel_id == fake.request_thread_id(0)
     # …and the approval binding hash is untouched by the new field
     assert stored["sha256"] == draft["sha256"]

@@ -82,8 +82,10 @@ def test_resolve_creates_message_anchored_thread() -> None:
         (
             "POST",
             f"/channels/{ORIGIN_CHANNEL}/messages/{ORIGIN_MESSAGE}/threads",
-            {"name": "스레드 이름"},
-        )
+            {"name": "🧵 스레드 이름"},
+        ),
+        # The new thread opens with its big title line (owner 2026-10-16).
+        ("POST", f"/channels/{THREAD_ID}/messages", {"content": "## 🧵 스레드 이름"}),
     ]
 
 
@@ -119,9 +121,10 @@ def test_resolve_creates_channel_thread_without_message() -> None:
     thread = resolve_thread_id(api, OriginRef(ORIGIN_CHANNEL), "이름")
     # Then: a public thread is created in the channel itself
     assert thread == THREAD_ID
-    [(method, path, payload)] = calls
+    [(method, path, payload), title] = calls
     assert (method, path) == ("POST", f"/channels/{ORIGIN_CHANNEL}/threads")
-    assert payload is not None and payload["name"] == "이름" and payload["type"] == 11
+    assert payload is not None and payload["name"] == "🧵 이름" and payload["type"] == 11
+    assert title == ("POST", f"/channels/{THREAD_ID}/messages", {"content": "## 🧵 이름"})
 
 
 # ------------------------------------------------------------------- deliver

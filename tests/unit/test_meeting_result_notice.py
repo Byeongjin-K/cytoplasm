@@ -130,7 +130,7 @@ def test_legacy_bytes_when_runtime_predates_envelopes(
     # Then: every byte survives, and delivery still uses the instruction anchor.
     assert code == 0
     assert ingest.posts == [("333", PUBLIC)]
-    assert ingest.calls == [("POST", "/channels/111/messages/222/threads")]
+    assert ingest.calls == [("POST", "/channels/111/messages/222/threads"), ("POST", "/channels/333/messages")]
 
 
 def test_legacy_bytes_when_offline(ingest):
