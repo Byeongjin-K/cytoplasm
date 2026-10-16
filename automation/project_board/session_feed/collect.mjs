@@ -9,13 +9,16 @@
 //                     dept id is one of ops|assistant|research|web|study|infra; unmatched lanes become etc / "세션 N"
 //   SB_SERVICES       JSON file: [{"label", "group": "watch|web|timer", "tag", "units": ["<user unit>", ...], "every"?}];
 //                     state, start, restarts, runs, fails and last run are read from systemd --user and its journal
-//   SB_SESSION_FINDER path to the coding-agent-sessions skill's find-agent-sessions.py
+//   SB_CACHE          optional private JSON file that remembers, per session file, how far it was read and what it held
+//                     (paths stay in that file only). Without it every run reads the last week's transcripts in full.
 //   SB_NOW            optional ISO time to freeze "now" (default: the current time)
 //   SB_LEAD_WINDOWS   optional regex for aoe_ window names that are lead windows (default: none)
 //   SB_PROJECT_WINDOWS optional regex for aoe_ window names that are project windows (default: none)
 //
 // Privacy: lane keys and titles, session prompts and paths never reach the output. The output keeps only
 // dept/theme labels from the rules file, statuses, times, durations and counts.
+
+import { existsSync } from 'node:fs';
 
 const [, , outPath] = process.argv;
 const env = k => { const v = process.env[k]; if (!v) throw new Error(`missing ${k}`); return v; };
@@ -52,25 +55,91 @@ const lanes = [...raw.values()]
     };
   });
 
-// ---- coding-agent sessions (metadata; the finder's message fields are dropped immediately)
-const day = new Date(W0 - 864e5).toISOString().slice(0, 10);
-const found = await Bun.$`python3 -I ${env('SB_SESSION_FINDER')} list --from ${day} --include-subagents --limit 5000 --workers 32`.quiet().cwd('/tmp');
-const parsed = JSON.parse(found.stdout.toString());
-const list = (Array.isArray(parsed) ? parsed : parsed.results ?? parsed.sessions ?? [])
-  .map(({ platform, model, created_at, updated_at, path }) => ({ platform, model, created_at, updated_at, path }));
-const fam = m => !m ? '기타 모델' : /opus-5-5/.test(m) ? 'Opus 5.5' : /sonnet/.test(m) ? 'Sonnet 5.5' : /haiku/.test(m) ? 'Haiku' : /fable/.test(m) ? 'Fable 5.1' : '기타 모델';
-const inWindow = list.filter(s => Date.parse(s.created_at) <= NOW && Date.parse(s.updated_at || s.created_at) >= W0);
-const agents = [];
-for (let i = 0; i < inWindow.length; i += 40) {
-  await Promise.all(inWindow.slice(i, i + 40).map(async s => {
-    // Response count = lines carrying an assistant marker; the body is never parsed.
-    const marker = s.platform === 'claude' ? '"type":"assistant"' : '"role":"assistant"';
-    const r = await Bun.$`grep -c -F ${marker} ${s.path}`.nothrow().quiet();
-    const updated = Date.parse(s.updated_at || s.created_at);
-    const a = Math.max(Date.parse(s.created_at), W0), b = Math.min(updated, NOW);
-    agents.push({ platform: s.platform, fam: fam(s.model), start: a, end: b, dur: Math.max(0, b - a), calls: parseInt(r.stdout.toString()) || 0, live: updated > NOW - 15 * 60e3 });
-  }));
+// ---- coding-agent sessions: Claude Code and Senpi JSONL transcripts, read incrementally.
+// The rules are the coding-agent-sessions finder's (created = first timestamp, updated = last, model = the first
+// model field, one session per platform + session id, created on or after the day before the window), but a file
+// is read only from where the previous run stopped: transcripts are append-only, so the week's 3-4 GB is read
+// once and later runs read the few lines written since. Files last written before the window are not opened.
+const H = process.env.HOME;
+const cachePath = process.env.SB_CACHE;
+const cache = new Map(cachePath && await Bun.file(cachePath).exists() ? Object.entries(JSON.parse(await Bun.file(cachePath).text())) : []);
+const SOURCES = [
+  { platform: 'claude', marker: '"type":"assistant"', id: p => p.split('/').pop().replace(/\.jsonl$/, ''),
+    globs: [[`${H}/.claude/projects`, '*/*.jsonl'], [`${H}/.claude/transcripts`, '*.jsonl'], [`${H}/.claude/pre-compact-session-histories`, '*.jsonl']] },
+  { platform: 'claude', marker: '"type":"assistant"', sub: true, id: p => p.split('/').pop().replace(/\.jsonl$/, '').replace(/^agent-/, ''),
+    globs: [[`${H}/.claude/projects`, '*/*/subagents/**/agent-*.jsonl']] },
+  ...['.omo', '.senpi', '.pi'].map(d => ({ platform: 'senpi', marker: '"role":"assistant"', id: p => p.split('/').pop().replace(/\.jsonl$/, '').split('_').pop(),
+    globs: [[`${H}/${d}/agent/sessions`, '**/*.jsonl'], [`${H}/${d}/profiles`, '*/agent/sessions/**/*.jsonl']] })),
+];
+const str = v => typeof v === 'string' && v ? v : null;
+const readLines = async (path, from, to, onLine) => {
+  // Complete lines only: a line still being written is read on the next run. Returns the new offset.
+  const reader = Bun.file(path).slice(from, to).stream().getReader();
+  const dec = new TextDecoder();
+  let carry = new Uint8Array(0), done = from;
+  for (;;) {
+    const { value, done: end } = await reader.read();
+    if (end) break;
+    const buf = carry.length ? Buffer.concat([carry, value]) : value;
+    let start = 0;
+    for (let i = buf.indexOf(10); i !== -1; i = buf.indexOf(10, start)) { onLine(dec.decode(buf.subarray(start, i))); start = i + 1; }
+    done += start; carry = buf.subarray(start);
+  }
+  return done;
+};
+const seen = new Set(), files = [];
+for (const src of SOURCES) for (const [root, pattern] of src.globs) {
+  if (!existsSync(root)) continue;
+  for await (const rel of new Bun.Glob(pattern).scan({ cwd: root, onlyFiles: true })) {
+    const path = `${root}/${rel}`;
+    if (seen.has(path)) continue;
+    seen.add(path); files.push([src, path]);
+  }
 }
+const rows = [];
+for (const [src, path] of files) {
+  const st = await Bun.file(path).stat().catch(() => null);
+  if (!st || st.mtimeMs < W0) continue;
+  let c = cache.get(path);
+  if (!c || st.size < c.offset) c = { offset: 0, sid: null, created: null, updated: null, model: null, calls: 0 };
+  if (st.size > c.offset) {
+    c.offset = await readLines(path, c.offset, st.size, line => {
+      if (line.includes(src.marker)) c.calls++;
+      let d;
+      try { d = JSON.parse(line); } catch { return; }
+      if (!d || typeof d !== 'object') return;
+      const ts = str(d.timestamp);
+      if (ts) { c.created ??= ts; c.updated = ts; }
+      c.sid = str(d.sessionId) ?? (d.type === 'session' ? str(d.id) : null) ?? c.sid;
+      const msg = (d.message && typeof d.message === 'object' ? d.message : null) ?? (d.payload && typeof d.payload === 'object' ? d.payload : {});
+      c.model ??= str(d.modelId) ?? str(d.model) ?? str(msg.model);
+    });
+  }
+  cache.set(path, c);
+  const mtime = new Date(st.mtimeMs).toISOString();
+  const created = c.created ?? mtime;
+  rows.push({ platform: src.platform, path, sid: src.sub ? src.id(path) : (c.sid ?? src.id(path)), sub: !!src.sub, created,
+    updated: src.sub ? mtime : (c.updated ?? created), model: src.sub ? null : c.model, calls: c.calls });
+}
+if (cachePath) {
+  const kept = new Set(rows.map(r => r.path));
+  for (const p of cache.keys()) if (!kept.has(p)) cache.delete(p);
+  await Bun.write(`${cachePath}.tmp`, JSON.stringify(Object.fromEntries(cache)));
+  await Bun.$`chmod 600 ${cachePath}.tmp && mv -f ${cachePath}.tmp ${cachePath}`.quiet();
+}
+const unique = new Map();
+for (const r of rows.sort((a, b) => a.path.localeCompare(b.path))) {
+  const key = `${r.platform}\n${r.sid}`, cur = unique.get(key);
+  if (!cur || (r.sub && !cur.sub)) unique.set(key, r);
+}
+const fromDay = Date.parse(`${new Date(W0 - 864e5).toISOString().slice(0, 10)}T00:00:00Z`);
+const fam = m => !m ? '기타 모델' : /opus-5-5/.test(m) ? 'Opus 5.5' : /sonnet/.test(m) ? 'Sonnet 5.5' : /haiku/.test(m) ? 'Haiku' : /fable/.test(m) ? 'Fable 5.1' : '기타 모델';
+const agents = [...unique.values()]
+  .filter(s => !(Date.parse(s.created) < fromDay) && Date.parse(s.created) <= NOW && Date.parse(s.updated) >= W0)
+  .map(s => {
+    const updated = Date.parse(s.updated), a = Math.max(Date.parse(s.created), W0), b = Math.min(updated, NOW);
+    return { platform: s.platform, fam: fam(s.model), start: a, end: b, dur: Math.max(0, b - a), calls: s.calls, live: updated > NOW - 15 * 60e3 };
+  });
 
 // ---- live aoe windows (names are classified, never emitted)
 const lead = process.env.SB_LEAD_WINDOWS ? new RegExp(process.env.SB_LEAD_WINDOWS) : null;
