@@ -188,6 +188,33 @@ details.sect{margin-top:var(--s6)}
 details.card{padding-top:var(--s2);padding-bottom:var(--s2)}
 details.card+details.card{margin-top:var(--s3)}
 .cnt{margin-left:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+code{font:var(--t-sm)/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--surface-2);border:1px solid var(--line);
+border-radius:var(--r-sm);padding:1px 6px;color:var(--text);overflow-wrap:anywhere}
+.onboard{padding:var(--s6);margin-bottom:var(--s6)}
+.onboard-head{display:flex;gap:var(--s3);align-items:flex-start}
+.onboard-head .ico{width:24px;height:24px;color:var(--accent-ink);margin-top:2px}
+.onboard-head b{font-size:var(--t-lg)}
+.onboard-head p{margin:var(--s1) 0 0;color:var(--text-2)}
+.steps{list-style:none;counter-reset:step;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s4);margin:var(--s5) 0 var(--s2);padding:0}
+.steps li{counter-increment:step;display:flex;flex-direction:column;gap:var(--s1);padding:var(--s4);border-radius:var(--r-md);background:var(--surface-2)}
+.steps li::before{content:counter(step);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+background:var(--accent-wash);color:var(--accent-ink);font-weight:700;font-size:var(--t-sm);margin-bottom:var(--s1)}
+.steps span{color:var(--text-2);font-size:var(--t-sm)}
+dialog{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--surface);color:var(--text);
+padding:var(--s6);max-width:min(440px,calc(100vw - 32px));box-shadow:0 20px 50px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(10,12,16,.45)}
+dialog h2{font-size:var(--t-lg);margin:0 0 var(--s3)}
+dialog p{margin:0 0 var(--s3);color:var(--text-2)}
+.dialog-error{color:var(--danger);font-weight:600;min-height:1em}
+.dialog-actions{display:flex;justify-content:flex-end;gap:var(--s2);margin-top:var(--s2)}
+.notice{max-width:560px;margin:var(--s10) auto;padding:0 var(--s4)}
+.notice .card{padding:var(--s8) var(--s6);text-align:center}
+.notice .ico{width:32px;height:32px;color:var(--text-3)}
+.notice h1{font-size:var(--t-xl);margin:var(--s3) 0 var(--s2)}
+.notice p{color:var(--text-2);margin:0 0 var(--s5)}
+.reader{max-width:860px;margin:0 auto;padding:var(--s6) var(--s4) var(--s10)}
+.reader pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:var(--t-md);line-height:1.7;margin:0}
 footer{max-width:var(--max);margin:0 auto;padding:0 var(--s6) var(--s10);color:var(--text-3);font-size:var(--t-sm);display:flex;gap:var(--s2);flex-wrap:wrap}
 """
 
@@ -211,6 +238,7 @@ footer{padding:0 var(--s4) calc(88px + env(safe-area-inset-bottom))}
 .tile{padding:var(--s3) var(--s4)}
 .tile b{font-size:24px}
 .filters{grid-template-columns:1fr 1fr;gap:var(--s2) var(--s3)}
+.steps{grid-template-columns:1fr}.onboard{padding:var(--s4)}
 .picker-row{max-width:none}
 .pv-head .btn{margin-left:0}
 .events time{width:4.5em}}
@@ -245,6 +273,23 @@ _PATHS: Final = {
 
 def icon(name: str) -> str:
     return f'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">{_PATHS[name]}</svg>'
+
+
+def page_shell(title: str, body: str, brand: str) -> str:
+    """A plain page in the dashboard's look (both appearances): the notice and source-reader screens."""
+    name = escape(brand)
+    return (
+        '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        f'<title>{escape(title)} · {name}</title><link rel="icon" href="{favicon(brand)}"><style>{CSS}</style></head><body>'
+        f'<header><div class="bar"><a class="brand" href="/">{brand_mark(brand)}{name}</a></div></header>{body}</body></html>'
+    )
+
+
+def notice_page(title: str, message: str, brand: str, *, action: str = "") -> str:
+    body = (f'<main class="notice"><div class="card">{icon("alert")}<h1>{escape(title)}</h1>'
+            f"<p>{escape(message)}</p>{action}</div></main>")
+    return page_shell(title, body, brand)
 
 
 def brand_mark(brand: str) -> str:

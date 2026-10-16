@@ -17,6 +17,7 @@ from html import escape
 from typing import Final, Literal
 from urllib.parse import quote
 
+from .config import DEFAULT_BRAND
 from .dashboard_theme import CSS, brand_mark, favicon, icon
 from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
 
@@ -25,30 +26,63 @@ Mode = Literal["served", "file"]
 _STATUS_CLASS: Final = {"열림": "st-open", "진행": "st-doing", "완료": "st-done", "보류": "st-held"}
 
 _SERVED_JS: Final = """
-document.querySelectorAll('input[data-todo]').forEach(function(box){
-  box.addEventListener('change',function(){
-    var token=document.querySelector('meta[name=pb-token]').content;
-    var body='status='+encodeURIComponent(box.checked?'완료':'열림');
-    box.disabled=true;
-    fetch('/todo/'+encodeURIComponent(box.dataset.todo),{method:'POST',credentials:'same-origin',
+(function(){
+  var token=document.querySelector('meta[name=pb-token]').content,live=document.getElementById('live');
+  function say(text){if(live){live.textContent='';live.textContent=text;}}
+  function post(path,body){
+    return fetch(path,{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-PB-Token':token},
-      body:body}).then(function(r){if(!r.ok){throw new Error(r.status);}location.reload();})
-      .catch(function(){box.checked=!box.checked;box.disabled=false;alert('기록하지 못했습니다');});
+      body:body}).then(function(r){if(!r.ok){throw new Error(r.status);}return r;});
+  }
+  function why(error){
+    var code=String(error&&error.message||'');
+    if(code==='401'||code==='403'){return '권한이 없어 저장하지 못했습니다. 대시보드를 다시 열어 주세요.';}
+    if(/^[0-9]+$/.test(code)){return '저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.';}
+    return '연결이 끊겨 저장하지 못했습니다. 연결을 확인하고 다시 눌러 주세요.';
+  }
+  function note(after,text){
+    var box=after.parentNode.querySelector('.row-error');
+    if(!box){box=document.createElement('span');box.className='row-error';box.setAttribute('role','alert');after.parentNode.appendChild(box);}
+    box.textContent=text;
+  }
+  document.querySelectorAll('input[data-todo]').forEach(function(box){
+    box.addEventListener('change',function(){
+      var li=box.closest('li'),main=li.querySelector('.todo-main'),old=li.querySelector('.row-error');
+      if(old){old.remove();}
+      box.disabled=true;li.classList.add('saving');say('저장하는 중');
+      post('/todo/'+encodeURIComponent(box.dataset.todo),'status='+encodeURIComponent(box.checked?'완료':'열림'))
+        .then(function(){location.reload();})
+        .catch(function(error){box.checked=!box.checked;box.disabled=false;li.classList.remove('saving');
+          note(main.lastElementChild,why(error));say(why(error));});
+    });
   });
-});
-document.querySelectorAll('button[data-archive]').forEach(function(b){
-  b.addEventListener('click',function(){
+  var dialog=document.getElementById('archive-dialog'),pending=null;
+  function send(b){
     var on=b.dataset.archive==='1',name=b.dataset.archiveProject;
-    if(on&&!confirm('「'+name+'」을(를) 보관할까요?\\n요약·할 일·일정·근거에서 사라지고 보관함에서만 보입니다. 할 일과 근거는 지워지지 않습니다.')){return;}
-    var token=document.querySelector('meta[name=pb-token]').content;
     b.disabled=true;
-    fetch('/project/'+encodeURIComponent(name),{method:'POST',credentials:'same-origin',
-      headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-PB-Token':token},
-      body:'archived='+(on?'1':'0')}).then(function(r){if(!r.ok){throw new Error(r.status);}
-        location.hash=on?'archive':'project/'+encodeURIComponent(name);location.reload();})
-      .catch(function(){b.disabled=false;alert('기록하지 못했습니다');});
+    return post('/project/'+encodeURIComponent(name),'archived='+(on?'1':'0')).then(function(){
+      location.hash=on?'archive':'project/'+encodeURIComponent(name);location.reload();
+    }).catch(function(error){b.disabled=false;throw error;});
+  }
+  document.querySelectorAll('button[data-archive]').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(b.dataset.archive!=='1'||!dialog||!dialog.showModal){
+        send(b).catch(function(error){note(b,why(error));say(why(error));});return;
+      }
+      pending=b;
+      dialog.querySelector('[data-name]').textContent=b.dataset.archiveProject;
+      dialog.querySelector('.dialog-error').textContent='';
+      dialog.showModal();
+    });
   });
-});
+  if(dialog){
+    dialog.querySelector('[data-confirm]').addEventListener('click',function(event){
+      event.preventDefault();if(!pending){return;}
+      var ok=event.currentTarget;ok.disabled=true;
+      send(pending).catch(function(error){ok.disabled=false;dialog.querySelector('.dialog-error').textContent=why(error);});
+    });
+  }
+})();
 """
 
 _FOLD_JS: Final = """
@@ -128,7 +162,6 @@ TABS: Final = (
     ("archive", "보관함"),
 )
 _NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{icon(tab)}{label}</a>' for tab, label in TABS)
-DEFAULT_BRAND: Final = "프로젝트 대시보드"
 LOCAL_ACTOR: Final = "노드 로컬 접속"
 
 EMPTY_SECTION: Final = (
@@ -158,6 +191,27 @@ _FILTER_JS: Final = """
 """
 
 _WEEKDAYS: Final = "월화수목금토일"
+
+ONBOARDING: Final = (
+    f'<div class="card onboard" data-tab="summary"><div class="onboard-head">{icon("inbox")}<div>'
+    "<b>처음 오셨군요. 대시보드는 승인된 할 일로 채워집니다</b>"
+    "<p>세 단계로 데이터가 들어옵니다. 지금은 아무것도 하지 않아도 됩니다.</p></div></div>"
+    '<ol class="steps"><li><b>메일과 회의록을 읽습니다</b>'
+    "<span>기관 메일과 확정 회의록에서 할 일, 담당, 마감을 찾아 제안합니다.</span></li>"
+    "<li><b>승인 카드로 확인합니다</b><span>제안은 승인 카드로 올라오고, 승인 카드에서 승인하면 데이터가 됩니다.</span></li>"
+    "<li><b>여기서 진행을 챙깁니다</b><span>프로젝트별 할 일, 일정, 근거를 보고 체크로 완료를 남깁니다.</span></li></ol>"
+    '<p class="note">실제 데이터 없이 둘러보려면 <code>python3 -m automation.project_board demo</code> 를 실행합니다.</p></div>'
+)
+
+_ARCHIVE_DIALOG: Final = (
+    '<dialog id="archive-dialog" aria-labelledby="archive-title"><form method="dialog">'
+    '<h2 id="archive-title">이 프로젝트를 보관할까요?</h2>'
+    '<p>「<b data-name></b>」이(가) 요약, 할 일, 일정, 근거에서 빠지고 보관함에서만 보입니다. '
+    "할 일과 근거는 지워지지 않고 프로젝트 화면의 「보관 해제」로 언제든 되돌립니다.</p>"
+    '<p class="dialog-error" role="alert"></p>'
+    '<div class="dialog-actions"><button class="btn" value="cancel">취소</button>'
+    '<button class="btn primary" value="ok" data-confirm>보관하기</button></div></form></dialog>'
+)
 
 
 def _kst(stamp: str) -> str:
@@ -683,14 +737,10 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", br
         todos=tuple(t for t in full.todos if t.project not in hidden),
         sources=tuple(s for s in full.sources if s.project not in hidden),
         events=tuple(e for e in full.events if e.project not in hidden),
+        pending=tuple(p for p in full.pending if p.project not in hidden),
     )
     fresh = _fresh_in_shelf(full, shelf)
-    empty = ""
-    if not snapshot.todos and not snapshot.pending:
-        empty = (
-            '<div class="card empty" data-tab="summary">아직 데이터가 없습니다. 메일·회의록 분석 제안을 '
-            "승인 카드에서 승인하면 프로젝트와 할 일이 여기에 나타납니다.</div>"
-        )
+    empty = ONBOARDING if not snapshot.todos and not snapshot.pending else ""
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
     scripts = _FOLD_JS + _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
     pages = "".join(
@@ -710,5 +760,7 @@ def render_dashboard(snapshot: BoardSnapshot, *, mode: Mode, token: str = "", br
         f"{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {escape(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
+        f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"
+        '<div id="live" class="sr-only" role="status" aria-live="polite"></div>'
         f"<script>{scripts}</script></body></html>"
     )

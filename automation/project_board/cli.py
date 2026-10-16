@@ -189,7 +189,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         pending=lambda: pending_views(board), read_source=read_source, attachment_path=attachment,
         on_change=lambda: rebuild_dashboard(board, today=today_kst()),
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
-        tailnet_token=config.tailnet_token,
+        tailnet_token=config.tailnet_token, brand=config.brand,
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()

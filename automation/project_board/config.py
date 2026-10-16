@@ -21,6 +21,8 @@ from .models import DEFAULT_GRADE, GRADES, ProjectBoardError
 ROOT_ENV: Final = "PROJECT_BOARD_ROOT"
 CONFIG_ENV: Final = "PROJECT_BOARD_CONFIG"
 DEFAULT_PORT: Final = 8810
+DEFAULT_BRAND: Final = "프로젝트 대시보드"
+MAX_BRAND: Final = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +57,7 @@ class BoardConfig:
     tailnet_origins: tuple[str, ...] = ()
     tailnet_logins: tuple[str, ...] = ()
     tailnet_token: bool = False
+    brand: str = DEFAULT_BRAND
 
     def project_grade(self, project: str) -> str:
         """The configured default grade of a project (과제내부 when the catalog says nothing)."""
@@ -137,7 +140,20 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         tailnet_origins=_tailnet_origins(dashboard.get("tailnet")),
         tailnet_logins=_tailnet_logins(dashboard.get("tailnet")),
         tailnet_token=_tailnet_token(dashboard.get("tailnet")),
+        brand=_brand(dashboard.get("brand")),
     )
+
+
+def _brand(raw: object) -> str:
+    """The product name shown in the header, tab title and icon; one line, at most 40 characters."""
+    if raw in (None, ""):
+        return DEFAULT_BRAND
+    if not isinstance(raw, str) or not raw.strip():
+        raise ProjectBoardError("config dashboard.brand must be a non-empty name")
+    name = " ".join(raw.split())
+    if len(name) > MAX_BRAND:
+        raise ProjectBoardError(f"config dashboard.brand must be at most {MAX_BRAND} characters")
+    return name
 
 
 def _project_grade(raw: object) -> str:

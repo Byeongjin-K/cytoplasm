@@ -35,7 +35,8 @@ from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .board_store import BoardStore
-from .dashboard import LOCAL_ACTOR, render_dashboard
+from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard
+from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError
 
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -63,6 +64,7 @@ class _Handler(BaseHTTPRequestHandler):
     tailnet_origins: frozenset[str] = frozenset()
     tailnet_logins: frozenset[str] = frozenset()
     tailnet_token: bool = False
+    brand: str = DEFAULT_BRAND
 
     def _via_tailnet(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -99,6 +101,12 @@ class _Handler(BaseHTTPRequestHandler):
     def _text(self, status: int, text: str) -> None:
         self._send(status, (text + "\n").encode("utf-8"), "text/plain; charset=utf-8")
 
+    def _page(self, status: int, title: str, message: str, *, home: bool = True) -> None:
+        """A browser-facing refusal in the dashboard's own look; API callers only read the status."""
+        action = '<a class="btn primary" href="/">대시보드로 돌아가기</a>' if home else ""
+        page = notice_page(title, message, self.brand, action=action)
+        self._send(status, page.encode("utf-8"), "text/html; charset=utf-8")
+
     def _matches(self, value: str) -> bool:
         return bool(value) and hmac.compare_digest(value.encode("utf-8"), self.token.encode("utf-8"))
 
@@ -113,20 +121,20 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - http.server API
         if not self._identity_ok():
-            self._text(403, "forbidden")
+            self._page(403, "이 계정으로는 열 수 없습니다", "대시보드를 볼 수 있는 계정으로 다시 로그인해 주세요.", home=False)
             return
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         offered = query.get("t", [""])[0]
         if offered:
             if not self._matches(offered):
-                self._text(401, "authentication required")
+                self._page(401, "접속 주소가 맞지 않습니다", "주소의 접속 키가 다르거나 바뀌었습니다. 대시보드를 설치한 곳에서 새 주소를 받아 열어 주세요.", home=False)
                 return
             cookie = f"{COOKIE}={self.token}; HttpOnly; SameSite=Strict; Path=/"
             self._send(303, b"", "text/plain", {"Location": parsed.path or "/", "Set-Cookie": cookie})
             return
         if not self._tokenless() and not self._cookie_ok():
-            self._text(401, "authentication required — open the URL with ?t=<token> once")
+            self._page(401, "로그인이 필요합니다", "처음 한 번은 설치할 때 받은 접속 주소로 열어야 합니다. 그 뒤로는 이 브라우저가 기억합니다.", home=False)
             return
         parts = [unquote(part) for part in parsed.path.split("/") if part]
         if not parts:
@@ -136,39 +144,34 @@ class _Handler(BaseHTTPRequestHandler):
         elif parts[0] == "source" and len(parts) == 5 and parts[3] == "attachment":
             self._attachment(parts[1], parts[2], parts[4])
         else:
-            self._text(404, "not found")
+            self._page(404, "찾는 화면이 없습니다", "주소가 바뀌었거나 없는 화면입니다.")
 
     def _dashboard(self) -> None:
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
-        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token)
+        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand)
         self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _source(self, kind: str, source_id: str) -> None:
         text = self.read_source(kind, source_id) if self.store.approved_attachments(kind, source_id) is not None else None
         if text is None:
-            self._text(404, "source not found")
+            self._page(404, "원문을 찾을 수 없습니다", "승인된 근거가 아니거나 원문이 더는 보관되어 있지 않습니다.")
             return
-        page = (
-            '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1"><title>원문</title>'
-            "<style>body{font:15px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;"
-            "margin:0 auto;max-width:900px;padding:16px;background:#f5f5f7;color:#1d1d1f}"
-            "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;padding:16px;border-radius:12px}"
-            "</style></head><body><p><a href=\"/\">← 대시보드</a></p>"
-            f"<pre>{escape(text)}</pre></body></html>"
+        body = (
+            f'<main class="reader"><a class="back" href="/#sources">{icon("chevron-left")}근거 목록</a>'
+            f'<div class="card"><pre>{escape(text)}</pre></div></main>'
         )
-        self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+        self._send(200, page_shell("원문", body, self.brand).encode("utf-8"), "text/html; charset=utf-8")
 
     def _attachment(self, kind: str, source_id: str, name: str) -> None:
         if "/" in name or "\\" in name or ".." in name or not name:
-            self._text(404, "attachment not found")
+            self._page(404, "첨부 파일을 찾을 수 없습니다", "승인된 근거의 첨부가 아니거나 파일이 더는 보관되어 있지 않습니다.")
             return
         if name not in (self.store.approved_attachments(kind, source_id) or ()):
-            self._text(404, "attachment not found")
+            self._page(404, "첨부 파일을 찾을 수 없습니다", "승인된 근거의 첨부가 아니거나 파일이 더는 보관되어 있지 않습니다.")
             return
         path = self.attachment_path(kind, source_id, name)
         if path is None or not path.is_file():
-            self._text(404, "attachment not found")
+            self._page(404, "첨부 파일을 찾을 수 없습니다", "승인된 근거의 첨부가 아니거나 파일이 더는 보관되어 있지 않습니다.")
             return
         data = path.read_bytes()
         disposition = f"attachment; filename*=UTF-8''{quote(name, safe='')}"
@@ -273,6 +276,7 @@ def make_server(
     tailnet_origins: tuple[str, ...] = (),
     tailnet_logins: tuple[str, ...] = (),
     tailnet_token: bool = False,
+    brand: str = DEFAULT_BRAND,
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -293,6 +297,7 @@ def make_server(
             "tailnet_origins": frozenset(o.lower() for o in tailnet_origins),
             "tailnet_logins": frozenset(x.lower() for x in tailnet_logins),
             "tailnet_token": tailnet_token,
+            "brand": brand or DEFAULT_BRAND,
         },
     )
     server = ThreadingHTTPServer((host, port), handler)

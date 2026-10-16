@@ -19,7 +19,7 @@ from typing import Final
 from . import minutes
 from .analysis import analyze
 from .board_store import BoardStore, task_key_of, utc_stamp
-from .config import BoardConfig, state_root
+from .config import DEFAULT_BRAND, BoardConfig, load_config, state_root
 from .dashboard import render_dashboard
 from .llm import LlmConfig, LlmProvider
 from .models import (
@@ -108,9 +108,17 @@ def open_and_pending(board: Board, limit: int = 40) -> tuple[str, ...]:
     return (*board.store.open_todo_lines(limit), *pending[:limit])
 
 
+def configured_brand() -> str:
+    """The configured product name; an unreadable config keeps the default name rather than failing a rebuild."""
+    try:
+        return load_config().brand
+    except ProjectBoardError:
+        return DEFAULT_BRAND
+
+
 def rebuild_dashboard(board: Board, *, today: date, now: datetime | None = None) -> Path:
     snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now)
-    atomic_write(board.dashboard_path, render_dashboard(snapshot, mode="file"))
+    atomic_write(board.dashboard_path, render_dashboard(snapshot, mode="file", brand=configured_brand()))
     return board.dashboard_path
 
 
@@ -351,7 +359,7 @@ def digest_snapshot(board: Board, *, today: date, now: datetime | None = None) -
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
     path = board.root / "digests" / f"project-dashboard-{today.isoformat()}-{stamp}.html"
     snapshot = board.store.snapshot(today=today, pending=pending_views(board), now=now, exported=True)
-    atomic_write(path, render_dashboard(snapshot, mode="file"))
+    atomic_write(path, render_dashboard(snapshot, mode="file", brand=configured_brand()))
     return path
 
 
