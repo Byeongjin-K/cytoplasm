@@ -16,7 +16,9 @@
 //   SB_PROJECT_WINDOWS optional regex for aoe_ window names that are project windows (default: none)
 //
 // Privacy: lane keys and titles, session prompts and paths never reach the output. The output keeps only
-// dept/theme labels from the rules file, statuses, times, durations and counts.
+// dept/theme labels from the rules file, statuses, times, durations and counts, and for a lane that waits or is stuck
+// one short reason this file reduces from the lane's latest pause note (see waitReason): Korean notes lose
+// parentheses, links, paths, ids and hashes; English notes become a fixed Korean phrase plus a version or question number.
 
 import { existsSync } from 'node:fs';
 
@@ -36,24 +38,88 @@ for (const dir of env('SB_LANE_DIRS').split(':')) {
   }
 }
 const rules = JSON.parse(await Bun.file(env('SB_LANE_RULES')).text()).map(([re, dept, theme]) => [new RegExp(re), dept, theme]);
-const ST = { closed: 'done', 'done-claimed': 'review', open: 'run', paused: 'hold', 'not-done': 'fail' };
+const ST = { closed: 'done', 'done-claimed': 'review', open: 'run', paused: 'wait', 'not-done': 'fail' };
+// dori marks a working lane's agent that stopped for a person: an error, a prompt waiting for input, an open question.
+// idle is left out: a lane that ended its turn to wait on its own watch is still working.
+const BLOCKED = { error: '작업 창이 오류로 멈췄습니다', waiting: '작업 창이 입력을 기다리며 멈췄습니다', question: '작업 창이 질문의 답을 기다리며 멈췄습니다' };
+const liveSessions = new Set((await Bun.$`tmux ls -F ${'#{session_name}'}`.nothrow().quiet().text()).trim().split('\n').filter(Boolean));
 let unknown = 0;
 const lanes = [...raw.values()]
   .filter(l => Date.parse(l.openedAt) <= NOW)
   .map(l => {
     const closed = l.closedAt && Date.parse(l.closedAt) <= NOW ? Date.parse(l.closedAt) : null;
     // Closed after the frozen "now": it was still running then.
-    const st = l.closedAt && !closed ? 'run' : (ST[l.status ?? 'open'] ?? 'run');
-    return { key: l.key, start: Date.parse(l.openedAt), end: closed, st };
+    let st = l.closedAt && !closed ? 'run' : (ST[l.status ?? 'open'] ?? 'run');
+    const out = { key: l.key, start: Date.parse(l.openedAt), end: closed, st };
+    if (closed) return out;
+    const history = (l.history ?? []).filter(h => Date.parse(h.at) <= NOW);
+    if (st === 'wait') {
+      const paused = history.findLast(h => h.status === 'paused' && /^PAUSED:/.test(h.note ?? ''));
+      // a done claim made while parked waits on the lead's check, not on the reason it was parked for
+      if (l.claim && paused && l.claim.at >= paused.at) return { ...out, st: 'review' };
+      if (paused) Object.assign(out, { since: Date.parse(paused.at), ...waitReason(paused.note, Date.parse(paused.at)) });
+    } else if (st === 'run' || st === 'fail') {
+      const reason = BLOCKED[l.blocked] ?? (l.pane?.startsWith('aoe_') && liveSessions.size && !liveSessions.has(l.pane) ? '작업 창이 꺼졌습니다' : null);
+      if (reason) Object.assign(out, { st: 'block', why: reason });
+    }
+    return out;
   })
   .filter(l => l.end == null || l.end >= W0)
-  .map(l => {
-    const m = rules.find(([re]) => re.test(l.key));
+  .map(({ key, ...l }) => {
+    const m = rules.find(([re]) => re.test(key));
     return {
-      dept: m ? m[1] : 'etc', theme: m ? m[2] : `세션 ${++unknown}`, st: l.st, start: l.start, end: l.end,
+      dept: m ? m[1] : 'etc', theme: m ? m[2] : `세션 ${++unknown}`, ...l,
       dur: (l.end ?? NOW) - Math.max(l.start, W0), carried: l.start < W0,
     };
   });
+
+// The wait reason as one short line in plain Korean, and the time it names (epoch ms) when it names one in KST.
+// Nothing here is trusted to be clean: whatever is not plain words is dropped, never shortened.
+function waitReason(note, at) {
+  let s = note.replace(/^PAUSED:\s*/, '');
+  const until = scheduledAt(s, at);
+  if (until) s = s.replace(until.text, ' ');
+  s = s.replace(/[(（][^()（）]*[)）]/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ').replace(/\S+@\S+/g, ' ')
+    .replace(/(^|\s)[~.]?\/\S*/g, ' ').replace(/\S*\/\S*\/\S*/g, ' ')
+    .replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/gi, ' ').replace(/\d{6,}/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const hangul = (s.match(/[가-힣]/g) ?? []).length, latin = (s.match(/[A-Za-z]/g) ?? []).length;
+  let why;
+  if (hangul >= 4 || (hangul && hangul >= latin)) why = s.replace(/^[\s,;:·]+|[\s,;:·]+$/g, '');
+  else {
+    const ver = s.match(/\bv\d+\.\d+(?:\.\d+)?\b/)?.[0], q = s.match(/\bQ\d+\b/)?.[0];
+    if (/owner\s+stop|stopped by (the )?owner/i.test(s)) why = '소유자 지시로 보류';
+    else if (/✅|approv/i.test(s)) why = `소유자 승인(✅) 대기${ver ? `, ${ver} 릴리스 카드` : ''}`;
+    else if (q || /owner\s+(pick|direction|decision|choice|answer|review)/i.test(s)) why = `소유자 결정 대기${q ? `, 질문 ${q}` : ''}`;
+    else if (/owner|형/i.test(s)) why = '소유자 확인 대기';
+    else why = until ? '예정된 시각 대기' : '다음 단계 대기';
+  }
+  if (why.length > 70) why = why.slice(0, 70).replace(/\s+\S*$/, '');
+  return { why, until: until?.at ?? null };
+}
+
+// "10/17 08:06 KST", "10월 17일 08:06", "~00:15 KST" / "until 12:00 KST" / "12:00 KST까지" (the next such time after the note
+// was written); KST is UTC+9. A bare clock time or a date before the note is an event that already happened
+// ("owner stop 10:25 KST"), not what the lane waits for.
+function scheduledAt(text, at) {
+  const day = new Date(at + KST);
+  const kst = (y, mo, d, h, mi) => Date.UTC(y, mo - 1, d, h, mi) - KST;
+  const ok = (mo, d, h, mi) => mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && h < 24 && mi < 60;
+  let m = text.match(/(\d{1,2})\s*\/\s*(\d{1,2})\s+~?(\d{1,2}):(\d{2})\s*KST/) ?? text.match(/(\d{1,2})월\s*(\d{1,2})일\s*~?(\d{1,2}):(\d{2})(?:\s*KST)?/);
+  if (m && ok(+m[1], +m[2], +m[3], +m[4])) {
+    let t = kst(day.getUTCFullYear(), +m[1], +m[2], +m[3], +m[4]);
+    if (t < at - 180 * 864e5) t = kst(day.getUTCFullYear() + 1, +m[1], +m[2], +m[3], +m[4]);
+    return t >= at - 60e3 ? { at: t, text: m[0] } : null;
+  }
+  m = text.match(/(?:~\s*|\b(?:until|by)\s+)(\d{1,2}):(\d{2})\s*KST/i) ?? text.match(/(\d{1,2}):(\d{2})\s*KST\s*(?:까지|예정)/);
+  if (m && ok(1, 1, +m[1], +m[2])) {
+    let t = kst(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), +m[1], +m[2]);
+    if (t < at) t += 864e5;
+    return { at: t, text: m[0] };
+  }
+  return null;
+}
 
 // ---- coding-agent sessions: Claude Code and Senpi JSONL transcripts, read incrementally.
 // The rules are the coding-agent-sessions finder's (created = first timestamp, updated = last, model = the first

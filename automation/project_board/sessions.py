@@ -17,7 +17,12 @@ from typing import Final, Literal
 SESSIONS_FILE: Final = "sessions.json"
 
 LANE_DEPTS: Final = ("ops", "assistant", "research", "web", "study", "infra", "etc")
-LANE_STATES: Final = ("done", "run", "review", "hold", "fail")
+# wait: parked on a person or a time (dori paused); block: its agent stopped on an error, a prompt or a closed window.
+# hold is the name older collectors gave to wait and is read as wait.
+LANE_STATES: Final = ("done", "run", "review", "wait", "block", "fail")
+_LEGACY_STATES: Final = {"hold": "wait"}
+# a lane's reason is one short line the collector already reduced to plain words; longer means it was not reduced
+WHY_MAX: Final = 80
 SERVICE_GROUPS: Final = ("watch", "web", "timer")
 WINDOW_KINDS: Final = ("lead", "lane", "proj")
 
@@ -31,6 +36,9 @@ class Lane:
     end: int | None
     dur: int
     carried: bool
+    why: str = ""
+    since: int | None = None
+    until: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +110,18 @@ def _text(row: dict[str, object], key: str, allowed: tuple[str, ...] = (), *, op
     return value
 
 
+def _state(row: dict[str, object]) -> str:
+    value = row.get("st")
+    return _text({"st": _LEGACY_STATES.get(value, value) if isinstance(value, str) else value}, "st", LANE_STATES)
+
+
+def _why(row: dict[str, object]) -> str:
+    value = _text(row, "why", optional=True)
+    if len(value) > WHY_MAX or any(ch < " " for ch in value):
+        raise _Bad("why")
+    return value
+
+
 def _rows(raw: dict[str, object], key: str) -> list[dict[str, object]]:
     rows = raw.get(key)
     if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
@@ -114,8 +134,8 @@ def parse_sessions(raw: object) -> Sessions:
     if not isinstance(raw, dict):
         raise _Bad("top level")
     lanes = tuple(
-        Lane(_text(r, "dept", LANE_DEPTS), _text(r, "theme"), _text(r, "st", LANE_STATES), _req(r, "start"),
-             _opt(r, "end"), _req(r, "dur"), r.get("carried") is True)
+        Lane(_text(r, "dept", LANE_DEPTS), _text(r, "theme"), _state(r), _req(r, "start"),
+             _opt(r, "end"), _req(r, "dur"), r.get("carried") is True, _why(r), _opt(r, "since"), _opt(r, "until"))
         for r in _rows(raw, "lanes")
     )
     agents = tuple(

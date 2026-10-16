@@ -36,7 +36,10 @@
    "start": 1791759600000,
    "end": null,
    "dur": 374400000,
-   "carried": false
+   "carried": false,
+   "why": "소유자 결정 대기, 질문 Q41",
+   "since": 1792116000000,
+   "until": 1792173600000
   },
   {
    "dept": "assistant",

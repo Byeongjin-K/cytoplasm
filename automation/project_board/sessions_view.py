@@ -7,6 +7,7 @@ each group is a fold whose heading already carries its count and status in words
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -23,14 +24,16 @@ STALE_MS: Final = 45 * 60_000
 _WEEKDAYS: Final = "월화수목금토일"
 
 # status key -> (words, badge class); the badge never relies on its colour alone
+# wait (a lane parked on a person or a time) is not a problem, so it is neutral; block and a service's hold are real stops
 _STATUS: Final = {
     "done": ("완료", "st-done"), "run": ("진행", "st-doing"), "review": ("확인 대기", "grade"),
-    "hold": ("멈춤", "d-soon"), "fail": ("미완", "d-over"), "live": ("가동 중", "st-doing"),
+    "wait": ("대기", "st-wait"), "block": ("막힘", "d-over"), "hold": ("멈춤", "d-soon"),
+    "fail": ("미완", "d-over"), "live": ("가동 중", "st-doing"),
     "ok": ("실패 없음", "st-done"), "warn": ("실패 있음", "d-soon"), "ended": ("종료", "st-open"),
     "unknown": ("기록 없음", "st-open"),
 }
-_WORST_FIRST: Final = ("fail", "hold", "warn", "run", "review", "live", "ok", "done", "ended", "unknown")
-_LANE_ORDER: Final = ("done", "run", "review", "hold", "fail")
+_WORST_FIRST: Final = ("block", "fail", "hold", "warn", "run", "review", "wait", "live", "ok", "done", "ended", "unknown")
+_LANE_ORDER: Final = ("done", "run", "review", "wait", "block", "fail")
 _PEAK: Final = ' class="peak"'
 
 _DEPTS: Final = (
@@ -66,6 +69,7 @@ class _Member:
     when: str
     foot: str
     tag: str
+    notes: tuple[tuple[str, str, str], ...] = ()  # (state, what, when) per waiting or blocked lane
 
 
 def _at(ms: int) -> datetime:
@@ -83,6 +87,13 @@ def _clock(ms: int) -> str:
 
 def _wk(ms: int) -> str:
     return _WEEKDAYS[_at(ms).weekday()]
+
+
+def _started(start: int, end: int | None) -> str:
+    """A lane group's first start (and last end once all ended), with no status word: the badge and the notes say that."""
+    if end is None:
+        return f"{_day(start)} {_clock(start)} 시작"
+    return _span(start, end)
 
 
 def _span(start: int, end: int | None) -> str:
@@ -124,20 +135,50 @@ def _lane_counts(states: Iterable[str]) -> str:
 
 def _badge(st: str) -> str:
     words, css = _STATUS[st]
-    return f'<span class="badge {css}">{words}</span>'
+    glyph = icon("clock") if st == "wait" else ""
+    return f'<span class="badge {css}">{glyph}{words}</span>'
 
 
-def _lane_members(lanes: list[Lane]) -> list[_Member]:
+# a reason is shown, never trusted: whatever slipped past the collector's reduction (a link, a long id) stays off the page
+_UNSAFE: Final = re.compile(r"https?://\S+|\S+@\S+|(?<![\w.])[~/]\S*/\S*|\d{6,}|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", re.I)
+
+
+# the line already starts with the word 대기, so a reason that says it again ("승인 대기") drops that word once
+_WAIT_WORD: Final = re.compile(r"\s*대기(?=[\s,.]|$)")
+
+
+def _plain(text: str) -> str:
+    return " ".join(_UNSAFE.sub(" ", text).split())
+
+
+def _note(lane: Lane, now: int) -> tuple[str, str, str]:
+    """What one waiting or blocked lane waits on, and when, as two short phrases."""
+    if lane.st == "block":
+        return "block", _plain(lane.why) or "작업이 멈췄습니다", ""
+    # how long it has waited is said here only: since is when the reason was written, i.e. when the lane was parked
+    when = []  # each phrase stays on one line on a phone (U+00A0); a line breaks only between phrases
+    if lane.since is not None:
+        when.append(f"{_day(lane.since)} {_clock(lane.since)}부터 대기".replace(" ", "\u00a0"))
+    if lane.until is not None:
+        when.append(f"{_day(lane.until)} {_clock(lane.until)} 예정".replace(" ", "\u00a0")
+                    + (", 시각\u00a0지남" if lane.until < now else ""))
+    what = _WAIT_WORD.sub("", _plain(lane.why), count=1).strip(" ,")
+    return "wait", what or "사유를 적지 않았습니다", ", ".join(when)
+
+
+def _lane_members(lanes: list[Lane], now: int) -> list[_Member]:
     themes: dict[str, list[Lane]] = {}
     for lane in lanes:
         themes.setdefault(lane.theme, []).append(lane)
     rows = sorted(themes.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-    return [
-        _Member(theme, f"{_n(len(g))}건", _worst(x.st for x in g), _lane_counts(x.st for x in g),
-                _span(min(x.start for x in g), None if any(x.end is None for x in g) else max(x.end or 0 for x in g)),
-                f"걸린 시간 합계 {_dur(sum(x.dur for x in g))}", "")
-        for theme, g in rows
-    ]
+    out = []
+    for theme, g in rows:
+        out.append(_Member(
+            theme, f"{_n(len(g))}건", _worst(x.st for x in g), _lane_counts(x.st for x in g),
+            _started(min(x.start for x in g), None if any(x.end is None for x in g) else max(x.end or 0 for x in g)),
+            f"걸린 시간 합계 {_dur(sum(x.dur for x in g))}", "",
+            tuple(_note(x, now) for x in sorted(g, key=lambda x: (x.st != "block", x.start)) if x.st in ("wait", "block"))))
+    return out
 
 
 def _agent_members(agents: list[Agent]) -> list[_Member]:
@@ -168,12 +209,23 @@ def _service_member(s: Service, w0: int) -> _Member:
     return _Member(s.label, f"{s.units}개", st, "", f"{_day(start)} {_clock(start)}부터 지금까지", foot, s.tag)
 
 
+def _notes(notes: tuple[tuple[str, str, str], ...]) -> str:
+    if not notes:
+        return ""
+    rows = "".join(
+        f'<li class="ss-note is-{st}">{icon("clock" if st == "wait" else "alert")}<span><b>{_STATUS[st][0]}</b> {escape(what)}'
+        + (f'<span class="ss-when">{escape(when)}</span>' if when else "") + "</span></li>"
+        for st, what, when in notes
+    )
+    return f'<ul class="ss-notes">{rows}</ul>'
+
+
 def _member(m: _Member) -> str:
     detail = f'<span class="muted">{escape(m.detail)}</span>' if m.detail else ""
     tag = f'<span class="ss-tag">{escape(m.tag)}</span>' if m.tag else ""
     return (
         f'<li class="ss-member"><div class="ss-mhead"><b>{escape(m.label)}</b><span class="ss-count">{escape(m.count)}</span></div>'
-        f'<div class="meta">{_badge(m.st)}{detail}{tag}</div>'
+        f'<div class="meta">{_badge(m.st)}{detail}{tag}</div>{_notes(m.notes)}'
         f'<p class="ss-line">{escape(m.when)}</p><p class="ss-line muted">{escape(m.foot)}</p></li>'
     )
 
@@ -229,7 +281,7 @@ def _freshness(data: Sessions, now_ms: int) -> str:
 def _board(data: Sessions, now_ms: int) -> str:
     lanes, agents, services = list(data.lanes), list(data.agents), list(data.services)
     lane_groups = [
-        _group(f"lane-{key}", name, glyph, f"{_n(len(g))}건", _lane_counts(x.st for x in g), _lane_members(g))
+        _group(f"lane-{key}", name, glyph, f"{_n(len(g))}건", _lane_counts(x.st for x in g), _lane_members(g, now_ms))
         for key, name, glyph in _DEPTS if (g := [x for x in lanes if x.dept == key])
     ]
     platforms = [p for p in _PLATFORMS if any(a.platform == p for a in agents)]
