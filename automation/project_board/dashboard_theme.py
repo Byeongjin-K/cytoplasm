@@ -56,6 +56,8 @@ header{position:sticky;top:0;z-index:10;background:var(--header);backdrop-filter
 .mark{width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;
 font-size:var(--t-md);font-weight:800}
 nav{display:flex;gap:var(--s1)}
+.fresh{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text-3);font-size:var(--t-sm);white-space:nowrap}
+.fresh.is-error{color:var(--danger);font-weight:600}
 nav a{display:flex;align-items:center;gap:6px;min-height:var(--hit);padding:0 var(--s3);border-radius:var(--r-md);color:var(--text-2);
 font-size:var(--t-md);font-weight:500;text-decoration:none;position:relative}
 nav a .ico{display:none}

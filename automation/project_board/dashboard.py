@@ -8,6 +8,7 @@ from outside: no fonts, no CDN, inline CSS and a few lines of inline script.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import defaultdict
 from collections.abc import Iterable
@@ -29,8 +30,9 @@ _STATUS_CLASS: Final = {"열림": "st-open", "진행": "st-doing", "완료": "st
 
 _SERVED_JS: Final = """
 (function(){
-  var token=document.querySelector('meta[name=pb-token]').content,live=document.getElementById('live');
+  var PB=window.PB=window.PB||{},token=document.querySelector('meta[name=pb-token]').content,live=document.getElementById('live');
   function say(text){if(live){live.textContent='';live.textContent=text;}}
+  PB.say=say;
   function post(path,body){
     return fetch(path,{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-PB-Token':token},
@@ -47,7 +49,16 @@ _SERVED_JS: Final = """
     if(!box){box=document.createElement('span');box.className='row-error';box.setAttribute('role','alert');after.parentNode.appendChild(box);}
     box.textContent=text;
   }
-  document.querySelectorAll('input[data-todo]').forEach(function(box){
+  var dialog=document.getElementById('archive-dialog'),pending=null;
+  function send(b){
+    var on=b.dataset.archive==='1',name=b.dataset.archiveProject;
+    b.disabled=true;
+    return post('/project/'+encodeURIComponent(name),'archived='+(on?'1':'0')).then(function(){
+      location.hash=on?'archive':'project/'+encodeURIComponent(name);location.reload();
+    }).catch(function(error){b.disabled=false;throw error;});
+  }
+  PB.bind=function(root){
+  root.querySelectorAll('input[data-todo]').forEach(function(box){
     box.addEventListener('change',function(){
       var li=box.closest('li'),main=li.querySelector('.todo-main'),old=li.querySelector('.row-error');
       if(old){old.remove();}
@@ -58,15 +69,7 @@ _SERVED_JS: Final = """
           note(main.lastElementChild,why(error));say(why(error));});
     });
   });
-  var dialog=document.getElementById('archive-dialog'),pending=null;
-  function send(b){
-    var on=b.dataset.archive==='1',name=b.dataset.archiveProject;
-    b.disabled=true;
-    return post('/project/'+encodeURIComponent(name),'archived='+(on?'1':'0')).then(function(){
-      location.hash=on?'archive':'project/'+encodeURIComponent(name);location.reload();
-    }).catch(function(error){b.disabled=false;throw error;});
-  }
-  document.querySelectorAll('button[data-archive]').forEach(function(b){
+  root.querySelectorAll('button[data-archive]').forEach(function(b){
     b.addEventListener('click',function(){
       if(b.dataset.archive!=='1'||!dialog||!dialog.showModal){
         send(b).catch(function(error){note(b,why(error));say(why(error));});return;
@@ -77,6 +80,8 @@ _SERVED_JS: Final = """
       dialog.showModal();
     });
   });
+  };
+  PB.bind(document);
   if(dialog){
     dialog.querySelector('[data-confirm]').addEventListener('click',function(event){
       event.preventDefault();if(!pending){return;}
@@ -89,20 +94,22 @@ _SERVED_JS: Final = """
 
 _FOLD_JS: Final = """
 (function(){
-  var key='pb-fold:';
-  document.querySelectorAll('details[data-fold]').forEach(function(d){
+  var key='pb-fold:',PB=window.PB=window.PB||{};
+  PB.fold=function(root){
+  root.querySelectorAll('details[data-fold]').forEach(function(d){
     try{if(localStorage.getItem(key+d.dataset.fold)==='0'){d.open=false;}}catch(e){}
     d.addEventListener('toggle',function(){
       try{if(d.open){localStorage.removeItem(key+d.dataset.fold);}else{localStorage.setItem(key+d.dataset.fold,'0');}}catch(e){}
     });
   });
+  };
+  PB.fold(document);
 })();
 """
 
 _TABS_JS: Final = """
 (function(){
-  var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
-      names=[].map.call(links,function(a){return a.dataset.tab;}),title=document.title,sticky='';
+  var PB=window.PB=window.PB||{},title=document.title,sticky='';
   function dec(s){try{return decodeURIComponent(s);}catch(e){return '';}}
   function parse(hash){
     var q=hash.indexOf('?p=');
@@ -117,9 +124,12 @@ _TABS_JS: Final = """
     [].forEach.call(sel.options,function(o){if(o.dataset.p===proj){sel.value=o.value;}});
     return proj;
   }
-  document.querySelectorAll('select[data-picker]').forEach(function(sel){
-    sel.addEventListener('change',function(){location.hash=sel.value;});
-  });
+  PB.pickers=function(root){
+    root.querySelectorAll('select[data-picker]').forEach(function(sel){
+      sel.addEventListener('change',function(){location.hash=sel.value;});
+    });
+  };
+  PB.pickers(document);
   function filterSchedule(proj){
     var panel=document.getElementById('schedule');if(!panel){return;}
     proj=pick(panel,proj);var any=false,chosen=proj;
@@ -137,7 +147,9 @@ _TABS_JS: Final = """
     document.dispatchEvent(new Event('pb-project'));
     return chosen;
   }
-  function show(){
+  function show(keep){
+    var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
+        names=[].map.call(links,function(a){return a.dataset.tab;});
     var hash=location.hash.slice(1),r=parse(hash),tab=r.tab,page=null;
     if(tab==='project'){
       panels.forEach(function(s){if(s.dataset.tab==='project'&&s.dataset.project===r.proj){page=s;}});
@@ -152,12 +164,175 @@ _TABS_JS: Final = """
     links.forEach(function(a){var n=a.dataset.tab;if(n==='todos'||n==='schedule'){
       a.setAttribute('href','#'+n+(sticky?'?p='+encodeURIComponent(sticky):''));}});
     document.title=page?r.proj+' · '+title:title;
+    if(keep===true){return;}
     var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash);
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
   }
+  PB.show=show;
   window.addEventListener('hashchange',show);show();
 })();
 """
+
+_REFRESH_JS: Final = """
+(function(){
+  var PB=window.PB=window.PB||{},main=document.getElementById('main'),EVERY=120000,FLOOR=15000,DAY=86400000,KST=32400000,
+      badge=document.getElementById('pb-fresh'),meta=document.querySelector('meta[name=pb-etag]'),WEEK='월화수목금토일',
+      tag=meta?meta.content:'',timer=0,ticker=0,last=Date.now(),checked=Date.now(),fault='',held=null,waiting=false,busyFetch=false;
+  function keyOf(n){
+    if(n.dataset&&n.dataset.tab==='project'){return 'p:'+n.dataset.project;}
+    return n.id||(n.classList.contains('onboard')?'onboard':n.tagName);
+  }
+  function norm(n){var c=n.cloneNode(true);c.querySelectorAll('[data-live]').forEach(function(e){e.textContent='';});return c.outerHTML;}
+  var base={};[].forEach.call(main.children,function(n){base[keyOf(n)]=norm(n);});
+  var nav=document.querySelector('header nav'),navBase=nav?norm(nav):'';
+  function kday(ms){return Math.floor((ms+KST)/DAY);}
+  function md(ms){var d=new Date(ms+KST);return (d.getUTCMonth()+1)+'월\u00a0'+d.getUTCDate()+'일\u2060('+WEEK[(d.getUTCDay()+6)%7]+')';}
+  function dur(ms){
+    var m=Math.round(ms/60000);if(m<60){return m+'분';}
+    var h=Math.floor(m/60),r=m%60;if(h<48){return r?h+'시간 '+r+'분':h+'시간';}
+    var d=Math.floor(h/24);h=h%24;return h?d+'일 '+h+'시간':d+'일';
+  }
+  function ago(ms,now){
+    var m=Math.floor((now-ms)/60000);if(m<1){return '방금';}if(m<60){return m+'분 전';}
+    if(m<1440){return Math.floor(m/60)+'시간 전';}
+    var d=kday(now)-kday(ms);return d===1?'어제':d<7?d+'일 전':md(ms);
+  }
+  function when(v){var n=Number(v);return isNaN(n)?Date.parse(v):n;}
+  function tick(){
+    var now=Date.now();
+    document.querySelectorAll('[data-ago]').forEach(function(e){
+      var t=when(e.dataset.ago);if(isNaN(t)){return;}
+      var text=e.dataset.agoUnit==='dur'?dur(Math.max(0,now-t)):ago(t,now);
+      if(e.textContent!==text){e.textContent=text;}
+    });
+    if(badge){
+      var a=ago(checked,now),text=fault||(a==='방금'?'방금 갱신':a+' 갱신');
+      if(badge.textContent!==text){badge.textContent=text;}
+      badge.classList.toggle('is-error',!!fault);
+    }
+  }
+  var WORDS={
+    auth:['다시 로그인 필요','로그인이 만료되어 화면을 새로 받지 못했습니다. 대시보드를 다시 열어 주세요.'],
+    net:['연결 끊김 · 다시 시도','연결이 끊겨 화면을 새로 받지 못했습니다. 2분 뒤 다시 시도합니다.'],
+    http:['갱신 실패 · 다시 시도','화면을 새로 받지 못했습니다. 2분 뒤 다시 시도합니다.']
+  };
+  function fail(kind){
+    var w=WORDS[kind]||WORDS.http,first=fault!==w[0];fault=w[0];
+    if(badge){badge.title=w[1];}if(first&&PB.say){PB.say(w[1]);}tick();
+  }
+  function ok(){
+    checked=Date.now();if(fault&&PB.say){PB.say('화면을 다시 최신으로 받았습니다.');}fault='';
+    if(badge){badge.title='2분마다 바뀐 내용만 새로 받습니다';}tick();
+  }
+  function visible(e){return e.getClientRects().length>0;}
+  function sel(e){return e.id?'#'+CSS.escape(e.id):'details[data-fold=\"'+CSS.escape(e.dataset.fold)+'\"]';}
+  function pin(){
+    var y=window.scrollY;if(y<=0){return null;}
+    var list=main.querySelectorAll('[id],details[data-fold]');
+    for(var i=0;i<list.length;i++){
+      var e=list[i];if(!visible(e)){continue;}
+      var t=e.getBoundingClientRect().top;if(t>=0){return {s:sel(e),t:t,y:y};}
+    }
+    return {s:'',t:0,y:y};
+  }
+  function restore(m){
+    if(!m){return;}
+    var e=null;
+    if(m.s){[].some.call(main.querySelectorAll(m.s),function(x){if(visible(x)){e=x;return true;}return false;});}
+    if(e){window.scrollBy(0,e.getBoundingClientRect().top-m.t);}else{window.scrollTo(0,m.y);}
+  }
+  function wire(node){['fold','pickers','bind','filterBind'].forEach(function(n){if(PB[n]){PB[n](node);}});}
+  function folds(root){
+    var out=[],i=0;
+    root.querySelectorAll('details').forEach(function(d){out.push([d.dataset.fold?'f:'+d.dataset.fold:'i:'+(i++),d]);});
+    return out;
+  }
+  function carry(old,node){
+    wire(node);
+    var open={};folds(old).forEach(function(p){open[p[0]]=p[1].open;});
+    folds(node).forEach(function(p){if(p[0] in open&&p[1].open!==open[p[0]]){p[1].open=open[p[0]];}});
+    old.querySelectorAll('input[id],select[id],textarea[id]').forEach(function(e){
+      if(e.type==='checkbox'){return;}
+      var n=node.querySelector('#'+CSS.escape(e.id));if(n&&n.value!==e.value){n.value=e.value;}
+    });
+  }
+  function topOf(e){while(e&&e.parentNode!==main){e=e.parentNode;}return e;}
+  function apply(){
+    if(!held){return;}
+    var doc=held.doc,next=[].map.call(doc.getElementById('main').children,function(n){return {k:keyOf(n),n:n,s:norm(n)};});
+    var f=document.activeElement,typing=f&&main.contains(f)&&/^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName)&&f.type!=='checkbox';
+    var top=typing?topOf(f):null;
+    if(top&&next.some(function(p){return p.k===keyOf(top)&&p.s!==base[p.k];})){
+      if(!waiting){waiting=true;f.addEventListener('blur',function(){waiting=false;setTimeout(apply,0);},{once:true});}
+      return;
+    }
+    var mark=pin(),olds={},prev=null,changed=0;
+    [].forEach.call(main.children,function(n){olds[keyOf(n)]=n;});
+    next.forEach(function(p){
+      var old=olds[p.k],node=old;
+      if(!old||base[p.k]!==p.s){node=document.importNode(p.n,true);changed++;}
+      var at=prev?prev.nextSibling:main.firstChild;
+      if(node!==at){main.insertBefore(node,at);}
+      if(old&&node!==old){carry(old,node);old.remove();}else if(!old){wire(node);}
+      delete olds[p.k];base[p.k]=p.s;prev=node;
+    });
+    Object.keys(olds).forEach(function(k){olds[k].remove();delete base[k];changed++;});
+    var nn=doc.querySelector('header nav');
+    if(nav&&nn){var s=norm(nn);if(s!==navBase){nav.innerHTML=nn.innerHTML;navBase=s;changed++;}}
+    var foot=document.querySelector('body>footer'),nf=doc.querySelector('body>footer');
+    if(foot&&nf&&foot.innerHTML!==nf.innerHTML){foot.innerHTML=nf.innerHTML;}
+    tag=held.tag||tag;held=null;
+    if(changed){if(PB.show){PB.show(true);}if(PB.filter){PB.filter();}restore(mark);}
+    tick();
+  }
+  function busy(){
+    var d=document.getElementById('archive-dialog');
+    return busyFetch||waiting||(d&&d.open)||!!document.querySelector('main li.saving,main button[data-archive]:disabled');
+  }
+  function schedule(ms){clearTimeout(timer);timer=0;if(!document.hidden){timer=setTimeout(check,ms);}}
+  function check(){
+    timer=0;
+    if(document.hidden){return;}
+    if(busy()){schedule(EVERY);return;}
+    last=Date.now();busyFetch=true;
+    var head={'Accept':'text/html'};if(tag){head['If-None-Match']=tag;}
+    fetch(location.pathname,{credentials:'same-origin',cache:'no-store',headers:head}).then(function(r){
+      if(r.status===304){ok();return;}
+      if(r.status===401||r.status===403){throw new Error('auth');}
+      if(!r.ok){throw new Error('http');}
+      var next=r.headers.get('ETag')||'';
+      return r.text().then(function(html){
+        var doc=new DOMParser().parseFromString(html,'text/html');
+        if(!doc.getElementById('main')){throw new Error('http');}
+        held={doc:doc,tag:next};apply();ok();
+      });
+    },function(){throw new Error('net');}).catch(function(e){fail(e&&e.message);}).then(function(){
+      busyFetch=false;schedule(EVERY);
+    });
+  }
+  function start(){clearInterval(ticker);ticker=setInterval(tick,30000);}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){clearTimeout(timer);timer=0;clearInterval(ticker);ticker=0;return;}
+    tick();start();var gap=Date.now()-last;schedule(gap>=FLOOR?0:FLOOR-gap);
+  });
+  PB.refresh=check;
+  if(!document.hidden){start();schedule(EVERY);}
+})();
+"""
+
+_LIVE_TEXT: Final = re.compile(r"(<(span|time)\b[^>]*\bdata-live\b[^>]*>)[^<]*(</\2>)")
+_ETAG_META: Final = '<meta name="pb-etag" content="">'
+
+
+def stamp_etag(page: str) -> tuple[str, str]:
+    """The page's ETag and the page carrying it in ``meta[name=pb-etag]``.
+
+    Text the open page keeps current by itself (``data-live``: relative times, the generation stamp) is left
+    out, so the tag changes only when what the screen shows changes and an unchanged poll costs a 304.
+    """
+    digest = hashlib.sha256(_LIVE_TEXT.sub(r"\1\3", page).encode("utf-8")).hexdigest()[:32]
+    etag = f'"{digest}"'
+    return etag, page.replace(_ETAG_META, f'<meta name="pb-etag" content="{escape(etag, quote=True)}">', 1)
 
 TABS: Final = (
     ("summary", "요약"), ("projects", "프로젝트"), ("todos", "할 일"), ("schedule", "일정"), ("sources", "근거"),
@@ -173,10 +348,11 @@ EMPTY_SECTION: Final = (
 
 _FILTER_JS: Final = """
 (function(){
-  var q=document.getElementById('todo-q'),s=document.getElementById('todo-s'),
-      c=document.getElementById('todo-count'),rows=document.querySelectorAll('#todos ul.todos li');
+  var PB=window.PB=window.PB||{};
   function apply(){
-    var text=q.value.trim().toLowerCase(),want=s.value,proj=document.body.dataset.project||'',shown=0,total=0;
+    var q=document.getElementById('todo-q'),s=document.getElementById('todo-s'),c=document.getElementById('todo-count');
+    if(!q||!s||!c){return;}
+    var rows=document.querySelectorAll('#todos ul.todos li'),text=q.value.trim().toLowerCase(),want=s.value,proj=document.body.dataset.project||'',shown=0,total=0;
     rows.forEach(function(li){
       var mine=!proj||li.dataset.project===proj;if(mine){total++;}
       var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.toLowerCase().indexOf(text)>=0);
@@ -187,7 +363,12 @@ _FILTER_JS: Final = """
     });
     c.textContent=total+'건 중 '+shown+'건';
   }
-  q.addEventListener('input',apply);s.addEventListener('change',apply);
+  PB.filter=apply;
+  PB.filterBind=function(root){
+    var q=root.querySelector('#todo-q'),s=root.querySelector('#todo-s');
+    if(q){q.addEventListener('input',apply);}if(s){s.addEventListener('change',apply);}
+  };
+  PB.filterBind(document);
   document.addEventListener('pb-project',apply);apply();
 })();
 """
@@ -652,7 +833,7 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
 
     def row(e: EventRow) -> str:
         return (
-            f'<li><time datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
+            f'<li><time data-live data-ago="{escape(e.at, quote=True)}" datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
             f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><b>{escape(e.project)}</b> · "
             f"{_event_text(e, titles)}{who(e)}</div></li>"
         )
@@ -778,11 +959,14 @@ def render_dashboard(
         events=tuple(e for e in full.events if e.project not in hidden),
         pending=tuple(p for p in full.pending if p.project not in hidden),
     )
-    fresh = _fresh_in_shelf(full, shelf)
+    new_in_shelf = _fresh_in_shelf(full, shelf)
     now_ms = int((now or datetime.now(UTC)).timestamp() * 1000)
     empty = ONBOARDING if not snapshot.todos and not snapshot.pending else ""
-    meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">' if mode == "served" else ""
-    scripts = _FOLD_JS + _TABS_JS + (_FILTER_JS if snapshot.todos else "") + (_SERVED_JS if mode == "served" else "")
+    served = mode == "served"
+    meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">{_ETAG_META}' if served else ""
+    # the refresh script runs first: it notes the page as the server sent it, before the others change it
+    scripts = (_REFRESH_JS if served else "") + _FOLD_JS + _TABS_JS + _FILTER_JS + (_SERVED_JS if served else "")
+    fresh = '<span id="pb-fresh" class="fresh" title="2분마다 바뀐 내용만 새로 받습니다">방금 갱신</span>' if served else ""
     pages = "".join(
         _project_page(i, view, full, mode, today, archived=view in shelf)
         for i, view in enumerate(snapshot.projects + shelf, 1)
@@ -795,12 +979,12 @@ def render_dashboard(
         f"<style>{CSS}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
-        f'<nav aria-label="화면">{_nav(shelf, fresh)}</nav></div></header><main id="main">'
+        f'<nav aria-label="화면">{_nav(shelf, new_in_shelf)}</nav>{fresh}</div></header><main id="main">'
         f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today)}"
-        f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, fresh)}"
+        f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
         f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
-        f'<span aria-hidden="true">·</span><span>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
+        f'<span aria-hidden="true">·</span><span data-live>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"
         '<div id="live" class="sr-only" role="status" aria-live="polite"></div>'
         f"<script>{scripts}</script></body></html>"

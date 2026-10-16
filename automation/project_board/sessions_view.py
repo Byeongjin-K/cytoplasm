@@ -217,10 +217,12 @@ def _bars(title: str, unit: str, days: list[int], values: list[int], peak: int) 
 
 def _freshness(data: Sessions, now_ms: int) -> str:
     age = max(0, now_ms - data.now)
-    line = f'<p class="note ss-fresh">{icon("clock")}{_day(data.now)} {_clock(data.now)} 기준, {_dur(age)} 전에 받은 집계입니다</p>'
+    # the open page keeps the age current itself (data-ago); data-live keeps it out of the page's ETag
+    since = f'<span data-live data-ago="{data.now}" data-ago-unit="dur">{_dur(age)}</span>'
+    line = f'<p class="note ss-fresh">{icon("clock")}{_day(data.now)} {_clock(data.now)} 기준, {since} 전에 받은 집계입니다</p>'
     if age <= STALE_MS:
         return line
-    return line + (f'<div class="callout">{icon("alert")}<div><b>세션 집계가 {_dur(age)} 동안 새로 오지 않았습니다</b>'
+    return line + (f'<div class="callout">{icon("alert")}<div><b>세션 집계가 {since} 동안 새로 오지 않았습니다</b>'
                    '<p class="note">작업 컴퓨터가 꺼져 있거나 전송이 멈췄을 수 있습니다. 아래 숫자는 마지막으로 받은 집계입니다.</p></div></div>')
 
 
