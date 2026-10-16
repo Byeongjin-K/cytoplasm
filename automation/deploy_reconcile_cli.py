@@ -44,7 +44,8 @@ from automation.release_rollback import (
     ReleaseTransition,
     apply_release_update,
 )
-from automation.update_trust import UpdateTrustError, resolve_signed_update
+from automation.update_trust import TrustedUpdate, UpdateTrustError, resolve_signed_update
+from automation.update_trust_stale import StaleTrustKey, find_stale_trust_key
 from automation.update_trust_state import release_floor_path
 
 #: The ONLY privileged command this tick may run. No arguments: the helper resolves
@@ -121,8 +122,17 @@ def candidate_update_sha(update_channel: str | None = None) -> str:
         remote_url=update_channel,
         floor_path=RELEASE_FLOOR,
     )
-    observe_stale_trust_key(update)
+    observe_stale_trust_key(_stale_trust_key(update, update_channel))
     return update.commit_sha
+
+
+def _stale_trust_key(update: TrustedUpdate, update_channel: str | None) -> StaleTrustKey | None:
+    """Observation only: a remote we cannot read again this tick is no warning and no block."""
+    try:
+        return find_stale_trust_key(MIRROR, update, remote_url=update_channel)
+    except UpdateTrustError as error:
+        print(f"[deploy-reconcile] UPDATE-TRUST-STALE-UNKNOWN {error}", file=sys.stderr)
+        return None
 
 
 def run_converge(command: Sequence[str] | None = None) -> int:

@@ -5,13 +5,11 @@ from pathlib import Path
 import pytest
 
 from automation.deploy_reconcile_trust import observe_stale_trust_key
-from automation.update_trust import StaleTrustKey, TrustedUpdate
-
-_SHA = "a" * 40
+from automation.update_trust_stale import StaleTrustKey
 
 
-def _stale(tag: str = "v1.40.0", signer: str = "SHA256:new") -> TrustedUpdate:
-    return TrustedUpdate("v1.22.2", _SHA, StaleTrustKey(tag, "BAD-SIGNATURE", signer))
+def _stale(tag: str = "v1.40.0", signer: str = "SHA256:new") -> StaleTrustKey:
+    return StaleTrustKey("v1.22.2", tag, "BAD-SIGNATURE", signer)
 
 
 class _Notify:
@@ -19,7 +17,7 @@ class _Notify:
         self.delivered = delivered
         self.sent: list[str] = []
 
-    def __call__(self, update: TrustedUpdate, warning: str) -> bool:
+    def __call__(self, stale: StaleTrustKey, warning: str) -> bool:
         self.sent.append(warning)
         return self.delivered
 
@@ -70,7 +68,7 @@ def test_stale_key_when_the_node_catches_up_then_forgets_so_the_next_rotation_al
     observe_stale_trust_key(_stale(), path=path, notify=notify)
     _ = capsys.readouterr()
 
-    observe_stale_trust_key(TrustedUpdate("v1.40.0", _SHA), path=path, notify=notify)
+    observe_stale_trust_key(None, path=path, notify=notify)
     observe_stale_trust_key(_stale(), path=path, notify=notify)
 
     assert len(notify.sent) == 2

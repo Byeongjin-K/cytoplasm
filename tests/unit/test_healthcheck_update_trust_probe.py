@@ -72,6 +72,8 @@ def _record_probe_argv(tmp_path: Path, private_root: Path) -> list[str]:
         "\n".join(
             (
                 "#!/usr/bin/env bash",
+                # The stale-key check runs after the verifier; record the verifier only.
+                'case "$1" in *update_trust_stale.py) exit 0;; esac',
                 f'printf "%s\\n" "$@" > "{recorder}"',
                 "exit 0",
                 "",
@@ -156,14 +158,15 @@ def test_update_trust_probe_fails_closed_when_the_floor_cannot_be_resolved(
 def test_update_trust_probe_when_a_newer_release_fails_the_trust_key_then_fails_with_the_reason(
     tmp_path: Path,
 ) -> None:
-    # Given: the verifier resolves an older release (rc 0) but names a stale trust key.
+    # Given: the verifier resolves an older release (rc 0) and the stale check names a stale key.
     fake_python = tmp_path / "python3"
     script = "\n".join(
         (
             "#!/usr/bin/env bash",
-            f"printf '{'a' * 40}\\n'",
-            "printf 'UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: v1.40.0 SHA256:new\\n' >&2",
-            "exit 0",
+            'case "$1" in',
+            "  *update_trust_stale.py) printf 'UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요: v1.40.0 SHA256:new\\n' >&2; exit 3;;",
+            f"  *) printf '{'a' * 40}\\n'; exit 0;;",
+            "esac",
             "",
         )
     )
@@ -175,6 +178,7 @@ def test_update_trust_probe_when_a_newer_release_fails_the_trust_key_then_fails_
         f'source "{PROBE}"; '
         f'UPDATE_TRUST_PYTHON="{fake_python}" '
         f'UPDATE_TRUST_SCRIPT="{tmp_path / "update_trust.py"}" '
+        f'UPDATE_TRUST_STALE_SCRIPT="{tmp_path / "update_trust_stale.py"}" '
         f'probe_update_trust ignored ignored "{mirror}"'
     )
 
