@@ -36,7 +36,7 @@ from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .board_store import BoardStore
-from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard
+from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard, stamp_etag
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError
 from .sessions import SessionsState
@@ -155,9 +155,17 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _dashboard(self) -> None:
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
-        page = render_dashboard(snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
-                                sessions=self.sessions())
-        self._send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+        etag, page = stamp_etag(render_dashboard(
+            snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
+            sessions=self.sessions()))
+        offered = {tag.strip().removeprefix("W/") for tag in (self.headers.get("If-None-Match") or "").split(",")}
+        if etag in offered:  # the open page's 2-minute check: nothing it shows has changed
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        self._send(200, page.encode("utf-8"), "text/html; charset=utf-8", {"ETag": etag})
 
     def _source(self, kind: str, source_id: str) -> None:
         text = self.read_source(kind, source_id) if self.store.approved_attachments(kind, source_id) is not None else None

@@ -83,7 +83,8 @@ def test_a_late_feed_is_called_out_and_a_fresh_one_is_not(tmp_path: Path) -> Non
     data = parse_sessions(_raw())
     fresh = _panel(_page(tmp_path, data, now_ms=data.now + 5 * 60_000))
     late = _panel(_page(tmp_path, data, now_ms=data.now + STALE_MS + 60_000))
-    assert "새로 오지 않았습니다" not in fresh and "5분 전에 받은 집계" in fresh
+    shown = re.sub(r"<[^>]+>", "", fresh)  # the age sits in its own span so the open page can keep it current
+    assert "새로 오지 않았습니다" not in fresh and "5분 전에 받은 집계" in shown
     assert "새로 오지 않았습니다" in late
 
 

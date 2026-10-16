@@ -162,5 +162,10 @@ def demo_handlers(today: Callable[[], date]) -> dict[str, Callable[..., object]]
         "read_source": lambda kind, source_id: mail_text(source_id) if kind == "mail" else None,
         "attachment_path": lambda kind, source_id, name: None,
         "on_change": lambda: None,
-        "sessions": lambda: sessions(datetime.now(UTC)),
+        "sessions": lambda: sessions(_feed_slot(datetime.now(UTC))),
     }
+
+
+def _feed_slot(now: datetime) -> datetime:
+    """``now`` floored to the 10 minutes the real feed takes, so an open demo page sees 304s between feeds."""
+    return now.replace(minute=now.minute - now.minute % 10, second=0, microsecond=0)
