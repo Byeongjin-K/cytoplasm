@@ -10,6 +10,7 @@
 | `approval_types.py` · `approval_reminder.py` · `approval_lease.ReminderJournal` | 기존 승인 레코드의 key·원문 message id·실제 게시 시각에 고정된 리마인더 계산. 기존 key lease 안에서 lifecycle 관찰→영속 claim→최소정보 원문 링크 전송하며 catch-up은 최신 due 구간 1건만 시도한다. 별도 승인 상태머신이 아니다 |
 | `external_effect_gate_e2e.py` · `injection_adapter.py` | E2E 서명(HMAC) 승인 경로. `E2E_TEST_MODE=1`에서만 동작 |
 | `hermes_plugin/` · `hook_boundary_e2e.py` | Hermes 플러그인 경계 — 게이트가 실제로 강제되는 지점. **게이트웨이가 부르는 훅은 `register()` 가 등록하는 여섯뿐이다**(`pre_gateway_dispatch`·`pre_tool_call`·`transform_llm_output`·`kanban_task_{claimed,completed,blocked}`) — "에러를 동반한 라이프사이클 실패" 훅은 벤더에 없다. 그래서 **라이프사이클 실패 → 수리 티켓 경로는 만들지 않는다(2026-09-09 결정)**: 붙일 훅이 없고, `#agents-log` 보고는 이미 `kanban_task_*` → `_send_kanban_report` 가 하며, 티켓 쪽을 지금 형태로 켜면 `record_lifecycle_failure` 의 90초 subprocess 가 async 훅 안에서 턴을 세우고 dedup location 이 `task_id` 라 실패한 task 마다 새 카드가 열리며 수리 카드가 blocked 로 생성되므로 `kanban_task_blocked` 에 걸면 자기 루프가 된다. 그 자리를 메우던 대체된 선행 구현 `hermes_hook.py` 는 같은 날 삭제했다 — 인프라 실패는 healthcheck detect 가, 소유자가 눈치챈 실패는 `!repair` 가 덮는다. `coord-` 질의 응답은 config의 `interop_channel_id` 채널(#autophagy-agents)로 라우팅되며, 미설정 시 소스 채널로 폴백. 승인 표면은 `approval_surface.py`가 결정하고 `approval_directory.py`가 해석한다 — 설정 키(`personal_approvals_channel_id` / `deploy_approvals_channel_id`)는 그 디렉터리 내부에서만 읽힌다 |
+| `digest_thread.py` | 아침 다이제스트의 하루 한 표준 승인 스레드(2026-10-16 Q187) — 날짜별 바인딩 파일(0600, flock)을 메일·캘린더가 공유하고, `settle` 이 미결 카드 수로 🔔 / ✅ 완료 표시를 맞춘다(이름 변경은 `origin_notice.rename_thread`·`close_thread`). 승인 판정은 없다 |
 | `approval_reminder_config.py` | `config.yaml`의 `approval_reminders`를 검증된 enabled·initial/repeat 모델로 로드(기본 true·3h·1h, 간격 오류 fail-fast) |
 | `thread_pointer.py` | 승인 요청 CLI 가 게시 직후 내는 `APPROVAL-THREAD <키>=<값> url=<링크>` 줄의 단일 정의. 좌표는 레코드의 `approval_guild_id`·`approval_thread_id`, 링크는 `owner_message.discord_link`, 좌표 결손은 `url=unavailable search=<값>`(추측 금지). I/O 없음 |
 | `discord_transport.py` · `chunker.py` | `DiscordTransport` 순차 청킹 전송 + 429 `Retry-After` 백오프. `chunk_message`=2000자 분할 |
@@ -38,6 +39,6 @@
 - **`approval_lifecycle.request_owner_approval`은 보안 경계임**: 아래 5대 불변식을 약화하는 것은 소유자의 ✅가 무시되는 권한 회귀(Authorization Regression)로 간주함.
     - (1) Lease 보유 상태에서만 변이, (2) `message_id` 절대 덮어쓰기 금지, (3) 결정된 요청(APPROVED/CANCELLED) 파괴 금지, (4) 불확실 시 생존 간주(`UNVERIFIABLE` → `DEFER`), (5) 비성공 시 명시적 Reason + non-zero exit.
 - **주의**: `_probe`의 예외 처리를 임의로 좁히지 마십시오. Lease 파일을 `unlink` 하거나 delete/drop 순서를 바꾸지 마십시오.
-- **리마인더는 기존 watcher tick에서만 실행합니다.** 새 confirm surface·리액션·resolver·병렬 watcher를 만들지 않습니다. 본문은 요청 유형·경과시간·원문 링크만 포함하고 원문 채널 밖으로 전송 범위를 넓히지 않습니다.
+- **리마인더는 기존 watcher tick에서만 실행합니다.** 새 confirm surface·리액션·resolver·병렬 watcher를 만들지 않습니다. 본문은 `⏰ 승인 대기 N시간 · <승인 카드 링크>` 한 줄이며 좌표 미상은 링크만 생략합니다. 같은 틱·같은 목적지는 `dispatch_owner_approval_reminders`로 메시지 하나에 카드별 한 줄씩 묶습니다. 원문 채널 밖으로 전송 범위를 넓히지 않으며 승인·취소 반응 기호는 넣지 않습니다.
 - **리마인더 claim은 전송 오류에도 해제하지 않습니다.** 원격 전달 후 오류인지 구분할 수 없어 해제하면 동일 구간 중복 전송이 가능해집니다. 실패한 구간은 at-most-once로 닫고 다음 wall-clock 구간부터 다시 시도합니다.
 - **I/O 제약**: `approval_lifecycle` 및 `approval_lease`는 lease/journal 파일 외의 디스크, 네트워크, 환경 변수에 직접 접근하지 않습니다. 저장소와 Discord 클라이언트는 각 게이트가 Protocol을 통해 주입해야 하며, 여기에 직접 I/O를 추가하지 마십시오.
