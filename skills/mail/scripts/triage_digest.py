@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
+import digest_reaction_actions
 import mail_contacts
 import triage_confirm
 import triage_core
@@ -56,6 +57,7 @@ def _footer() -> str:
     """How to reply. Never asks for a ✅ here — approval is the draft's own card."""
     return (
         "---\n"
+        "👆 메일 메시지에서 📄 를 누르면 그 메일 전문, ✍️ 를 누르면 회신 초안이 같은 스레드에 올라옵니다\n"
         "💬 회신 지시 · 스레드의 메일 메시지에 **답장(Reply)** 으로 요지를 적으면 "
         '그 메일의 회신 초안을 만듭니다 ("N번 메일, …라고 회신해줘"도 됩니다)\n'
         "초안은 정식 승인 카드(요청별 승인 스레드)로 올라오고, 에이전트 답장에 그 카드 링크가 실립니다"
@@ -282,7 +284,8 @@ def render_item(item: dict, *, kst_now: datetime) -> str:
     subject = _clip(_sanitize_inline(str(item["subject"])), _SUBJECT_LIMIT)
     lines = [
         f"### {item['item_no']}. {subject}",
-        f"-# ↩️ 이 메시지에 답장하면 회신 초안 · 회신 키 `{reply_key(kst_now, int(item['item_no']))}`",
+        f"-# 📄 누르면 전문 · ✍️ 누르면 회신 초안 · ↩️ 답장하면 지시대로 초안 · "
+        f"회신 키 `{reply_key(kst_now, int(item['item_no']))}`",
         _badge_line(item),
         f"> 요약 · {_clip(_sanitize_inline(str(item['summary'])), _SUMMARY_LIMIT)}",
     ]
@@ -337,6 +340,26 @@ def _fail_marker(stage: str, code: str, error: BaseException) -> str:
     """
     detail = triage_core.redact(str(error)).replace("\n", " ")[:200]
     return f"DIGEST-FAIL stage={stage} retry_safe=false code={code} detail={detail}"
+
+
+def _flat_channel() -> str:
+    """The channel the cards went to when no thread opened, or '' when unknown."""
+    try:
+        return triage_confirm._owner_channel()  # noqa: SLF001 — the channel dm_owner posted to
+    except Exception as error:  # noqa: BLE001 — reactions are a convenience, the digest stands
+        print(f"DIGEST-REACTION-CHANNEL-FAIL err={type(error).__name__}", file=sys.stderr)
+        return ""
+
+
+def _attach_reactions(channel_id: str, message_id: str) -> None:
+    """Pre-attach 📄·✍️ to one card; a failure leaves the card readable and is logged."""
+    if not channel_id or not message_id:
+        return
+    try:
+        digest_reaction_actions.attach(channel_id, message_id)
+    except Exception as error:  # noqa: BLE001 — never fail a delivered digest over an emoji
+        print(f"DIGEST-REACTION-ATTACH-FAIL msg={message_id} err={type(error).__name__}",
+              file=sys.stderr)
 
 
 def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
@@ -407,9 +430,12 @@ def run_digest(*, limit: int, sync: bool, dry_run: bool) -> int:
         raise triage_gate.GateError(
             _fail_marker("deliver", "discord_delivery_failed", error), 4
         ) from error
+    card_channel = thread_id or _flat_channel()
     for store_item, message_id in zip(store_items, message_ids[1:], strict=True):
         store_item["reply_key"] = reply_key(kst_now, int(store_item["item_no"]))
         store_item["message_id"] = str(message_id or "")
+        store_item["channel_id"] = card_channel
+        _attach_reactions(card_channel, str(message_id or ""))
     run_id = triage_store.record_digest_run(db, triage_core.utc_now(), store_items)
     print(f"DIGEST run={run_id} items={len(dm_items)}")
     return 0

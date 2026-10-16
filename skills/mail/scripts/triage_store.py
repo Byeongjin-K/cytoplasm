@@ -11,6 +11,7 @@ downgrade (2 consecutive failures → W4-2-runtime re-verdict).
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Historical DB columns stay in place; new writes use zero, with no verdict.
@@ -51,14 +52,24 @@ CREATE TABLE IF NOT EXISTS digest_items (
     recv_date TEXT NOT NULL,
     reply_key TEXT NOT NULL DEFAULT '',
     message_id TEXT NOT NULL DEFAULT '',
+    channel_id TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (run_id, item_no)
 );
 CREATE INDEX IF NOT EXISTS idx_digest_items_uid ON digest_items (uid);
+CREATE TABLE IF NOT EXISTS digest_actions (
+    message_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempts INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, action)
+);
 """
 # Columns added after the first release: (name, DDL) appended in place on old DBs.
 _DIGEST_ITEM_ADDED_COLUMNS = (
     ("reply_key", "reply_key TEXT NOT NULL DEFAULT ''"),
     ("message_id", "message_id TEXT NOT NULL DEFAULT ''"),
+    ("channel_id", "channel_id TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -144,8 +155,8 @@ def record_digest_run(db_path: Path, sent_at: str, items: list[dict[str, int | s
             connection.executemany(
                 "INSERT INTO digest_items "
                 "(run_id, item_no, uid, subject, sender_masked, sensitive, category, "
-                "flags, summary, note, recv_date, reply_key, message_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "flags, summary, note, recv_date, reply_key, message_id, channel_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         run_id,
@@ -161,6 +172,7 @@ def record_digest_run(db_path: Path, sent_at: str, items: list[dict[str, int | s
                         item["recv_date"],
                         str(item.get("reply_key") or ""),
                         str(item.get("message_id") or ""),
+                        str(item.get("channel_id") or ""),
                     )
                     for item in items
                 ],
@@ -214,6 +226,85 @@ def latest_digest_items(
         }
         for row in rows
     ]
+
+
+def recent_digest_cards(db_path: Path, *, since: str) -> list[dict[str, int | str]]:
+    """Digest mail cards posted with a known channel by runs sent at or after ``since``."""
+    if not db_path.exists():
+        return []
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT i.run_id, i.item_no, i.uid, i.subject, i.message_id, i.channel_id, r.sent_at "
+            "FROM digest_items i JOIN digest_runs r ON r.run_id = i.run_id "
+            "WHERE i.message_id != '' AND i.channel_id != '' ORDER BY i.run_id, i.item_no",
+        ).fetchall()
+    floor = _instant(since)
+    return [
+        {
+            "run_id": int(row[0]), "item_no": int(row[1]), "uid": str(row[2]),
+            "subject": str(row[3]), "message_id": str(row[4]), "channel_id": str(row[5]),
+        }
+        for row in rows
+        if _instant(str(row[6])) >= floor
+    ]
+
+
+def _instant(stamp: str) -> datetime:
+    """An ISO stamp as an aware UTC instant; unparseable stamps sort as the distant past."""
+    try:
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def claim_digest_action(
+    db_path: Path, message_id: str, action: str, now: str, *, max_attempts: int,
+) -> bool:
+    """Claim one (card, action) run; True only for a first run or a capped retry.
+
+    A row in any state but ``retry`` (``running``, ``done``, ``partial``, ``gave-up``)
+    refuses the claim, so a reaction seen on every tick acts exactly once.
+    """
+    with _connect(db_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                "SELECT status, attempts FROM digest_actions WHERE message_id = ? AND action = ?",
+                (message_id, action),
+            ).fetchone()
+            if row is None:
+                connection.execute(
+                    "INSERT INTO digest_actions VALUES (?, ?, 'running', 1, ?)",
+                    (message_id, action, now),
+                )
+                claimed = True
+            elif str(row[0]) == "retry" and int(row[1]) < max_attempts:
+                connection.execute(
+                    "UPDATE digest_actions SET status = 'running', attempts = attempts + 1, "
+                    "updated_at = ? WHERE message_id = ? AND action = ?",
+                    (now, message_id, action),
+                )
+                claimed = True
+            else:
+                claimed = False
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+    return claimed
+
+
+def finish_digest_action(
+    db_path: Path, message_id: str, action: str, status: str, now: str,
+) -> None:
+    """Record a claimed run's outcome (``done``, ``partial`` or ``retry``)."""
+    with _connect(db_path) as connection:
+        connection.execute(
+            "UPDATE digest_actions SET status = ?, updated_at = ? "
+            "WHERE message_id = ? AND action = ?",
+            (status, now, message_id, action),
+        )
 
 
 def digest_item_by_reply_key(db_path: Path, reply_key: str) -> dict[str, int | str] | None:
