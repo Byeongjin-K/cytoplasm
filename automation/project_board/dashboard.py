@@ -265,6 +265,11 @@ def _quoted(title: str) -> str:
     return f'<span class="q">{inner}</span>' if len(title) <= 18 else inner
 
 
+def _quoted_plain(title: str) -> str:
+    """A short title kept on one line inside a comma list (no brackets)."""
+    return f'<span class="q">{_keep(title)}</span>' if len(title) <= 18 else _keep(title)
+
+
 def _to(word: str) -> str:
     """The Korean particle 로/으로 after ``word`` (으로 after a final consonant other than ㄹ)."""
     last = word[-1:] or "가"
@@ -581,7 +586,7 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_pr
         else:
             files.append(escape(name))
     attachments = f'<div class="names">{icon("paperclip")}<span>{", ".join(files)}</span></div>' if files else ""
-    todos = ", ".join(escape(t.title) for t in produced) or "없음"
+    todos = ", ".join(_quoted_plain(t.title) for t in produced) or "없음"
     top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
     top += [escape(row.project)] if with_project else []
     return (
@@ -689,7 +694,7 @@ def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dic
     cards = "".join(_project_card(view, today, line(view)) for view in shelf)
     body = f'<div class="grid">{cards}</div>' if cards else (
         f'<div class="card empty">{icon("archive")}<b>보관한 프로젝트가 없습니다</b>'
-        "<p>끝난 프로젝트는 프로젝트 화면의 <span class=\"q\">「보관」으로</span> 이곳에 옮길 수 있습니다.</p></div>"
+        "<p>끝난 프로젝트는 프로젝트 화면의 <span class=\"q\">「보관」으로</span> 이곳에\u00a0옮길\u00a0수\u00a0있습니다.</p></div>"
     )
     return f'<section id="archive" data-tab="archive">{_head("보관함", sub)}{body}</section>'
 
