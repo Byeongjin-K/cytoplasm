@@ -185,15 +185,15 @@ def build_item(
     flags = cls.flags() + (("replied",) if replied_at else ()) + (("cc",) if role == "cc" else ())
     if classify_failed:
         flags = flags + (_CLASSIFY_FAILED_FLAG,)
-    note = ""
+    schedule = triage_transport.ScheduleNote("")
     if cls.category == "important" and cls.schedule_needed and cls.schedule_text:
-        note = triage_transport._delegate_schedule(cls.schedule_text, uid_opaque, digest_day)
+        schedule = triage_transport._delegate_schedule(cls.schedule_text, uid_opaque, digest_day)
     shared = {
         "item_no": item_no,
         "uid": uid,
         "sender_masked": triage_core.mask_value(sender),
         "category": cls.category,
-        "note": note,
+        "note": schedule.note,
         "recv_date": str(mail_detail.get("date") or ""),
     }
     dm_item = {
@@ -204,6 +204,9 @@ def build_item(
         "summary": summary,
         "flags": flags,
         "replied_at": replied_at,
+        "calendar_card": schedule.card_url,
+        "calendar_when": _event_when(schedule.start, schedule.end),
+        "calendar_title": schedule.title,
     }
     store_item = {
         **shared,
@@ -304,9 +307,45 @@ def render_item(item: dict, *, kst_now: datetime) -> str:
     if cc:
         lines.append(f"참조 {_sanitize_inline(cc)}")
     if item["note"]:
-        note = str(item["note"]).replace("`", "'")
-        lines.append(f"🗓️ 일정 초안 `{note}`")
+        lines.append(_schedule_line(item))
     return "\n".join(lines)
+
+
+_WEEKDAY_KO = "월화수목금토일"
+
+
+def _event_when(start: str, end: str) -> str:
+    """``10/19(월) 13:30–14:30`` in KST, or '' when the calendar did not say."""
+    try:
+        begin = datetime.fromisoformat(start).astimezone(ZoneInfo("Asia/Seoul"))
+    except ValueError:
+        return ""
+    when = f"{begin.month}/{begin.day}({_WEEKDAY_KO[begin.weekday()]}) {begin:%H:%M}"
+    try:
+        finish = datetime.fromisoformat(end).astimezone(ZoneInfo("Asia/Seoul"))
+    except ValueError:
+        return when
+    return f"{when}–{finish:%H:%M}"
+
+
+def _schedule_line(item: dict) -> str:
+    """The calendar line: a link to the approval card and the event, never a bare hash.
+
+    A failure cause (``calendar-refused`` …) is shown as before so the owner sees why
+    no card exists. Without a link (an older calendar skill) the line names the thread.
+    """
+    note = str(item["note"])
+    if not note.startswith("calendar:"):
+        cause = note.replace("`", "'")
+        return f"🗓️ 일정 초안 `{cause}`"
+    url = str(item.get("calendar_card") or "")
+    head = (f"🗓️ 일정 초안 → [승인 카드](<{url}>)" if url
+            else "🗓️ 일정 초안 · 승인 카드는 그날 「캘린더 · 다이제스트」 스레드")
+    event = " ".join(part for part in (
+        str(item.get("calendar_when") or ""),
+        _clip(_sanitize_inline(str(item.get("calendar_title") or "")), _SUBJECT_LIMIT),
+    ) if part)
+    return f"{head} · {event}" if event else head
 
 
 def render_digest_parts(dm_items: list[dict], *, kst_now: datetime) -> list[str]:

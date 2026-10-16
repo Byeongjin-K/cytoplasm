@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -78,7 +79,59 @@ def _clip(detail: str) -> str:
     return collapsed[:_STDERR_CLIP] if collapsed else "(없음)"
 
 
-def _delegate_schedule(schedule_text: str, uid_opaque: str, digest_day: str = "") -> str:
+@dataclass(frozen=True, slots=True)
+class ScheduleNote:
+    """The calendar delegation result: the short ``note`` plus, when known, its approval card.
+
+    ``note`` keeps its old meaning (``calendar:<id>`` or a failure cause) because it is
+    stored and joined elsewhere; the card fields only feed the digest line.
+    """
+
+    note: str
+    card_url: str = ""
+    start: str = ""
+    end: str = ""
+    title: str = ""
+
+
+_CARD_LINE = re.compile(
+    r"^DIGEST-CARD draft=\S+ url=(?P<url>\S+) start=(?P<start>\S+) end=(?P<end>\S+) summary=(?P<title>.*)$",
+    re.M,
+)
+
+
+def _with_card(note: str, stdout: str) -> ScheduleNote:
+    """Attach the calendar's ``DIGEST-CARD`` facts; an older calendar prints none."""
+    match = _CARD_LINE.search(stdout)
+    if not match:
+        return ScheduleNote(note)
+    url = match["url"] if match["url"].startswith("https://") else ""
+    start, end = ("" if value == "-" else value for value in (match["start"], match["end"]))
+    return ScheduleNote(note, url, start, end, match["title"].strip())
+
+
+def _delegate_schedule(schedule_text: str, uid_opaque: str, digest_day: str = "") -> ScheduleNote:
+    proc_or_note = _run_calendar(schedule_text, uid_opaque, digest_day)
+    if isinstance(proc_or_note, str):
+        return ScheduleNote(proc_or_note)
+    proc = proc_or_note
+    if proc.returncode == 0:
+        match = re.search(r"^DRAFT-CREATED id=(\w+)", proc.stdout, re.M)
+        return _with_card(f"calendar:{match.group(1)}" if match else "calendar:unknown", proc.stdout)
+    if proc.returncode == 5:
+        print(f"CAL-AMBIGUOUS uid={uid_opaque} (되묻기 필요 — 초안 없음)")
+        return ScheduleNote("calendar-ambiguous")
+    cause = _CALENDAR_CAUSE.get(proc.returncode, f"calendar-failed-rc{proc.returncode}")
+    print(
+        f"CAL-FAIL uid={uid_opaque} rc={proc.returncode} cause={cause} stderr={_clip(proc.stderr)}",
+        file=sys.stderr,
+    )
+    return ScheduleNote(cause)
+
+
+def _run_calendar(
+    schedule_text: str, uid_opaque: str, digest_day: str,
+) -> subprocess.CompletedProcess[str] | str:
     calendar_cli = _env_path(
         "TRIAGE_CALENDAR_CLI", "/srv/autophagy-skills/live/calendar/scripts/calendar_cli.py"
     )
@@ -96,15 +149,4 @@ def _delegate_schedule(schedule_text: str, uid_opaque: str, digest_day: str = ""
     except OSError as error:  # 실행 불가한 인터프리터·경로 — 역시 항목 하나만 잃는다
         print(f"CAL-SPAWN-FAIL uid={uid_opaque} error={_clip(str(error))}", file=sys.stderr)
         return "calendar-spawn-failed"
-    if proc.returncode == 0:
-        match = re.search(r"^DRAFT-CREATED id=(\w+)", proc.stdout, re.M)
-        return f"calendar:{match.group(1)}" if match else "calendar:unknown"
-    if proc.returncode == 5:
-        print(f"CAL-AMBIGUOUS uid={uid_opaque} (되묻기 필요 — 초안 없음)")
-        return "calendar-ambiguous"
-    cause = _CALENDAR_CAUSE.get(proc.returncode, f"calendar-failed-rc{proc.returncode}")
-    print(
-        f"CAL-FAIL uid={uid_opaque} rc={proc.returncode} cause={cause} stderr={_clip(proc.stderr)}",
-        file=sys.stderr,
-    )
-    return cause
+    return proc

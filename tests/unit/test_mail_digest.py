@@ -480,9 +480,12 @@ def test_build_item_delegates_calendar_for_important_schedule_needed(
 ) -> None:
     calls: list[tuple[str, str, str]] = []
 
-    def delegate(schedule_text: str, uid_opaque: str, digest_day: str) -> str:
+    def delegate(schedule_text: str, uid_opaque: str, digest_day: str) -> triage_transport.ScheduleNote:
         calls.append((schedule_text, uid_opaque, digest_day))
-        return "calendar:abc123"
+        return triage_transport.ScheduleNote(
+            "calendar:abc123", "https://discord.com/channels/11/22/33",
+            "2026-07-20T10:00:00+09:00", "2026-07-20T11:00:00+09:00", "장비 회의",
+        )
 
     monkeypatch.setattr(triage_transport, "_delegate_schedule", delegate)
     monkeypatch.setattr(triage_llm, "summarize", lambda **kwargs: "Synthetic summary")
@@ -497,6 +500,11 @@ def test_build_item_delegates_calendar_for_important_schedule_needed(
     assert calls == [("7/20 10:00 장비 회의", triage_core.mask_value("uid-5"), "2026-07-20")]
     assert dm_item["note"] == "calendar:abc123"
     assert store_item["note"] == "calendar:abc123"
+    # The card link and event reach the rendered card, not the stored row.
+    assert dm_item["calendar_card"] == "https://discord.com/channels/11/22/33"
+    assert dm_item["calendar_when"] == "7/20(월) 10:00–11:00"
+    assert dm_item["calendar_title"] == "장비 회의"
+    assert "calendar_card" not in store_item
 
     monkeypatch.setattr(
         triage_llm, "classify",
@@ -540,7 +548,9 @@ def test_render_digest_dm_card_format() -> None:
     assert "> 요약 · First summary" in lines
     assert "수신 07-18 18:01" in lines
     assert "UID" not in text and "sha256" not in text
-    assert "🗓️ 일정 초안 `calendar:abc123`" in lines
+    # A draft whose card link is unknown names the thread instead of a bare hash.
+    assert "🗓️ 일정 초안 · 승인 카드는 그날 「캘린더 · 다이제스트」 스레드" in lines
+    assert "calendar:abc123" not in text
     assert "---" in lines  # 머리글과 회신 안내 구분선
     assert "N번 메일" in text
     assert "✅" not in text.split("### 1.")[0] and "승인 카드" in text

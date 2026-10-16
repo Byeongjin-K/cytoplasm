@@ -92,6 +92,7 @@ def submit(draft: DraftRecord, day: str) -> DraftRecord:
             previous: DraftRecord = json.loads(path.read_text(encoding="utf-8"))
             if previous.get("status") != "pending":
                 print(f"DIGEST-DECIDED id={key} status={previous.get('status')}")
+                print(card_line(previous, None))
                 return previous
             candidate = {**candidate, "created": previous["created"], "digest_day": previous.get("digest_day", day)}
         else:
@@ -123,7 +124,35 @@ def _publish(candidate: DraftRecord) -> DraftRecord:
     calendar_digest_recovery.recover(calendar_gate.load_draft(candidate["id"]))
     entry = calendar_approval.request_confirmation(candidate)
     print(f"PENDING-OWNER draft={candidate['id']} message={entry.dm_message_id}")
-    return calendar_gate.load_draft(candidate["id"])
+    record = calendar_gate.load_draft(candidate["id"])
+    print(card_line(record, entry.dm_message_id))
+    return record
+
+
+def card_line(record: Mapping[str, object], message_id: str | None) -> str:
+    """``DIGEST-CARD`` — 메일 다이제스트가 일정 줄을 이 승인 카드로 잇게 하는 한 줄.
+
+    카드는 다이제스트 메일 카드보다 먼저 게시되므로 링크를 여기서 알 수 있다. 카드 메시지
+    id 를 모르면(이미 결정된 일정) 스레드 링크로, 좌표가 없으면 ``unavailable`` 로 내려간다 —
+    링크를 추측하지 않는다. 제목은 마지막 필드라 공백을 담을 수 있고 줄바꿈은 접는다.
+    """
+    url = "unavailable"
+    try:
+        from automation.interop.owner_message import LinkStatus, discord_link
+    except ImportError as error:
+        print(f"DIGEST-CARD-LINK-UNAVAILABLE draft={record.get('id')} err={type(error).__name__}", file=sys.stderr)
+    else:
+        def text(field: str) -> str | None:
+            value = record.get(field)
+            return value if isinstance(value, str) and value else None
+
+        link = discord_link(space="guild", channel_id=text("approval_thread_id"),
+                            message_id=message_id or None, guild_id=text("approval_guild_id"))
+        if link.status is LinkStatus.AVAILABLE:
+            url = str(link.url)
+    title = " ".join(str(record.get("summary") or "").split())
+    return (f"DIGEST-CARD draft={record.get('id')} url={url} start={record.get('start') or '-'} "
+            f"end={record.get('end') or '-'} summary={title}")
 
 
 def _failures() -> tuple[type[BaseException], ...]:
