@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
-version: 1.4.4
+version: 1.5.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -202,6 +202,10 @@ draft id, 결과, 사유뿐이다. 결과 통지는 `OwnerMessage` 봉투로 보
 - 이미 ✅/⛔ 로 결정된 일정(`executed`/`cancelled` 레코드)은 같은 메일이 다시 와도 **다시
   묻지 않는다**(`DIGEST-DECIDED`). 다이제스트 초안의 ⛔ 는 파일을 지우지 않고
   `cancelled` 로 남겨 그 사실을 기억한다.
+- 카드를 게시(또는 이미 결정된 일정을 확인)한 뒤 `DIGEST-CARD draft=<키> url=<카드 링크> start=<ISO> end=<ISO>
+  summary=<제목>` 한 줄을 낸다. 메일 다이제스트가 이 줄로 메일 카드의 `🗓️ 일정 초안` 을 승인 카드
+  링크와 일정 한 줄로 바꾼다. 링크는 `owner_message.discord_link` 로만 만들고, 카드 메시지 id 를
+  모르면(이미 결정된 일정) 스레드 링크, 좌표가 없으면 `url=unavailable` 이다 — 추측하지 않는다.
 - 결과(실행 완료/취소/실행 실패)는 그 카드 **아래 답글**로 올라가고, 일별 스레드는 다른
   카드가 남아 있으므로 개별 결과로 닫지 않는다. 실행 실패는 `⚠️ … 실행 실패` 로 카드
   아래에 알린 뒤 항목을 남겨 다음 틱에 재시도한다.
