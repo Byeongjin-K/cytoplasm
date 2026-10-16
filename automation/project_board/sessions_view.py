@@ -29,10 +29,10 @@ _STATUS: Final = {
     "done": ("완료", "st-done"), "run": ("진행", "st-doing"), "review": ("확인 대기", "grade"),
     "wait": ("대기", "st-wait"), "block": ("막힘", "d-over"), "hold": ("멈춤", "d-soon"),
     "fail": ("미완", "d-over"), "live": ("가동 중", "st-doing"),
-    "ok": ("실패 없음", "st-done"), "warn": ("실패 있음", "d-soon"), "ended": ("종료", "st-open"),
+    "ok": ("정상", "st-done"), "down": ("실패", "d-over"), "warn": ("실패 있음", "d-soon"), "ended": ("종료", "st-open"),
     "unknown": ("기록 없음", "st-open"),
 }
-_WORST_FIRST: Final = ("block", "fail", "hold", "warn", "run", "review", "wait", "live", "ok", "done", "ended", "unknown")
+_WORST_FIRST: Final = ("block", "fail", "down", "hold", "warn", "run", "review", "wait", "live", "ok", "done", "ended", "unknown")
 _LANE_ORDER: Final = ("done", "run", "review", "wait", "block", "fail")
 _PEAK: Final = ' class="peak"'
 
@@ -198,15 +198,28 @@ def _agent_members(agents: list[Agent]) -> list[_Member]:
 
 def _service_member(s: Service, w0: int) -> _Member:
     if s.group == "timer":
-        st = "unknown" if s.runs is None else ("warn" if s.fails else "ok")
-        detail = "실행 기록 없음" if s.runs is None else (f"실패 {_n(s.fails or 0)}회" if s.fails else "")
-        when = f"마지막 실행 {_day(s.last)} {_clock(s.last)}" if s.last else "이번 주 실행 기록을 찾지 못했습니다"
-        foot = "확인 필요" if s.runs is None else f"7일간 실행 {_n(s.runs)}회"
-        return _Member(s.label, s.every or f"{s.units}개", st, detail, when, foot, s.tag)
+        return _timer_member(s)
     start = max(s.start or w0, w0)
     foot = "다시 시작 기록 없음" if s.restarts is None else f"7일간 시작 {_n(s.restarts)}회"
     st = s.st if s.st in _STATUS else "unknown"
     return _Member(s.label, f"{s.units}개", st, "", f"{_day(start)} {_clock(start)}부터 지금까지", foot, s.tag)
+
+
+def _timer_member(s: Service) -> _Member:
+    """A timer's badge is how its latest run ended; earlier failures of the week stay on the card as one line."""
+    when = f"마지막 실행 {_day(s.last)} {_clock(s.last)}" if s.last else "이번 주 실행 기록을 찾지 못했습니다"
+    if s.runs is None:
+        return _Member(s.label, s.every or f"{s.units}개", "unknown", "실행 기록 없음", when, "확인 필요", s.tag)
+    if s.last_ok is None:  # a feed from before the latest result was sent: only the week's count is known
+        st, detail = ("warn", f"실패 {_n(s.fails or 0)}회") if s.fails else ("ok", "")
+        return _Member(s.label, s.every or f"{s.units}개", st, detail, when, f"7일간 실행 {_n(s.runs)}회", s.tag)
+    if not s.fails:
+        foot = f"7일간 {_n(s.runs)}번 실행, 실패 없음"
+    else:
+        foot = f"7일간 {_n(s.runs)}번 중 실패\u00a0{_n(s.fails)}번"
+        if s.last_fail:
+            foot += ", " + f"마지막 실패 {_day(s.last_fail)} {_clock(s.last_fail)}".replace(" ", "\u00a0")
+    return _Member(s.label, s.every or f"{s.units}개", "ok" if s.last_ok else "down", "", when, foot, s.tag)
 
 
 def _notes(notes: tuple[tuple[str, str, str], ...]) -> str:

@@ -540,7 +540,9 @@
    "runs": 7,
    "fails": 0,
    "every": "매일",
-   "last": 1792116000000
+   "last": 1792116000000,
+   "lastOk": true,
+   "lastFail": null
   },
   {
    "label": "상태 확인",
@@ -551,7 +553,9 @@
    "runs": 300,
    "fails": 2,
    "every": "30분마다",
-   "last": 1792133400000
+   "last": 1792133400000,
+   "lastOk": true,
+   "lastFail": 1792056600000
   },
   {
    "label": "주간 정리",
@@ -562,7 +566,9 @@
    "runs": null,
    "fails": null,
    "every": "매주 월 03:15",
-   "last": null
+   "last": null,
+   "lastOk": null,
+   "lastFail": null
   }
  ]
 }

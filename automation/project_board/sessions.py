@@ -71,6 +71,8 @@ class Service:
     fails: int | None
     every: str
     last: int | None
+    last_ok: bool | None = None  # how the latest run ended; None for a feed from before it was sent
+    last_fail: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +103,13 @@ def _req(row: dict[str, object], key: str) -> int:
 
 def _opt(row: dict[str, object], key: str) -> int | None:
     return None if row.get(key) is None else _req(row, key)
+
+
+def _flag(row: dict[str, object], key: str) -> bool | None:
+    value = row.get(key)
+    if value is not None and not isinstance(value, bool):
+        raise _Bad(key)
+    return value
 
 
 def _text(row: dict[str, object], key: str, allowed: tuple[str, ...] = (), *, optional: bool = False) -> str:
@@ -147,7 +156,7 @@ def parse_sessions(raw: object) -> Sessions:
     services = tuple(
         Service(_text(r, "label"), _text(r, "group", SERVICE_GROUPS), _text(r, "tag"), _req(r, "units"),
                 _text(r, "st"), _opt(r, "start"), _opt(r, "restarts"), _opt(r, "runs"), _opt(r, "fails"),
-                _text(r, "every", optional=True), _opt(r, "last"))
+                _text(r, "every", optional=True), _opt(r, "last"), _flag(r, "lastOk"), _opt(r, "lastFail"))
         for r in _rows(raw, "services")
     )
     w0, now = _req(raw, "w0"), _req(raw, "now")
