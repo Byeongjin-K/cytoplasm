@@ -344,10 +344,10 @@ def test_skill_channel_with_configured_id_passes_when_renamed() -> None:
     assert binding.channel_id == SKILL_CHANNEL_ID
 
 
-def test_stored_skill_channel_with_wrong_id_is_refused() -> None:
-    # Given: an unrelated text channel has the old conventional name.
+def test_stored_skill_channel_with_wrong_id_and_name_is_refused() -> None:
+    # Given: an unrelated text channel is neither the configured id nor named approvals.
     directory = FakeDirectory()
-    directory.facts["123"] = ChannelFacts(0, "approvals", ())
+    directory.facts["123"] = ChannelFacts(0, "general", ())
     binding = ApprovalBinding(
         ApprovalKind.SKILL_ATTEST, ApprovalSurface.SKILL_APPROVALS, "123", POLICY_VERSION,
     )
@@ -361,6 +361,7 @@ def test_stored_skill_channel_requires_a_known_id(configured: str) -> None:
     # Given: channel facts alone cannot establish the approved destination.
     directory = FakeDirectory()
     directory.skill_channel_id = configured
+    directory.facts[SKILL_CHANNEL_ID] = ChannelFacts(0, "renamed", ())
     binding = ApprovalBinding(
         ApprovalKind.SKILL_ATTEST, ApprovalSurface.SKILL_APPROVALS,
         SKILL_CHANNEL_ID, POLICY_VERSION,

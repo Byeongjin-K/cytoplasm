@@ -96,12 +96,13 @@ class _PostingTransport:
 @dataclass(frozen=True, slots=True)
 class _Directory:
     facts: ChannelFacts
+    configured: str = APPROVALS_CHANNEL_ID
 
     def owner_dm(self) -> str:
         return "1528936606946122423"
 
     def skill_approvals(self) -> str:
-        return APPROVALS_CHANNEL_ID
+        return self.configured
 
     def describe(self, channel_id: str) -> ChannelFacts:
         if channel_id != APPROVALS_CHANNEL_ID:
@@ -267,8 +268,16 @@ def test_assert_surface_accepts_the_guild_approvals_channel_and_refuses_a_mismat
     # When / Then: the exact policy binding is accepted.
     discord.assert_surface(BINDING)
 
-    # Given: the same snowflake is described as a non-approval guild channel.
-    invalid_directory = _Directory(ChannelFacts(0, "other-channel", ()))
+    # Given: the configured channel was renamed in Discord (owner 2026-10-18).
+    renamed_directory = _Directory(ChannelFacts(0, "release-approvals", ()))
+    renamed = RepairDiscordApi("ops-token", BINDING, renamed_directory, OWNER_ID)
+    # When / Then: its configured id still identifies the approval surface.
+    renamed.assert_surface(BINDING)
+
+    # Given: the snowflake is neither named approvals nor the configured channel.
+    invalid_directory = _Directory(
+        ChannelFacts(0, "other-channel", ()), configured="1528936606946122499",
+    )
     mismatched = RepairDiscordApi("ops-token", BINDING, invalid_directory, OWNER_ID)
 
     # When / Then: channel facts that contradict the binding fail closed.

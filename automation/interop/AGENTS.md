@@ -27,7 +27,7 @@
 | `free_response.py` | 게이트웨이 드롭인 `ExecStartPre=-…` 가 매 시작마다 `agent_chat_channel_id` 를 같은 계정 `config.yaml` 의 `discord.free_response_channels` 에 정확히 한 번 맞춘다(빠졌을 때만 한 줄 수정, 백업·원자 교체, ignored 우선, 키 없는 peer 는 무동작). doctor 「agent-chat 채널 무멘션 응답」이 같은 `decide`/`configured_channels` 를 읽기 전용으로 쓴다 |
 
 ## 불변식 (변경 전 반드시 확인)
-- 공급망 승인 채널은 type 0과 설정 ID(또는 명시적 공급망 핀)로 검증한다. `approvals`·`notifications`는 표시 이름 예시이며 변경할 수 있다. 설정 없는 레거시 공급망 조회만 이름 검색을 쓴다. 정책 버전·저장 형식은 불변이다.
+- 공급망 승인 채널은 type 0이고 이름이 `approvals`이거나 설정 ID(또는 명시적 공급망 핀)와 같을 때 받는다 — 이름 변경을 받는 쪽으로만 넓혔고 예전 기록의 의미는 그대로다. `approvals`·`notifications`는 표시 이름 예시이며 변경할 수 있다. 설정 없는 레거시 공급망 조회만 이름 검색을 쓴다. 정책 버전·저장 형식은 불변이다.
 - **mutation은 owner 승인 레코드 없이는 절대 실행 안 됨.** 승인 판정 로직(`_has_valid_approval`) 변경은 보안 회귀.
 - **`coordination.py`는 부수효과 없는 순수 상태머신** — 캘린더 쓰기/전송은 드라이버(coordination 스킬)가 소유. deadlock 10분·재협상 정확히 1회 규칙은 회귀 테스트로 고정.
 - `DiscordTransport` 호출부는 저장소 전반에 흩어져 있다(`grep -rl 'DiscordTransport(' --include=*.py`) — 시그니처를 바꾸면 그 목록 전체를 동반 갱신한다. 세어 둔 숫자는 금방 낡으므로 적지 않는다.

@@ -399,10 +399,15 @@ def _validate_channel(
         case ApprovalSurface.OWNER_DM:
             is_valid = facts.channel_type == 1 and owner_id in facts.recipient_ids
         case ApprovalSurface.SKILL_APPROVALS:
-            expected_id = _resolved_channel_id(
-                binding.kind, binding.surface, directory, skill_channel_id,
+            # The conventional name still qualifies (stored records keep their old
+            # meaning); the configured id or the caller's pin qualifies under any name,
+            # so the owner can rename the channel (2026-10-18).
+            is_valid = facts.channel_type == 0 and (
+                facts.name == "approvals"
+                or binding.channel_id == _resolved_channel_id(
+                    binding.kind, binding.surface, directory, skill_channel_id,
+                )
             )
-            is_valid = facts.channel_type == 0 and binding.channel_id == expected_id
         case ApprovalSurface.AGENT_CHAT_THREAD:
             is_valid = facts.channel_type in (11, 12) and (
                 facts.parent_id is not None and facts.parent_id == directory.agent_chat()
