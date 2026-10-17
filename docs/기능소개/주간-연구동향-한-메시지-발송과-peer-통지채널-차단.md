@@ -31,8 +31,8 @@ Discord…」 nag 와 논평(「평문 메시지 수신 확인. 🟢」)을 남�
 - **파일 없이 부른 레거시 경로**(`_send_dm(report)`): 예전처럼 전문을 본문으로 보낸다.
 - **peer 설정 드리프트**: peer config 가 재생성돼 `#notifications` 가 빠지면 healthcheck 가
   `PEER-IGNORED-CHANNELS-MISSING` + `PEER-IGNORED-CHANNELS-RECOVERY` 로 FAIL 한다.
-  `owner_notice_channel_id`가 없는 설치(레거시 DM)는 승인 ID만 대조한다.
-  채널 이름은 검사하지 않으며, 승인 ID가 없거나 잘못되면 fail-closed(`INVALID`).
+  `#notifications` 가 없는 설치(레거시 DM)는 `#approvals` 만으로 PASS 한다. 두 채널 이름이
+  중복이면 fail-closed(`INVALID`).
 
 ## 소유자 절차 (노드, 1회)
 

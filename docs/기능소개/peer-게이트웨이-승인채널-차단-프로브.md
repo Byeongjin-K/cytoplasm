@@ -4,13 +4,12 @@
 
 healthcheck의 읽기 전용 LOCAL 프로브 `peer_ignored_channels`가 peer 설정의 **최상위
 `discord.ignored_channels`** 에 공급망 승인 채널이 들어 있는지 확인한다. 채널 id는
-peer의 `interop/config.json`에 설정된 `personal_approvals_channel_id`와
-`deploy_approvals_channel_id`로 해석하며(둘 중 하나 이상 필수),
+peer의 `channel_directory.json`에서 이름이 `approvals`인 유일한 항목으로 해석하며,
 설정이 없거나 읽을 수 없으면 PASS로 추측하지 않고 **FAIL-closed** 한다.
-`owner_notice_channel_id`가 설정돼 있으면 그 id도 함께
+**2026-09-21**: 같은 디렉터리에 이름이 `notifications`인 채널이 보이면 그 id 도 함께
 요구한다 — peer 게이트웨이가 소유자 통지 채널을 수신하면 통지(주간 연구 동향 청크·헬스체크·
 릴리스)마다 스레드를 열어 논평과 `/sethome` nag 를 남겼다([소개](주간-연구동향-한-메시지-발송과-peer-통지채널-차단.md)).
-통지 ID가 없는 설치는 승인 ID만 대조한다. 표시 이름과 채널 디렉터리는 읽지 않는다.
+채널이 없는 설치는 approvals 만으로 PASS, 이름이 둘이면 fail-closed.
 
 ## 왜
 
@@ -22,10 +21,10 @@ peer 봇 신원은 승인 채널에서 REST 게시·리액션 조회를 해야 �
 ## 사용 시나리오
 
 - **정상:** 소유자가 차단 설정을 유지한 상태에서 기존 `automation/healthcheck.sh`를 실행한다
-  → 프로브가 gateway 설정과 interop 설정을 대조해 `PEER-IGNORED-CHANNELS-PASS`(rc 0)를 낸다.
+  → 프로브가 두 파일을 대조해 `PEER-IGNORED-CHANNELS-PASS`(rc 0)를 낸다.
   이는 디스크 설정 확인이지 실행 중 게이트웨이가 그 설정을 로드했다는 증명은 아니다.
 - **설정 유실:** 재생성된 config에서 승인 채널이 빠진다 → FAIL과
-  `PEER-IGNORED-CHANNELS-RECOVERY` 안내가 나온다. 소유자가 interop 설정의 ID를 복원하고,
+  `PEER-IGNORED-CHANNELS-RECOVERY` 안내가 나온다. 소유자가 디렉터리의 값을 복원하고,
   운영 규약에 따라 agent·peer 게이트웨이 재시동을 판단한다. 프로브는 편집·재시동하지 않는다.
 - **권한 부족:** `PEER-IGNORED-CHANNELS-UNREADABLE`(rc 1)이면 개별 sudoers 행을
   손으로 추가하지 않는다. 새 자산을 포함한 `deploy_checkout`에서 아래 **한 번의 `sudo`
@@ -66,18 +65,14 @@ printf '%s\n' PEER-READ-OK
 SH
 ```
 
-  명령은 node config의 계정·홈으로 템플릿을 렌더해 peer 설정 파일에 대한
+  명령은 node config의 계정·홈으로 템플릿을 렌더해 peer의 두 파일에 대한
   `/usr/bin/cat -- <path>`만 허용한다. `visudo -cf`가 먼저 실패하면 설치하지 않고, 같은
   바이트와 0440 `root:root`이면 no-op이다. 그 외에는 원자 교체 뒤 sha256·소유권·모드를
   다시 확인한다. 최종 파일명에는 `.`을 넣지 않는다. `sudoers.d`가 그런 파일을 무시한다.
 
-잘못된 YAML·잘못되거나 없는 승인 ID도 FAIL이며, PyYAML이 없으면
+잘못된 YAML·모호한 디렉터리도 FAIL이며, PyYAML이 없으면
 `PEER-IGNORED-CHANNELS-PARSER-UNAVAILABLE`과 설치 안내를 낸다. 파일 본문·채널 id는
 진단에 출력하지 않는다. 권한 설치 전 반복 FAIL·수리 티켓 잡음은 OWNER 원장에 남긴다.
-
-이 ID 전환을 배포할 기존 설치는 위 sudoers 자산을 한 번 다시 설치해야 한다.
-`interop/config.json` 한 파일의 읽기만 추가되며 셸·Python sudo 권한은 추가하지 않는다.
-프로브는 LOCAL 실행이고 SSH 강제명령 문자열·허용 목록은 바뀌지 않는다.
 
 ## 관련
 
@@ -86,3 +81,5 @@ SH
   운영 규약 · [소유자·관측 원장](../follow-ups-deferred.md#후속-과제-스윕-5-착지-후-남긴-것-2026-09-05--소유자관측)
 - [자가 스킬 승인 역할 주장 advisory](에이전트-자가-스킬.md#승인-역할-주장-advisory-2026-09-05)(PR #408)는
   본문 저작을 알리는 별도 보완책이다. 둘 다 승인 주체나 소유자 ✅ 게이트를 대체하지 않는다.
+
+**2026-10-18 이름 변경 대응**: 프로브가 이름으로 한 번 찾은 승인·통지 채널의 id를 ops 소유 메모(`<헬스체크 로그 디렉터리>/peer-ignored-ids.json`, 0600, id만)에 남긴다. 그 뒤 Discord에서 채널 이름을 바꿔도 peer 디렉터리에 같은 id가 남아 있는 동안 그 id를 계속 요구한다. 디렉터리에서 사라진 id는 요구하지 않는다. 메모를 읽거나 쓰지 못하면 `PEER-IGNORED-CHANNELS-MEMO-UNREADABLE`·`-MEMO-WRITE-FAIL` 한 줄을 남기고 판정은 그대로다. 권한·sudoers는 바뀌지 않는다. 처음 설치한 노드는 이름을 바꾸기 전에 헬스체크가 한 번 PASS해야 한다(이름도 메모도 없으면 `INVALID`).

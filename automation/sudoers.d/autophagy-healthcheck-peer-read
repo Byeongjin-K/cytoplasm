@@ -1,3 +1,2 @@
 $NODE_OPS_ACCOUNT ALL=($NODE_PEER_ACCOUNT) NOPASSWD: /usr/bin/cat -- $NODE_PEER_HOME/.hermes/config.yaml
 $NODE_OPS_ACCOUNT ALL=($NODE_PEER_ACCOUNT) NOPASSWD: /usr/bin/cat -- $NODE_PEER_HOME/.hermes/channel_directory.json
-$NODE_OPS_ACCOUNT ALL=($NODE_PEER_ACCOUNT) NOPASSWD: /usr/bin/cat -- $NODE_PEER_HOME/.hermes/interop/config.json

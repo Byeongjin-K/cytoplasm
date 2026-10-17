@@ -313,13 +313,8 @@ python3 automation/install/discord_check.py --config ~/.hermes/interop/config.js
 가능하면 다른 이름이어도 설치 점검은 PASS다. 설정 ID가 없는 레거시 승인
 디렉터리만 캐시·유일한 `approvals` 이름 검색을 사용한다.
 
-peer interop 설정에도 실제 승인·통지 목적지 ID를 기록한다. LOCAL 차단 점검은
-해당 ID(명시적 `deploy_approvals_channel_id` 포함)가 peer gateway 최상위
-`discord.ignored_channels`에 있는지 확인한다. 기존 설치는
-`autophagy-healthcheck-peer-read` sudoers 자산을 한 번 다시 설치해 peer
-`interop/config.json`의 읽기 한 줄을 추가한다. 권한 부족은 FAIL이며 자동 우회하지
-않는다. SSH 강제명령 허용 목록은 변하지 않는다.
-[기능 소개와 기존 설치 절차](../기능소개/Discord-승인-통지-채널-ID.md)를 따른다.
+peer 게이트웨이 차단 점검은 이름으로 한 번 찾은 승인·통지 id를 기억하므로, 이름은
+그 점검이 한 번 PASS한 뒤에 바꾼다. [기능 소개](../기능소개/Discord-승인-통지-채널-ID.md)
 
 ### 5.1 승인 표면 필수 키: `agent_chat_channel_id`
 

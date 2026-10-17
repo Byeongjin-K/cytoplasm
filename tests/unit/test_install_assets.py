@@ -135,7 +135,6 @@ def test_build_inputs_renders_healthcheck_peer_read_sudoers_dropin_exactly() -> 
     assert peer_read.content == (
         "ops ALL=(peer) NOPASSWD: /usr/bin/cat -- /home/peer/.hermes/config.yaml\n"
         "ops ALL=(peer) NOPASSWD: /usr/bin/cat -- /home/peer/.hermes/channel_directory.json\n"
-        "ops ALL=(peer) NOPASSWD: /usr/bin/cat -- /home/peer/.hermes/interop/config.json\n"
     )
     assert (peer_read.mode, peer_read.owner, peer_read.group) == (0o440, "root", "root")
 
@@ -160,8 +159,6 @@ def test_build_inputs_renders_healthcheck_peer_read_sudoers_from_custom_node_con
         "/srv/alternate-peer/.hermes/config.yaml\n"
         "alternate-ops ALL=(alternate-peer) NOPASSWD: /usr/bin/cat -- "
         "/srv/alternate-peer/.hermes/channel_directory.json\n"
-        "alternate-ops ALL=(alternate-peer) NOPASSWD: /usr/bin/cat -- "
-        "/srv/alternate-peer/.hermes/interop/config.json\n"
     )
 
 

@@ -1,9 +1,5 @@
 # 보류·인계 후속 과제
 
-## Discord 채널 ID 전환의 기존 설치 권한 (2026-10-17)
-
-- **OWNER — peer interop 설정 읽기:** 기존 sudoers 자산에는 해당 파일 판독 권한이 없다 → 배포 시 `autophagy-healthcheck-peer-read` 자산을 한 번 다시 설치한다. 권한 갱신 전 peer 차단 점검은 UNREADABLE로 실패하며 승인 게이트를 우회하지 않는다. [절차](기능소개/peer-게이트웨이-승인채널-차단-프로브.md).
-
 > [follow-ups.md](follow-ups.md) 에서 **이 저장소가 지금 손댈 수 없는** 항목을 옮겨 둔 곳이다.
 > 버려진 것이 아니라 조건이 걸린 것이다 — 조건이 풀리면 해당 불릿을 `follow-ups.md` 로 되돌린다.
 > 원 묶음 `##` 헤딩을 그대로 유지한다: 후속 과제 회계 가드(`tests/unit/test_features_board_conformance.py` A9)가

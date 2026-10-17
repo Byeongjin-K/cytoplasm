@@ -130,9 +130,7 @@ python3 automation/install/discord_check.py --config ~/.hermes/interop/config.js
 캐시·유일한 `approvals` 이름 검색이 남으므로 이름 변경 전에 ID를 설정한다.
 다른 채널 역할의 관례 이름 차이는 기존처럼 `WARN`으로 알린다.
 
-peer interop 설정에도 승인·통지 ID를 기록하고 해당 ID를 gateway 최상위
-`discord.ignored_channels`에 넣는다. 기존 설치의 peer 설정 읽기 권한 갱신은
-[채널 ID 기능 소개](../기능소개/Discord-승인-통지-채널-ID.md)를 따른다.
+[채널 ID 기능 소개](../기능소개/Discord-승인-통지-채널-ID.md)
 
 ---
 
