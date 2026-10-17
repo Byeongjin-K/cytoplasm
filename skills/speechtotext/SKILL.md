@@ -292,7 +292,8 @@ python3 $C remove --name 김민수                                       # 등�
 CLI 를 부르지 않아도 된다. 라이프로그 노트(vault `000_PARA/Area/Lifelog/`)의 `## 한눈에` 아래에
 생성되는 기본 양식의 `미상`을 실제 이름으로 바꾸면 no-agent 워처
 `voice_catalog_enroll_watch.py`(10분 틱, `automation/voice_catalog/`)가 RAG 미러에서 그 줄을 읽어
-위의 `enroll` 을 돌리고 `#notifications` 에 결과를 올린다. 기본값 `미상`은 무시하므로 소유자가
+위의 `enroll` 을 돌리고 `owner_notice_channel_id`의 통지 채널에 결과를 올린다
+(`#notifications`는 변경 가능한 예시 이름). 기본값 `미상`은 무시하므로 소유자가
 이름을 넣기 전에는 등록되지 않는다:
 
 생성 직후:

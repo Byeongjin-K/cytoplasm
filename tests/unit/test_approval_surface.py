@@ -19,6 +19,7 @@ from automation.interop.approval_surface import (
     surface_at_policy,
     validate_stored_binding,
 )
+from automation.skill_gate_surface import SupplyChainSurface
 
 OWNER_ID = "280680578404010625"
 DM_CHANNEL_ID = "1526487936065952385"
@@ -332,14 +333,74 @@ def test_dm_without_owner_recipient_raises() -> None:
         _ = validate_stored_binding(_stored_repair_dm_binding(), directory, OWNER_ID)
 
 
-def test_skill_channel_with_wrong_name_raises() -> None:
-    # Given: the guild channel is named general rather than approvals.
+def test_skill_channel_with_configured_id_passes_when_renamed() -> None:
+    # Given: only the configured channel's display name changed.
     directory = FakeDirectory()
     directory.facts[SKILL_CHANNEL_ID] = ChannelFacts(0, "general", ())
 
-    # When / Then: the mismatch fails closed.
+    # When
+    binding = resolve_new_binding(ApprovalKind.SKILL_ATTEST, directory, OWNER_ID)
+    # Then
+    assert binding.channel_id == SKILL_CHANNEL_ID
+
+
+def test_stored_skill_channel_with_wrong_id_and_name_is_refused() -> None:
+    # Given: an unrelated text channel is neither the configured id nor named approvals.
+    directory = FakeDirectory()
+    directory.facts["123"] = ChannelFacts(0, "general", ())
+    binding = ApprovalBinding(
+        ApprovalKind.SKILL_ATTEST, ApprovalSurface.SKILL_APPROVALS, "123", POLICY_VERSION,
+    )
+    # When / Then
     with pytest.raises(ApprovalSurfaceError):
-        _ = resolve_new_binding(ApprovalKind.SKILL_ATTEST, directory, OWNER_ID)
+        validate_stored_binding(binding, directory, OWNER_ID)
+
+
+@pytest.mark.parametrize("configured", ["", "unknown"])
+def test_stored_skill_channel_requires_a_known_id(configured: str) -> None:
+    # Given: channel facts alone cannot establish the approved destination.
+    directory = FakeDirectory()
+    directory.skill_channel_id = configured
+    directory.facts[SKILL_CHANNEL_ID] = ChannelFacts(0, "renamed", ())
+    binding = ApprovalBinding(
+        ApprovalKind.SKILL_ATTEST, ApprovalSurface.SKILL_APPROVALS,
+        SKILL_CHANNEL_ID, POLICY_VERSION,
+    )
+    # When / Then
+    with pytest.raises(ApprovalSurfaceError):
+        validate_stored_binding(binding, directory, OWNER_ID)
+
+
+def test_stored_skill_channel_accepts_explicit_pin_when_renamed() -> None:
+    # Given: the explicit pin differs from the directory's default.
+    directory = FakeDirectory()
+    directory.facts["123"] = ChannelFacts(0, "renamed", ())
+    binding = ApprovalBinding(
+        ApprovalKind.SKILL_ATTEST, ApprovalSurface.SKILL_APPROVALS, "123", POLICY_VERSION,
+    )
+    # When
+    result = validate_stored_binding(binding, directory, OWNER_ID, skill_channel_id="123")
+    # Then
+    assert result == binding
+
+
+@pytest.mark.parametrize("stamped", [True, False])
+def test_supply_chain_replays_explicit_pin_when_renamed(stamped: bool) -> None:
+    # Given: the caller's pin differs from the directory, for old and new records.
+    directory = FakeDirectory()
+    directory.facts["123"] = ChannelFacts(0, "renamed", ())
+    surface = SupplyChainSurface(ApprovalKind.SKILL_DEPLOY, OWNER_ID, directory, "123")
+    record = {"channel_id": "123"}
+    if stamped:
+        record.update(
+            kind=ApprovalKind.SKILL_DEPLOY.value,
+            surface=ApprovalSurface.SKILL_APPROVALS.value,
+            policy_version=str(POLICY_VERSION),
+        )
+    # When
+    binding = surface.stored(record)
+    # Then
+    assert binding.channel_id == "123"
 
 
 def test_directory_exception_becomes_surface_error_without_fallback() -> None:

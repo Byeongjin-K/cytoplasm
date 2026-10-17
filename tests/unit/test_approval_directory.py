@@ -9,7 +9,9 @@ from urllib.error import HTTPError
 import pytest
 
 from automation.interop.approval_directory import DiscordChannelDirectory, JsonValue
-from automation.interop.approval_surface import ApprovalKind, ApprovalSurfaceError, ChannelFacts
+from automation.interop.approval_surface import (
+    ApprovalKind, ApprovalSurfaceError, ChannelFacts, resolve_new_binding,
+)
 
 RequestKey = tuple[str, str]
 RecordedCall = tuple[str, str, dict[str, JsonValue] | None]
@@ -186,6 +188,17 @@ def test_skill_approvals_refuses_two_guild_matches(interop_config: Path) -> None
     # When / Then: ambiguity fails closed.
     with pytest.raises(ApprovalSurfaceError):
         _directory(fake).skill_approvals()
+
+
+def test_configured_renamed_channel_never_uses_name_scan(interop_config: Path) -> None:
+    # Given: the configured channel has a new name; guild scanning is unavailable.
+    interop_config.write_text(json.dumps({"personal_approvals_channel_id": "42"}), encoding="utf-8")
+    fake = FakeApi("bot-a", {("GET", "/channels/42"): {"type": 0, "name": "renamed"}})
+    # When
+    binding = resolve_new_binding(ApprovalKind.SKILL_ATTEST, _directory(fake), "owner")
+    # Then: resolution plus validation use only the configured channel.
+    assert binding.channel_id == "42"
+    assert fake.calls == [("GET", "/channels/42", None)]
 
 
 def test_skill_approvals_refuses_zero_guild_matches(interop_config: Path) -> None:

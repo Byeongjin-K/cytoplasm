@@ -35,7 +35,10 @@ probe_peer_ignored_channels() {
   # A full YAML parser rejects malformed surrounding config as well as this field.
   # PyYAML is already present in the node's ops python3 and peer Hermes venv.
   # Keep config (which can contain secrets) on inherited fds, never argv or env.
-  if python3 - 4<<< "$config" 5<<< "$directory" <<'PY'
+  # The memo holds only channel ids this probe already matched (ops-owned, 0600), so
+  # renaming #approvals/#notifications in Discord keeps the same ids required.
+  local memo="${HEALTHCHECK_PEER_IGNORED_MEMO:-${LOG_DIR:+$LOG_DIR/peer-ignored-ids.json}}"
+  if PEER_IGNORED_MEMO="$memo" python3 - 4<<< "$config" 5<<< "$directory" <<'PY'
 from __future__ import annotations
 
 import json
@@ -84,12 +87,39 @@ try:
             raise ProbeInputError
         return ChannelId(matches[0])
 
+    # A channel matched once by its conventional name stays required by id while the
+    # peer directory still lists that id, so a Discord rename does not drop it
+    # (owner 2026-10-18 "Approval도 코드 변경해서 같은 느낌으로 맞춰줘").
+    present = {row.get("id") for row in channels if isinstance(row.get("id"), str)}
+    memo_path = os.environ.get("PEER_IGNORED_MEMO", "")
+    remembered: dict[str, list[str]] = {}
+    if memo_path:
+        try:
+            with open(memo_path, encoding="utf-8") as stream:
+                loaded = json.load(stream)
+            if isinstance(loaded, dict):
+                remembered = {key: [i for i in value if isinstance(i, str) and i.isascii() and i.isdigit()]
+                              for key, value in loaded.items() if isinstance(value, list)}
+        except FileNotFoundError:
+            pass
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            print("[healthcheck] PEER-IGNORED-CHANNELS-MEMO-UNREADABLE")
+
+    def channel_ids(name: str, *, required: bool) -> set[ChannelId]:
+        """The name's current id plus earlier matches the directory still lists."""
+        found = unique_channel(name, required=False)
+        ids = {ChannelId(i) for i in remembered.get(name, []) if i in present}
+        if found is not None:
+            ids.add(found)
+        if required and not ids:
+            raise ProbeInputError
+        return ids
+
     # #approvals must exist; #notifications is required only when the peer can see it —
     # a peer that receives owner notices opens a thread on every chunk (2026-09-21).
-    required = {unique_channel("approvals", required=True)}
-    notifications = unique_channel("notifications", required=False)
-    if notifications is not None:
-        required.add(notifications)
+    approvals = channel_ids("approvals", required=True)
+    notifications = channel_ids("notifications", required=False)
+    required = approvals | notifications
     with os.fdopen(4, encoding="utf-8") as stream:
         root = yaml.compose(stream, Loader=yaml.SafeLoader)
     ignored = field(field(root, "discord"), "ignored_channels")
@@ -112,6 +142,17 @@ try:
 except (OSError, UnicodeError, json.JSONDecodeError, yaml.YAMLError, ProbeInputError):
     print("[healthcheck] PEER-IGNORED-CHANNELS-INVALID")
     raise SystemExit(1) from None
+if memo_path:
+    memo = {"approvals": sorted(approvals), "notifications": sorted(notifications)}
+    try:
+        temporary = f"{memo_path}.tmp"
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(memo, stream)
+        os.replace(temporary, memo_path)
+    except OSError:
+        # The verdict stands; the next run simply matches by name again.
+        print("[healthcheck] PEER-IGNORED-CHANNELS-MEMO-WRITE-FAIL")
 print("[healthcheck] PEER-IGNORED-CHANNELS-PASS")
 PY
   then

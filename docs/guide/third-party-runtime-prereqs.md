@@ -124,8 +124,13 @@ python3 automation/install/discord_check.py --config ~/.hermes/interop/config.js
 | `NO-HISTORY` | Read Message History가 거부됐다 → 승인 리액션 판독 불가 |
 | `WRONG-CHANNEL-TYPE` | 텍스트 채널이 아니다 |
 
-채널 **이름**이 관례값과 다르면 `WARN`으로만 알린다 — id 기반 흐름은 동작하지만 이름 검색
-폴백(`#approvals` 해석)이 실패하므로 맞추는 편이 좋다.
+공급망 승인 채널은 `personal_approvals_channel_id`로 식별하므로 표시 이름이 달라도
+`PASS`다. `#approvals`·`#notifications`는 예시 이름이며 변경할 수 있다.
+통지는 `owner_notice_channel_id`로 간다. 설정이 없는 레거시 승인 조회에만
+캐시·유일한 `approvals` 이름 검색이 남으므로 이름 변경 전에 ID를 설정한다.
+다른 채널 역할의 관례 이름 차이는 기존처럼 `WARN`으로 알린다.
+
+[채널 ID 기능 소개](../기능소개/Discord-승인-통지-채널-ID.md)
 
 ---
 

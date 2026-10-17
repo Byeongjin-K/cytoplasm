@@ -120,7 +120,7 @@ class DiscordChannelDirectory:
         return channel_id
 
     def skill_approvals(self) -> str:
-        """Resolve the configured, cached, or uniquely scanned skill approval channel."""
+        """Prefer the configured id regardless of name; scan only unconfigured installs."""
         configured = _configured_approvals_channel()
         if configured is not None:
             return configured

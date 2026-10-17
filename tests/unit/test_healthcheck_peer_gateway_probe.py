@@ -39,7 +39,8 @@ def _probe(files: tuple[Path, Path], script: str = 'source "$1"; probe_peer_igno
         env={**os.environ,
              "HEALTHCHECK_NODE_CONFIG_PATH": str(_REPO / "configs/node.example.toml"),
              "HEALTHCHECK_PEER_GATEWAY_CONFIG": str(config),
-             "HEALTHCHECK_PEER_CHANNEL_DIRECTORY": str(directory)},
+             "HEALTHCHECK_PEER_CHANNEL_DIRECTORY": str(directory),
+             "HEALTHCHECK_PEER_IGNORED_MEMO": str(config.parent / "peer-ignored-ids.json")},
         capture_output=True, text=True, check=False, timeout=15,
     )
 
@@ -204,5 +205,60 @@ exit 3
     # When: the production dispatcher selects the new local probe.
     result = _probe(peer_files, script)
     # Then
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PEER-IGNORED-CHANNELS-PASS" in result.stdout
+
+
+def _rename_approvals(directory: Path, name: str) -> None:
+    rows = json.loads(directory.read_text(encoding="utf-8"))
+    for row in rows["platforms"]["discord"]:
+        if row["id"] == _APPROVALS:
+            row["name"] = name
+    directory.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_a_renamed_approvals_channel_stays_required_by_its_remembered_id(
+    peer_files: tuple[Path, Path],
+) -> None:
+    # Given: one pass matched #approvals by name, then the owner renamed it in Discord.
+    assert _probe(peer_files).returncode == 0
+    memo = peer_files[0].parent / "peer-ignored-ids.json"
+    assert oct(memo.stat().st_mode & 0o777) == "0o600"
+    _rename_approvals(peer_files[1], "release-approvals")
+    # When: the peer still ignores that id
+    kept = _probe(peer_files)
+    # and when the id is later removed from the peer's ignore list
+    peer_files[0].write_text('discord:\n  ignored_channels: "67890"\n', encoding="utf-8")
+    dropped = _probe(peer_files)
+    # Then: the rename passes, and the id is still enforced without the old name.
+    assert kept.returncode == 0, kept.stdout + kept.stderr
+    assert "PEER-IGNORED-CHANNELS-PASS" in kept.stdout
+    assert dropped.returncode == 1, dropped.stdout + dropped.stderr
+    assert "PEER-IGNORED-CHANNELS-MISSING" in dropped.stdout
+    assert _APPROVALS not in kept.stdout + dropped.stdout
+
+
+def test_a_renamed_channel_without_an_earlier_match_fails_closed(
+    peer_files: tuple[Path, Path],
+) -> None:
+    # Given: no earlier pass remembered the id, so nothing identifies the approvals channel.
+    _rename_approvals(peer_files[1], "release-approvals")
+    # When
+    result = _probe(peer_files)
+    # Then
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "PEER-IGNORED-CHANNELS-INVALID" in result.stdout
+
+
+def test_a_remembered_id_the_directory_no_longer_lists_is_not_required(
+    peer_files: tuple[Path, Path],
+) -> None:
+    # Given: an earlier pass remembered an id whose channel has since been replaced.
+    (peer_files[0].parent / "peer-ignored-ids.json").write_text(
+        json.dumps({"approvals": ["99999"], "notifications": []}), encoding="utf-8",
+    )
+    # When
+    result = _probe(peer_files)
+    # Then: only channels the peer can still see are required.
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PEER-IGNORED-CHANNELS-PASS" in result.stdout

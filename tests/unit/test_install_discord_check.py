@@ -189,6 +189,15 @@ def test_channel_name_drift_warns_but_does_not_fail() -> None:
     assert _INTEROP.expected_name in result.detail
 
 
+def test_approvals_channel_passes_when_renamed() -> None:
+    # Given: the configured id is readable and its name is arbitrary.
+    channel = _ok_channel("supply-chain")
+    # When
+    result = evaluate_channel(_APPROVALS, "9", channel, ApiResponse(200, []))
+    # Then
+    assert result.status is Status.PASS
+
+
 def test_run_checks_is_read_only_and_covers_every_required_channel() -> None:
     responses = {
         "/users/@me": _ok_bot(),

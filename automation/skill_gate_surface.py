@@ -142,14 +142,19 @@ class SupplyChainSurface:
         stamped, channel_id = record.get("policy_version", ""), record.get("channel_id", "")
         surface, kind = record.get("surface", ""), record.get("kind", "")
         if not stamped.isdigit() or not channel_id or not surface:
-            return legacy_binding(self.kind, channel_id or None, self.directory, self.owner)
+            return legacy_binding(
+                self.kind, channel_id or None, self.directory, self.owner,
+                skill_channel_id=self.pinned,
+            )
         if kind != self.kind.value:
             raise ApprovalSurfaceError(f"stored kind {kind!r} contradicts {self.kind.value!r}")
         try:
             binding = ApprovalBinding(self.kind, ApprovalSurface(surface), channel_id, int(stamped))
         except ValueError as error:
             raise ApprovalSurfaceError(f"stored surface is unknown: {surface!r}") from error
-        return validate_stored_binding(binding, self.directory, self.owner)
+        return validate_stored_binding(
+            binding, self.directory, self.owner, skill_channel_id=self.pinned,
+        )
 
 
 def surface_for(kind: ApprovalKind, identity: GateIdentity) -> SupplyChainSurface:

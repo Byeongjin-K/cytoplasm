@@ -201,6 +201,10 @@ sudo runuser -u agent -- python3 -m automation.managed_sync sync
 
 승인 표면은 둘로 갈린다. **소유자 전용 승인은 봇과 나의 DM**이고,
 **스킬 공급망 승인(배포·attestation·관리형 활성화)은 개인 서버 `#approvals`**다.
+여기와 아래의 `#approvals`·`#notifications`는 예시 이름이다. 승인 채널 ID는
+`personal_approvals_channel_id`(명시적 배포 핀은 `deploy_approvals_channel_id`),
+통지 채널 ID는 `owner_notice_channel_id`로 정한다. 같은 ID를 유지하면 Discord에서
+이름을 바꿀 수 있다. 설정 없는 레거시 승인 조회만 이름 검색을 사용한다.
 후자가 채널인 이유는 내 설치의 두 번째 주체(peer 봇)가 같은 메시지를 봐야 하기
 때문이며, 그래서 DM으로 옮길 수 없다.
 

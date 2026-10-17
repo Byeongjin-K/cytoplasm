@@ -389,6 +389,7 @@ def _validate_channel(
     owner_id: str,
     *,
     resolve_guild: bool = False,
+    skill_channel_id: str | None = None,
 ) -> ApprovalBinding:
     try:
         facts = directory.describe(binding.channel_id)
@@ -398,7 +399,15 @@ def _validate_channel(
         case ApprovalSurface.OWNER_DM:
             is_valid = facts.channel_type == 1 and owner_id in facts.recipient_ids
         case ApprovalSurface.SKILL_APPROVALS:
-            is_valid = facts.channel_type == 0 and facts.name == "approvals"
+            # The conventional name still qualifies (stored records keep their old
+            # meaning); the configured id or the caller's pin qualifies under any name,
+            # so the owner can rename the channel (2026-10-18).
+            is_valid = facts.channel_type == 0 and (
+                facts.name == "approvals"
+                or binding.channel_id == _resolved_channel_id(
+                    binding.kind, binding.surface, directory, skill_channel_id,
+                )
+            )
         case ApprovalSurface.AGENT_CHAT_THREAD:
             is_valid = facts.channel_type in (11, 12) and (
                 facts.parent_id is not None and facts.parent_id == directory.agent_chat()
@@ -429,7 +438,9 @@ def resolve_new_binding(
     surface = required_surface(kind)
     channel_id = _resolved_channel_id(kind, surface, directory, skill_channel_id, request)
     binding = ApprovalBinding(kind, surface, channel_id, POLICY_VERSION)
-    return _validate_channel(binding, directory, owner_id, resolve_guild=True)
+    return _validate_channel(
+        binding, directory, owner_id, resolve_guild=True, skill_channel_id=channel_id,
+    )
 
 
 def reuse_request_thread(
@@ -480,6 +491,7 @@ def validate_stored_binding(
     owner_id: str,
     *,
     transitions: TransitionLedger = _TRANSITIONS,
+    skill_channel_id: str | None = None,
 ) -> ApprovalBinding:
     stamped_surface = surface_at_policy(
         binding.kind,
@@ -490,7 +502,7 @@ def validate_stored_binding(
         raise ApprovalSurfaceError(
             f"stored surface {binding.surface} contradicts policy version {binding.policy_version}",
         )
-    return _validate_channel(binding, directory, owner_id)
+    return _validate_channel(binding, directory, owner_id, skill_channel_id=skill_channel_id)
 
 
 def legacy_binding(
@@ -498,23 +510,25 @@ def legacy_binding(
     raw_channel_id: str | None,
     directory: ChannelDirectory,
     owner_id: str,
+    *,
+    skill_channel_id: str | None = None,
 ) -> ApprovalBinding:
     match raw_channel_id:
         case None | "":
             surface = surface_at_policy(kind, 0)
-            channel_id = _resolved_channel_id(kind, surface, directory, None)
+            channel_id = _resolved_channel_id(kind, surface, directory, skill_channel_id)
         case "dm":
             surface = ApprovalSurface.OWNER_DM
-            channel_id = _resolved_channel_id(kind, surface, directory, None)
+            channel_id = _resolved_channel_id(kind, surface, directory, skill_channel_id)
         case "approvals":
             surface = ApprovalSurface.SKILL_APPROVALS
-            channel_id = _resolved_channel_id(kind, surface, directory, None)
+            channel_id = _resolved_channel_id(kind, surface, directory, skill_channel_id)
         case str() as channel_id:
             surface = surface_at_policy(kind, 0)
         case unreachable:
             assert_never(unreachable)
     binding = ApprovalBinding(kind, surface, channel_id, 0)
-    return _validate_channel(binding, directory, owner_id)
+    return _validate_channel(binding, directory, owner_id, skill_channel_id=skill_channel_id)
 
 
 def reaction_instruction(
