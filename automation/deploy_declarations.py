@@ -9,6 +9,11 @@ file, 소유 패키지는 소스 앞 두 조각). `v2:` 로 시작하면 종류(
 cron 행의 선택 키 `env=<이름>[,<이름>…]` 은 그 스크립트가 기본값 없이 요구하는 환경값이다. 배포기는
 이 키를 쓰지 않고, doctor 가 등록된 작업마다 값이 있는지 확인한다(`automation/doctor/cron_env.py`).
 
+cron 행의 선택 키 `runner=hermes|systemd`(기본 hermes)는 그 잡을 누가 띄우는지다. systemd 면 배포기가
+`converge_timer`(`automation/cron_timer.py`)로 계정의 사용자 타이머를 맞추고 같은 이름의 Hermes 잡은
+일시정지로 둔다(P2). systemd 는 `deliver=local` 만 받는다 — Hermes 가 stdout 을 Discord 로 보내던 잡을
+타이머로 옮기면 그 글이 사라진다. 주기는 systemd 달력으로 같은 뜻을 낼 수 있어야 한다(`cron_schedule`).
+
 v2 행은 중앙 표(`configs/watcher-deploy-manifest.txt`)에 나오지 않는다. 그 표의 바이트는
 헬스체크 허용 목록 지문에 들어가므로, 표는 legacy 행만 투영한다(`watcher_manifest.derive_manifest`).
 """
@@ -19,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final, TypeAlias
 
+from automation.cron_schedule import ScheduleError, on_calendar
 from automation.watcher_manifest import (
     V2_PREFIX as _V2_PREFIX,
 )
@@ -39,7 +45,7 @@ _KIND_KEYS: Final[dict[str, frozenset[str]]] = {
     "file": frozenset(),
     "tree": frozenset({"files", "profile", "prefix", "lock"}),
     "derived": frozenset({"algorithm", "requirements"}),
-    "cron": frozenset({"schedule", "script", "deliver", "mode", "env"}),
+    "cron": frozenset({"schedule", "script", "deliver", "mode", "env", "runner"}),
     "config": frozenset({"algorithm"}),
 }
 _ENV_NAME: Final = re.compile(r"[A-Z_][A-Z0-9_]*")
@@ -53,8 +59,9 @@ _ENUMS: Final[dict[str, tuple[str, ...]]] = {
     "activation": ("none", "gateway"),
     "requires": ("roster",),
     "node": ("default", "rag"),
+    "runner": ("hermes", "systemd"),
 }
-_DEFAULTS: Final[dict[str, str]] = {"profile": "python", "activation": "none", "node": "default"}
+_DEFAULTS: Final[dict[str, str]] = {"profile": "python", "activation": "none", "node": "default", "runner": "hermes"}
 _PATH_KEYS: Final = frozenset({"prefix", "lock", "requirements", "script"})
 
 
@@ -121,6 +128,13 @@ def _parse_v2(field: str) -> tuple[str, dict[str, str]]:
     missing = [key for key in _REQUIRED_KEYS.get(kind, ()) if key not in values]
     if missing:
         raise ManifestError(f"{kind} declaration lacks: {', '.join(missing)}")
+    if values.get("runner") == "systemd":
+        if values["deliver"] != "local":
+            raise ManifestError("runner=systemd needs deliver=local (a timer has no Discord delivery)")
+        try:
+            _ = on_calendar(values["schedule"])
+        except ScheduleError as error:
+            raise ManifestError(f"runner=systemd schedule: {error}") from None
     return kind, values
 
 
