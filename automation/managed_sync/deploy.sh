@@ -52,5 +52,6 @@ push_file "$repo_root/automation/managed_sync/cron/managed_sync_watch.py" '.herm
 # Idempotent cron registration — a second run must not create a second job.
 # --all so a paused job is still seen and not duplicated.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron managed-sync-watch "every 30m" managed_sync_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer managed-sync-watch "every 30m" managed_sync_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 managed-sync-watch || true'

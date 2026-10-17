@@ -37,6 +37,8 @@ NAME: Final = re.compile(r"[a-z0-9][a-z0-9-]*")
 SCRIPT: Final = re.compile(r"[A-Za-z0-9_]+\.py")
 ENV: Final = re.compile(r"[A-Z_][A-Z0-9_]*")
 UNIT_PREFIX: Final = "autophagy-cron-"
+#: local = stdout 은 journal 에만, discord = Hermes 처럼 홈 채널로 보낸다(`cron_timer_run`).
+DELIVERIES: Final = ("local", "discord")
 STATE_DIR: Final = Path(".hermes") / "cron-timers"
 _TZ_LINE: Final = re.compile(r"^timezone:\s*['\"]?([A-Za-z][A-Za-z0-9_+/-]*)['\"]?\s*$", re.M)
 _TIMEOUT: Final = 120
@@ -56,10 +58,11 @@ class Job:
     schedule: str
     script: str
     env: tuple[str, ...] = ()
+    deliver: str = "local"
 
     def check(self) -> None:
         if not (NAME.fullmatch(self.name) and SCRIPT.fullmatch(self.script)
-                and all(ENV.fullmatch(e) for e in self.env)):
+                and all(ENV.fullmatch(e) for e in self.env) and self.deliver in DELIVERIES):
             raise TimerError(2, f"unsafe argument for {self.name[:40]}")
 
 
@@ -83,6 +86,7 @@ def render(job: Job, *, root: str, timezone: str) -> tuple[str, str]:
     except ScheduleError as error:
         raise TimerError(2, f"schedule {job.schedule!r}: {error}") from None
     env = f" --env {','.join(job.env)}" if job.env else ""
+    deliver = " --deliver discord" if job.deliver == "discord" else ""
     service = (
         "[Unit]\n"
         f"Description=Autophagy scheduled job {job.name} (no-agent script, moved from Hermes cron)\n"
@@ -91,7 +95,10 @@ def render(job: Job, *, root: str, timezone: str) -> tuple[str, str]:
         "Type=oneshot\n"
         "WorkingDirectory=%h/.hermes/scripts\n"
         f"Environment=PYTHONPATH={root}\n"
-        f"ExecStart=/usr/bin/python3 -B -m automation.cron_timer_run --name {job.name} --script {job.script}{env}\n"
+        "Environment=HERMES_HOME=%h/.hermes\n"
+        "Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin\n"
+        "EnvironmentFile=-%h/.env.secrets\n"
+        f"ExecStart=/usr/bin/python3 -B -m automation.cron_timer_run --name {job.name} --script {job.script}{env}{deliver}\n"
         f"TimeoutStartSec={SCRIPT_TIMEOUT + 100}\n"
     )
     timer = (
@@ -259,7 +266,8 @@ def check(node: Node, job: Job, *, root: str) -> tuple[str, str]:
 
 
 def identity(job: Job) -> str:
-    return hashlib.sha256("\n".join((job.name, " ".join(job.schedule.split()), job.script, ",".join(job.env))).encode()).hexdigest()[:16]
+    fields = (job.name, " ".join(job.schedule.split()), job.script, ",".join(job.env), job.deliver)
+    return hashlib.sha256("\n".join(fields).encode()).hexdigest()[:16]
 
 
 def declared(root: Path, role: str, name: str) -> Job:
@@ -268,7 +276,8 @@ def declared(root: Path, role: str, name: str) -> Job:
 
     for row in all_declarations(root):
         if (row.kind, row.account, row.destination, row.attr("runner")) == ("cron", role, name, "systemd"):
-            return Job(name, row.attr("schedule"), row.attr("script"), tuple(e for e in row.attr("env").split(",") if e))
+            return Job(name, row.attr("schedule"), row.attr("script"),
+                       tuple(e for e in row.attr("env").split(",") if e), row.attr("deliver"))
     raise TimerError(7, f"no runner=systemd declaration for {role}:{name}")
 
 
@@ -281,6 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         p.add_argument("--schedule", required=True)
         p.add_argument("--script", required=True)
         p.add_argument("--env", default="")
+        p.add_argument("--deliver", default="local")
         p.add_argument("--timezone", default=None)
     sub.add_parser("revert").add_argument("--name", required=True)
     declared_check = sub.add_parser("check-declared")
@@ -298,7 +308,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             state, detail = check(node, job, root=root)
             print(f"TIMER-CHECK state={state} detail={detail} want={identity(job)}")
             return 0
-        job = Job(args.name, args.schedule, args.script, tuple(e for e in args.env.split(",") if e))
+        job = Job(args.name, args.schedule, args.script, tuple(e for e in args.env.split(",") if e), args.deliver)
         if args.verb == "render":
             job.check()
             tz = hermes_timezone(node.home) if args.timezone is None else args.timezone

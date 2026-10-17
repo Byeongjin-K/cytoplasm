@@ -80,12 +80,14 @@ def digest_markers(home: Path, since: datetime) -> dict[str, int]:
     try:
         raw = json.loads((home / ".hermes" / "cron" / "jobs.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
+        raw = {}
     jobs = raw.get("jobs") if isinstance(raw, dict) else raw
     ids = [str(j.get("id")) for j in jobs or () if isinstance(j, dict) and j.get("name") == DIGEST_JOB]
+    folders = [home / ".hermes" / "cron" / "output" / job_id for job_id in ids]
+    # 다이제스트가 사용자 타이머로 돌면 러너가 출력을 여기 남긴다(`automation/cron_timer_run.py`).
+    folders.append(home / ".hermes" / "cron-timers" / "output" / DIGEST_JOB)
     found: dict[str, int] = {}
-    for job_id in ids:
-        folder = home / ".hermes" / "cron" / "output" / job_id
+    for folder in folders:
         for path in sorted(folder.glob("*")) if folder.is_dir() else ():
             if datetime.fromtimestamp(path.stat().st_mtime, UTC) <= since:
                 continue

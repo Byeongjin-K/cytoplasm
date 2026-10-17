@@ -34,8 +34,9 @@ push_file "$repo_root/automation/project_board/cron/project_board_analyze.py" '.
 push_file "$repo_root/automation/project_board/systemd/autophagy-project-board.service" '.config/systemd/user/autophagy-project-board.service'
 
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron project-board-watch "every 2m" project_board_watch.py local
-converge_cron project-board-analyze "every 30m" project_board_analyze.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer project-board-watch "every 2m" project_board_watch.py local
+converge_timer project-board-analyze "every 30m" project_board_analyze.py local
 
 run_agent 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"; systemctl --user daemon-reload && systemctl --user enable autophagy-project-board.service && systemctl --user restart autophagy-project-board.service && systemctl --user is-active autophagy-project-board.service'
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 project-board || true'

@@ -58,5 +58,6 @@ fi
 # 해석한다 — 실측(2026-08-28): daily-cost-report 가 `0 9 * * *` 이고 Next run 이
 # 2026-08-29T09:00:00+09:00 이다. UTC 로 착각해 9시간 옮기지 마라.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron meeting-pending-transcript-watch "0 0 * * *" meeting_pending_transcript_watch.py discord
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer meeting-pending-transcript-watch "0 0 * * *" meeting_pending_transcript_watch.py discord
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A6 "meeting-pending-transcript-watch" || hermes cron list --all | tail -20'

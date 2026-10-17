@@ -44,7 +44,8 @@ push_file "$repo_root/automation/memory_curator/cron/memory_curator_watch.py" '.
 # Idempotent cron registration (no-agent, LLM-free, every 30m). Use --all so a PAUSED
 # job is still seen — plain `cron list` hides paused jobs and would duplicate the job.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron memory-curator-watch "every 30m" memory_curator_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer memory-curator-watch "every 30m" memory_curator_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-curator-watch || true'
 
 # Hermes memory caps (owner decision 2026-10-14): the curator's CAPS and both accounts'

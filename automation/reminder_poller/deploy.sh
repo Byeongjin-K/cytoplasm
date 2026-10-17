@@ -31,4 +31,5 @@ run_agent() { run_account "$NODE_AGENT_ACCOUNT" "$1"; }
 deploy_tree_swap --link "$repo_root/automation/reminder_poller" .hermes/reminder_poller_runtime/.current poller_core.py reminder_store.py || exit $?
 push_file "$repo_root/automation/reminder_poller/poll_reminders.py" '.hermes/scripts/poll_reminders.py'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron reminder-poller "*/5 * * * *" poll_reminders.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer reminder-poller "*/5 * * * *" poll_reminders.py local

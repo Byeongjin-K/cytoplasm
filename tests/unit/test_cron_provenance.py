@@ -17,7 +17,8 @@ from typing import Final
 
 import pytest
 
-from tests.unit.cron_fixture import HELPER, converge_call, declared_cron, listing
+from automation.cron_schedule import on_calendar
+from tests.unit.cron_fixture import HELPER, declared_cron, listing, timer_env
 from tests.unit.test_cron_declarations import registrations
 
 _REPO: Final = Path(__file__).resolve().parents[2]
@@ -89,7 +90,7 @@ _COST: Final = "automation/effect_request"
 _ROW: Final = declared_cron(_COST)
 _FILES: Final = (
     "automation/node_config.py", "automation/node_config_sh.py", "automation/deploy_provenance.sh",
-    "automation/deploy_push.sh", HELPER, f"{_COST}/deploy.sh", f"{_COST}/deploy-manifest.txt", f"{_COST}/cron/effect_request_watch.py",
+    "automation/deploy_push.sh", HELPER, "automation/deploy_timer.sh", f"{_COST}/deploy.sh", f"{_COST}/deploy-manifest.txt", f"{_COST}/cron/effect_request_watch.py",
     "configs/node.example.toml",
 )
 _HERMES: Final = r'''#!/usr/bin/env bash
@@ -134,6 +135,7 @@ def _rig(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "PATH": f"{bin_dir}:{os.environ['PATH']}", "DEPLOY_SSH_HOST": "fake-node",
         "HEALTHCHECK_NODE_CONFIG_PATH": str(repo / "configs/node.example.toml"),
         "LISTING": listing(_ROW).replace(_ROW.attr("schedule"), "@SCHEDULE@"),
+        **timer_env(tmp_path / "timer"),
     })
     return repo, env
 
@@ -152,8 +154,9 @@ def test_a_clean_hermes_cron_deploy_still_converges(tmp_path: Path) -> None:
     rc, stderr, calls, schedule = _deploy(tmp_path, repo, env)
 
     assert rc == 0, stderr
-    assert calls == ["fake-node"] * 4
-    assert schedule == _ROW.attr("schedule")
+    assert calls == ["fake-node"] * 5
+    timer = (tmp_path / "home" / ".config/systemd/user/autophagy-cron-effect-request-watch.timer").read_text()
+    assert f"OnCalendar={on_calendar(_ROW.attr('schedule'), '')}\n" in timer
 
 
 @pytest.mark.parametrize("dirty", ["schedule", "declaration"])
@@ -161,7 +164,7 @@ def test_an_uncommitted_registration_source_never_reaches_the_node(tmp_path: Pat
     repo, env = _rig(tmp_path)
     if dirty == "schedule":
         deployer = repo / _COST / "deploy.sh"
-        old = converge_call(_ROW)
+        old = f'converge_timer {_ROW.destination} "{_ROW.attr("schedule")}"'
         text = deployer.read_text(encoding="utf-8")
         assert old in text
         _ = deployer.write_text(text.replace(old, old.replace(_ROW.attr("schedule"), "0 10 * * *")),
@@ -175,4 +178,4 @@ def test_an_uncommitted_registration_source_never_reaches_the_node(tmp_path: Pat
     assert rc == 4, stderr
     assert "DEPLOY-BLOCK" in stderr
     assert calls == []
-    assert schedule == _ROW.attr("schedule")
+    assert not (tmp_path / "home" / ".config/systemd/user/autophagy-cron-effect-request-watch.timer").exists()

@@ -47,7 +47,8 @@ push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_watch.py" 
 
 # Reactions every 2m; expensive idle discovery retains its internal 30m cadence.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron memory-relocate-watch "every 2m" memory_relocate_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer memory-relocate-watch "every 2m" memory_relocate_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-relocate-watch || true'
 
 # Moved people facts are no longer in every prompt (owner decision Q138 ②): the agent's SOUL.md

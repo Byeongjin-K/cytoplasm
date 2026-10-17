@@ -30,4 +30,5 @@ deploy_tree_swap --link --prefix automation "$repo_root/automation" .hermes/repa
 # 소비 감시는 cron sandbox가 찾는 계정 홈에만 복사해야 수리 런타임 권한을 넓히지 않는다.
 push_file "$repo_root/automation/repair/cron/repair_report_consume_watch.py" '.hermes/scripts/repair_report_consume_watch.py'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron repair-report-consumer "*/5 * * * *" repair_report_consume_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer repair-report-consumer "*/5 * * * *" repair_report_consume_watch.py local

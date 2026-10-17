@@ -1,2 +1,2 @@
 agent|skills/budget/scripts/budget_watch.py|.hermes/scripts/budget_watch.py|required
-agent|skills/budget/scripts/budget_watch.py|budget-watch|v2:cron;schedule=*/30 * * * *;script=budget_watch.py;deliver=discord;mode=no-agent
+agent|skills/budget/scripts/budget_watch.py|budget-watch|v2:cron;schedule=*/30 * * * *;script=budget_watch.py;deliver=discord;mode=no-agent;runner=systemd

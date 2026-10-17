@@ -1,2 +1,2 @@
 agent|skills/todo/scripts/todo_confirm_reaction_watch.py|.hermes/scripts/todo_confirm_reaction_watch.py|required
-agent|skills/todo/scripts/todo_confirm_reaction_watch.py|todo-confirm-watch|v2:cron;schedule=*/1 * * * *;script=todo_confirm_reaction_watch.py;deliver=local;mode=no-agent
+agent|skills/todo/scripts/todo_confirm_reaction_watch.py|todo-confirm-watch|v2:cron;schedule=*/1 * * * *;script=todo_confirm_reaction_watch.py;deliver=local;mode=no-agent;runner=systemd

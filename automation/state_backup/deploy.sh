@@ -25,4 +25,5 @@ run_agent 'grep -qx "timezone: Asia/Seoul" "$HOME/.hermes/config.yaml"'
 #   openssl rand -hex 32 > ~/.hermes/backup/backup.key && chmod 600 ~/.hermes/backup/backup.key
 # 키가 없으면 워처는 BACKUP-KEY-MISSING 으로 fail-closed 한다(평문 업로드 없음).
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron state-backup-watch "15 3 * * *" state_backup_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer state-backup-watch "15 3 * * *" state_backup_watch.py local

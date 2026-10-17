@@ -5,6 +5,11 @@ Hermes 가 하던 것(노드 `cron/scheduler.py::_run_job_script`)을 그대로 
 걷어 넘기던 것 대신, 선언 `env=` 가 이름을 댄 값만 그 파일에서 가져온다(나머지는 스크립트가 스스로
 `~/.env.secrets` 를 읽는다 — 규약 (b)). PYTHONPATH 는 넘기지 않는다(Hermes 래퍼도 지운다).
 
+`--deliver discord` 면 Hermes 의 `deliver=discord` 와 같이 비어 있지 않은 stdout 을 Hermes 홈 채널
+(`~/.hermes/.env` 의 `DISCORD_HOME_CHANNEL_THREAD_ID` → `DISCORD_HOME_CHANNEL`)로 보내고, 실패하면 실패 한 줄을
+보낸다. 침묵 표식(`[SILENT]` 등)은 보내지 않는다. 비어 있지 않은 stdout 은 `~/.hermes/cron-timers/output/<이름>/` 에
+최근 20개까지 남는다(Hermes 의 잡 출력 폴더 자리 — N1 이 다이제스트 실패 표식을 거기서 읽는다).
+
 두 번 실행 방지: 같은 이름의 Hermes 잡이 active 면 돌지 않고 `CRON-TIMER-SKIP` 만 남긴다(0). 잡별
 잠금이 잡혀 있어도 건너뛴다. 결과는 `~/.hermes/cron-timers/<이름>.json`(0600)에 남아 doctor 가
 Hermes 잡처럼 연속 실패를 판정한다 — 오류 문구는 싣지 않고 종료코드만 적는다.
@@ -17,11 +22,16 @@ import json
 import os
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
-from automation.cron_timer import SCRIPT_TIMEOUT, STATE_DIR, TimerError, Job
+from automation.cron_timer import SCRIPT_TIMEOUT, STATE_DIR, Job, TimerError
+
+SILENT: Final = frozenset({"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"})
+KEEP_OUTPUTS: Final = 20
+Send = Callable[[str, str, str], None]
 
 
 def hermes_job_active(home: Path, name: str) -> bool | None:
@@ -74,6 +84,39 @@ def _record(home: Path, name: str, status: str, error: str) -> None:
     os.replace(tmp, path)
 
 
+def _discord_send(token: str, target: str, body: str) -> None:
+    from automation.interop.discord_transport import DiscordTransport
+
+    _ = DiscordTransport(token, target).send(body)
+
+
+def _keep_output(home: Path, name: str, text: str) -> None:
+    folder = home / STATE_DIR / "output" / name
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = folder / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.txt"
+    path.write_text(text, encoding="utf-8")
+    path.chmod(0o600)
+    for old in sorted(folder.glob("*.txt"))[:-KEEP_OUTPUTS]:
+        old.unlink()
+
+
+def deliver(home: Path, job: Job, rc: int, text: str, send: Send | None = None) -> str:
+    """Hermes `deliver=discord` 와 같은 자리로 보낸다. 보낸 것이 없으면 "", 보냈으면 "sent"."""
+    body = text.strip()
+    if rc != 0:
+        body = f"⚠️ 정기 작업 '{job.name}' 실패(종료코드 {rc})" + (f"\n{body}" if body else "")
+    elif not body or body in SILENT:
+        return ""
+    names = ("DISCORD_BOT_TOKEN", "DISCORD_HOME_CHANNEL", "DISCORD_HOME_CHANNEL_THREAD_ID")
+    found = {**_env_file(home / ".env.secrets", names), **_env_file(home / ".hermes" / ".env", names)}
+    token = os.environ.get("DISCORD_BOT_TOKEN") or found.get("DISCORD_BOT_TOKEN", "")
+    target = found.get("DISCORD_HOME_CHANNEL_THREAD_ID") or found.get("DISCORD_HOME_CHANNEL", "")
+    if not token or not target.isdigit():
+        raise TimerError(4, "no Discord token or home channel for deliver=discord")
+    (send or _discord_send)(token, target, body)
+    return "sent"
+
+
 def run(home: Path, job: Job) -> int:
     job.check()
     active = hermes_job_active(home, job.name)
@@ -105,14 +148,30 @@ def _execute(home: Path, job: Job) -> int:
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
     for key, value in _env_file(home / ".hermes" / ".env", job.env).items():
         env.setdefault(key, value)
+    capture = job.deliver == "discord"
+    text = ""
     try:
-        rc = subprocess.run([sys.executable, str(scripts / job.script)], cwd=scripts, env=env,
-                            timeout=SCRIPT_TIMEOUT, check=False).returncode
+        done = subprocess.run([sys.executable, str(scripts / job.script)], cwd=scripts, env=env,
+                              timeout=SCRIPT_TIMEOUT, check=False, stdout=subprocess.PIPE if capture else None,
+                              text=True, errors="replace")
+        rc, text = done.returncode, done.stdout or ""
     except subprocess.TimeoutExpired:
         rc = 124
     except OSError:
         rc = 127
-    _record(home, job.name, "ok" if rc == 0 else "error", "" if rc == 0 else f"exit {rc}")
+    if text:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        _keep_output(home, job.name, text)
+    error = "" if rc == 0 else f"exit {rc}"
+    if capture:
+        try:
+            if deliver(home, job, rc, text) == "sent":
+                print(f"CRON-TIMER-DELIVERED name={job.name}", flush=True)
+        except (TimerError, OSError, RuntimeError, ValueError) as failure:
+            print(f"CRON-TIMER-DELIVERY-FAIL name={job.name} reason={type(failure).__name__}", flush=True)
+            rc, error = rc or 1, error or "delivery-failed"
+    _record(home, job.name, "ok" if rc == 0 else "error", error)
     return rc
 
 
@@ -121,10 +180,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--name", required=True)
     parser.add_argument("--script", required=True)
     parser.add_argument("--env", default="")
+    parser.add_argument("--deliver", default="local", choices=("local", "discord"))
     args = parser.parse_args(argv)
     try:
         return run(Path.home(), Job(args.name, "* * * * *", args.script,
-                                    tuple(e for e in args.env.split(",") if e)))
+                                    tuple(e for e in args.env.split(",") if e), args.deliver))
     except TimerError as error:
         print(f"CRON-TIMER-BLOCK: {error}", file=sys.stderr)
         return error.rc
