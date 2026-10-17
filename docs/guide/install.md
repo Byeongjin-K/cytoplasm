@@ -209,7 +209,7 @@ INSTALL PLAN
 
 ### 프로필과 헬스체크 선언
 
-`--profile <core|rag|report-hub|full>`로 이 노드가 운영할 묶음을 고른다. 위·아래 명령의
+`--profile <core|rag|report-hub|full>`로 이 노드가 운영할 묶음을 고른다(도리 기본 구성은 아래 「도리 프로필」). 위·아래 명령의
 `core`는 예시이므로 실제 용도에 맞게 바꾸되 dry-run과 apply에는 **같은 값**을 쓴다.
 
 | 프로필 | `HEALTHCHECK_SERVICES` 선언 | 자동 선택 컴포넌트 |
@@ -223,6 +223,29 @@ INSTALL PLAN
 `report-hub`와 `full`은 보고 허브 컴포넌트도 설치한다. **RAG는 별도 노드 배포**다:
 `automation/rag_stack/deploy.sh`가 SSH로 `RAG_NODE`에 배포하며, 주 노드만 다루는
 설치기에는 RAG 컴포넌트가 없다. `rag`·`full`의 RAG 선택은 원격 감시 선언이다.
+
+### 도리 프로필
+
+`dori` 는 위 네 프로필과 다른 설치기로 간다. 노드 서비스 계정·root·systemd·업데이트 신뢰키가 필요
+없고, 설치하는 사람의 계정에 도리 기본 구성을 깐다(Hermes 경로는 그대로다).
+
+```bash
+python3 -m automation.install.wizard --profile dori --dry-run-only   # 마법사로 계획만
+python3 -m automation.install.dori --dry-run                        # 같은 계획을 직접
+python3 -m automation.install.dori --role okdori --role moodori --owner-call 형
+```
+
+| 단계 | 하는 일 |
+|---|---|
+| `dori-fork` | `dori/pin.toml` 의 커밋 하나만 `~/.dori/src` 에 받고 `git rev-parse HEAD` 가 같은지 확인한다. 받을 수 없으면 `DORI-PIN-FETCH-FAIL`(exit 3)이고 아무것도 남지 않는다. 이미 있는 체크아웃이 다른 커밋이면 `DORI-PIN-SRC-DIFFERS`(exit 2)로 전부 멈춘다 |
+| `dori-skill-link` | `~/.agents/skills/dori-mode` → 포크 스킬 링크(링크가 아닌 폴더가 있으면 그대로 둔다) |
+| `dori-cli` | 포크 `scripts` 에서 `bun install`·`bun link` — `dori` 명령이 생긴다 |
+| `dori-config` | `~/.dori/config.json` 이 없을 때만 포크 예시(`--backend aoe` 기본)를 복사한다 |
+| `dori-role-<역할>` | `~/Documents/<도리>/AGENTS.md`·`avatar.md` 를 `dori/roles/` 템플릿에서 쓴다. 기본은 리드(`zzangdori`)·비서(`yoodori`), `--role okdori`·`--role moodori` 는 선택. 이미 있으면 덮지 않고 다르면 차이만 보인다(`DORI-ROLE-KEEP`) |
+
+`--dry-run` 은 쓰기도 네트워크도 없다(git·bun 이 없어도 계획은 나온다). 실제 설치에는 git 과
+bun 이 PATH 에 있어야 한다(`DORI-INSTALL-BLOCK`). 설치 뒤 `~/.dori/dori.env`(0600)에 봇 토큰·
+채널·소유자 id 를 넣고, 리드 작업 폴더에서 에이전트를 열어 "Dori mode" 라고 한다.
 
 ### 선택 컴포넌트
 
