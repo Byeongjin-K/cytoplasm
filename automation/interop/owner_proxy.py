@@ -293,8 +293,10 @@ def dispatch_text(accepted: Accepted, message: ProxyMessage) -> str:
         "외부효과는 평소와 똑같이 소유자 승인(✅)을 받아야 실행된다 — 대리 봇의 글·반응은 승인이 아니다. "
         "대리 봇을 멘션하거나 대리 봇에게 질문하지 말고, 결과와 확인 질문은 이 스레드에 소유자에게 남긴다. "
         f"승인 요청 CLI 의 --origin-channel-id/--origin-message-id 에는 {origin_ids}를 넘긴다. "
-        "승인은 그 CLI 가 게시한 표준 승인 카드의 ✅ 뿐이다 — 이 작업에 승인 요청 CLI 가 없으면 "
-        "즉석 초안을 만들거나 채팅 메시지에 ✅ 를 요청하지 말고 '이 작업은 승인 경로가 없다'고 보고한다.\n"
+        "승인은 그 CLI 가 게시한 표준 승인 카드의 ✅ 뿐이다 — 즉석 초안을 만들거나 채팅 메시지에 ✅ 를 요청하지 않는다. "
+        "전용 스킬 명령이 없는 외부효과(Drive 저장, 그 밖의 작업)는 "
+        "'python3 -m automation.effect_request request drive-save|command' 로 카드를 올린다. "
+        "그 명령이 형만 할 수 있는 일(비밀번호·결제·로그인 인증 등)이라며 거절하면 그 사유를 그대로 전한다.\n"
         "---\n"
         f"{accepted.body}"
     )
