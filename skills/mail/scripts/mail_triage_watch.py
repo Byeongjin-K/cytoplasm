@@ -109,14 +109,15 @@ def _announce(*, ok: bool, detail: str = "") -> bool:
     return True
 
 
-def digest_card(message_id: str) -> int:
+def digest_card(message_id: str, emoji: str = "") -> int:
     """One digest card press, heard by the gateway — not a tick (no failure streak)."""
     _load_env_secrets()
     if not CLI.exists():
         print("mail skill is not mounted", file=sys.stderr)
         return 3
     result = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
-        [sys.executable, str(CLI), "digest-react", "--message-id", message_id],
+        [sys.executable, str(CLI), "digest-react", "--message-id", message_id,
+         *(["--emoji", emoji] if emoji else [])],
         capture_output=True, text=True, timeout=600, check=False,
         cwd=str(Path.home()),
         env={**os.environ, "AUTOPHAGY_REPO_ROOT": str(_runtime_root())},
@@ -128,8 +129,9 @@ def digest_card(message_id: str) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) == 3 and sys.argv[1] == "--digest-card":
-        return digest_card(sys.argv[2])
+    if len(sys.argv) in (3, 5) and sys.argv[1] == "--digest-card":
+        emoji = sys.argv[4] if len(sys.argv) == 5 and sys.argv[3] == "--emoji" else ""
+        return digest_card(sys.argv[2], emoji)
     _load_env_secrets()
     if not CLI.exists():
         return 0 if _announce(ok=False, detail="mail skill is not mounted") else 1

@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS digest_actions (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (message_id, action)
 );
+CREATE TABLE IF NOT EXISTS digest_body_threads (
+    message_id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 # Columns added after the first release: (name, DDL) appended in place on old DBs.
 _DIGEST_ITEM_ADDED_COLUMNS = (
@@ -306,6 +313,41 @@ def finish_digest_action(
             "UPDATE digest_actions SET status = ?, updated_at = ? "
             "WHERE message_id = ? AND action = ?",
             (status, now, message_id, action),
+        )
+
+
+def digest_action_status(db_path: Path, message_id: str, action: str) -> str:
+    """The (card, action) run's status, or ``""`` when it never ran."""
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT status FROM digest_actions WHERE message_id = ? AND action = ?",
+            (message_id, action),
+        ).fetchone()
+    return str(row[0]) if row else ""
+
+
+def digest_body_thread(db_path: Path, message_id: str) -> dict[str, str] | None:
+    """The card's 📄 full-text thread: id, guild and how far it got (opened/linked/posted)."""
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT thread_id, guild_id, stage FROM digest_body_threads WHERE message_id = ?",
+            (message_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"thread_id": str(row[0]), "guild_id": str(row[1]), "stage": str(row[2])}
+
+
+def save_digest_body_thread(
+    db_path: Path, message_id: str, thread: dict[str, str], now: str,
+) -> None:
+    """Record the card's full-text thread right after each step, so a retry resumes it."""
+    with _connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO digest_body_threads VALUES (?, ?, ?, ?, ?) ON CONFLICT(message_id) "
+            "DO UPDATE SET thread_id = excluded.thread_id, guild_id = excluded.guild_id, "
+            "stage = excluded.stage, updated_at = excluded.updated_at",
+            (message_id, thread["thread_id"], thread["guild_id"], thread["stage"], now),
         )
 
 

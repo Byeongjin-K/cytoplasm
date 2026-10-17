@@ -116,7 +116,7 @@ async def run_wrapper(message_id: str, emoji: str, received: float) -> None:
     error = ""
     try:
         process = await asyncio.create_subprocess_exec(
-            sys.executable, str(WRAPPER), "--digest-card", message_id,
+            sys.executable, str(WRAPPER), "--digest-card", message_id, "--emoji", emoji,
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE, cwd=str(Path.home()),
         )
