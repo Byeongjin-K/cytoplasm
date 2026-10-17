@@ -21,10 +21,37 @@ watcher_drift_deploy_script() { # watcher_drift_deploy_script <source>
   printf '%s/%s/deploy.sh' "${source%%/*}" "${rest%%/*}"
 }
 
+#: 릴리스 전환 유예(최대 15분): 포인터가 새 세대로 바뀐 직후에는 `deploy_all` 이 래퍼를 복사하고
+#: SSH 허용 목록 래퍼를 갱신하기 전까지 몇 분이 걸린다. 그 틈의 스윕이 같은 릴리스를 두 번
+#: (10-16 v1.39.0 differs, 10-17 v1.46.0 새 행 not allowlisted) 단발 FAIL 로 소유자에게 알렸다.
+#: 영수증·스킬 마운트와 같은 `release_switch_grace.py` 로 직전 세대를 확인하고, 그 행이
+#: **직전 세대 그대로**이거나 **이번 릴리스에 새로 생긴 행이라 아직 없거나 읽히지 않을 때만**
+#: 봐준다. 직전과도 다른 내용, 직전에 있던 행의 부재·판독 불가는 그대로 FAIL 이다.
+#: 호출자 지역 변수 previous_state·previous 를 쓴다(bash 동적 범위) — 한 프로브당 한 번만 묻는다.
+watcher_drift_grace_tolerates() { # watcher_drift_grace_tolerates <source> <deployed-sha|"">
+  local source="$1" deployed="$2" previous_sha
+  if [[ "$previous_state" == unasked ]]; then
+    if previous="$(python3 "$(dirname "${BASH_SOURCE[0]}")/release_switch_grace.py" \
+      --current "$source_root" --print-previous)" && [[ -d "$previous" ]]; then
+      previous_state=known
+    else
+      previous_state=none
+    fi
+  fi
+  [[ "$previous_state" == known ]] || return 1
+  if [[ ! -e "$previous/$source" && ! -L "$previous/$source" ]]; then
+    [[ -z "$deployed" ]]
+    return
+  fi
+  [[ -n "$deployed" && -r "$previous/$source" ]] || return 1
+  previous_sha="$(sha256sum -- "$previous/$source" | cut -d' ' -f1)" || return 1
+  [[ "$deployed" == "$previous_sha" ]]
+}
+
 probe_watcher_wrappers_current() {
   local node="$1" _account="$2" manifest="$3"
   local source_root="${HEALTHCHECK_RELEASE_SOURCE_ROOT:-/srv/autophagy-agent-current}"
-  local failed=0 compared=0
+  local failed=0 compared=0 converging=0 previous_state=unasked previous=""
 
   [[ -r "$manifest" ]] || {
     watcher_drift_log "WATCHER-DRIFT-UNKNOWN: unreadable manifest=$manifest"
@@ -62,6 +89,11 @@ probe_watcher_wrappers_current() {
     # 소유자에게 불필요한 재배포를 지시하게 된다(2026-08-20 프로덕션에서 12행 오탐 실측).
     if ! deployed_sha="$(capture_on_node "$node" \
       "sudo -n -u ${account} -H bash -c 'sha256sum \"\$HOME/${destination}\" 2>/dev/null | cut -d\" \" -f1'")"; then
+      if watcher_drift_grace_tolerates "$source" ""; then
+        watcher_drift_log "WATCHER-DRIFT-GRACE: ${account}:${destination} is new in this release and not readable yet"
+        converging=$((converging + 1))
+        continue
+      fi
       watcher_drift_log \
         "WATCHER-DRIFT-UNKNOWN: cannot read ${account}:${destination} — node unreachable or command not allowlisted"
       failed=1
@@ -74,6 +106,11 @@ probe_watcher_wrappers_current() {
       case "$policy" in
         optional:*) continue ;;
         *)
+          if watcher_drift_grace_tolerates "$source" ""; then
+            watcher_drift_log "WATCHER-DRIFT-GRACE: ${account}:${destination} is new in this release and not deployed yet"
+            converging=$((converging + 1))
+            continue
+          fi
           watcher_drift_log "WATCHER-DRIFT NOT-DEPLOYED: ${account}:${destination} — run $script"
           failed=1
           ;;
@@ -83,11 +120,20 @@ probe_watcher_wrappers_current() {
 
     compared=$((compared + 1))
     if [[ "$deployed_sha" != "$source_sha" ]]; then
+      if watcher_drift_grace_tolerates "$source" "$deployed_sha"; then
+        watcher_drift_log "WATCHER-DRIFT-GRACE: ${account}:${destination} is still the previous release's copy"
+        converging=$((converging + 1))
+        continue
+      fi
       watcher_drift_log "WATCHER-DRIFT: ${account}:${destination} differs from the release — run $script"
       failed=1
     fi
   done
 
   (( failed == 0 )) || return 1
+  if (( converging > 0 )); then
+    watcher_drift_log "WATCHER-DRIFT-GRACE-PASS: ${converging} wrapper(s) still converging after the release switch"
+    return 0
+  fi
   watcher_drift_log "WATCHER-DRIFT-PASS: ${compared} wrapper(s) match the release"
 }

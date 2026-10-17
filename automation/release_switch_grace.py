@@ -56,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     surface.add_argument("--receipt-sha")
     surface.add_argument("--missing-receipt", action="store_true")
     surface.add_argument("--live-root", type=Path)
+    # Print the preceding generation so a caller can compare its own surface with it.
+    surface.add_argument("--print-previous", action="store_true")
     args = parser.parse_args(argv)
     try:
         identity = args.current.lstat()
@@ -69,6 +71,9 @@ def main(argv: list[str] | None = None) -> int:
                 source = previous / "skills" / name
                 if not (source / "SKILL.md").is_file() or skill_digest(source) != mounted:
                     return 1
+        elif args.print_previous:
+            if previous is None:
+                return 1
         elif not args.missing_receipt:
             if previous is None or args.receipt_sha != previous.name:
                 return 1
@@ -80,7 +85,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     except (OSError, UnicodeError, DriftError):
         return 1
-    print(f"RELEASE-SWITCH-GRACE-WARN: release surfaces are converging; grace < {GRACE_SECONDS}s")
+    warning = f"RELEASE-SWITCH-GRACE-WARN: release surfaces are converging; grace < {GRACE_SECONDS}s"
+    if args.print_previous:
+        print(warning, file=sys.stderr)
+        print(previous)
+        return 0
+    print(warning)
     return 0
 
 
