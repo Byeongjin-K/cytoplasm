@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
-version: 1.6.0
+version: 1.6.1
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -223,6 +223,11 @@ calendar-confirm-watch  */1 * * * *  --script confirm_reaction_watch.py --delive
 
 감시자는 mounted calendar skill의 `calendar_cli.py confirm/discard`만 호출하며, gws를
 직접 호출하지 않는다.
+
+Discord 가 카드·반응 읽기에 429 를 주면 같은 요청을 `Retry-After`(10초 이하)만큼 기다렸다
+최대 3번까지 다시 묻는다. 그래도 막히거나 더 오래 기다리라고 하면 그 틱은 예전처럼 실패로
+끝난다(2026-10-17: 한 번의 `retry_after=5` 가 틱을 실패로 만들어 doctor 가 「최근 실패·중지」를
+알렸다 — [소개](../../docs/기능소개/캘린더-확정-워처-429-재시도.md)).
 
 ## 시간 파싱 규칙
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from contextlib import suppress
 from datetime import datetime
 from importlib import import_module
@@ -37,6 +38,14 @@ create_watcher_authorization = _authz.create_watcher_authorization
 API = "https://discord.com/api/v10"
 USER_AGENT = "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)"
 DM_SCAN_LIMIT = 50
+#: Discord 429 를 Retry-After 만큼 기다렸다 다시 묻는 최대 횟수. 1분 주기 확정 워처가 메시지·반응을
+#: 연달아 읽다 한 번 걸린 429 를 틱 실패(exit 1 → cron error → doctor 「최근 실패」)로 만들던 것을
+#: 막는다(2026-10-17 실측: 145회 중 18회가 retry_after=5 의 429 하나로 실패). 상한이 있어 계속 막히면
+#: 예전처럼 실패로 끝난다 — 공용 transport(reaction_approval·discord_transport)와 같은 규칙이다.
+API_MAX_ATTEMPTS = 3
+#: 이보다 긴 Retry-After 는 기다리지 않고 실패로 돌려준다 — 틱이 다음 틱과 겹치지 않게.
+API_MAX_RETRY_WAIT = 10.0
+_sleep = time.sleep
 APPROVE_EMOJI = "\u2705"
 CANCEL_EMOJI = "\u26d4"
 #: Terminal states a result notice may close its request thread with (origin_notice 소유).
@@ -95,21 +104,43 @@ def consume_watcher_authorization(draft: DraftRecord, authorization_path: Path) 
     )
 
 
+def _retry_wait(error: HTTPError) -> float | None:
+    """Seconds to wait before repeating a rate-limited call, or None when it must not wait."""
+    raw = error.headers.get("Retry-After") if error.headers is not None else None
+    try:
+        wait = 1.0 if raw is None else float(raw)
+    except ValueError:
+        return None
+    return wait if 0 <= wait <= API_MAX_RETRY_WAIT else None
+
+
 def _api(method: str, path: str, payload: Mapping[str, str | Mapping[str, str | bool]] | None = None) -> Any:
     token = bot_token()
-    request = Request(
-        f"{API}{path}",
-        data=None if payload is None else json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bot {token}",
-            "Content-Type": "application/json",
-            "User-Agent": USER_AGENT,
-        },
-        method=method,
-    )
-    with urlopen(request, timeout=30) as response:  # noqa: S310
-        body = response.read().decode("utf-8")
-    return json.loads(body) if body else None
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    attempt = 0
+    while True:
+        attempt += 1
+        request = Request(
+            f"{API}{path}",
+            data=data,
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": USER_AGENT,
+            },
+            method=method,
+        )
+        try:
+            with urlopen(request, timeout=30) as response:  # noqa: S310
+                body = response.read().decode("utf-8")
+        except HTTPError as error:
+            # 429 는 Discord 가 요청을 처리하지 않았다는 뜻이라 POST 도 다시 보내도 중복되지 않는다.
+            wait = _retry_wait(error) if error.code == 429 and attempt < API_MAX_ATTEMPTS else None
+            if wait is None:
+                raise
+            _sleep(wait)
+            continue
+        return json.loads(body) if body else None
 
 
 def _parse_ts(value: str) -> datetime:
