@@ -82,6 +82,7 @@ def render_receipt(
     declared_reasons: Mapping[tuple[str, str, str], str] | None = None,
     wrapper_refresh: tuple[str, ...] = (),
     rag_mcp_refresh: str = "",
+    dori_pin: Mapping[str, str] | None = None,
 ) -> str:
     """전량 반영 영수증 — clean 이 아닌 계획에 서명하는 것을 코드가 거부한다.
 
@@ -146,6 +147,8 @@ def render_receipt(
     }
     if refreshed:
         payload["wrapper_refresh"] = refreshed
+    if dori_pin is not None:
+        payload["dori_pin"] = dict(dori_pin)
     if rag_mcp_refresh:
         rag = parse_refresh(rag_mcp_refresh)
         payload["rag_mcp_refresh"] = rag

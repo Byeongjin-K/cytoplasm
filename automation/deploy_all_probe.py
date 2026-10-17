@@ -25,6 +25,7 @@ if __package__ in (None, ""):  # pragma: no cover - 스크립트로 직접 실�
 
 from automation import deploy_all, deploy_all_gateway, deploy_all_observe  # noqa: E402
 from automation.deploy_declarations import all_declarations  # noqa: E402
+from automation.dori_pin import PIN_RELPATH, PinError, load_pin  # noqa: E402
 from automation.skill_mount_drift import DriftError, inspect_mounts  # noqa: E402
 from automation.watcher_manifest import (  # noqa: E402
     CENTRAL_MANIFEST,
@@ -210,14 +211,19 @@ def main(argv: list[str] | None = None) -> int:
             if not d.legacy
         }
         try:
+            dori_pin = (
+                load_pin(args.runtime_root).as_receipt()
+                if (args.runtime_root / PIN_RELPATH).exists() else None
+            )
             receipt = deploy_all.render_receipt(
                 plan,
                 verified_at=verified_at,
                 declared_reasons=reasons,
                 wrapper_refresh=tuple(args.wrapper_refresh),
                 rag_mcp_refresh=args.rag_mcp_refresh,
+                dori_pin=dori_pin,
             )
-        except deploy_all.ObservationError as error:
+        except (deploy_all.ObservationError, PinError) as error:
             print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
             return 4
         print(receipt, end="")
