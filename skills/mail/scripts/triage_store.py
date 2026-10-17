@@ -260,8 +260,10 @@ def _instant(stamp: str) -> datetime:
 
 def claim_digest_action(
     db_path: Path, message_id: str, action: str, now: str, *, max_attempts: int,
-) -> bool:
-    """Claim one (card, action) run; True only for a first run or a capped retry.
+) -> int:
+    """Claim one (card, action) run; the attempt number (1, 2, …) or 0 when refused.
+
+    Non-zero only for a first run or a capped retry.
 
     A row in any state but ``retry`` (``running``, ``done``, ``partial``, ``gave-up``)
     refuses the claim, so a reaction seen on every tick acts exactly once.
@@ -278,16 +280,16 @@ def claim_digest_action(
                     "INSERT INTO digest_actions VALUES (?, ?, 'running', 1, ?)",
                     (message_id, action, now),
                 )
-                claimed = True
+                claimed = 1
             elif str(row[0]) == "retry" and int(row[1]) < max_attempts:
                 connection.execute(
                     "UPDATE digest_actions SET status = 'running', attempts = attempts + 1, "
                     "updated_at = ? WHERE message_id = ? AND action = ?",
                     (now, message_id, action),
                 )
-                claimed = True
+                claimed = int(row[1]) + 1
             else:
-                claimed = False
+                claimed = 0
             connection.execute("COMMIT")
         except BaseException:
             connection.execute("ROLLBACK")

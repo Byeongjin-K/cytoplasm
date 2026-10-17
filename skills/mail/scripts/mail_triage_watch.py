@@ -16,6 +16,12 @@ cron sandbox rule); the skill CLI stays the single implementation in the
 immutable governed live store at /srv/autophagy-skills/live/mail/scripts/ — no
 import of it here, subprocess only (avoids the W3-2 cron-sandbox PYTHONPATH
 package-shadowing trap).
+
+``--digest-card <message id>`` (2026-10-17): the gateway's interop plugin runs this
+wrapper the moment the owner presses 📄/✍️ on a digest card, so the press is handled
+in seconds instead of on the next */2 tick. Same secrets and runtime root as the tick;
+it is not a tick, so it never touches the failure streak — the exit code and a masked
+stderr line go back to the plugin, which logs them.
 """
 from __future__ import annotations
 
@@ -103,7 +109,27 @@ def _announce(*, ok: bool, detail: str = "") -> bool:
     return True
 
 
+def digest_card(message_id: str) -> int:
+    """One digest card press, heard by the gateway — not a tick (no failure streak)."""
+    _load_env_secrets()
+    if not CLI.exists():
+        print("mail skill is not mounted", file=sys.stderr)
+        return 3
+    result = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
+        [sys.executable, str(CLI), "digest-react", "--message-id", message_id],
+        capture_output=True, text=True, timeout=600, check=False,
+        cwd=str(Path.home()),
+        env={**os.environ, "AUTOPHAGY_REPO_ROOT": str(_runtime_root())},
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout).strip().splitlines()
+        print(_redact(tail[-1] if tail else f"rc={result.returncode}")[:300], file=sys.stderr)
+    return result.returncode
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--digest-card":
+        return digest_card(sys.argv[2])
     _load_env_secrets()
     if not CLI.exists():
         return 0 if _announce(ok=False, detail="mail skill is not mounted") else 1

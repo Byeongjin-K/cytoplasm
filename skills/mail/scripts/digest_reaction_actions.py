@@ -5,22 +5,35 @@ Owner request (voice, 10/16 08:55 KST): "기관메일 다이제스트에서 이�
 
 The digest already posts one Discord message per mail inside the digest thread, so
 each card is its own reaction target — no item numbers to pick. The bot pre-attaches
-both emoji when the card is posted (``attach``); the existing ``mail-triage-watch``
-tick (``triage_cli watch``, every 2 min) calls ``run_tick``, which reads reactions
-only — never message text — on recent cards and acts on the owner's (non-bot) ones:
+both emoji when the card is posted (``attach``). The owner's press reaches us two ways,
+both reading reactions only — never message text — and acting on the owner's (non-bot)
+ones:
+
+- at once: the gateway's interop plugin hears ``on_raw_reaction_add`` on its existing
+  Discord connection (``automation/interop/digest_reaction_listener.py``) and runs
+  ``triage_cli digest-react --message-id`` → ``run_card`` for that one card (2026-10-17,
+  owner: "이모지 달면 반응이 너무 느려 즉각적으로 반응할 수 있겠죠");
+- as the safety net: the ``mail-triage-watch`` tick (``triage_cli watch``, every 2 min)
+  calls ``run_tick`` over every recent card, so a press the gateway missed (restart,
+  disconnect) is still acted on.
+
+What each emoji does:
 
 - 📄 posts the mail's full text (``mail_body_view.render(full=True)``, already split
   under Discord's limit) and its attachment names into the card's thread.
 - ✍️ runs the existing owner-instruction draft path (``triage_cli.cmd_draft``), which
   writes the draft and posts the standard mail approval card; the thread gets a
   preview and the card link. Nothing is sent here — sending stays the owner's ✅ on
-  that approval card, read by the same watch tick's approval loop.
+  that approval card, read by the same watch tick's approval loop. Writing takes a
+  model call, so a one-line "writing…" reply goes up first, on the first attempt only.
 
 Each (card, action) runs at most once: a row in ``digest_actions`` is claimed before
 the work and marked done after it (state after success). A failure before anything
 reached the thread is retried on later ticks up to ``MAX_ATTEMPTS``; a body post that
 failed after some parts were already posted is not retried, so the owner never sees
-the same text twice.
+the same text twice. The claim is one SQLite ``BEGIN IMMEDIATE``, so the event path and
+the tick racing on the same press still run it once. When the last allowed attempt
+fails, the thread is told so instead of going quiet.
 """
 from __future__ import annotations
 
@@ -55,6 +68,10 @@ DRAFT_INSTRUCTION: Final = (
     "사실·일정·수치는 원문에 있는 것만 쓰고 소유자 판단이 필요한 부분은 [확인 필요]로 남겨 주세요."
 )
 _URL: Final = re.compile(r"\burl=(\S+)")
+DRAFT_ACK: Final = (
+    "✍️ 회신 초안을 쓰고 있습니다 — 1분쯤 걸려요. 다 쓰면 이 카드 아래에 미리보기와 승인 카드 링크를 올립니다."
+)
+_ACTION_LABEL: Final = {"body": "📄 전문", "draft": "✍️ 회신 초안"}
 
 
 def attach(channel_id: str, message_id: str) -> None:
@@ -187,7 +204,7 @@ def draft_preview(draft: dict, *, existed: bool) -> str:
     ]))[:2000]
 
 
-def _write_draft(card: dict) -> str:
+def _write_draft(card: dict, attempt: int = 1) -> str:
     """Draft through the owner-instruction path, under the reply-request lock."""
     import fcntl
 
@@ -200,6 +217,9 @@ def _write_draft(card: dict) -> str:
         fcntl.flock(lock, fcntl.LOCK_EX)
         existed = triage_gate.has_draft_for(uid)
         if not existed:
+            if attempt == 1:  # the model call takes a while — say it started, once
+                triage_confirm.post_in(str(card["channel_id"]), DRAFT_ACK,
+                                       reply_to=str(card["message_id"]))
             triage_cli.cmd_draft(argparse.Namespace(
                 uid=uid, instruction=DRAFT_INSTRUCTION, attachment=[], no_post=False,
                 with_evidence=False, reply_all=False,
@@ -218,43 +238,85 @@ def _write_draft(card: dict) -> str:
     return "done"
 
 
-_RUNNERS: Final = {"body": _show_body, "draft": _write_draft}
+def _run(action: str, card: dict, attempt: int) -> str:
+    if action == "draft":
+        return _write_draft(card, attempt)
+    return _show_body(card)
+
+
+def _gave_up(card: dict, action: str) -> None:
+    """The last allowed attempt failed — say so under the card (best-effort)."""
+    try:
+        triage_confirm.post_in(
+            str(card["channel_id"]),
+            f"⚠️ {_ACTION_LABEL[action]}을 {MAX_ATTEMPTS}번 시도했지만 가져오지 못했습니다. "
+            "이 카드에 답장으로 다시 요청해 주세요.",
+            reply_to=str(card["message_id"]),
+        )
+    except Exception as error:  # noqa: BLE001 — the notice must never fail the tick
+        print(f"DIGEST-REACTION-NOTICE-FAIL action={action} err={type(error).__name__}",
+              file=sys.stderr)
+
+
+def _act(card: dict, owner: str, db) -> int:
+    """Run each new owner reaction on one card once; return actions run."""
+    try:
+        actions = _owner_reactions(card, owner)
+    except Exception as error:  # noqa: BLE001 — one card's read never stops the others
+        print(f"DIGEST-REACTION-READ-FAIL msg={card['message_id']} "
+              f"err={type(error).__name__}", file=sys.stderr)
+        return 0
+    ran = 0
+    for action in actions:
+        stamp = triage_core.utc_now()
+        attempt = triage_store.claim_digest_action(
+            db, str(card["message_id"]), action, stamp, max_attempts=MAX_ATTEMPTS,
+        )
+        if not attempt:
+            continue
+        try:
+            status = _run(action, card, attempt)
+        except Exception as error:  # noqa: BLE001 — retried on a later tick, capped
+            triage_store.finish_digest_action(
+                db, str(card["message_id"]), action, "retry", triage_core.utc_now(),
+            )
+            print(f"DIGEST-REACTION-FAIL action={action} msg={card['message_id']} "
+                  f"err={triage_core.redact(str(error))[:160]}", file=sys.stderr)
+            if attempt >= MAX_ATTEMPTS:
+                _gave_up(card, action)
+            continue
+        triage_store.finish_digest_action(
+            db, str(card["message_id"]), action, status, triage_core.utc_now(),
+        )
+        ran += 1
+        print(f"DIGEST-REACTION action={action} item={card['item_no']} status={status}")
+    return ran
+
+
+def _recent_cards(now: datetime | None) -> tuple[object, list[dict]]:
+    db = triage_gate.db_path()
+    current = now or datetime.now(UTC)
+    return db, triage_store.recent_digest_cards(db, since=(current - WINDOW).isoformat())
 
 
 def run_tick(*, now: datetime | None = None) -> int:
-    """Act once on each new owner reaction on recent digest cards; return actions run."""
-    db = triage_gate.db_path()
-    current = now or datetime.now(UTC)
-    cards = triage_store.recent_digest_cards(db, since=(current - WINDOW).isoformat())
+    """Safety net: act once on each new owner reaction on recent digest cards."""
+    db, cards = _recent_cards(now)
     if not cards:
         return 0
     owner = triage_confirm.owner_id()
-    ran = 0
-    for card in cards:
-        try:
-            actions = _owner_reactions(card, owner)
-        except Exception as error:  # noqa: BLE001 — one card's read never stops the others
-            print(f"DIGEST-REACTION-READ-FAIL msg={card['message_id']} "
-                  f"err={type(error).__name__}", file=sys.stderr)
-            continue
-        for action in actions:
-            stamp = triage_core.utc_now()
-            if not triage_store.claim_digest_action(
-                db, str(card["message_id"]), action, stamp, max_attempts=MAX_ATTEMPTS,
-            ):
-                continue
-            try:
-                status = _RUNNERS[action](card)
-            except Exception as error:  # noqa: BLE001 — retried on a later tick, capped
-                triage_store.finish_digest_action(
-                    db, str(card["message_id"]), action, "retry", triage_core.utc_now(),
-                )
-                print(f"DIGEST-REACTION-FAIL action={action} msg={card['message_id']} "
-                      f"err={triage_core.redact(str(error))[:160]}", file=sys.stderr)
-                continue
-            triage_store.finish_digest_action(
-                db, str(card["message_id"]), action, status, triage_core.utc_now(),
-            )
-            ran += 1
-            print(f"DIGEST-REACTION action={action} item={card['item_no']} status={status}")
-    return ran
+    return sum(_act(card, owner, db) for card in cards)
+
+
+def run_card(message_id: str, *, now: datetime | None = None) -> int:
+    """The gateway heard a press on ``message_id`` — act on that one card right away.
+
+    The reaction is read back from Discord before acting (the event only says that
+    someone pressed), so the owner-only and once-per-action rules are the tick's own.
+    A message that is not a recent digest card is ignored without any Discord call.
+    """
+    db, cards = _recent_cards(now)
+    card = next((card for card in cards if str(card["message_id"]) == message_id), None)
+    if card is None:
+        return 0
+    return _act(card, triage_confirm.owner_id(), db)

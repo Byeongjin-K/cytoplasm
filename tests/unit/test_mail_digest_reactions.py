@@ -136,7 +136,8 @@ def test_a_failed_read_is_retried_later_and_capped(
     runs = [actions.run_tick(now=_NOW) for _ in range(actions.MAX_ATTEMPTS + 2)]
 
     assert runs == [0] * (actions.MAX_ATTEMPTS + 2)
-    assert len(calls) == actions.MAX_ATTEMPTS and posted == []
+    assert len(calls) == actions.MAX_ATTEMPTS
+    assert len(posted) == 1 and posted[0][1].startswith("⚠️ 📄 전문을 3번 시도했지만")
 
 
 def test_cards_of_an_old_digest_are_not_read(db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,7 +203,9 @@ def test_the_draft_reaction_writes_a_draft_that_the_watch_tick_does_not_send(
                for p in (tmp_path / "gate" / "drafts").glob("*.json")]
     assert [(r["uid"], r["status"]) for r in records] == [("u-1", "pending")]
     assert cards[0] == records[0]["id"]
-    previews = [body for channel, body in posted if channel == "thread-1"]
+    replies = [body for channel, body in posted if channel == "thread-1"]
+    assert replies[0] == actions.DRAFT_ACK  # said once before the model call
+    previews = replies[1:]
     assert len(previews) == 1
     assert previews[0].startswith(f"✍️ **회신 초안을 썼습니다** · draft `{records[0]['id']}`")
     assert "> 확인했습니다." in previews[0] and "아직 보내지 않았습니다" in previews[0]
@@ -263,3 +266,56 @@ def test_a_failed_emoji_attach_never_fails_the_delivered_digest(
 
     assert triage_digest.run_digest(limit=10, sync=False, dry_run=False) == 0
     assert "DIGEST-REACTION-ATTACH-FAIL msg=card-1 err=OSError" in capsys.readouterr().err
+
+
+def test_a_press_heard_by_the_gateway_runs_that_card_once_and_the_tick_does_not_repeat_it(
+    db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted = _discord(monkeypatch, {actions.BODY_EMOJI: [BOT, OWNER], actions.DRAFT_EMOJI: [BOT]})
+    monkeypatch.setattr(triage_transport, "_get_mail", _mail)
+
+    assert actions.run_card("card-1", now=_NOW) == 1
+    assert actions.run_card("card-1", now=_NOW) == 0
+    assert actions.run_tick(now=_NOW) == 0
+    assert len(posted) == 2 and posted[0][1].startswith("📄 **전문** · 합성 제목")
+
+
+def test_a_press_on_a_message_that_is_not_a_digest_card_reads_nothing(
+    db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(triage_confirm, "_api", lambda *_a: pytest.fail("read Discord"))
+
+    assert actions.run_card("not-a-card", now=_NOW) == 0
+
+
+@pytest.mark.parametrize(("mode", "ran"), [("full-go", ["card-7"]), ("no-go", [])])
+def test_digest_react_stops_when_mail_is_no_go(
+    monkeypatch: pytest.MonkeyPatch, mode: str, ran: list[str],
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(triage_mode, "effective_mode", lambda: mode)
+    monkeypatch.setattr(actions, "run_card", lambda message_id: calls.append(message_id) or 1)
+
+    args = triage_cli.build_parser().parse_args(["digest-react", "--message-id", "card-7"])
+
+    assert args.func(args) == 0
+    assert calls == ran
+
+
+def test_the_watch_wrapper_runs_one_card_without_touching_the_failure_streak(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    import subprocess
+
+    import mail_triage_watch as wrapper
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(wrapper, "CLI", tmp_path / "triage_cli.py")
+    (tmp_path / "triage_cli.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(wrapper, "_announce", lambda **_k: pytest.fail("streak touched"))
+    monkeypatch.setattr(subprocess, "run", lambda argv, **_k: seen.append(argv)
+                        or subprocess.CompletedProcess(argv, 0, "", ""))
+    monkeypatch.setattr(sys, "argv", ["mail_triage_watch.py", "--digest-card", "card-7"])
+
+    assert wrapper.main() == 0
+    assert seen[0][1:] == [str(tmp_path / "triage_cli.py"), "digest-react", "--message-id", "card-7"]
