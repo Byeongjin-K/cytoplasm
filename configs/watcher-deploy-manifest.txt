@@ -93,6 +93,7 @@ agent|skills/mail/scripts/mail_sync_watch.py|.hermes/scripts/mail_sync_watch.py|
 agent|skills/mail/scripts/watch_failure_streak.py|.hermes/scripts/watch_failure_streak.py|required
 agent|skills/mail/scripts/mailon_vendor_digest.sh|.hermes/scripts/mailon_vendor_digest.sh|required
 agent|skills/mail/scripts/mailon_runtime_drift.sh|.hermes/scripts/mailon_runtime_drift.sh|required
+agent|skills/mail/scripts/mail_digest_repair_watch.py|.hermes/scripts/mail_digest_repair_watch.py|required
 
 # --- skills/meeting/deploy-manifest.txt ---
 agent|skills/meeting/scripts/meeting_pending_transcript_watch.py|.hermes/scripts/meeting_pending_transcript_watch.py|required

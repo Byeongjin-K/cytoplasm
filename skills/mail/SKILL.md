@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "메일을 읽거나 찾거나 회신·작성·전달·발송하라고 할 때 사용. 기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.17.0
+version: 1.18.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -129,6 +129,9 @@ Hermes cron(`mail-triage-watch`, no_agent)이 `watch`를 돌린다. 이 루프�
 
 ### 1b. 평일 매시 수집 (09:20~19:20 KST)
 cron `mail-sync-watch`(`20 9-19 * * 1-5`, no_agent)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 실패한 시각은 다음 시각이 다시 시도하고 놓친 메일은 증분 수집이 이어서 저장한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 새 메일 0건이 6회 이어지면(`MAIL_SYNC_QUIET_AFTER`) 소유자에게 한 번 알리고, 회복 시 한 번 더 알린다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-평일-매시-수집과-정지-알림.md)
+
+### 1c. 다이제스트 실패 → 수리 티켓 (매일 09:10 KST, 사용자 타이머)
+`mail-triage-repair-daily`(`10 9 * * *`, no_agent, `runner=systemd`)가 `mail_digest_repair_watch.py` 를 돌린다. 지난번 이후의 분류 실패(`classification_failed`)·`(요약 실패)`·`DIGEST-FAIL stage=… code=…`·트리아지 워처 실패를 종류마다 수리 티켓 하나로 올린다(`repair_cli.py manual`, 메일 제목·주소·본문 비노출, 자동 수리 없음). 같은 종류의 재발은 같은 카드의 재발로 센다. 2026-10-02 노드에 손으로 넣은 에이전트 모드 잡을 대신하며, 그 Hermes 잡은 지우지 않고 일시정지된다. 상세: [소개](../../docs/기능소개/정기-작업-사용자-타이머-이전.md)
 
 ### 2. 다이제스트 루프 (매일 08:00 KST)
 신규 cron `mail-daily-digest`(`0 8 * * *`, no_agent)가 `digest`를 실행한다.

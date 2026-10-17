@@ -16,8 +16,8 @@ def test_rag_ingest_deployer_has_the_production_safety_contract() -> None:
         '"$repo_root/automation/rag_ingest" .hermes/rag_ingest_runtime/rag_ingest'
     ) in text
     assert ".hermes/scripts/rag_ingest_watch.py" in text
-    assert 'source "$repo_root/automation/deploy_cron.sh"' in text
-    assert 'converge_cron rag-ingest-watch "every 10m" rag_ingest_watch.py local' in text
+    assert 'source "$repo_root/automation/deploy_timer.sh"' in text
+    assert 'converge_timer rag-ingest-watch "every 10m" rag_ingest_watch.py local' in text
 
 
 def test_remote_payloads_run_from_a_readable_directory() -> None:

@@ -24,4 +24,5 @@ source "$repo_root/automation/deploy_push.sh"
 push_file "$repo_root/automation/stt_eval/cron/stt_eval_capture_watch.py" '.hermes/scripts/stt_eval_capture_watch.py'
 run_account "$account" 'grep -qx "timezone: Asia/Seoul" "$HOME/.hermes/config.yaml"'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron stt-eval-capture "40 3 * * *" stt_eval_capture_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer stt-eval-capture "40 3 * * *" stt_eval_capture_watch.py local

@@ -48,3 +48,31 @@ def listing_only_hermes(row: Declaration, prelude: str = "") -> str:
     """Lists exactly the declared job; any other call exits 9, so a create or edit fails the deploy."""
     return ("#!/usr/bin/env bash\n" + prelude + '[[ "$*" == "cron list --all" ]] || exit 9\n'
             f"printf %s {shlex.quote(listing(row))}\n")
+
+
+_FAKE_SYSTEMCTL: Final = r'''#!/usr/bin/env python3
+import json, os, sys
+path = os.path.join(os.environ["HOME"], "fake-systemctl.json")
+units = json.load(open(path)) if os.path.exists(path) else {}
+args = [a for a in sys.argv[1:] if a != "--user"]
+if args[0] in ("enable", "disable"):
+    units[args[-1]] = "on" if args[0] == "enable" else "off"
+elif args[0] == "is-enabled":
+    print("enabled" if units.get(args[1]) == "on" else "disabled")
+elif args[0] == "is-active":
+    print("active" if units.get(args[1]) == "on" else "inactive")
+json.dump(units, open(path, "w"))
+'''
+
+
+def timer_env(root: Path) -> dict[str, str]:
+    """`converge_timer` 를 부르는 배포기를 리그에서 돌릴 때 — 노드 릴리스 트리 대신 이 체크아웃의 수렴기,
+    가짜 systemctl(상태는 노드 HOME 의 json), 잡이 없는 Hermes 목록. 일시정지 순서는 `test_cron_timer.py` 가 본다."""
+    root.mkdir(parents=True, exist_ok=True)
+    systemctl, hermes = root / "fake-systemctl", root / "fake-timer-hermes"
+    _ = systemctl.write_text(_FAKE_SYSTEMCTL, encoding="utf-8")
+    _ = hermes.write_text("#!/bin/bash\n[[ \"$*\" == \"cron list --all\" ]] || exit 9\nprintf 'No scheduled jobs.\\n'\n",
+                          encoding="utf-8")
+    for path in (systemctl, hermes):
+        path.chmod(0o755)
+    return {"DEPLOY_TIMER_RUNTIME": str(REPO), "CRON_TIMER_SYSTEMCTL": str(systemctl), "CRON_TIMER_HERMES": str(hermes)}

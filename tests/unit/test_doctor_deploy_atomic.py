@@ -21,7 +21,7 @@ _PACKAGE: Final = "automation/doctor"
 _WRAPPER: Final = ".hermes/scripts/doctor_watch.py"
 _INFRA: Final = (
     "automation/node_config.py", "automation/node_config_sh.py", "automation/deploy_provenance.sh",
-    "automation/deploy_push.sh", HELPER, "configs/node.example.toml",
+    "automation/deploy_push.sh", HELPER, "automation/deploy_timer.sh", "configs/node.example.toml",
 )
 _SUDO: Final = r'''#!/bin/bash
 account="$3"; script="${@: -1}"
