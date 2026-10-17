@@ -15,6 +15,7 @@ from typing import Final
 
 import pytest
 
+from automation.deploy_declarations import all_declarations
 from tests.unit.cron_fixture import declared_cron, listing_only_hermes
 from tests.unit.provenance_rig import PROBE_HELPER, REMOTE_HEADS, build_repo, deploy, dirty
 
@@ -59,11 +60,22 @@ def test_a_dirty_shared_helper_never_reaches_the_node(repo: Path, tmp_path: Path
     assert not marker
 
 
-@pytest.mark.parametrize("helper", ["automation/deploy_cron.sh", "automation/deploy_tree_remote.sh"])
-def test_the_bypass_still_ships_a_dirty_helper(repo: Path, tmp_path: Path, helper: str) -> None:
+@pytest.mark.parametrize("helper,package,account", [
+    ("automation/deploy_cron.sh", "automation/doctor", "peer"),
+    ("automation/deploy_tree_remote.sh", "automation/repair", "agent"),
+])
+def test_the_bypass_still_ships_a_dirty_helper(
+    repo: Path, tmp_path: Path, helper: str, package: str, account: str,
+) -> None:
     assert helper in REMOTE_HEADS
+    # doctor keeps the peer Hermes path; repair now uses only the timer helper.
+    row = next(row for row in all_declarations(repo)
+               if (row.owner, row.kind, row.account) == (package, "cron", account))
     with dirty(repo, helper):
-        rc, stderr, calls, marker = _run(repo, tmp_path, "automation/repair", bypass=True)
+        rc, stderr, calls, marker = deploy(
+            repo, tmp_path, str(repo / package / "deploy.sh"),
+            hermes=listing_only_hermes(row), bypass=True,
+        )
 
     assert rc == 0, stderr
     assert calls

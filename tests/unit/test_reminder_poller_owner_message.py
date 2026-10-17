@@ -177,13 +177,14 @@ def test_cli_runs_when_only_flat_reminder_runtime_is_deployed(
     deploy = (source / 'deploy.sh').read_text(encoding='utf-8')
     payload = deploy[deploy.index('source "$repo_root/automation/deploy_tree.sh"'):]
     local = 'run_account() { bash -c "$2"; }\n' + payload
-    from tests.unit.cron_fixture import declared_cron, listing_only_hermes
+    from tests.unit.cron_fixture import declared_cron, listing_only_hermes, timer_env
     hermes = tmp_path / '.local' / 'bin' / 'hermes'
     hermes.parent.mkdir(parents=True)
     hermes.write_text(listing_only_hermes(declared_cron('automation/reminder_poller')), encoding='utf-8')
     hermes.chmod(0o755)
     subprocess.run(['bash', '-euo', 'pipefail', '-c', local], check=True,
-                   env={**os.environ, 'repo_root': str(repo), 'NODE_AGENT_ACCOUNT': 'agent'},
+                   env={**os.environ, 'repo_root': str(repo), 'NODE_AGENT_ACCOUNT': 'agent',
+                        **timer_env(tmp_path / 'timer')},
                    capture_output=True, text=True, timeout=10)
     wrapper = tmp_path / '.hermes' / 'scripts' / 'poll_reminders.py'
     # When

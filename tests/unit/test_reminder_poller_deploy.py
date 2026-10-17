@@ -25,7 +25,8 @@ from pathlib import Path
 import pytest
 
 from automation.deploy_declarations import all_declarations
-from tests.unit.cron_fixture import HELPER, declared_cron, listing_only_hermes
+from automation.cron_schedule import on_calendar
+from tests.unit.cron_fixture import HELPER, TIMER_HELPER, declared_cron, listing_only_hermes, timer_env
 
 _REPO = Path(__file__).resolve().parents[2]
 _PKG = "automation/reminder_poller"
@@ -53,7 +54,7 @@ _COPIED = tuple(dict.fromkeys((
     f"{_PKG}/__init__.py", f"{_PKG}/poll_reminders.py", f"{_PKG}/poller_core.py",
     f"{_PKG}/reminder_store.py", f"{_PKG}/deploy.sh", f"{_PKG}/deploy-manifest.txt",
     "automation/__init__.py", *_tree_helper_closure(), "automation/deploy_push.sh",
-    "automation/deploy_provenance.sh", "automation/node_config_sh.py",
+    "automation/deploy_provenance.sh", TIMER_HELPER, "automation/node_config_sh.py",
     "automation/node_config.py", "configs/node.example.toml",
     "configs/runtime-package-manifest.txt",
 )))
@@ -64,7 +65,8 @@ _NEW_PATH = (
 _OLD_PATH = 'sys.path.insert(0, str(Path.home() / ".hermes" / "reminder_poller_runtime"))'
 _FUTURE = "from __future__ import annotations\n"
 _CRON = declared_cron(_PKG)
-_FULL_RUN = ["prepare", "switch", "verify", "push", "readback", f"cron:{_CRON.destination}"]
+_FULL_RUN = ["prepare", "switch", "verify", "push", "readback",
+             f"timer:{_CRON.destination}", f"timer-check:{_CRON.destination}"]
 
 _SSH = '#!/bin/bash\nexec bash -c "$2"\n'
 _SUDO = r'''#!/bin/bash
@@ -76,7 +78,9 @@ case "$last" in
   _deploy_tree_remote_verify) kind=verify ;;
   _deploy_tree_remote_rollback*) kind=rollback ;;
   'rm -rf -- "$staging"') kind=cleanup ;;
-  *) case "$script" in *$'\n'"_converge_cron_remote "*) name="${script##*_converge_cron_remote }"; kind="cron:${name%% *}" ;;
+  *) case "$script" in
+       *"automation.cron_timer converge --name "*) name="${script##*converge --name }"; kind="timer:${name%% *}" ;;
+       *"automation.cron_timer check --name "*) name="${script##*check --name }"; kind="timer-check:${name%% *}" ;;
        sha256sum*) kind=readback ;; *deploy-tmp*) kind=push ;; *) kind=other ;; esac ;;
 esac
 printf '%s\n' "$kind" >> "$RIG/calls.log"
@@ -214,6 +218,7 @@ def rig(tmp_path: Path) -> Rig:
         **os.environ, "HOME": str(workstation), "NODE_HOME": str(home), "RIG": str(tmp_path),
         "PATH": f"{bin_dir}:{os.environ['PATH']}", "DEPLOY_SSH_HOST": "fake-node",
         "DEPLOY_ALLOW_UNPUSHED": "1", "REAL_PYTHON": real_python, "FAULT": "",
+        **timer_env(tmp_path / "timer"),
     })
     rig.label("A")
     return rig
@@ -260,6 +265,11 @@ def test_the_runtime_lands_as_one_generation_before_the_wrapper(rig: Rig) -> Non
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert rig.calls() == _FULL_RUN
+    units = rig.home / ".config/systemd/user"
+    timer = (units / f"autophagy-cron-{_CRON.destination}.timer").read_text()
+    assert f"OnCalendar={on_calendar(_CRON.attr('schedule'), '')}\n" in timer
+    service = (units / f"autophagy-cron-{_CRON.destination}.service").read_text()
+    assert f"--name {_CRON.destination} --script {_CRON.attr('script')}\n" in service
     [generation] = rig.generations()
     assert os.readlink(rig.home / _LINK) == f".current.d/{generation.name}"
     for module in _MODULES:

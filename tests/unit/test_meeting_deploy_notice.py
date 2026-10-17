@@ -14,7 +14,9 @@ from typing import Protocol, TypedDict
 
 import pytest
 
-from tests.unit.cron_fixture import JOB_ID, HELPER, declared_cron, listing, listing_only_hermes
+from automation.cron_schedule import on_calendar
+from automation.cron_timer import Job, identity
+from tests.unit.cron_fixture import HELPER, TIMER_HELPER, declared_cron, listing, listing_only_hermes, timer_env
 
 REPO = Path(__file__).resolve().parents[2]
 PLUGIN = ".hermes/plugins/00-meeting-gate/__init__.py"
@@ -22,8 +24,7 @@ SOURCE = "skills/meeting/plugin/__init__.py"
 _CRON = declared_cron("skills/meeting")
 _LISTED = listing(_CRON).split("\n")
 _NAME_AT = next(i for i, line in enumerate(_LISTED) if line.startswith("    Name:"))
-_CRON_STDOUT = (f"CRON-CONVERGE-OK name={_CRON.destination} action=unchanged id={JOB_ID}\n"
-                + "\n".join(_LISTED[_NAME_AT:_NAME_AT + 7]) + "\n")  # deploy.sh: grep -A6 <name>
+_LIST_STDOUT = "\n".join(_LISTED[_NAME_AT:_NAME_AT + 7]) + "\n"  # deploy.sh: grep -A6 <name>
 
 
 class _Location(TypedDict):
@@ -51,6 +52,20 @@ class _Run(Protocol):
 Deployment = tuple[_Run, Path, Path, Path]
 
 
+def _assert_timer(home: Path, stdout: str) -> None:
+    job = Job(_CRON.destination, _CRON.attr("schedule"), _CRON.attr("script"),
+              deliver=_CRON.attr("deliver"))
+    assert stdout == (
+        f"CRON-TIMER-OK name={job.name} action=written hermes=absent\n"
+        f"TIMER-CHECK state=ok detail=- want={identity(job)}\n" + _LIST_STDOUT
+    )
+    units = home / ".config/systemd/user"
+    timer = (units / f"autophagy-cron-{job.name}.timer").read_text()
+    assert f"OnCalendar={on_calendar(job.schedule, '')}\n" in timer
+    service = (units / f"autophagy-cron-{job.name}.service").read_text()
+    assert f"--name {job.name} --script {job.script} --deliver {job.deliver}\n" in service
+
+
 @pytest.fixture
 def deployment(tmp_path: Path) -> Deployment:
     repo = tmp_path / "repo"
@@ -63,7 +78,7 @@ def deployment(tmp_path: Path) -> Deployment:
         "skills/meeting/deploy.sh", "skills/meeting/deploy-manifest.txt", SOURCE,
         "skills/meeting/plugin/plugin.yaml",
         "skills/meeting/scripts/meeting_pending_transcript_watch.py",
-        "automation/deploy_push.sh", "automation/deploy_provenance.sh", HELPER,
+        "automation/deploy_push.sh", "automation/deploy_provenance.sh", HELPER, TIMER_HELPER,
         "automation/node_config_sh.py", "automation/node_config.py",
         "configs/node.example.toml",
     ]
@@ -81,7 +96,13 @@ def deployment(tmp_path: Path) -> Deployment:
         "HEALTHCHECK_NODE_CONFIG_PATH": str(repo / "configs/node.example.toml"),
         "FAKE_LOG": str(tmp_path / "events.jsonl"),
         "PYTHONDONTWRITEBYTECODE": "1", "LC_ALL": "C.UTF-8",
+        **timer_env(tmp_path / "timer"),
     }
+    timer_hermes = Path(env["CRON_TIMER_HERMES"])
+    _ = timer_hermes.write_text(timer_hermes.read_text().replace(
+        "#!/bin/bash\n",
+        '#!/bin/bash\nif [[ "${FAIL_CRON:-}" == 1 ]]; then echo FAKE-CRON-FAIL >&2; exit 43; fi\n',
+    ))
     for args in (("init", "-q"), ("add", "."),
                  ("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
                   "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture")):
@@ -171,7 +192,7 @@ def test_changed_plugin_reaches_owner_channel_once(deployment: Deployment, initi
     assert result.returncode == 0, result.stderr
     assert "PLUGIN-CHANGED:" in result.stderr
     assert "[deploy-provenance] OK:" in result.stderr
-    assert result.stdout == _CRON_STDOUT
+    _assert_timer(home, result.stdout)
     messages = [event["message"] for event in events if "message" in event]
     assert len(messages) == 1, result.stderr
     after = hashlib.sha256((repo / SOURCE).read_bytes()).hexdigest()
@@ -213,12 +234,12 @@ def test_unconfigured_channel_uses_facade_dm(deployment: Deployment) -> None:
 def test_notice_failure_is_loud_without_changing_deploy_result(
     deployment: Deployment, failure: dict[str, str], marker: str,
 ) -> None:
-    run, _, _, _ = deployment
+    run, _, home, _ = deployment
     result, _ = run(**failure)
     assert result.returncode == 0, result.stderr
     assert marker in result.stderr
     assert "PLUGIN-NOTICE-FAIL:" in result.stderr
-    assert result.stdout == _CRON_STDOUT
+    _assert_timer(home, result.stdout)
 
 
 @pytest.mark.parametrize("failure,code,marker", [
@@ -254,7 +275,9 @@ def test_missing_credentials_are_loud_without_sending(deployment: Deployment) ->
 
 
 def test_later_cron_error_is_preserved_after_notice(deployment: Deployment) -> None:
-    run, _, _, _ = deployment
+    run, _, home, _ = deployment
     result, events = run(FAIL_CRON="1")
-    assert result.returncode == 4 and "FAKE-CRON-FAIL" in result.stderr
+    assert result.returncode == 4
+    assert "CRON-TIMER-BLOCK: hermes cron list --all failed or was unreadable" in result.stdout
+    assert not (home / f".config/systemd/user/autophagy-cron-{_CRON.destination}.timer").exists()
     assert len([event for event in events if "channel" in event]) == 1
