@@ -5,4 +5,4 @@ agent|automation|.hermes/repair-report-runtime/.current|v2:tree;prefix=automatio
 # 실행 경로에서 빠진 옛 사본 — 격리 후보(todo 34). 지우지 않는다.
 agent|automation/repair|.hermes/repair|v2:tree;policy=retired;reason=detect-runs-the-release-runtime-copy
 agent|automation|.hermes/repair-report-runtime/automation|v2:tree;policy=retired;reason=the-wrapper-imports-the-generation-link-.current
-agent|automation/repair/cron/repair_report_consume_watch.py|repair-report-consumer|v2:cron;schedule=*/5 * * * *;script=repair_report_consume_watch.py;deliver=local;mode=no-agent
+agent|automation/repair/cron/repair_report_consume_watch.py|repair-report-consumer|v2:cron;schedule=*/5 * * * *;script=repair_report_consume_watch.py;deliver=local;mode=no-agent;runner=systemd

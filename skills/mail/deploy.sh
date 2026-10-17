@@ -98,24 +98,26 @@ push_file "$repo_root/skills/mail/scripts/mail_triage_watch.py" \
 # closes, so the delivery target can finally be one that reaches somebody. Measured
 # 2026-08-18: 111 consecutive failures under --deliver local reached nobody at all.
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-triage-watch\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "*/2 * * * *" --deliver discord --no-agent --script mail_triage_watch.py; else hermes cron create "*/2 * * * *" --name mail-triage-watch --no-agent --script mail_triage_watch.py --deliver discord; fi'
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer mail-triage-watch "*/2 * * * *" mail_triage_watch.py discord
 # Register (or converge) the daily digest cron. --deliver discord routes the
 # no-agent script's stdout to the owner DM, so a failure marker line + exit 1
 # actually reaches cha (the 2026-07-31 incident vanished under --deliver local,
 # which has 0 delivery targets). An already-registered job is converged in
 # place with `edit` (preserving its job id/history); otherwise it is created.
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-daily-digest\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 8 * * *" --deliver discord --no-agent --script mail_digest_watch.py; else hermes cron create "0 8 * * *" --name mail-daily-digest --no-agent --script mail_digest_watch.py --deliver discord; fi'
+converge_timer mail-daily-digest "0 8 * * *" mail_digest_watch.py discord
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron mail-attachment-drive-watch "every 30m" mail_attachment_drive_watch.py discord
+converge_timer mail-attachment-drive-watch "every 30m" mail_attachment_drive_watch.py discord
 # Workday hourly collection (2026-10-13): the 08:00 digest sync was the only scheduled one,
 # so one failed morning left a day without stored mail and nobody was told.
 push_file "$repo_root/skills/mail/scripts/mail_sync_watch.py" '.hermes/scripts/mail_sync_watch.py'
 run_agent "chmod 700 \"\$HOME/.hermes/scripts/mail_sync_watch.py\""
-converge_cron mail-sync-watch "20 9-19 * * 1-5" mail_sync_watch.py discord
+converge_timer mail-sync-watch "20 9-19 * * 1-5" mail_sync_watch.py discord
 
 # N1: 다이제스트 실패 → 수리 티켓(09:10 KST). 같은 이름의 손으로 넣은 에이전트 모드 Hermes 잡은
 # converge_timer 가 일시정지한다(지우지 않는다).
 push_file "$repo_root/skills/mail/scripts/mail_digest_repair_watch.py" '.hermes/scripts/mail_digest_repair_watch.py'
-source "$repo_root/automation/deploy_timer.sh"
 converge_timer mail-triage-repair-daily "10 9 * * *" mail_digest_repair_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'
 

@@ -36,4 +36,6 @@ push_file "$repo_root/skills/budget/scripts/budget_watch.py" \
   '.hermes/scripts/budget_watch.py'
 # Every ordinary failing tick is silent; only incident open/recovery notices reach Discord.
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+budget-watch\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "*/30 * * * *" --deliver discord --no-agent --script budget_watch.py; else hermes cron create "*/30 * * * *" --name budget-watch --no-agent --script budget_watch.py --deliver discord; fi'
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer budget-watch "*/30 * * * *" budget_watch.py discord
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'

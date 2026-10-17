@@ -37,4 +37,6 @@ run_agent 'grep -qx "timezone: Asia/Seoul" "$HOME/.hermes/config.yaml"'
 # Weekdays provide catch-up after a failed Monday tick. The delivered-week watermark
 # makes every later tick in a successfully consumed week a silent no-op.
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+notes-weekly-organize\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 8 * * 1-5" --deliver discord --no-agent --script notes_organize.py; else hermes cron create "0 8 * * 1-5" --name notes-weekly-organize --no-agent --script notes_organize.py --deliver discord; fi'
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer notes-weekly-organize "0 8 * * 1-5" notes_organize.py discord
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'

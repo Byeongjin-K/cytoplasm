@@ -33,5 +33,6 @@ push_file "$repo_root/automation/obsidian_write/cron/obsidian_note_watch.py" '.h
 
 # Idempotent cron registration (reaction resolve every 2m). --all so a paused job is seen.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron obsidian-note-watch "every 2m" obsidian_note_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer obsidian-note-watch "every 2m" obsidian_note_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 obsidian-note-watch || true'

@@ -1,3 +1,3 @@
 # 목적지 이름이 소스와 다르다 — 「confirm 워처 배포 파일명은 스킬별로 고유」 규칙.
 agent|skills/calendar/scripts/confirm_reaction_watch.py|.hermes/scripts/calendar_confirm_reaction_watch.py|required
-agent|skills/calendar/scripts/confirm_reaction_watch.py|calendar-confirm-watch|v2:cron;schedule=*/1 * * * *;script=calendar_confirm_reaction_watch.py;deliver=local;mode=no-agent
+agent|skills/calendar/scripts/confirm_reaction_watch.py|calendar-confirm-watch|v2:cron;schedule=*/1 * * * *;script=calendar_confirm_reaction_watch.py;deliver=local;mode=no-agent;runner=systemd

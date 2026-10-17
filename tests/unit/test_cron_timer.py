@@ -119,19 +119,19 @@ def test_schedules_whose_meaning_would_change_are_refused(schedule: str) -> None
 def test_every_declared_timer_schedule_has_the_same_calendar() -> None:
     rows = [d for d in all_declarations(Path(__file__).resolve().parents[2])
             if d.kind == "cron" and d.attr("runner") == "systemd"]
-    assert sorted((d.account, d.destination) for d in rows) == sorted(("agent", n) for n in (
-        "rag-ingest-watch", "stt-eval-capture", "voice-catalog-enroll", "daily-cost-report",
-        "selfskill-audit-watch", "doctor-watch", "mail-triage-repair-daily"))
+    agent_cron = {d.destination for d in all_declarations(Path(__file__).resolve().parents[2])
+                  if d.kind == "cron" and d.account == "agent"}
+    assert {d.destination for d in rows} == agent_cron and all(d.account == "agent" for d in rows)
     for row in rows:
-        assert row.attr("deliver") == "local"
+        assert row.attr("deliver") in ("local", "discord")
         assert on_calendar(row.attr("schedule"), "Asia/Seoul").endswith(" Asia/Seoul")
 
 
-def test_a_systemd_runner_must_deliver_locally() -> None:
+def test_a_systemd_runner_delivers_locally_or_to_discord_only() -> None:
     row = "agent|a/w.py|w-watch|v2:cron;schedule=0 8 * * *;script=w.py;deliver=discord;mode=no-agent;runner=systemd\n"
-    with pytest.raises(ManifestError, match="deliver=local"):
-        parse_declaration_file("automation/pkg/deploy-manifest.txt", row)
-    ok = parse_declaration_file("automation/pkg/deploy-manifest.txt", row.replace("discord", "local"))
+    with pytest.raises(ManifestError, match="local or discord"):
+        parse_declaration_file("automation/pkg/deploy-manifest.txt", row.replace("discord", "telegram"))
+    ok = parse_declaration_file("automation/pkg/deploy-manifest.txt", row)
     assert ok[0].attr("runner") == "systemd"
     assert parse_declaration_file("automation/pkg/deploy-manifest.txt", row.replace(";runner=systemd", "")
                                   .replace("discord", "local"))[0].attr("runner") == "hermes"
@@ -237,3 +237,62 @@ def test_the_runner_counts_failures_and_passes_only_declared_env(tmp_path: Path,
     state = json.loads((home / ".hermes" / "cron-timers" / "w-watch.json").read_text())
     assert (state["last_status"], state["failure_streak"], state["last_error"]) == ("error", 2, "exit 3")
     assert oct(os.stat(home / ".hermes" / "cron-timers" / "w-watch.json").st_mode & 0o777) == "0o600"
+
+
+def _discord_home(tmp_path: Path, script: str) -> tuple[Path, cron_timer.Job]:
+    home = tmp_path
+    (home / ".hermes" / "scripts").mkdir(parents=True)
+    (home / ".hermes" / ".env").write_text("DISCORD_HOME_CHANNEL=111\nDISCORD_HOME_CHANNEL_THREAD_ID=222\n", encoding="utf-8")
+    (home / ".env.secrets").write_text("DISCORD_BOT_TOKEN=fixture-token\n", encoding="utf-8")
+    (home / ".hermes" / "scripts" / "d.py").write_text(script, encoding="utf-8")
+    return home, cron_timer.Job("d-watch", "* * * * *", "d.py", (), "discord")
+
+
+def test_discord_delivery_posts_stdout_to_the_hermes_home_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, job = _discord_home(tmp_path, "print('DIGEST-FAIL stage=deliver retry_safe=false code=x')\n")
+    sent: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(cron_timer_run, "_discord_send", lambda *a: sent.append(a))
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+
+    assert cron_timer_run.run(home, job) == 0
+
+    assert sent == [("fixture-token", "222", "DIGEST-FAIL stage=deliver retry_safe=false code=x")]
+    kept = list((home / ".hermes" / "cron-timers" / "output" / "d-watch").glob("*.txt"))
+    assert len(kept) == 1 and "DIGEST-FAIL" in kept[0].read_text()
+
+
+@pytest.mark.parametrize("script", ["", "print('[SILENT]')\n"])
+def test_silent_runs_deliver_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, script: str) -> None:
+    home, job = _discord_home(tmp_path, script)
+    sent: list[object] = []
+    monkeypatch.setattr(cron_timer_run, "_discord_send", lambda *a: sent.append(a))
+
+    assert cron_timer_run.run(home, job) == 0
+    assert sent == []
+
+
+def test_a_failed_run_delivers_a_korean_failure_line_and_counts_the_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, job = _discord_home(tmp_path, "import sys\nsys.exit(2)\n")
+    sent: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(cron_timer_run, "_discord_send", lambda *a: sent.append(a))
+
+    assert cron_timer_run.run(home, job) == 2
+    assert sent and sent[0][2].startswith("⚠️ 정기 작업 'd-watch' 실패(종료코드 2)")
+    state = json.loads((home / ".hermes" / "cron-timers" / "d-watch.json").read_text())
+    assert (state["last_status"], state["failure_streak"]) == ("error", 1)
+
+
+def test_an_undeliverable_report_is_a_failure_not_silence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home, job = _discord_home(tmp_path, "print('report')\n")
+    (home / ".hermes" / ".env").write_text("", encoding="utf-8")
+
+    assert cron_timer_run.run(home, job) == 1
+    state = json.loads((home / ".hermes" / "cron-timers" / "d-watch.json").read_text())
+    assert (state["last_status"], state["last_error"]) == ("error", "delivery-failed")
+
+
+def test_discord_units_carry_the_hermes_like_environment() -> None:
+    service, _ = cron_timer.render(cron_timer.Job("d-watch", "*/2 * * * *", "d.py", (), "discord"),
+                                   root="/srv/rel", timezone="Asia/Seoul")
+    assert "--deliver discord" in service
+    assert "EnvironmentFile=-%h/.env.secrets" in service and "Environment=PATH=%h/.local/bin:" in service

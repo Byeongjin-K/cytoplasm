@@ -1,2 +1,2 @@
 agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|.hermes/scripts/wiki_confirm_reaction_watch.py|required
-agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|wiki-confirm-watch|v2:cron;schedule=*/1 * * * *;script=wiki_confirm_reaction_watch.py;deliver=local;mode=no-agent
+agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|wiki-confirm-watch|v2:cron;schedule=*/1 * * * *;script=wiki_confirm_reaction_watch.py;deliver=local;mode=no-agent;runner=systemd

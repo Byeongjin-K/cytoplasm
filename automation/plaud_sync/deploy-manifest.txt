@@ -1,2 +1,2 @@
 agent|automation/plaud_sync/cron/plaud_sync_watch.py|.hermes/scripts/plaud_sync_watch.py|required
-agent|automation/plaud_sync/cron/plaud_sync_watch.py|plaud-sync-watch|v2:cron;schedule=every 10m;script=plaud_sync_watch.py;deliver=local;mode=no-agent
+agent|automation/plaud_sync/cron/plaud_sync_watch.py|plaud-sync-watch|v2:cron;schedule=every 10m;script=plaud_sync_watch.py;deliver=local;mode=no-agent;runner=systemd

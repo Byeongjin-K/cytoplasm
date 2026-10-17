@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 from automation.deploy_declarations import Declaration, parse_declaration_file
+from tests.unit.cron_fixture import timer_env
 
 _REPO = Path(__file__).resolve().parents[2]
 _PKG = _REPO / "automation" / "research_trends"
@@ -114,6 +115,7 @@ def _rig(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}", "NODE_HOME": str(home), "HOME": str(tmp_path / "ops"),
         "DEPLOY_SSH_HOST": "fake-host", "DEPLOY_ALLOW_UNPUSHED": "1", "LANG": "C.UTF-8",
+        **timer_env(tmp_path / "timer"),
     }
     (tmp_path / "ops").mkdir()
     return home, env

@@ -6,4 +6,4 @@ agent|skills/meeting/scripts/meeting_pending_transcript_watch.py|.hermes/scripts
 # 도는 코드가 다를 수 있다 — 배포와 반영은 별개다(2026-08-28 5일 침묵 실측).
 agent|skills/meeting/plugin/__init__.py|.hermes/plugins/00-meeting-gate/__init__.py|required
 agent|skills/meeting/plugin/plugin.yaml|.hermes/plugins/00-meeting-gate/plugin.yaml|required
-agent|skills/meeting/scripts/meeting_pending_transcript_watch.py|meeting-pending-transcript-watch|v2:cron;schedule=0 0 * * *;script=meeting_pending_transcript_watch.py;deliver=discord;mode=no-agent
+agent|skills/meeting/scripts/meeting_pending_transcript_watch.py|meeting-pending-transcript-watch|v2:cron;schedule=0 0 * * *;script=meeting_pending_transcript_watch.py;deliver=discord;mode=no-agent;runner=systemd

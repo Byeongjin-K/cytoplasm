@@ -20,7 +20,7 @@ _timer_remote() { # _timer_remote <verb> <args…> → 원격 스크립트 한 �
   printf ' %q' "$@"
 }
 
-converge_timer() { # converge_timer <name> <schedule> <script> <deliver> [env]
+converge_timer() { # converge_timer <name> <schedule> <script> <local|discord> [env]
   local -
   set +e
   local arg out rc
@@ -28,8 +28,8 @@ converge_timer() { # converge_timer <name> <schedule> <script> <deliver> [env]
     printf 'CRON-TIMER-BLOCK: usage: converge_timer <name> <schedule> <script> <deliver> [env]\n' >&2
     return 2
   fi
-  if [[ "$4" != local ]]; then
-    printf 'CRON-TIMER-BLOCK: %s delivers to %q; a timer only runs deliver=local jobs\n' "$1" "$4" >&2
+  if [[ "$4" != local && "$4" != discord ]]; then
+    printf 'CRON-TIMER-BLOCK: %s delivers to %q; a timer delivers to local or discord only\n' "$1" "$4" >&2
     return 2
   fi
   for arg in "$@"; do
@@ -38,11 +38,11 @@ converge_timer() { # converge_timer <name> <schedule> <script> <deliver> [env]
       return 2
     fi
   done
-  out="$(run_agent "$(_timer_remote converge --name "$1" --schedule "$2" --script "$3" --env "${5-}")" </dev/null 2>&1)"
+  out="$(run_agent "$(_timer_remote converge --name "$1" --schedule "$2" --script "$3" --env "${5-}" --deliver "$4")" </dev/null 2>&1)"
   rc=$?
   printf '%s\n' "$out"
   (( rc == 0 )) || return "$rc"
-  out="$(run_agent "$(_timer_remote check --name "$1" --schedule "$2" --script "$3" --env "${5-}")" </dev/null 2>&1)"
+  out="$(run_agent "$(_timer_remote check --name "$1" --schedule "$2" --script "$3" --env "${5-}" --deliver "$4")" </dev/null 2>&1)"
   printf '%s\n' "$out"
   if [[ "$out" != *"TIMER-CHECK state=ok "* ]]; then
     printf 'CRON-TIMER-BLOCK: %s read-back is not ok after converge\n' "$1" >&2

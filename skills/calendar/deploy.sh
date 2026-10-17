@@ -30,5 +30,6 @@ deploy_provenance_check "$repo_root" \
 push_file "$repo_root/skills/calendar/scripts/confirm_reaction_watch.py" \
   '.hermes/scripts/calendar_confirm_reaction_watch.py'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron calendar-confirm-watch "*/1 * * * *" calendar_confirm_reaction_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer calendar-confirm-watch "*/1 * * * *" calendar_confirm_reaction_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'

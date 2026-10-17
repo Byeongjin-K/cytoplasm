@@ -177,14 +177,23 @@ def check(root: Path) -> tuple[Problem, ...]:
     found = [*problems, *registration_problems]
     by_key = {job.key: job for job in declared}
     registered_keys: dict[tuple[str, str, str], int] = {}
+    raw_kept: set[tuple[str, str, str]] = set()
     for registration in registered:
         job = registration.job
-        registered_keys[job.key] = registered_keys.get(job.key, 0) + 1
         want = by_key.get(job.key)
+        if registration.via == "raw" and want is not None and want.runner == "systemd":
+            # P2: FS3 고정 날것 줄은 Hermes 잡 정의를 계속 맞춘다(되돌리기용) — 값만 대조하고 타이머가 실행 주체다.
+            raw_kept.add(job.key)
+            if (job.schedule, job.script, job.deliver) != (want.schedule, want.script, want.deliver):
+                found.append(Problem("mismatch", job.package, f"{job.account}:{job.name}"))
+            continue
+        registered_keys[job.key] = registered_keys.get(job.key, 0) + 1
         if want is None:
             found.append(Problem("undeclared", job.package, f"{job.account}:{job.name}"))
         elif want != job:
             found.append(Problem("mismatch", job.package, f"{job.account}:{job.name}"))
+    for key in raw_kept - set(registered_keys):
+        found.append(Problem("raw-without-timer", key[0], f"{key[1]}:{key[2]}"))
     for key, count in registered_keys.items():
         if count > 1:
             found.append(Problem("registered-twice", key[0], f"{key[1]}:{key[2]}"))
@@ -228,9 +237,7 @@ def test_every_registration_matches_its_declaration() -> None:
     assert len(names["agent"]) == 31
     assert names["peer"] == {"doctor-watch", "selfskill-audit-watch", "memory-relocate-peer-watch"}
     timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
-    assert timers == {("agent", name) for name in (
-        "rag-ingest-watch", "stt-eval-capture", "voice-catalog-enroll", "daily-cost-report",
-        "selfskill-audit-watch", "doctor-watch", "mail-triage-repair-daily")}
+    assert timers == {("agent", name) for name in names["agent"]}  # 바로 전환: agent 잡 전부가 타이머
     raw = {(registration.job.package, registration.job.name) for registration in registered
            if registration.via == "raw"}
     assert raw == PINNED

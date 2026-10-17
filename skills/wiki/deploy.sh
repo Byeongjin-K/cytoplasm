@@ -40,5 +40,6 @@ deploy_provenance_check "$repo_root" \
 push_file "$repo_root/skills/wiki/scripts/wiki_confirm_reaction_watch.py" \
   '.hermes/scripts/wiki_confirm_reaction_watch.py'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron wiki-confirm-watch "*/1 * * * *" wiki_confirm_reaction_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer wiki-confirm-watch "*/1 * * * *" wiki_confirm_reaction_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'

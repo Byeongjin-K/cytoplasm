@@ -33,5 +33,6 @@ push_file "$repo_root/automation/effect_request/cron/effect_request_watch.py" '.
 
 # Idempotent cron registration (reaction resolve every 2m). --all so a paused job is seen.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron effect-request-watch "every 2m" effect_request_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer effect-request-watch "every 2m" effect_request_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 effect-request-watch || true'

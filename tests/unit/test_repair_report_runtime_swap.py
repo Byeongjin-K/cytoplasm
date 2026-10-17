@@ -30,7 +30,8 @@ from typing import Final
 
 import pytest
 
-from tests.unit.cron_fixture import HELPER, declared_cron, listing_only_hermes
+from automation.cron_schedule import on_calendar
+from tests.unit.cron_fixture import HELPER, TIMER_HELPER, declared_cron, listing_only_hermes, timer_env
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 _RUNTIME: Final = ".hermes/repair-report-runtime"
@@ -62,12 +63,13 @@ def _tree_helper_closure() -> tuple[str, ...]:
 
 _INFRA: Final = tuple(dict.fromkeys((
     "automation/node_config.py", "automation/node_config_sh.py",
-    "automation/deploy_provenance.sh", *_tree_helper_closure(), "automation/deploy_push.sh",
+    "automation/deploy_provenance.sh", *_tree_helper_closure(), "automation/deploy_push.sh", TIMER_HELPER,
     _DEPLOYER, "automation/repair/deploy-manifest.txt", _WRAPPER_SOURCE,
     "configs/runtime-package-manifest.txt", "configs/node.example.toml",
 )))
 _CRON: Final = declared_cron("automation/repair")
-_STEPS: Final = ("prepare", "switch", "verify", "push", "readback", f"cron:{_CRON.destination}")
+_STEPS: Final = ("prepare", "switch", "verify", "push", "readback",
+                 f"timer:{_CRON.destination}", f"timer-check:{_CRON.destination}")
 
 _SUDO: Final = r'''#!/bin/bash
 account=""
@@ -85,8 +87,10 @@ case "$last" in
   _deploy_tree_remote_rollback*) tag=rollback ;;
   *'rm -rf -- "$staging"'*) tag=cleanup ;;
   sha256sum*) tag=readback ;;
-  *) if [[ "$script" == *$'\n'"_converge_cron_remote "* ]]; then
-       name="${script##*_converge_cron_remote }"; tag="cron:${name%% *}"
+  *) if [[ "$script" == *"automation.cron_timer converge --name "* ]]; then
+       name="${script##*converge --name }"; tag="timer:${name%% *}"
+     elif [[ "$script" == *"automation.cron_timer check --name "* ]]; then
+       name="${script##*check --name }"; tag="timer-check:${name%% *}"
      elif [[ "$script" == *deploy-tmp* ]]; then tag=push; else tag=other; fi ;;
 esac
 printf '%s %s\n' "$account" "$tag" >> "$RIG/log"
@@ -316,6 +320,7 @@ def rig(tmp_path: Path) -> Rig:
         "PATH": f"{bin_dir}:{os.environ['PATH']}", "DEPLOY_SSH_HOST": "fake-node",
         "HEALTHCHECK_NODE_CONFIG_PATH": str(repo / "configs/node.example.toml"),
         "FAULT": "", "PAUSE": "0",
+        **timer_env(tmp_path / "timer"),
     })
     return Rig(tmp_path, repo, home, env)
 
@@ -327,6 +332,11 @@ def test_repair_deployer_ships_the_declared_closure(rig: Rig) -> None:
     with (_REPO / "configs/node.example.toml").open("rb") as stream:
         account = tomllib.load(stream)["agent_account"]
     assert rig.log() == [f"{account} {step}" for step in _STEPS]
+    units = rig.home / ".config/systemd/user"
+    timer = (units / f"autophagy-cron-{_CRON.destination}.timer").read_text()
+    assert f"OnCalendar={on_calendar(_CRON.attr('schedule'), '')}\n" in timer
+    service = (units / f"autophagy-cron-{_CRON.destination}.service").read_text()
+    assert f"--name {_CRON.destination} --script {_CRON.attr('script')}\n" in service
     assert rig.link.is_symlink()
     assert os.readlink(rig.link).startswith(".current.d/")
     generation = rig.link.resolve()
@@ -353,7 +363,8 @@ def test_a_watcher_started_at_any_point_of_a_deploy_sees_one_whole_generation(
     _ = rig.commit("B")
     assert _generation(rig.watch()) == before
     flipped = "root" if first else "B"
-    expected = {"prepare": before, "switch": flipped, "verify": flipped, "push": "B", "readback": "B", _STEPS[-1]: "B"}
+    expected = {"prepare": before, "switch": flipped, "verify": flipped, "push": "B",
+                "readback": "B", **dict.fromkeys(_STEPS[-2:], "B")}
     with rig.paused_deploy() as (process, arrived, release):
         for step in _STEPS:
             assert _line(arrived) == f"{step}\n".encode()

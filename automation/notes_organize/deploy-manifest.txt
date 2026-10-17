@@ -1,2 +1,2 @@
 agent|automation/notes_organize/notes_organize.py|.hermes/scripts/notes_organize.py|required
-agent|automation/notes_organize/notes_organize.py|notes-weekly-organize|v2:cron;schedule=0 8 * * 1-5;script=notes_organize.py;deliver=discord;mode=no-agent
+agent|automation/notes_organize/notes_organize.py|notes-weekly-organize|v2:cron;schedule=0 8 * * 1-5;script=notes_organize.py;deliver=discord;mode=no-agent;runner=systemd

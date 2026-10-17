@@ -1,7 +1,7 @@
 """배포기 시험 리그가 공유하는 cron 선언 조회와 가짜 `hermes`(RCB todo 27).
 
-배포기는 `converge_cron`(`automation/deploy_cron.sh`)으로 등록을 맞추므로, 배포기를 실제로 돌리는
-리그는 그 헬퍼와 노드 실측 형식으로 목록을 내는 `hermes` 가 있어야 한다. 기대값은 리그마다 적지 않고
+배포기는 선언의 runner에 따라 `converge_cron` 또는 `converge_timer`로 등록을 맞춘다.
+리그는 해당 헬퍼와 가짜 Hermes/systemctl을 제공한다. 기대값은 리그마다 적지 않고
 `deploy-manifest.txt` 의 `v2:cron` 선언에서 끌어온다.
 """
 from __future__ import annotations
@@ -16,6 +16,8 @@ REPO: Final = Path(__file__).resolve().parents[2]
 HELPER: Final = "automation/deploy_cron.sh"
 JOB_ID: Final = "0123456789ab"
 HELPER_SOURCE: Final = 'source "$repo_root/automation/deploy_cron.sh"'
+TIMER_HELPER: Final = "automation/deploy_timer.sh"
+TIMER_SOURCE: Final = 'source "$repo_root/automation/deploy_timer.sh"'
 
 
 def declared_cron(owner: str) -> Declaration:
@@ -26,6 +28,12 @@ def declared_cron(owner: str) -> Declaration:
 def converge_call(row: Declaration) -> str:
     return (f'converge_cron {row.destination} "{row.attr("schedule")}" '
             f'{row.attr("script")} {row.attr("deliver")}')
+
+
+def timer_call(row: Declaration) -> str:
+    env = f' {row.attr("env")}' if row.attr("env") else ""
+    return (f'converge_timer {row.destination} "{row.attr("schedule")}" '
+            f'{row.attr("script")} {row.attr("deliver")}{env}')
 
 
 def create_args(row: Declaration) -> list[str]:

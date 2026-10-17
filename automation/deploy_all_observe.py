@@ -201,7 +201,7 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
 def _timer(decl: Declaration, root: Path, call: Runner) -> _Seen:
     """`runner=systemd` 행 — 사용자 타이머와 같은 이름 Hermes 잡(paused 여야 함)을 계정 안 `cron_timer` 가 판정한다."""
     want = identity(Job(decl.destination, decl.attr("schedule"), decl.attr("script"),
-                        tuple(e for e in decl.attr("env").split(",") if e)))
+                        tuple(e for e in decl.attr("env").split(",") if e), decl.attr("deliver")))
     rc, out = call(decl.account, ("timer", str(root), decl.account, decl.destination))
     match = _TIMER_CHECK.search(out) if rc == 0 else None
     if match is None:

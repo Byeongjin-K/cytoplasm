@@ -1,2 +1,2 @@
 agent|automation/obsidian_write/cron/obsidian_note_watch.py|.hermes/scripts/obsidian_note_watch.py|required
-agent|automation/obsidian_write/cron/obsidian_note_watch.py|obsidian-note-watch|v2:cron;schedule=every 2m;script=obsidian_note_watch.py;deliver=local;mode=no-agent
+agent|automation/obsidian_write/cron/obsidian_note_watch.py|obsidian-note-watch|v2:cron;schedule=every 2m;script=obsidian_note_watch.py;deliver=local;mode=no-agent;runner=systemd
