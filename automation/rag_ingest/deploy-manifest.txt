@@ -1,3 +1,3 @@
 agent|automation/rag_ingest/cron/rag_ingest_watch.py|.hermes/scripts/rag_ingest_watch.py|required
 agent|automation/rag_ingest|.hermes/rag_ingest_runtime/rag_ingest|v2:tree;lock=.hermes/rag-ingest/watch.lock
-agent|automation/rag_ingest/cron/rag_ingest_watch.py|rag-ingest-watch|v2:cron;schedule=every 10m;script=rag_ingest_watch.py;deliver=local;mode=no-agent
+agent|automation/rag_ingest/cron/rag_ingest_watch.py|rag-ingest-watch|v2:cron;schedule=every 10m;script=rag_ingest_watch.py;deliver=local;mode=no-agent;runner=systemd

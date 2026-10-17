@@ -1,5 +1,5 @@
 # 자가 스킬 감사는 agent·peer 두 계정에서 각각 돈다(각 09:00 no-agent cron).
 agent|automation/selfskill_audit/cron/selfskill_audit_watch.py|.hermes/scripts/selfskill_audit_watch.py|required
 peer|automation/selfskill_audit/cron/selfskill_audit_watch.py|.hermes/scripts/selfskill_audit_watch.py|required
-agent|automation/selfskill_audit/cron/selfskill_audit_watch.py|selfskill-audit-watch|v2:cron;schedule=0 9 * * *;script=selfskill_audit_watch.py;deliver=local;mode=no-agent
+agent|automation/selfskill_audit/cron/selfskill_audit_watch.py|selfskill-audit-watch|v2:cron;schedule=0 9 * * *;script=selfskill_audit_watch.py;deliver=local;mode=no-agent;runner=systemd
 peer|automation/selfskill_audit/cron/selfskill_audit_watch.py|selfskill-audit-watch|v2:cron;schedule=0 9 * * *;script=selfskill_audit_watch.py;deliver=local;mode=no-agent

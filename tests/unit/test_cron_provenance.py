@@ -84,11 +84,12 @@ def test_dropping_an_own_file_from_the_guard_is_caught(tmp_path: Path, package: 
     assert target in uncovered(tmp_path, package)
 
 
-_COST: Final = "automation/cost-report"
+# 리그는 Hermes cron 에 남은 배포기 하나를 실제로 돌린다 — cost-report 는 P2 에서 사용자 타이머로 옮겼다.
+_COST: Final = "automation/effect_request"
 _ROW: Final = declared_cron(_COST)
 _FILES: Final = (
     "automation/node_config.py", "automation/node_config_sh.py", "automation/deploy_provenance.sh",
-    "automation/deploy_push.sh", HELPER, f"{_COST}/deploy.sh", f"{_COST}/deploy-manifest.txt", f"{_COST}/send_cost_report.py",
+    "automation/deploy_push.sh", HELPER, f"{_COST}/deploy.sh", f"{_COST}/deploy-manifest.txt", f"{_COST}/cron/effect_request_watch.py",
     "configs/node.example.toml",
 )
 _HERMES: Final = r'''#!/usr/bin/env bash
@@ -145,13 +146,13 @@ def _deploy(tmp_path: Path, repo: Path, env: dict[str, str]) -> tuple[int, str, 
     return result.returncode, result.stderr, calls, (tmp_path / "schedule").read_text(encoding="utf-8")
 
 
-def test_a_clean_cost_report_deploy_still_converges(tmp_path: Path) -> None:
+def test_a_clean_hermes_cron_deploy_still_converges(tmp_path: Path) -> None:
     repo, env = _rig(tmp_path)
 
     rc, stderr, calls, schedule = _deploy(tmp_path, repo, env)
 
     assert rc == 0, stderr
-    assert calls == ["fake-node"] * 3
+    assert calls == ["fake-node"] * 4
     assert schedule == _ROW.attr("schedule")
 
 

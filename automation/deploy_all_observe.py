@@ -19,6 +19,7 @@ from typing import Final, TypeAlias
 from urllib.parse import quote
 
 from automation import deploy_all_config, deploy_all_gateway
+from automation.cron_timer import Job, identity
 from automation.deploy_all_cron_listing import parse_cron_listing
 from automation.deploy_declarations import Declaration, all_declarations
 from automation.node_config import NodeConfigError, load_node_config
@@ -35,6 +36,7 @@ _SHA: Final = re.compile(r"^[0-9a-f]{64}$")
 _SHORT: Final = re.compile(r"^[0-9a-f]{16}$")
 _UNSAFE_TEXT: Final = re.compile(r"[\x00-\x1f\x7f|]")
 _CRON_FIELDS: Final = ("schedule", "script", "deliver", "mode")
+_TIMER_CHECK: Final = re.compile(r"^TIMER-CHECK state=(ok|absent|stale|unknown) detail=([a-z-]+) ", re.M)
 #: 검증 명령 자체가 돌지 못한 종료코드(홈 진입 실패·인자 거부·시간 초과·실행 불가·명령 없음).
 _ROSTER_NOT_RUN: Final = frozenset({44, 64, 124, 126, 127})
 
@@ -59,6 +61,7 @@ case "$1" in
   config) PYTHONPATH="$2" python3 -B -m "$3" --show ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
+  timer) PATH="$HOME/.local/bin:$PATH" PYTHONPATH="$2" python3 -B -m automation.cron_timer check-declared --role "$3" --name "$4" ;;
   delegated) timeout 300 bash "$2/automation/healthcheck_delegated.sh" ;;
   gateway) r="$2"; shift 2; PYTHONPATH="$r" python3 -B -m automation.gateway_generation --check --runtime-root "$r" "$@" ;;
   *) exit 64 ;;
@@ -195,7 +198,22 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
     return _Seen(want, have, _state(want, have))
 
 
-def _cron(decl: Declaration, _root: Path, call: Runner, cache: dict[str, object]) -> _Seen:
+def _timer(decl: Declaration, root: Path, call: Runner) -> _Seen:
+    """`runner=systemd` 행 — 사용자 타이머와 같은 이름 Hermes 잡(paused 여야 함)을 계정 안 `cron_timer` 가 판정한다."""
+    want = identity(Job(decl.destination, decl.attr("schedule"), decl.attr("script"),
+                        tuple(e for e in decl.attr("env").split(",") if e)))
+    rc, out = call(decl.account, ("timer", str(root), decl.account, decl.destination))
+    match = _TIMER_CHECK.search(out) if rc == 0 else None
+    if match is None:
+        return _Seen(want, "?", "unknown", (("timer-check-unavailable", "-"),))
+    state, detail = match[1], match[2]
+    have = {"ok": want, "absent": "-", "unknown": "?"}.get(state, f"timer-{detail}"[:40])
+    return _Seen(want, have, state, () if state in ("ok", "absent") else ((detail, "-"),))
+
+
+def _cron(decl: Declaration, root: Path, call: Runner, cache: dict[str, object]) -> _Seen:
+    if decl.attr("runner") == "systemd":
+        return _timer(decl, root, call)
     want_values = tuple(" ".join(decl.attr(k).split()) for k in _CRON_FIELDS)
     want = _sha_text("\n".join(want_values))[:16]
     if decl.account not in cache:

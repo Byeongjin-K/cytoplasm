@@ -19,9 +19,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, Literal, TypeAlias
 
+from automation.deploy_declarations import all_declarations
 from automation.doctor.cron_env import Gap
 from automation.doctor.cron_env import observe as observe_cron_env
 from automation.install.checks import CheckResult
+from automation.watcher_manifest import ManifestError
 from automation.interop import free_response
 
 Role: TypeAlias = Literal["agent", "peer"]
@@ -45,6 +47,17 @@ class CronJob:
     script: str
     enabled: bool
     paused: bool
+    last_status: str
+    failure_streak: int
+    last_error: str
+
+
+@dataclass(frozen=True, slots=True)
+class TimerJob:
+    """`runner=systemd` 로 옮긴 잡 하나 — 타이머 상태와 러너가 남긴 마지막 결과(`automation/cron_timer_run.py`)."""
+
+    name: str
+    timer: str
     last_status: str
     failure_streak: int
     last_error: str
@@ -84,6 +97,7 @@ class Facts:
     cron_env: tuple[tuple[Gap, ...], int] | str | None = None
     #: 공급자별로 `exhausted`(일시 쿨다운) 자격이 다시 쓰이기까지 남은 초 — 가장 늦은 것. 알 수 없으면 None.
     cooldowns: Mapping[str, float | None] | None = None
+    timers: tuple[TimerJob, ...] = ()
 
 
 def mask(text: str) -> str:
@@ -287,6 +301,27 @@ def _gws_status(binary: str, run: Run) -> GwsStatus | str:
     )
 
 
+def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
+    try:
+        names = [d.destination for d in all_declarations(repo)
+                 if d.kind == "cron" and d.account == role and d.attr("runner") == "systemd"]
+    except (ManifestError, OSError):
+        return ()
+    found: list[TimerJob] = []
+    for name in names:
+        raw = _json(home / ".hermes" / "cron-timers" / f"{name}.json")
+        state = raw if isinstance(raw, dict) else {}
+        found.append(TimerJob(
+            name=name,
+            timer=_gateway(f"autophagy-cron-{name}.timer", run, uid)
+            if (home / ".config" / "systemd" / "user" / f"autophagy-cron-{name}.timer").is_file() else "absent",
+            last_status=str(state.get("last_status") or ""),
+            failure_streak=int(state.get("failure_streak") or 0),
+            last_error=mask(str(state.get("last_error") or "")),
+        ))
+    return tuple(found)
+
+
 def _gateway(unit: str, run: Run, uid: int) -> str:
     _, out = run(("systemctl", "--user", "is-active", unit), {"XDG_RUNTIME_DIR": f"/run/user/{uid}"})
     lines = out.strip().splitlines()
@@ -311,7 +346,9 @@ def gather(
     token = (secrets or {}).get(TOKEN_KEY, "")
     provider, custom, fallback, default, fallback_models = _hermes_models(hermes_dir / "config.yaml")
     cron = _cron(hermes_dir / "cron" / "jobs.json")
-    registered = frozenset(job.name for job in cron or () if job.enabled and not job.paused)
+    timers = _timers(repo, role, home, run, os.getuid() if uid is None else uid)
+    registered = frozenset(job.name for job in cron or () if job.enabled and not job.paused) | frozenset(
+        timer.name for timer in timers if timer.timer == "active")
     discord: tuple[CheckResult, ...] | str | None = None
     if online and token:
         try:
@@ -335,6 +372,7 @@ def gather(
         gws_files=gws_files,
         gws=_gws_status(gws_binary, run) if online and gws_binary and gws_files else None,
         cron=cron,
+        timers=timers,
         discord=discord,
         model_default=default,
         fallback_models=fallback_models,

@@ -273,15 +273,26 @@ def _cron(f: Facts) -> Verdict:
     if f.cron is None:
         return _warn("정기 작업 목록이 없다 — 워처가 아직 배포되지 않았다")
     active = [job for job in f.cron if job.enabled and not job.paused]
-    failing = [job for job in active if job.last_status == "error"]
+    # 사용자 타이머로 옮긴 잡(runner=systemd)은 Hermes 쪽이 일부러 일시정지돼 있다 — 중지가 아니다.
+    # 그 잡은 타이머가 결과를 남기고, 타이머도 꺼져 있고 Hermes 도 멈췄으면 아무도 돌리지 않는 것이다.
+    moved = {timer.name for timer in f.timers}
+    running = [timer for timer in f.timers if timer.timer == "active"]
+    paused = {job.name for job in f.cron if job.paused}
+    orphaned = [timer.name for timer in f.timers if timer.timer != "active" and timer.name in paused]
+    timer_jobs = [CronJob(t.name, "", True, False, t.last_status, t.failure_streak, t.last_error) for t in running]
+    failing = [job for job in (*active, *timer_jobs) if job.last_status == "error"]
     broken = [job for job in failing if job.failure_streak >= STREAK_FAIL or DRIFT_SKIP in job.last_error]
-    if broken:
-        detail = "; ".join(_broken_detail(job) for job in broken)
-        return _fail(f"{len(broken)}개 반복 실패 — {detail}", tuple(job.name for job in broken))
-    stopped = [job for job in f.cron if not job.enabled or job.paused]
+    if broken or orphaned:
+        detail = "; ".join([*(_broken_detail(job) for job in broken),
+                            *(f"{name}(타이머 꺼짐·Hermes 일시정지 — 아무도 돌리지 않는다)" for name in orphaned)])
+        return _fail(f"{len(broken) + len(orphaned)}개 반복 실패·멈춤 — {detail}",
+                     (*(job.name for job in broken), *orphaned))
+    stopped = [job for job in f.cron if (not job.enabled or job.paused) and job.name not in moved]
     if failing or stopped:
         names = tuple(job.name for job in (*failing, *stopped))
         return _warn(f"최근 실패·중지: {', '.join(names)}", names)
+    if running:
+        return _ok(f"{len(active) + len(running)}개 정상(사용자 타이머 {len(running)}개)")
     return _ok(f"{len(active)}개 정상")
 
 

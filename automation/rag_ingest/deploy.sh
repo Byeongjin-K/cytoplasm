@@ -46,5 +46,6 @@ push_file "$repo_root/automation/rag_ingest/cron/rag_ingest_watch.py" '.hermes/s
 
 # --all sees paused jobs too, so rerunning cannot create a duplicate cron entry.
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron rag-ingest-watch "every 10m" rag_ingest_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer rag-ingest-watch "every 10m" rag_ingest_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 rag-ingest-watch || true'

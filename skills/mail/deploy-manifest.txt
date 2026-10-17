@@ -12,3 +12,6 @@ agent|skills/mail/scripts/mail_triage_watch.py|mail-triage-watch|v2:cron;schedul
 agent|skills/mail/scripts/mail_digest_watch.py|mail-daily-digest|v2:cron;schedule=0 8 * * *;script=mail_digest_watch.py;deliver=discord;mode=no-agent
 agent|skills/mail/scripts/mail_attachment_drive_watch.py|mail-attachment-drive-watch|v2:cron;schedule=every 30m;script=mail_attachment_drive_watch.py;deliver=discord;mode=no-agent
 agent|skills/mail/scripts/mail_sync_watch.py|mail-sync-watch|v2:cron;schedule=20 9-19 * * 1-5;script=mail_sync_watch.py;deliver=discord;mode=no-agent
+# N1(2026-10-18): 10/02 노드에 손으로 넣었던 에이전트 모드 잡을 대신하는 no-agent 워처 — 처음부터 사용자 타이머(P2).
+agent|skills/mail/scripts/mail_digest_repair_watch.py|.hermes/scripts/mail_digest_repair_watch.py|required
+agent|skills/mail/scripts/mail_digest_repair_watch.py|mail-triage-repair-daily|v2:cron;schedule=10 9 * * *;script=mail_digest_repair_watch.py;deliver=local;mode=no-agent;runner=systemd

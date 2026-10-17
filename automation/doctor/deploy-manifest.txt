@@ -1,5 +1,5 @@
 # doctor 알람 워처는 agent·peer 두 계정에서 각각 돈다(매시 17분 no-agent cron).
 agent|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
 peer|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
-agent|automation/doctor/cron/doctor_watch.py|doctor-watch|v2:cron;schedule=17 * * * *;script=doctor_watch.py;deliver=local;mode=no-agent
+agent|automation/doctor/cron/doctor_watch.py|doctor-watch|v2:cron;schedule=17 * * * *;script=doctor_watch.py;deliver=local;mode=no-agent;runner=systemd
 peer|automation/doctor/cron/doctor_watch.py|doctor-watch|v2:cron;schedule=17 * * * *;script=doctor_watch.py;deliver=local;mode=no-agent
