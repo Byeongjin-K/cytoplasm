@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "메일을 읽거나 찾거나 회신·작성·전달·발송하라고 할 때 사용. 기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.14.0
+version: 1.15.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -162,10 +162,10 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py reply-request --ke
 - 소유자가 아닌 사람의 답장은 `REPLY-REQUEST-IGNORED not-owner`(exit 2)로 무시된다. 모르는 키는 `REPLY-REQUEST-UNKNOWN`(exit 3) — 키를 지어내지 말고 아래 번호 경로로 간다.
 - 같은 메일에 초안이 이미 있으면 `초안이 이미 있음`(exit 2)으로 막히고, 두 답장이 동시에 와도 잠금 아래에서 하나만 초안이 된다. 다시 쓰는 절차는 `draft` 의 중복 거부와 같다(이전 초안 폐기 후 재요청).
 
-**다이제스트 반응 📄·✍️ (2026-10-16, 소유자 지시)**: 다이제스트가 메일 카드를 올릴 때 봇이 카드마다 📄·✍️ 를 미리 단다. cha 가 누르면 기존 `mail-triage-watch` 틱(`watch`, 2분)이 그 카드의 **소유자(비봇) 반응만** 읽어 카드·동작당 한 번 실행한다(`scripts/digest_reaction_actions.py`, 상태 `digest_actions` 표). 에이전트가 할 일은 없다 — 반응은 워처만 읽는다.
+**다이제스트 반응 📄·✍️ (2026-10-16, 소유자 지시)**: 다이제스트가 메일 카드를 올릴 때 봇이 카드마다 📄·✍️ 를 미리 단다. cha 가 누르면 게이트웨이가 기존 Discord 연결에서 그 반응을 바로 듣고(`automation/interop/digest_reaction_listener.py`, 2026-10-17) `triage_cli digest-react --message-id <카드>` 로 그 카드만 몇 초 안에 처리한다. 기존 `mail-triage-watch` 틱(`watch`, 2분)은 게이트웨이가 놓친 반응(재시작 중 등)의 안전망이다. 둘 다 그 카드의 **소유자(비봇) 반응만** 다시 읽어 카드·동작당 한 번 실행한다(`scripts/digest_reaction_actions.py`, 상태 `digest_actions` 표 — 같은 claim 이라 둘이 겹쳐도 한 번). 에이전트가 할 일은 없다 — 반응은 게이트웨이 리스너와 워처만 읽는다.
 - 📄 → 그 메일 전문(원문 인용 포함, `mail_body_view.render(full=True)`)과 첨부 **이름** 목록을 같은 스레드에 2,000자 아래로 나눠 올린다. 읽기 경로는 다이제스트와 같은 래퍼 `get --body` 다.
-- ✍️ → 위 `draft` 와 같은 경로로 회신 초안을 만들고 정식 승인 카드를 올린 뒤, 다이제스트 스레드에 초안 미리보기와 승인 카드 링크를 남긴다. **보내지 않는다** — 발송은 그 승인 카드의 ✅ 뒤 `watch` 가 한다. 이미 초안이 있으면 새로 쓰지 않고 그 초안을 다시 보여 준다. 지시를 담고 싶으면 반응 대신 답장(위)을 쓴다.
-- 실패는 `DIGEST-REACTION-FAIL`(stderr) 후 다음 틱에 최대 3회 재시도하고, 전문 일부가 이미 올라간 뒤의 실패는 되풀이하지 않는다. 최근 3일 다이제스트 카드만 본다. 이 기능 이전에 올라간 카드에는 반응이 없다.
+- ✍️ → 먼저 `✍️ 회신 초안을 쓰고 있습니다…` 한 줄을 카드 아래 올리고(첫 시도만), 위 `draft` 와 같은 경로로 회신 초안을 만들고 정식 승인 카드를 올린 뒤, 다이제스트 스레드에 초안 미리보기와 승인 카드 링크를 남긴다. **보내지 않는다** — 발송은 그 승인 카드의 ✅ 뒤 `watch` 가 한다. 이미 초안이 있으면 새로 쓰지 않고 그 초안을 다시 보여 준다. 지시를 담고 싶으면 반응 대신 답장(위)을 쓴다.
+- 실패는 `DIGEST-REACTION-FAIL`(stderr) 후 다음 틱에 최대 3회 재시도하고(3번째 실패는 카드 아래 ⚠️ 한 줄), 전문 일부가 이미 올라간 뒤의 실패는 되풀이하지 않는다. 최근 3일 다이제스트 카드만 본다. 이 기능 이전에 올라간 카드에는 반응이 없다.
 
 번호로 지시하면(예: "3번 메일, 참석 가능하다고 회신해줘"), 에이전트는 다음 절차를 따른다:
 1. `digest-items` 명령으로 번호(N)를 실제 `uid`로 변환한다.
