@@ -40,15 +40,8 @@ GATED_RULES: Final[dict[str, tuple[str, ...] | str]] = {
     ),
     "patent_draft_drive_upload": ("skills/patent-prep/scripts/patent_export.py::prepare_export",),
     "gws_drive_permission_grant": ("skills/mail/scripts/triage_approval.py::request_approval",),
-    "generic_external_effect_tool": (
-        "catch-all safety net for tool names that look like remote sends; no supported "
-        "skill emits one, so a match means the agent improvised and must report that the "
-        "work has no approval path (chat_approval_guard enforces the reply side)"
-    ),
-    "generic_external_post_command": (
-        "catch-all for hand-written curl/http POSTs; no supported flow posts this way, so "
-        "a match is refused and reported as having no approval path"
-    ),
+    "generic_external_effect_tool": ("automation/effect_request/cli.py::cmd_request",),
+    "generic_external_post_command": ("automation/effect_request/cli.py::cmd_request",),
 }
 
 #: approval producer -> the thing that acts on the owner's ✅, and a test that covers it.
@@ -89,6 +82,8 @@ PRODUCER_WATCHERS: Final[dict[str, tuple[str, str]]] = {
         "cron:plaud-sync-watch", "tests/unit/test_plaud_sync_watch_step.py"),
     "skills/todo/scripts/todo_cli.py::_cmd_request": (
         "cron:todo-confirm-watch", "tests/unit/test_todo_watch.py"),
+    "automation/effect_request/cli.py::cmd_request": (
+        "cron:effect-request-watch", "tests/unit/test_effect_request.py"),
     "automation/release_approval.py::cmd_request": (
         "systemd:automation/systemd/user/autophagy-release-complete.timer", "tests/unit/test_release_complete.py"),
 }

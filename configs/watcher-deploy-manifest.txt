@@ -21,6 +21,9 @@ agent|automation/cost-report/send_cost_report.py|.hermes/scripts/send_cost_repor
 agent|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
 peer|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
 
+# --- automation/effect_request/deploy-manifest.txt ---
+agent|automation/effect_request/cron/effect_request_watch.py|.hermes/scripts/effect_request_watch.py|required
+
 # --- automation/managed_sync/deploy-manifest.txt ---
 agent|automation/managed_sync/cron/managed_sync_watch.py|.hermes/scripts/managed_sync_watch.py|optional:구독자 전용 opt-in 컴포넌트라 그룹 스킬을 구독하지 않는 설치에는 없는 것이 정상이다(D3)
 

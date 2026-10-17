@@ -39,6 +39,7 @@ APPROVAL_PRODUCERS: Final[Mapping[str, str]] = {
     "skills/todo/scripts/todo_cli.py::_cmd_request": "skills/todo/scripts/todo_approval.py",
     "automation/release_approval.py::cmd_request": "automation/skill_gate_approval.py",
     "automation/project_board/cli.py::post_card": "automation/project_board/proposal_gate.py",
+    "automation/effect_request/cli.py::cmd_request": "automation/effect_request/gate.py",
 }
 
 _LIFECYCLE_HOSTS: Final[Mapping[str, str]] = {
@@ -57,6 +58,7 @@ _LIFECYCLE_HOSTS: Final[Mapping[str, str]] = {
     "automation/plaud_sync/approval_gate.py": "automation/plaud_sync/approval_gate.py",
     "skills/todo/scripts/todo_approval.py": "skills/todo/scripts/todo_approval.py",
     "automation/project_board/proposal_gate.py": "automation/project_board/proposal_gate.py",
+    "automation/effect_request/gate.py": "automation/effect_request/gate.py",
 }
 
 _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
@@ -74,6 +76,7 @@ _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
     "automation/plaud_sync/approval_gate.py::PlaudApprovalGate.post",
     "skills/todo/scripts/todo_approval.py::TodoApprovalGate.post",
     "automation/project_board/proposal_gate.py::ProposalApprovalGate.post",
+    "automation/effect_request/gate.py::EffectApprovalGate.post",
 })
 
 _POSTING_PRIMITIVE_IMPLEMENTATIONS: Final[frozenset[str]] = frozenset({
@@ -139,6 +142,7 @@ APPROVAL_KINDS: Final[Mapping[str, str]] = {
     "skills/todo/scripts/todo_cli.py::_cmd_request": "todo",
     "automation/release_approval.py::cmd_request": "release",
     "automation/project_board/cli.py::post_card": "project-board",
+    "automation/effect_request/cli.py::cmd_request": "external-effect",
 }
 
 # Commit surface (the ONLY writer of a flow's message_id) → the module that

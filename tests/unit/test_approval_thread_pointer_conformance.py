@@ -31,6 +31,7 @@ _ADOPTED: Final[dict[str, str]] = {
         "skills/coordination/scripts/coordination_lifecycle.py",
     "skills/budget/scripts/budget_approval.py::request_approval": "skills/budget/scripts/budget_cli.py",
     "automation/obsidian_write/note_request_cli.py::cmd_request": "automation/obsidian_write/note_request_cli.py",
+    "automation/effect_request/cli.py::cmd_request": "automation/effect_request/cli.py",
     "automation/project_board/cli.py::post_card": "automation/project_board/cli.py",
 }
 
