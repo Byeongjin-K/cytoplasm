@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "메일을 읽거나 찾거나 회신·작성·전달·발송하라고 할 때 사용. 기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.16.1
+version: 1.17.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -175,6 +175,31 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py reply-request --ke
 5. **전체회신**: cha 가 "전체회신"·"모두에게"·"참조 그대로" 라고 하면 `--reply-all` 을 붙인다 — 원문 frontmatter 의 To∪Cc 에서 소유자(`MAILON_ID`)와 발신자를 뺀 주소가 Cc 로 들어가 argv·해시에 바인딩되고 승인 메시지에 `- Cc:` 로 표시된다. 지시가 없으면 기본은 발신자 단독 회신이다. 원문에 다른 수신자가 없으면 `--reply-all` 도 단독 회신과 같다.
 
 ### 4. 새 메일 작성 (compose — 요청별 승인 스레드 확정)
+
+**숨은참조 일괄 안내**: 신청자들에게 한 통을 보낼 때는 소유자 본인 주소를
+`--to`에, 신청자 주소를 `--bcc`에 넣는다. `--bcc ADDR`는 반복하거나 쉼표로
+여러 주소를 지정할 수 있다. `--bcc-file PATH`만 쓰면 비어 있지 않은 줄마다
+주소 하나를 읽고, CSV이면 `--bcc-file PATH --bcc-column EMAIL`로 헤더의 열을
+지정한다. 열 이름만 지정하거나 잘못된·빈 주소를 읽으면 주소를 출력하지 않고
+행 번호와 함께 exit 2로 거부한다. 대소문자만 다른 중복은 첫 순서를 유지하고,
+To·Cc에 이미 있는 주소는 숨은참조에서 뺀다.
+
+```bash
+python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose \
+  --to "<소유자 이메일>" --bcc-file /private/applicants.csv --bcc-column email \
+  --subject "세미나 안내" --body "<검토할 안내문>" \
+  --origin-channel-id <채널ID> --origin-message-id <메시지ID>
+```
+
+카드는 총 인원·받는 사람/참조/숨은참조 인원·숨은참조 도메인별 인원과
+제목·본문을 보여 주며 BCC 주소 목록은 표시하지 않는다. 수신자는 다른
+BCC 주소를 볼 수 없지만 To·Cc 주소는 볼 수 있으므로 신청자를 To·Cc에 넣지 않는다.
+초안의 BCC 목록과 실제 발송 argv가 승인 해시에 묶이고, 기존 카드의
+소유자 승인 뒤 같은 watch가 발송한다. compose 출력에는
+`BCC draft=<id> count=<인원>`만 추가된다. 발송 전 폼의 BCC가 한 명이라도
+빠지거나 늘거나 잘리면 한 통 전체가 중단되고 단계와 전원 미발송을 알린다.
+발송 트리거 뒤 검증 실패는 미발송으로 단정하지 않고 결과 미확인으로 알린다.
+Gmail canonical send도 기존 `bcc` 옵션을 그대로 승인 argv와 초안에 보존한다.
 cha가 새 메일 발송을 지시하면, 이중 승인 없이 그 요청 전용 스레드 `메일 발신 · <제목>`에서 한 번만 확정한다:
 1. `compose --to <주소> [--cc <주소> ...] --subject "<제목>" --body "<본문>" [--attachment <경로> ...] [--in-reply-to <uid>] [--origin-channel-id <채널ID>] [--origin-message-id <메시지ID>]` — 초안 생성 + 현재 승인 스레드 게시(✅·⛔ 미리 부착). `--cc`는 여러 번 지정할 수 있고 To와 함께 승인 해시에 바인딩된다. 첨부는 최대 10개·개별/전체 25 MiB이며 반복 옵션 순서대로 파일명·크기·MIME·내용 해시가 승인에 바인딩된다. 승인 후 수신자·본문·첨부가 바뀌거나 일부 업로드만 성공하면 최종 발송을 거부한다.
    - **후속 메일은 원문을 인용한다 (2026-09-01, 소유자 지시)**: 이전 메일(받은 메일이든 내가 보낸 메일이든 — `list --all-folders` 로 보낸메일함 uid 도 찾을 수 있다)에 이어지는 안내·확정·변경 메일은 **반드시 `--in-reply-to <uid>`** 를 붙여 그 메일의 원문(헤더+본문)을 발송 본문 하단에 인용하고, 제목은 원문 제목에 `Re:` 를 붙인다. 회신 대상 uid 를 모르면 `--in-reply-to` 를 지어내지 말고 먼저 `list`/`get` 으로 찾는다.

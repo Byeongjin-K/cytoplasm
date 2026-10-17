@@ -264,6 +264,8 @@ def call_compose_send(browser: TriggerBrowser) -> str | None:
 # 08-14 prove nothing about it.  Measured 2026-08-18: a 236-char body was
 # refused on every attempt.  Clip the head instead; the marker sits right after
 # the editor's ~62-char style wrapper, so a 600-char head always carries it.
+BCC_SELECTOR = "#adr-bcc-ipt_ta"
+
 _FORM_PROBE_JS = r"""
 JSON.stringify((() => { /* compose form probe */
   const c = window._compose || {};
@@ -272,7 +274,7 @@ JSON.stringify((() => { /* compose form probe */
   try { p = c.getForm(); } catch (e) { return {__probe_error: String(e).slice(0, 150)}; }
   if (!p || typeof p !== 'object') return {__probe_error: 'getForm() returned ' + String(p)};
   const out = {};
-  const bounds = {to: 4000, cc: 4000, bcc: 4000, from: 400, method: 40, content: 600};
+  const bounds = {to: 4000, cc: 4000, bcc: 8000, from: 400, method: 40, content: 600};
   const isAddress = {to: true, cc: true, bcc: true, from: true, method: true};
   for (const k of Object.keys(bounds)) {
     try {
@@ -379,7 +381,7 @@ def _actual_set(form: dict[str, object], key: str) -> Counter[str]:
 
 
 def verify_compose_form(
-    browser: TriggerBrowser, recipients, body: str, cc=(),
+    browser: TriggerBrowser, recipients, body: str, cc=(), bcc=(),
 ) -> tuple[bool, str]:
     """Probe `_compose.getForm()` and require the REAL outgoing params to
     contain our body and route to EXACTLY our recipients (2026-07-19: a raw-DOM
@@ -387,17 +389,18 @@ def verify_compose_form(
     2026-07-29: a subset/substring recipient check let extra addresses through
     and a probe truncation hid the tail recipient).
 
-    To and Cc must each equal the intended multiset (order-insensitive), Bcc
-    must be empty, and any missing / extra / mutated / truncated recipient
+    To, Cc and Bcc must each equal the intended multiset (order-insensitive),
+    and any missing / extra / mutated / truncated recipient
     fails closed before the caller is allowed to fire the send trigger."""
     raw = _unwrap(browser.eval_js(_FORM_PROBE_JS))
     try:
         form = json.loads(raw) if isinstance(raw, str) else raw
     except json.JSONDecodeError:
-        return False, f"unparseable form probe: {str(raw)[:200]}"
+        return False, "unparseable form probe" if bcc else f"unparseable form probe: {str(raw)[:200]}"
     if not isinstance(form, dict):
-        return False, f"non-dict form probe: {str(raw)[:200]}"
-    dump = json.dumps(form, ensure_ascii=False)
+        return False, "non-dict form probe" if bcc else f"non-dict form probe: {str(raw)[:200]}"
+    dump = json.dumps({**form, "bcc": "[hidden]"} if bcc or form.get("bcc") else form,
+                      ensure_ascii=False)
     if form.get("__probe_error"):
         return False, dump
     marker = _body_marker(body)
@@ -409,10 +412,11 @@ def verify_compose_form(
     try:
         intended_to = _intended_set(recipients)
         intended_cc = _intended_set(cc)
+        intended_bcc = _intended_set(bcc)
         if method == "tome":
             # send() rewrites to := from in tome mode; only safe for a true,
             # single-address self-send with no other recipients.
-            if intended_cc:
+            if intended_cc or intended_bcc or _actual_set(form, "bcc"):
                 return False, dump
             from_addrs = _canonical_addresses(str(form.get("from", "")))
             actual_from = Counter(from_addrs) if len(from_addrs) == 1 else None
@@ -437,12 +441,13 @@ def verify_compose_form(
             routing_ok = (
                 actual_to == intended_to
                 and actual_cc == intended_cc
-                and not actual_bcc
+                and actual_bcc == intended_bcc
             )
         else:
             return False, dump  # unknown method: fail closed
     except _RecipientParseError as error:
-        log.warning("recipient verification failed: %s", str(error)[:200])
+        log.warning("recipient verification failed: %s",
+                    type(error).__name__ if bcc or form.get("bcc") else str(error)[:200])
         return False, dump
     return routing_ok, dump
 
@@ -492,15 +497,18 @@ _RECIPIENT_TOKENIZE_TEMPLATE = r"""
 """
 
 
-def commit_recipients(browser: TriggerBrowser, recipients, cc) -> None:
+def commit_recipients(browser: TriggerBrowser, recipients, cc, bcc=()) -> None:
     """Feed addresses ONE AT A TIME with Enter tokenization (2026-07-20:
     a comma-joined multi-recipient fill never registered any chip, so
     getForm() carried zero recipients and the form gate refused to send)."""
     groups = [["#adr-to-ipt_ta", list(recipients)]]
     if cc:
         groups.append(["#adr-cc-ipt_ta", list(cc)])
+    if bcc:
+        groups.append([BCC_SELECTOR, list(bcc)])
     script = _RECIPIENT_TOKENIZE_TEMPLATE.replace("__GROUPS__", json.dumps(groups))
     try:
         log.info("recipient tokenization: %s", _unwrap(browser.eval_js(script))[:300])
     except Exception as error:  # gate still verifies via getForm afterwards
-        log.warning("recipient tokenization failed: %s", str(error)[:150])
+        log.warning("recipient tokenization failed: %s",
+                    type(error).__name__ if bcc else str(error)[:150])

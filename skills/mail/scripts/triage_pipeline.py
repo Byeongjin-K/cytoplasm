@@ -43,6 +43,7 @@ def compose_and_post(
     quote: str = "",
     forward: dict | None = None,
     drive_share: dict | None = None,
+    bcc: tuple[str, ...] = (),
 ) -> dict:
     recipient_body = (
         mail_evidence.sanitize_draft_body(body, evidence_pack)
@@ -56,13 +57,15 @@ def compose_and_post(
         attachment_paths=attachments,
         origin_channel_id=origin_channel_id, origin_message_id=origin_message_id,
         quote=quote, forward=forward, drive_share=drive_share,
+        **({"bcc": bcc} if bcc else {}),
     )
     recipients = ", ".join(item for item in (to, cc) if item)
     gap = triage_recipient.related_recipient_gap(
         recipients, subject, triage_gate.list_drafts(), now_utc=triage_core.utc_now())
     notice = ""
     if gap:
-        shown = ", ".join(gap[:5]) + (f" 외 {len(gap) - 5}명" if len(gap) > 5 else "")
+        shown = (f"{len(gap)}명 (주소 비공개)" if bcc else
+                 ", ".join(gap[:5]) + (f" 외 {len(gap) - 5}명" if len(gap) > 5 else ""))
         notice = ("\n⚠️ 직전 관련 메일 수신자 중 제외됨: "
                   f"`{shown}` — 의도한 제외인지 확인 후 ✅ 해주세요")
     if evidence_pack is not None:

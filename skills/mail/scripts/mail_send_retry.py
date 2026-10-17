@@ -69,6 +69,18 @@ def failure_text(draft: dict, reason: str) -> str:
     """
     lines = [f"⚠️ 발송 실패: {draft['subject']} → {draft['to']} (draft {draft['id']})"]
     error = draft.get("last_error")
+    delivery_unverified = False
+    if draft.get("bcc"):
+        stage = (error.get("step") or error.get("stage") or "unknown") if isinstance(error, dict) else "unknown"
+        count = len(draft["bcc"])
+        if stage in {
+            "drive_share", "validation", "login", "auth", "page_boot", "mailbox_check", "compose_open",
+            "compose_fields", "editor_fill", "attachment_upload", "recipient_commit",
+        }:
+            lines.append(f"숨은참조 {count}명 전원 미발송 — 한 통 전체가 발송 전에 중단됐습니다 (단계: {stage}).")
+        else:
+            delivery_unverified = True
+            lines.append(f"숨은참조 {count}명 대상 한 통의 발송 결과 미확인 (단계: {stage}).")
     if isinstance(error, dict) and error.get("error_code"):
         where = error.get("step") or error.get("stage") or "unknown"
         cause = error.get("cause") or error["error_code"]
@@ -89,4 +101,7 @@ def failure_text(draft: dict, reason: str) -> str:
         lines.append(f"{count} · 자동 재시도를 멈췄습니다. 메일은 발송되지 않았습니다 — 다시 보내려면 새로 요청해 주세요.")
     else:
         lines.append(f"{count} · 자동으로 다시 시도하지 않습니다. 메일은 발송되지 않았습니다.")
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    if delivery_unverified:
+        text = text.replace("메일은 발송되지 않았습니다", "메일 발송 여부는 확인되지 않았습니다")
+    return text

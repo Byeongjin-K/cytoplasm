@@ -87,12 +87,19 @@ def approval_draft(snapshot: GmailApprovalSnapshot, *, draft_id: str, created_at
         "uid": f"gmail:{draft_id}",
         "uid_opaque": triage_core.mask_value(f"gmail:{draft_id}"),
     }
+    bcc = _option(snapshot.argv, "--bcc")
+    if bcc:
+        import mail_bcc
+
+        record["bcc"] = list(mail_bcc._mailboxes(bcc, 1))
     record["sha256"] = triage_core.draft_sha256(record)
     return record
 
 
 def snapshot_from_draft(draft: Mapping[str, JsonValue]) -> GmailApprovalSnapshot:
     """Parse the stored Gmail snapshot and reject any draft-field divergence."""
+    import mail_bcc
+
     raw_snapshot = draft.get("gmail_approval_snapshot")
     if not isinstance(raw_snapshot, dict):
         raise ApprovalSnapshotMismatchError()
@@ -125,6 +132,9 @@ def snapshot_from_draft(draft: Mapping[str, JsonValue]) -> GmailApprovalSnapshot
         or draft.get("sender_account") != snapshot.sender_account
         or draft.get("subject") != snapshot.subject
         or draft.get("to") != snapshot.recipients
+        or ("bcc" in draft and draft["bcc"] != list(
+            mail_bcc._mailboxes(_option(snapshot.argv, "--bcc") or "", 1)
+        ))
     ):
         raise ApprovalSnapshotMismatchError()
     return snapshot

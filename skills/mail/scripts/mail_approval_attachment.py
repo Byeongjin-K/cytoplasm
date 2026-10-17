@@ -47,6 +47,8 @@ def body_attachment(draft: Mapping[str, JsonValue]) -> BodyAttachment:
 def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     """Replay old summary bytes or select the new version over attachment-v1."""
     from automation.interop.approval_card import CardRenderError
+    if draft.get("bcc"):
+        return _summary_v3(draft, instruction)
 
     match draft.get("render_version", "1"):
         case "1" | "2":
@@ -78,9 +80,15 @@ def _summary_v3(draft: Mapping[str, JsonValue], instruction: str) -> str:
         raise CardRenderError("mail attachment envelope unavailable")
     metadata = body_attachment(draft).metadata
     here = om.Ref("self")
+    recipients = f"To: {draft['to']}\nCc: {draft.get('cc') or '-'}"
+    if draft.get("bcc"):
+        from mail_bcc import summary as bcc_summary
+
+        recipients = bcc_summary(str(draft["to"]), str(draft.get("cc") or ""),
+                                 tuple(str(address) for address in draft["bcc"]))
     message = om.OwnerMessage(
         subject_key=str(draft["id"]), subject="메일 발송 승인",
-        fact=(f"제목: {draft['subject']}\nTo: {draft['to']}\nCc: {draft.get('cc') or '-'}\n"
+        fact=(f"제목: {draft['subject']}\n{recipients}\n"
               f"본문: 첨부 파일 참조 ({metadata['size']} bytes)"),
         location=here, owner=om.Action("react", here, instruction),
         agent_next="승인된 메일만 발송", recovery="irreversible",
