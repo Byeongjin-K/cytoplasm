@@ -380,6 +380,7 @@ def _perform_send(args, cfg) -> int:
         request = SendRequest(
             recipients=_split_addresses(args.to),
             cc=_split_addresses(args.cc),
+            bcc=_split_addresses(getattr(args, "bcc", [])),
             subject=args.subject,
             body=args.body,
             attachments=tuple(Path(item) for item in args.attachment),
@@ -530,6 +531,7 @@ def build_parser() -> argparse.ArgumentParser:
     s_send = sub.add_parser("send", help="compose a mail with an explicit dry-run mode")
     s_send.add_argument("--to", action="append", required=True)
     s_send.add_argument("--cc", action="append", default=[])
+    s_send.add_argument("--bcc", action="append", default=[])
     s_send.add_argument("--subject", required=True)
     s_send.add_argument("--body", required=True)
     s_send.add_argument("--attachment", action="append", default=[])

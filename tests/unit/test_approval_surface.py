@@ -97,12 +97,12 @@ def _mail_flipped_at_v2() -> TransitionLedger:
     }
 
 
-def test_approval_kind_has_exactly_seventeen_members() -> None:
+def test_approval_kind_has_exactly_eighteen_members() -> None:
     # Given / When: the closed set of approval kinds is enumerated.
     kinds = tuple(ApprovalKind)
 
     # Then: every planned flow has exactly one kind.
-    assert len(kinds) == 17
+    assert len(kinds) == 18
 
 
 def test_todo_kind_lands_on_dm_then_moves_to_agent_chat() -> None:

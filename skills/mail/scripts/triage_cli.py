@@ -49,6 +49,7 @@ import mail_runtime
 import triage_pipeline
 import mail_preflight
 import triage_store
+import mail_bcc
 from triage_transport import _get_mail
 
 mail_evidence = importlib.import_module("mail_evidence")
@@ -129,6 +130,18 @@ def _forward_source(args: argparse.Namespace) -> mail_forward.ForwardSource | No
 
 
 def cmd_compose(args: argparse.Namespace) -> int:
+    if getattr(args, "bcc_file", None) is not None and not args.bcc_file:
+        raise triage_gate.GateError("BCC 입력 1행: 파일 경로가 필요합니다", 2)
+    if getattr(args, "bcc_column", None) is not None and not getattr(args, "bcc_file", None):
+        raise triage_gate.GateError("--bcc-column 은 --bcc-file 과 함께만 씁니다", 2)
+    args.bcc_addresses = mail_bcc.collect(
+        tuple(getattr(args, "bcc", ()) or ()),
+        mail_bcc.AddressFile(
+            str(getattr(args, "bcc_file", "") or ""),
+            str(getattr(args, "bcc_column", "") or ""),
+        ),
+        (args.to, ", ".join(getattr(args, "cc", ()) or ())),
+    )
     if triage_mode.effective_mode() == "no-go":
         raise triage_gate.GateError("mail-mode=no-go — W4-2 파이프라인 비활성(W4-1N 분기)", 3)
     forwarding = bool(getattr(args, "forward", "") or getattr(args, "forward_gmail", ""))
@@ -187,11 +200,14 @@ def _compose(
         quote=quote,
         forward=forward.record() if forward else None,
         drive_share=share,
+        **({"bcc": args.bcc_addresses} if getattr(args, "bcc_addresses", ()) else {}),
     )
     if pack is not None:
         mail_evidence.write_sidecar(triage_gate.gate_dir(), str(draft["id"]), pack)
     posted = int(bool(draft.get("message_id")))
     print(f"COMPOSED draft={draft['id']} posted={posted}")
+    if draft.get("bcc"):
+        print(f"BCC draft={draft['id']} count={len(draft['bcc'])}")
     if forward is not None:
         print(f"FORWARD draft={draft['id']} source={forward.origin} attachments={len(forward.attachments)}")
     if share is not None:
@@ -641,6 +657,12 @@ def build_parser() -> argparse.ArgumentParser:
         "compose", help="새 메일 작성 초안 — 소유자 확정 게이트 (같은 watch cron 재사용)"
     )
     compose.add_argument("--to", required=True)
+    compose.add_argument("--bcc", action="append", default=[], metavar="ADDR",
+                         help="숨은참조 주소 (반복·쉼표 구분 가능)")
+    compose.add_argument("--bcc-file", default=None, metavar="PATH",
+                         help="한 줄에 주소 하나인 파일 또는 --bcc-column 으로 고른 CSV")
+    compose.add_argument("--bcc-column", default=None, metavar="NAME",
+                         help="--bcc-file CSV 헤더의 주소 열 이름")
     compose.add_argument(
         "--cc", action="append", default=[], metavar="ADDRESS",
         help="참조 수신자 주소 (여러 번 지정 가능)",

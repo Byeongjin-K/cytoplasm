@@ -1,7 +1,7 @@
 ---
 name: doctype
 description: "문서를 등록·저장·개선하거나 등록된 문서 종류로 초안을 쓰라고 할 때 사용. 문서(.docx/.hwpx/.md/.txt)의 ‘등록/스킬화/저장/개선/문서종류화’ 액션은 주제와 무관하게 항상 doctype이 수행한다. 작성/초안(draft)은 레지스트리에 등록된 이름으로 요청될 때만 doctype 소유이며, 미등록된 제안서 작성은 proposal, 개인 노트 기반 보고서/슬라이드/대본은 report, 발명신고서/선행기술은 patent-prep 스킬로 넘긴다."
-version: 1.4.1
+version: 1.5.0
 author: autophagy-agents
 license: MIT
 metadata:
@@ -120,6 +120,26 @@ Obsidian 쓰기의 소유자 승인 요청은 cha의 agent-chat 채널 아래 **
 4. 결과 확인은 `python3 -m automation.obsidian_write status` — `status=written` 과 `remote=`·`sha256=` 이 영수증이다. `NOTE-REQUEST-REFUSED reason=owner-decided` 는 이전 카드가 이미 결정됐다는 뜻이다(워처가 처리한다).
 
 Drive 저장은 공용 `automation.drive_outputs` 파사드를 통해 `autophagy/문서/<YYYY>/<YYYY-MM-DD>_<원제목>.<확장자>`에 이름+부모 기준 upsert한다. 날짜는 최초 저장일로 고정되므로 같은 문서를 다시 저장해도 사본이 아니라 기존 파일이 갱신된다. owner-only permission과 재다운로드 SHA-256를 모두 확인해야 성공이다. 규약 정본: `docs/guide/drive-publish.md`.
+
+## Drive 저장·그 밖의 외부 작업 승인 요청 (전용 명령이 없는 일)
+
+형이 "이 파일 Drive에 저장해 줘"처럼 **파일 하나를 Drive에 비공개로 저장**하라고 하거나, 전용 스킬 명령이 없는 외부 작업을 시키면 "승인 경로가 없다"고 답하지 않는다. 아래 공용 명령으로 승인 카드를 올린다. ✅ 를 받으면 워처(`effect-request-watch`, 2분)가 실행하고 결과를 같은 스레드에 남긴다.
+
+```bash
+cd /srv/autophagy-agent-current && python3 -m automation.effect_request request drive-save \
+  --file <파일> --summary '<한 줄 설명>' [--title <Drive 제목>] [--kind doctype] [--project <과제>] \
+  --origin-channel-id <지시 메시지 채널 id> --origin-message-id <지시 메시지 id>
+
+cd /srv/autophagy-agent-current && python3 -m automation.effect_request request command \
+  --summary '<한 줄 설명>' --target '<영향 대상>' [--cwd <폴더>] [--timeout 600] \
+  --origin-channel-id <…> --origin-message-id <…> -- <실행할 명령 argv>
+```
+
+- drive-save 카드는 파일 이름·Drive 위치·공유 범위(비공개)·크기·sha256 을 보여 준다. 다른 사람에게 공유하려면 메일 `compose --drive-share --share-with` 를 쓴다.
+- command 카드는 실행할 명령 전체를 보여 주고, ✅ 뒤 한 번만 실행한다.
+- 출력의 `APPROVAL-THREAD … url=<링크>` 를 답장에 그대로 싣는다. 결과는 `python3 -m automation.effect_request status` 로 본다.
+- `EFFECT-REQUEST-REFUSED code=owner-only:…`(exit 4)는 형만 할 수 있는 일(비밀번호·결제·로그인 인증·sudo·승인 대리 누름)이다. 사유를 형에게 그대로 전한다. `code=dedicated:…` 는 전용 명령이 있다는 뜻이니 안내된 명령을 쓴다.
+- 오토파지에 도구 자체가 없는 일(예: 카카오톡 방 게시)은 "이 일을 할 도구가 없다"고 보고한다.
 
 ## 문서 저장 목적지 라우팅
 

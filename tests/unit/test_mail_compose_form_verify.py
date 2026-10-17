@@ -350,7 +350,7 @@ def test_real_probe_reads_explicit_bcc_key() -> None:
     form = _form("to@example.test", extra={**decoys, "bcc": "silent@evil.test"})
     browser = NodeFormProbeBrowser(form)
     ok, dump = _verify(browser, ("to@example.test",), cc=())
-    assert dump.get("bcc") == "silent@evil.test"
+    assert dump.get("bcc") == "[hidden]"
     assert ok is False
 
 

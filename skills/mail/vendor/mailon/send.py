@@ -142,6 +142,7 @@ class SendRequest:
     subject: str
     body: str
     attachments: tuple[Path, ...]
+    bcc: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.recipients:
@@ -269,6 +270,7 @@ class ComposeSender:
 
         self._browser.eval_js(_field_fill_script(
             ",".join(request.recipients), ",".join(request.cc), request.subject,
+            **({"bcc": ",".join(request.bcc)} if request.bcc else {}),
         ))
         self._step = "editor_fill"
         _fill_editor_when_ready(self._browser, request.body, clock=self._clock)
@@ -328,17 +330,18 @@ class ComposeSender:
             )
             _verify_attachment_upload(self._browser, request.attachments)
         self._step = "recipient_commit"
-        send_trigger.commit_recipients(self._browser, request.recipients, request.cc)
+        bcc_options = {"bcc": request.bcc} if request.bcc else {}
+        send_trigger.commit_recipients(self._browser, request.recipients, request.cc, **bcc_options)
         send_trigger.sync_field_events(self._browser)
         log.info("compose discovery: %s", send_trigger.discover_compose(self._browser))
         form_ok, form_dump = send_trigger.verify_compose_form(
-            self._browser, request.recipients, request.body, cc=request.cc)
+            self._browser, request.recipients, request.body, cc=request.cc, **bcc_options)
         if not form_ok:
             log.warning("compose form incomplete (%s); refilling body via editor API",
                         form_dump[:800])
             send_trigger.fill_body_via_editor_api(self._browser, request.body)
             form_ok, form_dump = send_trigger.verify_compose_form(
-                self._browser, request.recipients, request.body, cc=request.cc)
+                self._browser, request.recipients, request.body, cc=request.cc, **bcc_options)
         log.info("compose form state: %s", form_dump[:2500])
         if not form_ok:
             raise SendSafetyError(
@@ -516,11 +519,17 @@ def _fill_editor_when_ready(
         browser.wait_ms(500)
 
 
-def _field_fill_script(recipients: str, cc: str, subject: str) -> str:
+def _field_fill_script(recipients: str, cc: str, subject: str, bcc: str = "") -> str:
     encoded = json.dumps([recipients, cc, subject])
+    selectors = "['#adr-to-ipt_ta','#adr-cc-ipt_ta','#compose_subject']"
+    if bcc:
+        encoded = json.dumps([recipients, cc, subject, bcc])
+        selectors = json.dumps([
+            "#adr-to-ipt_ta", "#adr-cc-ipt_ta", "#compose_subject", send_trigger.BCC_SELECTOR,
+        ])
     return (
         "(function(values) {"
-        "['#adr-to-ipt_ta','#adr-cc-ipt_ta','#compose_subject'].forEach(function(selector, index) {"
+        f"{selectors}.forEach(function(selector, index) {{"
         "var element = document.querySelector(selector);"
         "if (!element) { throw new Error('compose field unavailable'); }"
         "element.value = values[index];"

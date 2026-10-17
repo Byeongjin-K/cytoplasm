@@ -18,7 +18,16 @@ def render_approvals_message(
     instruction: str = "",
 ) -> str:
     """Render reply content independently of topic."""
-    if draft.get("provider") == "gmail":
+    if draft.get("bcc"):
+        import mail_bcc
+
+        lines = [
+            "[mail-triage] 숨은참조 메일 발송 승인 요청",
+            mail_bcc.summary(draft["to"], draft.get("cc") or "", tuple(draft["bcc"])),
+            f"- 제목: `{draft['subject']}`",
+            "- 본문:", "```", draft["body"], "```",
+        ]
+    elif draft.get("provider") == "gmail":
         lines = [
             "[mail-triage] Gmail 발송 승인 요청 (DM 확정)",
             f"- 발신 계정: `{draft['sender_account']}`",

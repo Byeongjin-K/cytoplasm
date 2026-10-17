@@ -108,6 +108,7 @@ def create_draft(
     quote: str = "",
     forward: dict | None = None,
     drive_share: dict | None = None,
+    bcc: tuple[str, ...] = (),
 ) -> dict:
     """Persist a pending draft; ``quote`` (the answered or forwarded mail) is sent below ``body``."""
     directory = _public_drafts_dir()
@@ -117,7 +118,8 @@ def create_draft(
     attachments = triage_core.build_attachment_manifest(attachment_paths)
     private_paths = tuple(item["source_path_private"] for item in attachments)
     argv = triage_core.build_send_argv(
-        mailon_python(), to, subject, mail_quote.with_quote(body, quote), private_paths, cc
+        mailon_python(), to, subject, mail_quote.with_quote(body, quote), private_paths, cc,
+        **({"bcc": bcc} if bcc else {}),
     )
     record = {
         "argv": list(argv),
@@ -143,6 +145,8 @@ def create_draft(
         "uid_opaque": triage_core.mask_value(uid),
         "policy_version": None,
     }
+    if bcc:
+        record["bcc"] = list(bcc)
     if attachments:
         record["attachments"] = attachments
         record["attachment_manifest_sha256"] = (

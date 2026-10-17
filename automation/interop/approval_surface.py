@@ -50,6 +50,7 @@ class ApprovalKind(StrEnum):
     OBSIDIAN_WRITE = "obsidian-write"
     TODO = "todo"
     PROJECT_BOARD = "project-board"
+    EXTERNAL_EFFECT = "external-effect"
 
 
 class ApprovalSurface(StrEnum):
@@ -97,6 +98,7 @@ KIND_LABELS: Final[Mapping[ApprovalKind, str]] = MappingProxyType({
     ApprovalKind.OBSIDIAN_WRITE: "옵시디언 노트 승인 요청",
     ApprovalKind.TODO: "할 일",
     ApprovalKind.PROJECT_BOARD: "프로젝트 제안",
+    ApprovalKind.EXTERNAL_EFFECT: "외부 작업",
 })
 
 # Each kind's icon leads its thread name and the big title on the thread's first message
@@ -120,6 +122,7 @@ KIND_ICONS: Final[Mapping[ApprovalKind, str]] = MappingProxyType({
     ApprovalKind.OBSIDIAN_WRITE: "📝",
     ApprovalKind.TODO: "📋",
     ApprovalKind.PROJECT_BOARD: "📊",
+    ApprovalKind.EXTERNAL_EFFECT: "🧩",
 })
 
 REQUEST_TITLE_LIMIT: Final = 40
@@ -262,6 +265,7 @@ _TRANSITIONS: Final[TransitionLedger] = MappingProxyType({
         (7, ApprovalSurface.AGENT_CHAT_THREAD),
     ),
     ApprovalKind.PROJECT_BOARD: ((0, ApprovalSurface.AGENT_CHAT_THREAD),),
+    ApprovalKind.EXTERNAL_EFFECT: ((0, ApprovalSurface.AGENT_CHAT_THREAD),),
 })
 
 
@@ -305,6 +309,7 @@ def required_surface(kind: ApprovalKind) -> ApprovalSurface:
             | ApprovalKind.OBSIDIAN_WRITE
             | ApprovalKind.TODO
             | ApprovalKind.PROJECT_BOARD
+            | ApprovalKind.EXTERNAL_EFFECT
         ):
             return surface_at_policy(kind, POLICY_VERSION)
         case unreachable:

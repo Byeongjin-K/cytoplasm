@@ -1,0 +1,2 @@
+agent|automation/effect_request/cron/effect_request_watch.py|.hermes/scripts/effect_request_watch.py|required
+agent|automation/effect_request/cron/effect_request_watch.py|effect-request-watch|v2:cron;schedule=every 2m;script=effect_request_watch.py;deliver=local;mode=no-agent

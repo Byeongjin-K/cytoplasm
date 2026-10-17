@@ -85,6 +85,7 @@ _CARD_RENDER_ROOTS: Final = {
     "skills/patent-prep/scripts/patent_export.py::prepare_export": "skills/patent-prep/scripts/patent_export_render.py::render_approval",
     "automation/obsidian_write/gate_binding.py::request_approval": "automation/obsidian_write/gate_binding.py::request_approval",
     "automation/obsidian_write/note_request_cli.py::cmd_request": "automation/obsidian_write/note_request_render.py::render_note_approval",
+    "automation/effect_request/cli.py::cmd_request": "automation/effect_request/render.py::render_effect_approval",
     "automation/project_board/cli.py::post_card": "automation/project_board/proposal_render.py::render_proposal_card",
     "automation/memory_relocate/approval_gate.py::request_approval": "automation/memory_relocate/render.py::render_relocation_approval",
     "automation/plaud_sync/approval_gate.py::request_approval": "automation/plaud_sync/render.py::render_plaud_approval",
