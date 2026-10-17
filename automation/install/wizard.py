@@ -24,10 +24,12 @@ from automation.install.profiles import UnknownProfileError, resolve_profile
 from automation.install.wizard_screens import (
     DEFAULT_ORIGIN_URL,
     DOCTOR_ARGV,
+    DORI_PROFILE,
     PROFILE_MENU,
     Answers,
     approval_preview,
     doctor_settled,
+    dori_argv,
     installer_argv,
     render_node_toml,
     summarize_plan,
@@ -85,13 +87,15 @@ class _Arguments(argparse.Namespace):
     update_trust_key: Path | None = None
     expect_update_trust_fingerprint: str | None = None
     with_component: list[str] = []
+    dori_role: list[str] = []
+    owner_call: str | None = None
     dry_run_only: bool = False
     yes: bool = False
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 -m automation.install.wizard", add_help=True)
-    _ = parser.add_argument("--profile", default=None, help="core | rag | report-hub | full")
+    _ = parser.add_argument("--profile", default=None, help="core | rag | report-hub | full | dori")
     _ = parser.add_argument("--origin-url", default=None)
     _ = parser.add_argument("--node-name", default=None)
     _ = parser.add_argument("--operator", default=None)
@@ -99,6 +103,9 @@ def _parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--update-trust-key", type=Path, default=None)
     _ = parser.add_argument("--expect-update-trust-fingerprint", default=None)
     _ = parser.add_argument("--with-component", action="append", default=[], metavar="NAME")
+    _ = parser.add_argument("--dori-role", action="append", default=[], metavar="KEY",
+                            help="dori 프로필의 선택 역할(okdori, moodori)")
+    _ = parser.add_argument("--owner-call", default=None, help="dori 프로필: 도리가 소유자를 부르는 말")
     _ = parser.add_argument("--dry-run-only", action="store_true")
     _ = parser.add_argument("--yes", action="store_true", help="비대화 실행 전용: 확인을 건너뛴다")
     return parser
@@ -137,6 +144,8 @@ def _ask_profile(io: Console) -> str:
         answer = io.read_line("  선택 (번호 또는 이름) [1]: ").strip() or "1"
         if answer.isdigit() and 1 <= int(answer) <= len(PROFILE_MENU):
             return PROFILE_MENU[int(answer) - 1][0]
+        if answer == DORI_PROFILE:
+            return answer
         try:
             return resolve_profile(answer).name
         except UnknownProfileError as error:
@@ -169,6 +178,11 @@ def main(argv: Sequence[str] | None = None, *, io: Console | None = None) -> int
     args = _Arguments()
     _ = _parser().parse_args(argv, namespace=args)
     io.write("Autophagy 설치 마법사 — 설치 로직은 전부 python3 -m automation.install 에 있고, 여기서는 묻고 보여주고 확인만 받는다.\n")
+    if args.profile is None and io.tty:
+        _section(io, "⓪ 설치 방식")
+        args.profile = _ask_profile(io)
+    if args.profile == DORI_PROFILE:
+        return _dori(io, args)
     try:
         if args.profile is not None:
             _ = resolve_profile(args.profile)
@@ -221,6 +235,35 @@ def main(argv: Sequence[str] | None = None, *, io: Console | None = None) -> int
     io.write(summarize_verdict(output, returncode=rc) + "\n")
     if rc == 0:
         _connect(io, interactive=io.tty and not args.yes)
+    return rc
+
+
+def _dori(io: Console, args: _Arguments) -> int:
+    """도리 프로필 — Hermes 경로와 같은 순서(계획 → yes → 실행)를 `automation.install.dori` 에 건다."""
+    if not io.tty and not (args.yes or args.dry_run_only):
+        io.write("WIZARD-NO-TTY: 확인할 터미널이 없다. 비대화 실행이라면 --yes 또는 --dry-run-only 를 명시한다.\n")
+        return 2
+    roles, owner_call = tuple(args.dori_role), args.owner_call
+    _section(io, "① 도리 설치 계획 — 쓰기·네트워크 없음, root 불필요")
+    dry_argv = dori_argv(roles, owner_call, dry_run=True)
+    io.write("  $ " + " ".join(dry_argv) + "\n")
+    rc, output = io.run(dry_argv)
+    _keep_log(io, "01-dori-dry-run.log", output)
+    if rc != 0:
+        io.write(f"  도리 계획에서 멈춘다(rc={rc}) — 위의 DORI- 줄이 원인이다. 고친 뒤 같은 명령을 다시 실행한다.\n")
+        return rc
+    if args.dry_run_only:
+        io.write("  --dry-run-only 이므로 여기서 끝낸다. 실제 설치는 이 옵션 없이 다시 실행한다.\n")
+        return 0
+    _section(io, "② 확인")
+    if not args.yes:
+        if io.read_line("  위 계획대로 도리를 설치한다. 진행하려면 yes 를 입력한다: ").strip() != "yes":
+            io.write("  취소했다. 아무것도 실행하지 않았다.\n")
+            return 3
+    _section(io, "③ 도리 설치 — 멱등: 이미 있는 파일은 덮지 않는다")
+    rc, output = io.run(dori_argv(roles, owner_call, dry_run=False))
+    _keep_log(io, "02-dori-install.log", output)
+    io.write("  도리 설치 완료.\n" if rc == 0 else f"  도리 설치 미완(rc={rc}) — 위의 DORI- 줄이 원인이다.\n")
     return rc
 
 

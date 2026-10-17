@@ -1,0 +1,10 @@
+# 도리 포크 고정 커밋 — 이 릴리스가 설치하는 도리 코드는 이 한 줄이 정한다.
+#
+# 설치기(python3 -m automation.install.dori)는 이 커밋만 받고, 받은 뒤 `git rev-parse HEAD` 가
+# 이 값과 같은지 다시 확인한다. 다르거나 받을 수 없으면 아무것도 설치하지 않는다.
+# 포크 main 을 자동으로 따라가지 않는다(REPO.md R4): 올릴 때는 이 SHA 를 바꾸는 PR 하나와
+# 릴리스 노트의 "도리 포크 <짧은 SHA>: 바뀐 것" 한 줄로 한다. 서명 태그가 이 파일까지 덮으므로
+# 서명되지 않은 도리 코드가 설치되는 길이 없다.
+schema = 1
+repo = "https://github.com/orientpine/omo-dori-mode-experimental.git"
+commit = "43512336d8bf649539536c503c7e7638b772d909"

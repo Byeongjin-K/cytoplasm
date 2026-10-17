@@ -13,6 +13,7 @@ autophagy/
 ├── skills/       # 19개 스킬 디렉터리 (18 기능 + hello-autophagy 데모). 각 <name>/{SKILL.md, scripts/*_cli.py, scripts/*watch.py, deploy.sh}. 에이전트가 스스로 만든 자가 스킬은 이 트리에 없다(각 계정의 `~/.hermes/skills`)
 ├── automation/   # 오케스트레이션·게이트·워처·배치 코어 (interop, repair, rag_ingest, report_hub, skill_generation, selfskill_audit, twin_distill, twin_observe, managed_skills, managed_sync ...)
 ├── configs/      # routing-policy.md, peers.example.yaml, external-effect-tools.yaml, rag/
+├── dori/         # 도리 기반 사이토플라즘 저장소 층(2026-10-18 소유자 결정 Q219) — pin.toml(도리 포크 고정 커밋)·roles/(리드·비서 기본, 옥돌·무돌 선택 역할 템플릿+아바타). 개인값 없음, 설치는 automation/install/dori.py
 ├── prompts/      # 버전형 LLM 프롬프트 자산
 ├── docs/         # guide/(설계규약) patch/(인프라 변경) troubleshooting/ · qa/(W#-# 웨이브 증적)는 추적하지 않는 비공개 운영 저장소 링크다(아래 .omo/ 와 같음)
 ├── tests/        # unit/ + e2e/(drivers, scenarios, fixtures)
@@ -24,6 +25,7 @@ autophagy/
 | 작업 | 위치 | 비고 |
 |------|------|------|
 | 새 스킬 제작·배포 | `skills/<name>/`, `automation/deploy-skill.sh` | 4단계 게이트, `docs/guide/스킬-제작.md` |
+| 도리 층(포크 고정·기본 도리 구성) | `dori/`, `automation/dori_pin.py`, `automation/install/dori.py` | 소유자 결정 2026-10-18 00:10 KST "나는 도리 기반의 사이토플라즘을 계속 배포하고싶은데, 내가 지금 구성한 기본 도리 구성을 배포하도록 하고, 기존 사이토 플라즘의 모든 기능이 녹아들면 좋겠어", Q216 "추천대로 Q1~Q7 진행", Q219 "전부 추천대로 — 저장소 층부터 시작 (추천)". 포크는 `dori/pin.toml` 커밋 하나로만 설치되고(SHA 재확인, main 자동 추종 없음), 올릴 때는 그 SHA 를 바꾸는 PR + 릴리스 노트 한 줄. 영수증 `dori_pin`. 이 단계는 층만 더하고 노드 게이트웨이 동작은 불변. [소개](docs/기능소개/도리-저장소-층.md) |
 | 외부효과 승인 게이트 | `automation/interop/external_effect_gate.py` | fail-closed, 해시 바인딩 |
 | 인터롭 규약(보고/질의/조율) | `docs/guide/interop-규약.md`, `automation/interop/` | 단일 진실 |
 | 워처/cron 설계 규칙 | `docs/guide/watcher-cron-설계규약.md` | no-agent cron 필수 규약 |
@@ -109,7 +111,9 @@ autophagy/
 | `submission_cli` | module | `automation/managed_skills/submission_cli.py` | 개인 HEAD의 sha 고정 제출 + 기존 승인 표면 검토 요청(발행·마운트 없음) |
 | `managed_sync` | pkg | `automation/managed_sync/` | 관리형 스킬 동기화 (fetch→verify→quarantine) |
 | `managed_sync_watch` | cron | `automation/managed_sync/cron/managed_sync_watch.py` | 구독자 틱 **단일 구현** — Hermes cron(`deploy.sh`)과 systemd 타이머(`systemd/`, 설치기 opt-in)가 둘 다 이것을 돌린다. 겹친 틱=`FileKeyLease`로 무음 exit 0, 자식 env에 자격증명+두 runtime root 명시 전파, skill tag sync 성공 뒤 같은 mirror의 roster ref를 **별도 fetch**(부재/거부가 skill rc를 바꾸지 않음), staged 릴리스가 생긴 틱에만 기존 `owner_notice`로 best-effort 알림 1건(거부는 저널에만 — 매 틱 반복되므로 DM 홍수 방지) |
-| `wizard` | module | `automation/install/wizard.py` | 첫 설치 질문·node.toml 작성·계획 출력 집계·결과 안내. 설치 로직 없이 기존 설치기 argv만 조립하며, sudo는 `yes` 확인(비대화 `--yes`) 뒤에만 실행한다. [소개](docs/기능소개/설치-마법사.md) |
+| `wizard` | module | `automation/install/wizard.py` | 첫 설치 질문·node.toml 작성·계획 출력 집계·결과 안내. 설치 로직 없이 기존 설치기 argv만 조립하며, sudo는 `yes` 확인(비대화 `--yes`) 뒤에만 실행한다. 터미널에서 `--profile` 이 없으면 「⓪ 설치 방식」을 먼저 묻고, `dori` 를 고르면 신뢰키·root 없이 `automation.install.dori` 로 간다(계획 → yes → 설치). [소개](docs/기능소개/설치-마법사.md) |
+| `install.dori` | module | `automation/install/dori.py` | 도리 프로필 설치기 — `dori/pin.toml` 커밋으로 포크를 받아 SHA 확인(`dori_pin.fetch_at`), 스킬 링크, `bun install`·`bun link`, 포크 예시 config 1회 복사, `dori/roles/` 템플릿 렌더. 있는 파일은 덮지 않고 차이만(`DORI-ROLE-KEEP`), 다른 커밋의 체크아웃은 `DORI-PIN-SRC-DIFFERS`(exit 2), 받기 실패는 `DORI-PIN-FETCH-FAIL`(exit 3, 남는 폴더 0). `--dry-run` 은 쓰기·네트워크 0 이라 clean-host CI 가 돈다 |
+| `dori_pin` | module | `automation/dori_pin.py` | 도리 포크 고정 커밋의 단일 정의(파싱·검증·그 커밋으로 받기). 설치기와 노드 영수증 프로브(`deploy_all_probe` → `render_receipt(dori_pin=)`)가 같은 파서를 쓴다. 릴리스 트리의 pin 이 깨졌으면 영수증을 쓰지 않는다(exit 4) |
 | `doctor` | pkg | `automation/doctor/` | **연결·승인·동작 점검**(2026-09-29) — `python3 -m automation.doctor` 가 서비스 계정 안에서 사람 몫의 연결(주 모델 `model.provider` 로그인·폴백·Discord 봇·승인 채널·Google Workspace 토큰과 서비스별 권한·Drive 발행·기관메일·로컬 전사·Hermes cron 반복 실패·cron 선언 `env=` 가 요구하는 필수 설정값 `cron-required-env`)을 **읽기만** 해서 PASS/WARN/FAIL 과 조치 절차를 낸다. 운영자·root 에서는 `sudo -n -u` 로 agent·peer 를 모아 본다. 비밀은 있다/없다로만 읽고 오류 문구는 긴 토큰을 가린다. 판정 레지스트리 `capabilities.CAPABILITIES` 가 설치 마법사의 「승인할 것」 미리보기와 **단일 출처**다. `--notify` 는 문제 집합이 바뀔 때만 `owner_notice` 로 알리고 전송 실패 시 상태를 전진시키지 않는다(`~/.hermes/doctor/state.json`, fcntl 잠금). 워처 `cron/doctor_watch.py` 는 두 경로 — 오케스트레이터 `deploy.sh`(Hermes cron) · 설치기 컴포넌트 `doctor-watch`(systemd, **네 프로필 기본 포함**) — 가 같은 래퍼를 돈다. 주 모델이 `custom:` 이면 로그인 대상이 아니고, `#approvals` id 부재는 이름 검색 폴백이라 고장이 아니다(peer 실측 오탐 2건 교정). [가이드](docs/guide/연결-승인-점검.md)·[소개](docs/기능소개/연결-승인-점검-doctor.md) |
 | `profiles` | module | `automation/install/profiles.py` | 프로필→헬스체크 선언·컴포넌트의 단일 정의. `core`·`rag`는 컴포넌트 없이 주 노드 선언만 하고, `report-hub`·`full`은 `report-hub`를 함께 고른다(`rag` 배포는 별도 `RAG_NODE`). 설치기가 `/etc/autophagy/healthcheck.env`(root:root 0644)를 쓰고 registry는 환경변수가 unset일 때만 파일로 fallback한다. 생략은 기존 계획 유지, `--suggest` 는 복구용(기존 노드·수동 서비스 변경 뒤)이다 |
 | `owner_actions` | module | `automation/install/owner_actions.py` | 설치기가 **판정하지 못한 것**의 단일 정의(2026-09-09) — `discord_check.py` 의 rc=2(토큰 부재 = 판정 불가)를 FAIL 이 아니라 WARN 으로 옮기고, 그 항목을 닫는 명령을 「소유자 확인 절차」로 렌더한다. 접혀 있던 동안 `apply_plan` 이 계획 2/50 번째에서 break 해 배포키·자산·심링크·타이머·신뢰키 검증·healthcheck 가 전부 실행되지 않았다 — `sudo` 가 환경변수를 지우는 그 경로를 `docs/guide/install.md` §6 이 이미 허용하고 있었으므로 산문이 맞고 코드가 틀렸다. rc=0·rc=1 의 detail 문구는 바이트 그대로다(§8 증상 표가 인용한다), `checks.exit_code` 는 WARN 으로 rc 를 바꾸지 않아 종료 게이트는 그대로 엄격하다. 마법사 요약(`wizard_screens.summarize_verdict`)도 이 블록을 그대로 옮긴다 — allowlist 가 삼키면 문서상 기본 설치 경로에서 소유자가 볼 기회가 없다 |

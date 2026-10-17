@@ -129,6 +129,11 @@ jobs:
           PY
           python3 -m automation.install --update-trust-key "$key" --dry-run
 
+      - name: Dori profile dry-run on a bare interpreter
+        run: |
+          set -euo pipefail
+          python3 -m automation.install.dori --dry-run --role okdori --role moodori
+
       - name: Third-party boundary tests on a bare interpreter
         run: |
           set -euo pipefail

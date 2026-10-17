@@ -1,0 +1,40 @@
+# 기본 도리 구성의 역할 목록 — 설치기(automation.install.dori)가 읽는 유일한 목록이다.
+# default = true 인 역할은 고르지 않아도 깔리고, 나머지는 --role 로 고른다.
+# dir 은 작업 폴더 이름이다(--workroot 아래, 기본 ~/Documents).
+schema = 1
+
+[[role]]
+key = "lead"
+name = "ZzangDori"
+ko = "짱도리"
+nick = "짱돌"
+dir = "zzangdori"
+default = true
+summary = "리드 — 소유자의 대화 채널에서 일을 받아 lane 을 열고, 다른 도리를 돌보고, 저장소·릴리스를 맡는다"
+
+[[role]]
+key = "yoodori"
+name = "YooDori"
+ko = "유도리"
+nick = "유돌"
+dir = "yoodori"
+default = true
+summary = "비서 — 메일·일정·할 일·문서·기억·회의록을 cytoplasm 스킬과 승인 카드로 처리한다"
+
+[[role]]
+key = "okdori"
+name = "OkDori"
+ko = "옥도리"
+nick = "옥돌"
+dir = "okdori"
+default = false
+summary = "카톡 소통(선택) — 카카오톡 대화를 읽어 요약하고, 소유자 확인을 받은 답장만 보낸다"
+
+[[role]]
+key = "moodori"
+name = "MooDori"
+ko = "무도리"
+nick = "무돌"
+dir = "moodori"
+default = false
+summary = "회사 업무(선택) — 기관 시스템 2단계 로그인을 소유자와 함께 하고, 임시저장까지만 처리한다"

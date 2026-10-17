@@ -26,7 +26,22 @@ PROFILE_MENU: Final = (
     ("rag", "기본 + 개인 RAG(검색·임베딩·Qdrant)"),
     ("report-hub", "기본 + Lab report-hub(콜렉터·대시보드)"),
     ("full", "전부(기본 + report-hub + RAG)"),
+    ("dori", "도리 — 리드(짱돌)·비서(유돌) 기본 구성, 옥돌·무돌은 선택(root·신뢰키 불필요)"),
 )
+
+#: 도리 프로필은 Hermes 설치기(`PROFILES`)가 아니라 `automation.install.dori` 로 간다.
+DORI_PROFILE: Final = "dori"
+
+
+def dori_argv(roles: tuple[str, ...], owner_call: str | None, *, dry_run: bool) -> tuple[str, ...]:
+    argv: list[str] = ["python3", "-m", "automation.install.dori"]
+    for role in roles:
+        argv += ["--role", role]
+    if owner_call:
+        argv += ["--owner-call", owner_call]
+    if dry_run:
+        argv.append("--dry-run")
+    return tuple(argv)
 
 _KIND_MEANING: Final = {
     "account": "서비스 계정을 만든다(agent · peer · ops)",
