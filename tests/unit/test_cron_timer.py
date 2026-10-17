@@ -16,7 +16,7 @@ import pytest
 
 from automation import cron_timer, cron_timer_run
 from automation.cron_schedule import ScheduleError, on_calendar
-from automation.deploy_declarations import parse_declaration_file
+from automation.deploy_declarations import all_declarations, parse_declaration_file
 from automation.watcher_manifest import ManifestError
 
 _HERMES = r'''#!/usr/bin/env python3
@@ -114,6 +114,17 @@ def test_hermes_schedules_become_the_same_calendar(schedule: str, want: str) -> 
 def test_schedules_whose_meaning_would_change_are_refused(schedule: str) -> None:
     with pytest.raises(ScheduleError):
         on_calendar(schedule)
+
+
+def test_every_declared_timer_schedule_has_the_same_calendar() -> None:
+    rows = [d for d in all_declarations(Path(__file__).resolve().parents[2])
+            if d.kind == "cron" and d.attr("runner") == "systemd"]
+    assert sorted((d.account, d.destination) for d in rows) == sorted(("agent", n) for n in (
+        "rag-ingest-watch", "stt-eval-capture", "voice-catalog-enroll", "daily-cost-report",
+        "selfskill-audit-watch", "doctor-watch", "mail-triage-repair-daily"))
+    for row in rows:
+        assert row.attr("deliver") == "local"
+        assert on_calendar(row.attr("schedule"), "Asia/Seoul").endswith(" Asia/Seoul")
 
 
 def test_a_systemd_runner_must_deliver_locally() -> None:

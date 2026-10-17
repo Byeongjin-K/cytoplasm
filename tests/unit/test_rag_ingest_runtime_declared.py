@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 
 from automation.deploy_declarations import Declaration, all_declarations
-from tests.unit.cron_fixture import declared_cron, listing
+from tests.unit.cron_fixture import declared_cron, listing, timer_env
 
 _REPO = Path(__file__).resolve().parents[2]
 _DEPLOY = _REPO / "automation/rag_ingest/deploy.sh"
@@ -78,6 +78,7 @@ def _rig(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "DEPLOY_SSH_HOST": "fake-node",
         "DEPLOY_ALLOW_UNPUSHED": "1",
         "DEPLOY_TREE_LOCK_WAIT": "1",
+        **timer_env(tmp_path / "timer"),
     }
     return home, env
 

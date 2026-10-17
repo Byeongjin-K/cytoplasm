@@ -12,7 +12,8 @@ cron 행의 선택 키 `env=<이름>[,<이름>…]` 은 그 스크립트가 기�
 cron 행의 선택 키 `runner=hermes|systemd`(기본 hermes)는 그 잡을 누가 띄우는지다. systemd 면 배포기가
 `converge_timer`(`automation/cron_timer.py`)로 계정의 사용자 타이머를 맞추고 같은 이름의 Hermes 잡은
 일시정지로 둔다(P2). systemd 는 `deliver=local` 만 받는다 — Hermes 가 stdout 을 Discord 로 보내던 잡을
-타이머로 옮기면 그 글이 사라진다. 주기는 systemd 달력으로 같은 뜻을 낼 수 있어야 한다(`cron_schedule`).
+타이머로 옮기면 그 글이 사라진다. 주기가 systemd 달력으로 같은 뜻을 내는지는 `tests/unit/test_cron_timer.py` 가
+모든 systemd 행에 대해, 배포 때는 수렴기가(rc 2) 확인한다(`cron_schedule`).
 
 v2 행은 중앙 표(`configs/watcher-deploy-manifest.txt`)에 나오지 않는다. 그 표의 바이트는
 헬스체크 허용 목록 지문에 들어가므로, 표는 legacy 행만 투영한다(`watcher_manifest.derive_manifest`).
@@ -24,7 +25,6 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final, TypeAlias
 
-from automation.cron_schedule import ScheduleError, on_calendar
 from automation.watcher_manifest import (
     V2_PREFIX as _V2_PREFIX,
 )
@@ -128,13 +128,8 @@ def _parse_v2(field: str) -> tuple[str, dict[str, str]]:
     missing = [key for key in _REQUIRED_KEYS.get(kind, ()) if key not in values]
     if missing:
         raise ManifestError(f"{kind} declaration lacks: {', '.join(missing)}")
-    if values.get("runner") == "systemd":
-        if values["deliver"] != "local":
-            raise ManifestError("runner=systemd needs deliver=local (a timer has no Discord delivery)")
-        try:
-            _ = on_calendar(values["schedule"])
-        except ScheduleError as error:
-            raise ManifestError(f"runner=systemd schedule: {error}") from None
+    if values.get("runner") == "systemd" and values["deliver"] != "local":
+        raise ManifestError("runner=systemd needs deliver=local (a timer has no Discord delivery)")
     return kind, values
 
 

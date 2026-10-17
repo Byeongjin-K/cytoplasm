@@ -13,7 +13,8 @@
 _CONVERGE_TIMER_SAFE='^[A-Za-z0-9_.*/, -]*$'
 
 _timer_remote() { # _timer_remote <verb> <args…> → 원격 스크립트 한 줄
-  local runtime="${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}" line
+  # DEPLOY_TIMER_RUNTIME: 시험 리그가 노드 릴리스 트리 대신 체크아웃을 가리키는 이음새(운영에서는 쓰지 않는다).
+  local runtime="${DEPLOY_TIMER_RUNTIME:-${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}}" line
   printf -v line 'cd "$HOME" && PYTHONPATH=%q /usr/bin/python3 -B -m automation.cron_timer' "$runtime"
   printf '%s' "$line"
   printf ' %q' "$@"

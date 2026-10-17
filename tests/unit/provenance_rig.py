@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
+from tests.unit.cron_fixture import timer_env
+
 REPO: Final = Path(__file__).resolve().parents[2]
 MARKER: Final = "dirty-helper-ran"
 PROBE_HELPER: Final = "automation/closure_probe_helper.sh"
@@ -109,7 +111,8 @@ def deploy(repo: Path, rig: Path, *argv: str, hermes: str = "", ssh: str = _SSH,
     env = {key: value for key, value in os.environ.items() if key not in _SKIP_ENV}
     env.update({"HOME": str(rig), "NODE_HOME": str(home), "RIG": str(rig), "REPO": str(repo),
                 "PATH": f"{bin_dir}:{os.environ['PATH']}", "DEPLOY_SSH_HOST": "fake-node",
-                "HEALTHCHECK_NODE_CONFIG_PATH": str(repo / "configs/node.example.toml")})
+                "HEALTHCHECK_NODE_CONFIG_PATH": str(repo / "configs/node.example.toml"),
+                **timer_env(rig / "timer")})
     if bash_env:
         _ = (rig / "bash_env.sh").write_text(bash_env, encoding="utf-8")
         env["BASH_ENV"] = str(rig / "bash_env.sh")

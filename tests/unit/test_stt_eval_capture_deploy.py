@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.cron_fixture import HELPER, create_args, declared_cron
+from tests.unit.cron_fixture import HELPER, declared_cron, timer_env
 
 REPO = Path(__file__).resolve().parents[2]
 PACKAGE = REPO / "automation/stt_eval"
@@ -60,6 +60,7 @@ def deploy_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     _ = shutil.copyfile(PACKAGE / "cron/stt_eval_capture_watch.py", package / "cron/stt_eval_capture_watch.py")
     _ = shutil.copyfile(REPO / HELPER, repo / HELPER)
     _ = shutil.copyfile(REPO / "automation/deploy_push.sh", repo / "automation/deploy_push.sh")
+    _ = shutil.copyfile(REPO / "automation/deploy_timer.sh", repo / "automation/deploy_timer.sh")
     _ = (repo / "automation/node_config_sh.py").write_text("print('NODE_AGENT_ACCOUNT=fixture-agent; NODE_PEER_ACCOUNT=fixture-peer; NODE_DEPLOY_SSH_HOST=fixture-host')\n")
     _ = (repo / "automation/deploy_provenance.sh").write_text('deploy_provenance_check() { printf "%s\\n" "$@" >> "$HOME/provenance-receipt"; return "${FIXTURE_GUARD_RC:-0}"; }\n')
     home = tmp_path / "home"
@@ -91,7 +92,8 @@ def deploy_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "        + '\\n    Deliver:   ' + opt('--deliver') + '\\n    Script:    ' + opt('--script')\n"
         "        + '\\n    Mode:      no-agent (script stdout delivered directly)\\n\\n')\n"
     ))
-    return package / "deploy.sh", {**os.environ, "HOME": str(home), "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"], "DEPLOY_SSH_HOST": "fixture-host"}
+    return package / "deploy.sh", {**os.environ, "HOME": str(home), "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                                   "DEPLOY_SSH_HOST": "fixture-host", **timer_env(tmp_path / "timer")}
 
 
 def test_deploy_registers_once_and_preserves_provenance_guard(tmp_path: Path) -> None:
@@ -100,7 +102,12 @@ def test_deploy_registers_once_and_preserves_provenance_guard(tmp_path: Path) ->
         result = subprocess.run(["bash", str(script)], cwd=tmp_path, env=env, text=True, capture_output=True, timeout=30, check=False)
         assert result.returncode == 0, result.stderr
     home = Path(env["HOME"])
-    assert json.loads((home / "cron-receipt.json").read_text()) == create_args(declared_cron("automation/stt_eval"))
+    row = declared_cron("automation/stt_eval")
+    assert row.attr("runner") == "systemd"
+    assert not (home / "cron-receipt.json").exists()  # P2: Hermes 에 새로 등록하지 않는다
+    timer = (home / ".config/systemd/user/autophagy-cron-stt-eval-capture.timer").read_text()
+    assert "OnCalendar=*-*-* 03:40:00 Asia/Seoul" in timer
+    assert json.loads((home / "fake-systemctl.json").read_text()) == {"autophagy-cron-stt-eval-capture.timer": "on"}
     target = home / ".hermes/scripts/stt_eval_capture_watch.py"
     assert target.read_bytes() == (PACKAGE / "cron/stt_eval_capture_watch.py").read_bytes()
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
