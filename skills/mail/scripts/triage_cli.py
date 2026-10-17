@@ -399,6 +399,18 @@ def _digest_reactions() -> None:
               file=sys.stderr)
 
 
+def cmd_digest_react(args: argparse.Namespace) -> int:
+    """The gateway heard an owner press on one digest card — act on it now (same rules)."""
+    import digest_reaction_actions
+
+    mode = triage_mode.effective_mode()
+    if mode == "no-go":
+        print(f"MODE-SKIP mode={mode} (다이제스트 반응 정지)")
+        return 0
+    digest_reaction_actions.run_card(args.message_id.strip())
+    return 0
+
+
 def cmd_watch(_args: argparse.Namespace) -> int:
     """Production cron tick: repost pending, resolve ✅/⛔, send approved (초안 생성 없음)."""
     if os.environ.get("E2E_TEST_MODE"):
@@ -697,6 +709,12 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--no-sync", action="store_true", help=argparse.SUPPRESS)
     watch.add_argument("--no-post", action="store_true", help=argparse.SUPPRESS)
     watch.set_defaults(func=cmd_watch)
+
+    digest_react = sub.add_parser(
+        "digest-react", help="다이제스트 카드 하나의 소유자 📄/✍️ 반응을 즉시 처리 (게이트웨이 반응 이벤트)",
+    )
+    digest_react.add_argument("--message-id", required=True)
+    digest_react.set_defaults(func=cmd_digest_react)
 
     confirm = sub.add_parser("confirm", help="소유자 승인 검증 후에만 발송")
     confirm.add_argument("--draft", required=True)

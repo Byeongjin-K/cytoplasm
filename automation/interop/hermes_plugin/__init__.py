@@ -42,6 +42,14 @@ def register(ctx) -> None:
     ctx.register_hook("kanban_task_completed", kanban_task_completed)
     ctx.register_hook("kanban_task_blocked", kanban_task_blocked)
     LOGGER.warning("interop plugin registered proxy_watch_resumed=%d", owner_proxy_watch.resume())
+    try:  # digest 📄/✍️ answered on the press, not the next */2 tick (2026-10-17)
+        from automation.interop import digest_reaction_listener
+
+        armed = digest_reaction_listener.install()
+    except Exception as error:  # noqa: BLE001 — the cron tick still answers; never block register
+        LOGGER.warning("digest reaction listener install failed error=%s", type(error).__name__)
+    else:
+        LOGGER.warning("digest reaction listener armed=%s", armed)
 
 
 def pre_tool_call(tool_name, args, **kwargs):
