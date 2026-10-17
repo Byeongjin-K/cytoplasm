@@ -2763,7 +2763,7 @@ runtime-package 프로브의 `cron/` 오탐을 고쳤다. 그 과정에서 드�
 > doctor 첫 운영 실측(`python3 -m automation.doctor`, 노드 agent·peer)이 드러낸 것. 전부 노드 설정·소유자 판단이라 이 저장소가 고칠 수 없다.
 
 - **일일 비용 보고가 26회 연속 실패 중이다** — `send_cost_report.py` 는 `COST_REPORT_SOFT_CAP`(필수, USD)을 요구하는데 agent `~/.env.secrets` 에 없어 매일 `KeyError` 로 끝난다 → 소유자가 임계값을 정해 그 파일에 한 줄 더한다. **영향: 일일 지출 보고 중단 · 심각도 중**.
-- **`mail-triage-repair-daily` 가 6회 연속 `drift_skip` 이다** — Hermes 가 "global inference config drifted since this job was created" 로 실행을 거부한다(2026-09-22 폴백 변경 뒤로 추정) → 설정 변경이 의도였는지 확인하고 그 잡을 다시 만든다(`hermes cron`). **영향: 메일 분류 보정 중단 · 심각도 중**.
+- **`mail-triage-repair-daily` 가 6회 연속 `drift_skip` 이다** — Hermes 가 "global inference config drifted since this job was created" 로 실행을 거부한다(2026-09-22 폴백 변경 뒤로 추정) → 설정 변경이 의도였는지 확인하고 그 잡을 다시 만든다(`hermes cron`). **영향: 메일 분류 보정 중단 · 심각도 중**. → **해소(2026-10-18)**: 그 잡은 모델을 쓰지 않는 no-agent 워처로 옮겨 drift_skip 대상이 아니다(N1).
   ↳ 재관측(2026-10-01, 릴리스 수렴 사각지대 웨이브 6): 2026-09-29 주 모델 변경 이후 Hermes 의 drift 보호가 계속 건너뛰어 관측 시점(2026-10-01) 8회 연속 skip 이었고, 그 잡은 모델이 고정(pin)돼 있지 않다. 소유자 결정은 둘 중 하나다 — `hermes cron edit <job> --provider <p> --model <m>` 로 고정하거나(이것은 모델을 코드·argv 에 적지 않는다는 단일 출처 규칙과 충돌한다), 현재 설정 아래에서 잡을 다시 만든다. 저장소 쪽 소유 결정은 `docs/follow-ups.md` 「릴리스 수렴 사각지대 해소 후 남긴 것」의 같은 잡 불릿이 맡는다.
 - **peer 에는 폴백 모델이 없다** — 주 모델은 `custom:litellm` 이고 `fallback_providers` 가 비어 doctor 가 WARN 으로 남긴다 → 의도면 그대로 두고(첫 알람 1건 뒤 되풀이하지 않는다), 아니면 폴백을 선언·로그인한다. **영향: peer 응답 여유만 · 심각도 낮음**.
 - **중앙 워처 매니페스트가 바뀌어 healthcheck 래퍼를 다시 설치해야 한다** — `configs/watcher-deploy-manifest.txt` 에 doctor-watch 두 줄이 더해져 래퍼 지문이 달라진다 → 릴리스 반영 뒤 노드 소유자가 `automation/provision-healthcheck-probe.sh` 를 1회 실행한다(`healthcheck_wrapper_current` 가 그전까지 알린다). **영향: 헬스체크 래퍼 드리프트 경고 · 심각도 낮음**.
