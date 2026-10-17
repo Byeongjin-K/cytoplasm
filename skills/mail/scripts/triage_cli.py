@@ -407,7 +407,9 @@ def cmd_digest_react(args: argparse.Namespace) -> int:
     if mode == "no-go":
         print(f"MODE-SKIP mode={mode} (다이제스트 반응 정지)")
         return 0
-    digest_reaction_actions.run_card(args.message_id.strip())
+    pressed = next((action for emoji, action in digest_reaction_actions.ACTION_BY_EMOJI.items()
+                    if digest_reaction_actions._same_emoji(emoji, args.emoji or "")), "")  # noqa: SLF001
+    digest_reaction_actions.run_card(args.message_id.strip(), pressed=pressed)
     return 0
 
 
@@ -714,6 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
         "digest-react", help="다이제스트 카드 하나의 소유자 📄/✍️ 반응을 즉시 처리 (게이트웨이 반응 이벤트)",
     )
     digest_react.add_argument("--message-id", required=True)
+    digest_react.add_argument("--emoji", default="", help="게이트웨이가 들은 반응(📄 다시 누름이면 스레드 링크를 다시 남김)")
     digest_react.set_defaults(func=cmd_digest_react)
 
     confirm = sub.add_parser("confirm", help="소유자 승인 검증 후에만 발송")

@@ -135,7 +135,7 @@ def test_the_wrapper_runs_for_the_card_and_the_delay_is_logged(
 
     asyncio.run(listener.run_wrapper("card-9", "\U0001f4c4", 1_000.0))
 
-    assert json.loads(seen.read_text(encoding="utf-8")) == ["--digest-card", "card-9"]
+    assert json.loads(seen.read_text(encoding="utf-8")) == ["--digest-card", "card-9", "--emoji", "\U0001f4c4"]
     entry = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert entry["message_id"] == "card-9" and entry["rc"] == 2
     assert entry["error"] == "boom [N]"

@@ -72,6 +72,10 @@ DRAFT_ACK: Final = (
     "✍️ 회신 초안을 쓰고 있습니다 — 1분쯤 걸려요. 다 쓰면 이 카드 아래에 미리보기와 승인 카드 링크를 올립니다."
 )
 _ACTION_LABEL: Final = {"body": "📄 전문", "draft": "✍️ 회신 초안"}
+#: The full-text thread's name word; ``origin_notice`` gives names starting with it 📄.
+BODY_THREAD_LABEL: Final = "전문"
+_SUBJECT_LIMIT: Final = 60
+_THREAD_TYPES: Final = (10, 11, 12)
 
 
 def attach(channel_id: str, message_id: str) -> None:
@@ -155,19 +159,91 @@ def body_parts(mail: dict, subject: str) -> list[str]:
     return parts
 
 
+def _open_body_thread(card: dict, subject: str) -> dict[str, str]:
+    """A new thread for this card's full text, beside the digest thread.
+
+    Discord does not nest threads, and the card already sits inside the digest thread,
+    so the full-text thread opens in that thread's parent channel through the shared
+    ``origin_notice.resolve_thread_id`` (name ``📄 전문 · <subject>``, big title first).
+    """
+    channel = triage_confirm.fetch_channel(str(card["channel_id"]))
+    is_thread = isinstance(channel, dict) and channel.get("type") in _THREAD_TYPES
+    parent = str(channel.get("parent_id") or "") if is_thread else ""
+    origin_notice = triage_confirm._origin_notice()  # noqa: SLF001 — interop runtime import
+    label = f"{BODY_THREAD_LABEL} · {' '.join(subject.split())[:_SUBJECT_LIMIT]}"
+    thread_id = origin_notice.resolve_thread_id(
+        triage_confirm._api,  # noqa: SLF001 — shared rate-limited Discord client
+        origin_notice.OriginRef(channel_id=parent or str(card["channel_id"])), label,
+    )
+    guild = str(channel.get("guild_id") or "") if isinstance(channel, dict) else ""
+    return {"thread_id": str(thread_id), "guild_id": guild, "stage": "opened"}
+
+
+def body_link_line(thread: dict[str, str], subject: str) -> str:
+    """The one line under the card that points at its full-text thread."""
+    try:
+        triage_confirm._origin_notice()  # noqa: SLF001 — puts the interop runtime on the path
+        from automation.interop.owner_message import discord_link
+    except ImportError:
+        url = None
+    else:
+        url = discord_link(space="guild" if thread["guild_id"] else "unknown",
+                           channel_id=thread["thread_id"],
+                           guild_id=thread["guild_id"] or None).url
+    where = url or f"스레드 「📄 {BODY_THREAD_LABEL} · {' '.join(subject.split())[:_SUBJECT_LIMIT]}」"
+    return _inert(f"📄 전문은 별도 스레드에 있습니다: {where}")
+
+
 def _show_body(card: dict) -> str:
+    """📄: open the card's own thread, point at it under the card, then post the text there.
+
+    Each step is recorded before the next (``digest_body_threads.stage``), so a retry
+    after a failure resumes where it stopped and never opens a second thread.
+    """
+    db = triage_gate.db_path()
+    message_id = str(card["message_id"])
+    thread = triage_store.digest_body_thread(db, message_id)
+    if thread is not None and thread["stage"] == "posted":
+        return "done"
     mail = triage_transport._get_mail(str(card["uid"]))  # noqa: SLF001 — the digest's read path
-    parts = body_parts(mail, str(card.get("subject") or mail.get("subject") or ""))
+    subject = str(card.get("subject") or mail.get("subject") or "")
+    if thread is None:
+        thread = _open_body_thread(card, subject)
+        triage_store.save_digest_body_thread(db, message_id, thread, triage_core.utc_now())
+    if thread["stage"] == "opened":
+        triage_confirm.post_in(str(card["channel_id"]), body_link_line(thread, subject),
+                               reply_to=message_id)
+        thread = {**thread, "stage": "linked"}
+        triage_store.save_digest_body_thread(db, message_id, thread, triage_core.utc_now())
+    parts = body_parts(mail, subject)
     posted = 0
     try:
         for part in parts:
-            triage_confirm.post_in(str(card["channel_id"]), part, reply_to=str(card["message_id"]))
+            triage_confirm.post_in(thread["thread_id"], part)
             posted += 1
     except Exception:
-        if posted:  # the owner already sees part of it — a retry would repeat it
-            return "partial"
-        raise
-    return "done"
+        if not posted:
+            raise
+    # Some or all of the text is in the thread now — a retry would show it twice.
+    triage_store.save_digest_body_thread(
+        db, message_id, {**thread, "stage": "posted"}, triage_core.utc_now(),
+    )
+    return "done" if posted == len(parts) else "partial"
+
+
+def _relink(card: dict) -> bool:
+    """A repeat 📄 on a card whose text is already in its thread: the link once more."""
+    db = triage_gate.db_path()
+    message_id = str(card["message_id"])
+    thread = triage_store.digest_body_thread(db, message_id)
+    if thread is None or thread["stage"] != "posted":
+        return False
+    if triage_store.digest_action_status(db, message_id, "body") not in ("done", "partial"):
+        return False
+    triage_confirm.post_in(str(card["channel_id"]),
+                           body_link_line(thread, str(card.get("subject") or "")),
+                           reply_to=message_id)
+    return True
 
 
 def _pending_draft(uid: str) -> dict | None:
@@ -258,8 +334,12 @@ def _gave_up(card: dict, action: str) -> None:
               file=sys.stderr)
 
 
-def _act(card: dict, owner: str, db) -> int:
-    """Run each new owner reaction on one card once; return actions run."""
+def _act(card: dict, owner: str, db, *, pressed: str = "") -> int:
+    """Run each new owner reaction on one card once; return actions run.
+
+    ``pressed`` is the action the gateway just heard: a 📄 pressed again on a card whose
+    text is already in its thread gets the thread link again instead of nothing.
+    """
     try:
         actions = _owner_reactions(card, owner)
     except Exception as error:  # noqa: BLE001 — one card's read never stops the others
@@ -273,6 +353,8 @@ def _act(card: dict, owner: str, db) -> int:
             db, str(card["message_id"]), action, stamp, max_attempts=MAX_ATTEMPTS,
         )
         if not attempt:
+            if action == "body" and pressed == "body" and _relink(card):
+                print(f"DIGEST-REACTION action=body item={card['item_no']} status=relinked")
             continue
         try:
             status = _run(action, card, attempt)
@@ -308,7 +390,7 @@ def run_tick(*, now: datetime | None = None) -> int:
     return sum(_act(card, owner, db) for card in cards)
 
 
-def run_card(message_id: str, *, now: datetime | None = None) -> int:
+def run_card(message_id: str, *, now: datetime | None = None, pressed: str = "") -> int:
     """The gateway heard a press on ``message_id`` — act on that one card right away.
 
     The reaction is read back from Discord before acting (the event only says that
@@ -319,4 +401,4 @@ def run_card(message_id: str, *, now: datetime | None = None) -> int:
     card = next((card for card in cards if str(card["message_id"]) == message_id), None)
     if card is None:
         return 0
-    return _act(card, triage_confirm.owner_id(), db)
+    return _act(card, triage_confirm.owner_id(), db, pressed=pressed)

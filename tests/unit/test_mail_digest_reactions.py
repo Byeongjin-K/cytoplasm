@@ -36,6 +36,10 @@ OWNER_ID = "100000000000000001"
 BOT = {"id": "200000000000000002", "bot": True}
 OWNER = {"id": OWNER_ID}
 STRANGER = {"id": "300000000000000003"}
+GUILD = "100000000000000009"
+BODY_THREAD = "400000000000000004"
+#: Full-text threads opened by the fake Discord (reset per test by ``_discord``).
+OPENED: list[dict] = []
 _NOW = datetime(2026, 10, 16, 1, 0, tzinfo=UTC)
 _BODY = (
     '---\nuid: "u-1"\nsubject: "합성 제목"\nfrom: "sender@example.invalid"\n'
@@ -63,14 +67,23 @@ def _discord(
     monkeypatch: pytest.MonkeyPatch, users: dict[str, list[dict]],
 ) -> list[tuple[str, str]]:
     """Fake Discord: card reactions from ``users`` (emoji → reactors incl. the bot)."""
-    def api(method: str, path: str, _payload: object = None) -> object:
-        assert (method, path) == ("GET", "/channels/thread-1/messages/card-1")
-        return {"id": "card-1", "reactions": [
-            {"emoji": {"name": emoji}, "count": len(who), "me": BOT in who}
-            for emoji, who in users.items()
-        ]}
+    def api(method: str, path: str, payload: object = None) -> object:
+        if (method, path) == ("GET", "/channels/thread-1/messages/card-1"):
+            return {"id": "card-1", "reactions": [
+                {"emoji": {"name": emoji}, "count": len(who), "me": BOT in who}
+                for emoji, who in users.items()
+            ]}
+        if (method, path) == ("GET", "/channels/thread-1"):  # the digest thread
+            return {"id": "thread-1", "type": 11, "parent_id": "chan-1", "guild_id": GUILD}
+        if (method, path) == ("POST", "/channels/chan-1/threads"):  # a full-text thread
+            OPENED.append(dict(payload))  # type: ignore[arg-type]
+            return {"id": BODY_THREAD}
+        assert (method, path) == ("POST", f"/channels/{BODY_THREAD}/messages"), (method, path)
+        posted.append((BODY_THREAD, str(payload["content"])))  # type: ignore[index]
+        return {"id": "title-1"}
 
     posted: list[tuple[str, str]] = []
+    OPENED.clear()
     monkeypatch.setattr(triage_confirm, "_api", api)
     monkeypatch.setattr(
         triage_confirm, "_reaction_users", lambda _c, _m, emoji: users[emoji],
@@ -115,10 +128,15 @@ def test_the_same_owner_reaction_seen_on_every_tick_posts_the_body_once(
     second = actions.run_tick(now=_NOW)
 
     assert (first, second) == (1, 0)
-    assert posted == after_first and len(posted) == 2
-    assert posted[0][0] == "thread-1" and posted[0][1].startswith("📄 **전문** · 합성 제목")
-    assert "합성 본문입니다" in posted[0][1]
-    assert posted[1][1] == "📎 첨부 2건 (이름만)\n- 계획서.pdf\n- 예산 표.xlsx"
+    assert posted == after_first
+    assert [p["name"] for p in OPENED] == ["📄 전문 · 합성 제목"]  # its own thread, once
+    under_card = [body for channel, body in posted if channel == "thread-1"]
+    in_thread = [body for channel, body in posted if channel == BODY_THREAD]
+    assert len(under_card) == 1  # the digest thread gets one link line, not the text
+    assert under_card[0] == f"📄 전문은 별도 스레드에 있습니다: https://discord.com/channels/{GUILD}/{BODY_THREAD}"
+    assert in_thread[0] == "## 📄 전문 · 합성 제목"  # the big title opens the thread
+    assert in_thread[1].startswith("📄 **전문** · 합성 제목") and "합성 본문입니다" in in_thread[1]
+    assert in_thread[2] == "📎 첨부 2건 (이름만)\n- 계획서.pdf\n- 예산 표.xlsx"
 
 
 def test_a_failed_read_is_retried_later_and_capped(
@@ -277,7 +295,7 @@ def test_a_press_heard_by_the_gateway_runs_that_card_once_and_the_tick_does_not_
     assert actions.run_card("card-1", now=_NOW) == 1
     assert actions.run_card("card-1", now=_NOW) == 0
     assert actions.run_tick(now=_NOW) == 0
-    assert len(posted) == 2 and posted[0][1].startswith("📄 **전문** · 합성 제목")
+    assert len(OPENED) == 1 and len(posted) == 4  # link + title + text + attachments, once
 
 
 def test_a_press_on_a_message_that_is_not_a_digest_card_reads_nothing(
@@ -294,7 +312,8 @@ def test_digest_react_stops_when_mail_is_no_go(
 ) -> None:
     calls: list[str] = []
     monkeypatch.setattr(triage_mode, "effective_mode", lambda: mode)
-    monkeypatch.setattr(actions, "run_card", lambda message_id: calls.append(message_id) or 1)
+    monkeypatch.setattr(actions, "run_card",
+                        lambda message_id, pressed="": calls.append(message_id) or 1)
 
     args = triage_cli.build_parser().parse_args(["digest-react", "--message-id", "card-7"])
 
@@ -319,3 +338,56 @@ def test_the_watch_wrapper_runs_one_card_without_touching_the_failure_streak(
 
     assert wrapper.main() == 0
     assert seen[0][1:] == [str(tmp_path / "triage_cli.py"), "digest-react", "--message-id", "card-7"]
+
+
+def test_pressing_body_again_points_at_the_same_thread_without_opening_another(
+    db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted = _discord(monkeypatch, {actions.BODY_EMOJI: [BOT, OWNER]})
+    monkeypatch.setattr(triage_transport, "_get_mail", _mail)
+    assert actions.run_card("card-1", now=_NOW, pressed="body") == 1
+    before = list(posted)
+
+    assert actions.run_card("card-1", now=_NOW, pressed="body") == 0
+    assert actions.run_tick(now=_NOW) == 0  # the tick never re-posts the link
+
+    assert len(OPENED) == 1
+    link = next(item for item in before if item[0] == "thread-1")
+    assert posted[len(before):] == [link]  # the same link, once more
+
+
+def test_a_failure_after_the_thread_opened_resumes_in_that_thread(
+    db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted = _discord(monkeypatch, {actions.BODY_EMOJI: [BOT, OWNER]})
+    monkeypatch.setattr(triage_transport, "_get_mail", _mail)
+    real_post = triage_confirm.post_in
+    calls = {"n": 0}
+
+    def flaky(channel: str, body: str, reply_to: str = "") -> str:
+        calls["n"] += 1
+        if calls["n"] == 1:  # the link line under the card fails once
+            raise OSError("discord down")
+        return real_post(channel, body, reply_to=reply_to)
+
+    monkeypatch.setattr(triage_confirm, "post_in", flaky)
+
+    assert actions.run_tick(now=_NOW) == 0
+    assert actions.run_tick(now=_NOW) == 1
+
+    assert len(OPENED) == 1  # the retry reused the thread it had opened
+    assert [c for c, _ in posted].count("thread-1") == 1
+
+
+def test_a_long_body_goes_to_its_thread_in_parts_under_the_limit(
+    db: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posted = _discord(monkeypatch, {actions.BODY_EMOJI: [BOT, OWNER]})
+    long_text = "\n\n".join(f"{n}번째 문단. " + "가나다라마바사 " * 40 for n in range(30))
+    monkeypatch.setattr(triage_transport, "_get_mail", lambda uid: _mail(uid, long_text))
+
+    assert actions.run_tick(now=_NOW) == 1
+
+    in_thread = [body for channel, body in posted if channel == BODY_THREAD]
+    assert len(in_thread) > 4 and all(len(body) <= 2000 for body in in_thread)
+    assert [channel for channel, _ in posted].count("thread-1") == 1
