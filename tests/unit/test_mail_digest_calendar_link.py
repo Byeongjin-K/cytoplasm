@@ -7,8 +7,11 @@ under it, so the line with the link is written by editing the posted mail card.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import pytest
 
 from tests.unit.test_calendar_digest_daily_thread import TEXTS, digest, pending
 from tests.unit.test_calendar_single_live_request import (
@@ -41,10 +44,26 @@ def test_render_when_the_card_link_is_known_then_the_line_links_it_with_the_even
     assert "a" * 64 not in card
 
 
-def test_render_when_the_draft_failed_then_the_cause_is_still_shown() -> None:
-    card = triage_digest.render_item(_item(note="calendar-refused"), kst_now=_KST_NOW)
+@pytest.mark.parametrize("note", ["calendar-ambiguous", "calendar-unparsed"])
+def test_render_when_the_date_is_not_settled_then_the_line_says_so_in_korean(note: str) -> None:
+    # Owner 2026-10-17: the English cause was shown for a mail whose date is not set yet.
+    card = triage_digest.render_item(_item(note=note), kst_now=_KST_NOW)
 
-    assert card.splitlines()[-1] == "🗓️ 일정 초안 `calendar-refused`"
+    assert card.splitlines()[-1] == "🗓️ 일정 예정 · 날짜 미정 — 날짜가 정해지면 그때 등록"
+
+
+@pytest.mark.parametrize("note", [
+    "calendar-refused", "calendar-misconfigured", "calendar-routing", "calendar-unavailable",
+    "calendar-exec-failed", "calendar-timeout", "calendar-spawn-failed", "calendar-failed-rc9",
+])
+def test_render_when_the_draft_failed_then_the_reason_is_korean_and_the_code_stays_hidden(
+    note: str,
+) -> None:
+    line = triage_digest.render_item(_item(note=note), kst_now=_KST_NOW).splitlines()[-1]
+
+    assert line.startswith("🗓️ 일정 ")
+    assert "calendar" not in line
+    assert not re.search(r"[A-Za-z]", line)
 
 
 def _calendar_line(monkeypatch) -> list[str]:

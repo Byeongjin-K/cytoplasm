@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from dataclasses import replace
 
 from datetime import UTC, datetime
+from typing import Final
 from zoneinfo import ZoneInfo
 
 import digest_reaction_actions
@@ -337,16 +338,37 @@ def _event_when(start: str, end: str) -> str:
     return f"{when}–{finish:%H:%M}"
 
 
+# What the owner reads for each calendar delegation cause. The cause codes themselves
+# stay as they are in the store, the pipeline and the operator logs; only the card line
+# speaks Korean (owner 2026-10-17: "영어 구문만 날짜 미정 … 일정이 예정되어 있어 정도로").
+# A mail whose date is not settled yet is not a failure: the event is coming and gets
+# registered when a later mail names the day — no draft or candidate dates are made now.
+_UNDATED_LINE: Final = "🗓️ 일정 예정 · 날짜 미정 — 날짜가 정해지면 그때 등록"
+_SCHEDULE_CAUSE_KO: Final[dict[str, str]] = {
+    "calendar-ambiguous": _UNDATED_LINE,
+    "calendar-unparsed": _UNDATED_LINE,
+    "calendar-no-text": _UNDATED_LINE,
+    "calendar-routing": "🗓️ 일정 예정 · 다른 사람과 조율할 일정이라 초안을 만들지 않음",
+    "calendar-refused": "🗓️ 일정 초안을 만들지 못함 · 승인 절차에서 거부됨",
+    "calendar-misconfigured": "🗓️ 일정 초안을 만들지 못함 · 캘린더 설정 문제",
+    "calendar-unavailable": "🗓️ 일정 초안을 만들지 못함 · 캘린더 기능이 설치되지 않음",
+    "calendar-exec-failed": "🗓️ 일정 초안을 만들지 못함 · 캘린더 실행 오류",
+    "calendar-timeout": "🗓️ 일정 초안을 만들지 못함 · 캘린더 응답 시간 초과",
+    "calendar-spawn-failed": "🗓️ 일정 초안을 만들지 못함 · 캘린더를 실행하지 못함",
+}
+_SCHEDULE_CAUSE_UNKNOWN: Final = "🗓️ 일정 초안을 만들지 못함 · 알 수 없는 오류"
+
+
 def _schedule_line(item: dict) -> str:
     """The calendar line: a link to the approval card and the event, never a bare hash.
 
-    A failure cause (``calendar-refused`` …) is shown as before so the owner sees why
-    no card exists. Without a link (an older calendar skill) the line names the thread.
+    A failure cause (``calendar-refused`` …) is shown in Korean so the owner sees why
+    no card exists; the code itself stays in the logs. Without a link (an older calendar
+    skill) the line names the thread.
     """
     note = str(item["note"])
     if not note.startswith("calendar:"):
-        cause = note.replace("`", "'")
-        return f"🗓️ 일정 초안 `{cause}`"
+        return _SCHEDULE_CAUSE_KO.get(note, _SCHEDULE_CAUSE_UNKNOWN)
     url = str(item.get("calendar_card") or "")
     head = (f"🗓️ 일정 초안 → [승인 카드](<{url}>)" if url
             else "🗓️ 일정 초안 · 승인 카드는 그날 「캘린더 · 다이제스트」 스레드")
