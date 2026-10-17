@@ -123,6 +123,7 @@ def retire_released_record(
     *,
     expected_head: str,
     decision: Probe,
+    released: bool = False,
 ) -> Path | None:
     """Archive one executed release approval before the next request exists."""
     try:
@@ -137,7 +138,7 @@ def retire_released_record(
     head = str(decoded.get("head_sha", ""))
     if head != expected_head or len(head) != 40:
         raise ReleaseSpecError("pending release does not match the latest signed head")
-    if decision is not Probe.APPROVED:
+    if decision is not Probe.APPROVED and not released:
         raise ReleaseSpecError("only an approved release can leave pending")
     target = archive_bytes(archive_root, f"{head}.json", encoded)
     record_path.unlink()

@@ -40,6 +40,12 @@ latest_release_base() { # latest_release_base <repo_root> — the sha the newest
     | sort -V | tail -n 1 | awk '{ print $2 }'
 }
 
+released_tags_map() { # released_tags_map <repo_root> — v=sha,… for the newest 30 release tags (retire's executed evidence)
+  git -C "$1" ls-remote --tags origin 'refs/tags/v*' 2>/dev/null \
+    | awk '$2 ~ /^refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+\^\{\}$/ { sub("refs/tags/", "", $2); sub(/\^\{\}$/, "", $2); print $2 " " $1 }' \
+    | sort -V | tail -n 30 | awk '{ printf "%s%s=%s", (NR > 1 ? "," : ""), $1, $2 }'
+}
+
 released_tag_at() { # released_tag_at <repo_root> <sha> — the tag already peeling to sha
   git -C "$1" ls-remote --tags origin 2>/dev/null \
     | awk -v sha="$2" '$1 == sha && $2 ~ /\^\{\}$/ { sub("refs/tags/", "", $2); sub(/\^\{\}$/, "", $2); print $2 }' \

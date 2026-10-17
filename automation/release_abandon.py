@@ -21,7 +21,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -33,6 +33,7 @@ from typing import Final
 from automation import skill_gate, skill_gate_retire
 from automation.interop.approval_lifecycle import ApprovalRecordsError, ApprovalSurfaceError
 from automation.interop.approval_types import Probe
+from automation.release_released import correct_abandoned, is_released
 from automation.release_retire import abandoned_message, archive_bytes, retire_released_record
 from automation.release_spec import ReleaseSpec, ReleaseSpecError, spec_from_record
 from automation.skill_gate_approval import SkillApprovalGate
@@ -194,8 +195,12 @@ def abandon(
 
 def retire_previous(
     head: str, tip: str, gate_factory: Callable[[ReleaseSpec], SkillApprovalGate],
+    released: Mapping[str, str] | None = None,
 ) -> int:
     """Retire executed approvals; abandon an overtaken approval only with an explicit tip."""
+    released = released or {}
+    if released:
+        _ = correct_abandoned(skill_gate.GATE_DIR, released)
     path = skill_gate.GATE_DIR / "pending/release.json"
     try:
         decoded = json.loads(path.read_text(encoding="utf-8"))
@@ -219,6 +224,19 @@ def retire_previous(
     # 미결정·미확인 요청은 lifecycle 의 재사용/supersede 가 소유한다 — retire 가 여기서 막으면
     # '재실행=재개' 계약이 깨진다(2026-08-31 v1.0.139 재개 실측). retire 는 실행 완료(✅ + 서명
     # 태그)된 승인만 감사 archive 로 옮기고, tip 을 벗어난 승인만 아래 감사형 abandon 으로 보낸다.
+    if is_released(record, released):
+        try:
+            archived = retire_released_record(
+                path, skill_gate.GATE_DIR / "release-history", expected_head=spec.head_sha,
+                decision=decision, released=True,
+            )
+        except (ReleaseSpecError, OSError) as error:
+            print(f"RELEASE-RETIRE-BLOCK: {error}", file=sys.stderr)
+            return 4
+        print(f"RELEASE-RETIRE: archived {spec.head_sha[:12]} as released {spec.version}"
+              f" (owner reaction now reads {decision.value})" if archived is not None
+              else "RELEASE-RETIRE: no previous release record", file=sys.stderr)
+        return 0
     if decision is not Probe.APPROVED:
         print("RELEASE-RETIRE: not an executed approval — leaving it to the request lifecycle", file=sys.stderr)
         return 0

@@ -198,7 +198,8 @@ fi
 
 if (( decision_rc != 0 )); then
   # 태그 전 main이 전진한 APPROVED도 여기서 감사 회수한다. 새 요청은 새 ✅가 필요하다.
-  "${approval[@]}" retire --head "$base" --tip "$head" \
+  # 서명 태그는 ✅ 뒤에만 잘린다 — 태그가 가리키는 레코드는 카드 반응이 지금 어떻든 실행 완료다(v1.46.1 사건).
+  "${approval[@]}" retire --head "$base" --tip "$head" --released "$(released_tags_map "$REPO_ROOT")" \
     || die "previous release record cannot be archived safely" 4
   # 헬스체크 허용 목록(강제명령 래퍼)은 릴리스 트리 밖 파일이라 수렴이 올리지 못한다. 이 릴리스가 기대할
   # 지문이 설치본과 다른 노드를 표면으로 묶어 같은 ✅ 가 갱신까지 인가한다(소유자 지시 2026-10-14).
