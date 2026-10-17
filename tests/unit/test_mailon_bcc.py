@@ -4,12 +4,28 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _install_third_party_stubs() -> None:
+    for name in ("pyotp", "dotenv", "bs4"):
+        if name in sys.modules:
+            continue
+        try:
+            __import__(name)
+        except ImportError:
+            stub = types.ModuleType(name)
+            stub.TOTP = stub.load_dotenv = stub.BeautifulSoup = object  # type: ignore[attr-defined]
+            sys.modules[name] = stub
+
+
+_install_third_party_stubs()
 sys.path.insert(0, str(ROOT / "skills/mail/vendor"))
 
 from mailon import main, send, send_trigger  # noqa: E402
