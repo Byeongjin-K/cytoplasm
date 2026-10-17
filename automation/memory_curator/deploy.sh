@@ -51,7 +51,8 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memo
 # Hermes memory caps (owner decision 2026-10-14): the curator's CAPS and both accounts'
 # config.yaml read the same automation.hermes_memory_config.LIMITS. Gateways load the
 # config at start; the composed profile also selects autophagy_recall without a second
-# config.yaml writer. activation=gateway makes deploy_all restart agent+peer.
+# config.yaml writer. The agent profile also ignores agent-chat for YooDori;
+# the peer retains the memory-only profile. activation=gateway restarts agent+peer.
 source "$repo_root/automation/deploy_config.sh"
-converge_config agent .hermes/config.yaml hermes-memory-profile-with-recall-v1
+converge_config agent .hermes/config.yaml hermes-agent-profile-v1
 converge_config peer .hermes/config.yaml hermes-memory-profile-with-recall-v1

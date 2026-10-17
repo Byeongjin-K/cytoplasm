@@ -106,13 +106,16 @@ def test_agent_chat_missing_from_free_response_is_broken(tmp_path: Path) -> None
     assert found.steps
 
 
-def test_agent_chat_in_ignored_channels_only_warns(tmp_path: Path) -> None:
+@pytest.mark.parametrize("free", ["44", "11"])
+def test_agent_chat_in_ignored_channels_is_intended_even_when_free(tmp_path: Path, free: str) -> None:
     home = _connected_home(tmp_path)
-    _ = _write(home / ".hermes" / "config.yaml", "discord:\n  ignored_channels: '11,44'\n")
+    _ = _write(home / ".hermes" / "config.yaml",
+               f"discord:\n  ignored_channels: '11,44'\n  free_response_channels: '{free}'\n")
 
     found = _by_key(evaluate(_facts(home)))["agent-chat-free-response"]
 
-    assert found.status is Status.WARN and found.subjects == ("ignored_channels",)
+    assert found.status is Status.PASS and found.subjects == ()
+    assert found.steps == ()
 
 
 def test_a_repeatedly_failing_job_is_broken_and_named(tmp_path: Path) -> None:

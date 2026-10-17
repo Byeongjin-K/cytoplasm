@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Final, TypeAlias
 
 from automation import hermes_memory_config, hermes_soul_recall
 from automation.deploy_declarations import Declaration
+from automation.memory_provider import agent_config as agent_profile
 from automation.memory_provider import config as memory_profile
 
 if TYPE_CHECKING:
@@ -17,6 +18,7 @@ CONFIG_MODULES: Final = {
     hermes_memory_config.ALGORITHM: hermes_memory_config,
     hermes_soul_recall.ALGORITHM: hermes_soul_recall,
     memory_profile.ALGORITHM: memory_profile,
+    agent_profile.ALGORITHM: agent_profile,
 }
 _PAIRS: Final = r"([a-z_]+=[a-z0-9_-]+(?:,[a-z_]+=[a-z0-9_-]+)*)"
 ConfigFacts: TypeAlias = tuple[str, str, str, tuple[tuple[str, str], ...]]

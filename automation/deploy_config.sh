@@ -21,6 +21,7 @@ _converge_config_module() { # _converge_config_module <algorithm> → "<module> 
     hermes-memory-limits-v1) printf '%s' "automation.hermes_memory_config .hermes/config.yaml" ;;
     hermes-soul-recall-v2) printf '%s' "automation.hermes_soul_recall .hermes/SOUL.md" ;;
     hermes-memory-profile-with-recall-v1) printf '%s' "automation.memory_provider.config .hermes/config.yaml" ;;
+    hermes-agent-profile-v1) printf '%s' "automation.memory_provider.agent_config .hermes/config.yaml" ;;
     *) return 1 ;;
   esac
 }

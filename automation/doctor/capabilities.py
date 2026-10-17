@@ -203,11 +203,10 @@ def _free_response(f: Facts) -> Verdict:
     if f.discord_channels is None:
         return _warn("~/.hermes/config.yaml 의 discord 블록을 읽지 못했다 — 무멘션 응답 여부 판정 불가")
     free, ignored = f.discord_channels
+    if channel in ignored:
+        return _ok("agent-chat 채널은 유돌이 맡는다(이 게이트웨이는 무시)")
     if channel in free:
         return _ok("agent-chat 채널 은 @ 없이도 답한다")
-    if channel in ignored:
-        return _warn("agent-chat 채널 이 discord.ignored_channels 에 있다 — 이 채널에서는 답하지 않는다",
-                     ("ignored_channels",))
     return _fail("agent-chat 채널 이 discord.free_response_channels 에 없다 — @ 를 달아야만 답한다",
                  ("free_response_channels",))
 
