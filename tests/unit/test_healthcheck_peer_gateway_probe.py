@@ -19,12 +19,9 @@ def write_peer_files(tmp_path: Path) -> tuple[Path, Path]:
     """Create real inputs for both probe tests and the complete healthcheck sweep."""
     config = tmp_path / "config.yaml"
     config.write_text(f'discord:\n  ignored_channels: "{_APPROVALS}"\n', encoding="utf-8")
-    directory = tmp_path / "channel_directory.json"
-    directory.write_text(json.dumps({"platforms": {"discord": [
-        {"name": "approvals", "id": _APPROVALS, "type": "text", "guild": "fixture"},
-        {"name": "agent-chat", "id": "67890", "type": "text", "guild": "fixture"},
-    ]}}), encoding="utf-8")
-    return config, directory
+    interop = tmp_path / "interop.json"
+    interop.write_text(json.dumps({"personal_approvals_channel_id": _APPROVALS}), encoding="utf-8")
+    return config, interop
 
 
 @pytest.fixture
@@ -33,13 +30,13 @@ def peer_files(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _probe(files: tuple[Path, Path], script: str = 'source "$1"; probe_peer_ignored_channels') -> subprocess.CompletedProcess[str]:
-    config, directory = files
+    config, interop = files
     return subprocess.run(
         ["bash", "-c", script, "bash", str(_PROBE), str(_HEALTHCHECK)],
         env={**os.environ,
              "HEALTHCHECK_NODE_CONFIG_PATH": str(_REPO / "configs/node.example.toml"),
              "HEALTHCHECK_PEER_GATEWAY_CONFIG": str(config),
-             "HEALTHCHECK_PEER_CHANNEL_DIRECTORY": str(directory)},
+             "HEALTHCHECK_PEER_INTEROP_CONFIG": str(interop)},
         capture_output=True, text=True, check=False, timeout=15,
     )
 
@@ -96,18 +93,17 @@ _NOTIFICATIONS: Final = "55555"
 
 
 def _with_notifications(files: tuple[Path, Path]) -> None:
-    """The peer bot can see #notifications — the surface it flooded on 2026-09-21."""
-    files[1].write_text(json.dumps({"platforms": {"discord": [
-        {"name": "approvals", "id": _APPROVALS, "type": "text", "guild": "fixture"},
-        {"name": "notifications", "id": _NOTIFICATIONS, "type": "text", "guild": "fixture"},
-        {"name": "agent-chat", "id": "67890", "type": "text", "guild": "fixture"},
-    ]}}), encoding="utf-8")
+    """The notice channel is configured by id, irrespective of its display name."""
+    files[1].write_text(json.dumps({
+        "personal_approvals_channel_id": _APPROVALS,
+        "owner_notice_channel_id": _NOTIFICATIONS,
+    }), encoding="utf-8")
 
 
-def test_fails_when_notifications_is_visible_but_not_ignored(
+def test_fails_when_notifications_is_configured_but_not_ignored(
     peer_files: tuple[Path, Path],
 ) -> None:
-    # Given: the peer directory lists #notifications, but only approvals is ignored —
+    # Given: the peer config has a notice ID, but only the approval ID is ignored —
     # the 2026-09-21 state in which the peer opened a thread on every weekly-report chunk.
     _with_notifications(peer_files)
     # When
@@ -136,13 +132,12 @@ def test_passes_when_both_approvals_and_notifications_are_ignored(
     assert _NOTIFICATIONS not in result.stdout + result.stderr
 
 
-def test_fails_when_notifications_is_ambiguous(peer_files: tuple[Path, Path]) -> None:
-    # Given: two channels named notifications — the probe cannot know which one to require.
-    peer_files[1].write_text(json.dumps({"platforms": {"discord": [
-        {"name": "approvals", "id": _APPROVALS},
-        {"name": "notifications", "id": _NOTIFICATIONS},
-        {"name": "notifications", "id": "55556"},
-    ]}}), encoding="utf-8")
+def test_fails_when_explicit_deploy_channel_is_not_ignored(peer_files: tuple[Path, Path]) -> None:
+    # Given: the deploy pin differs from the ordinary approval destination.
+    peer_files[1].write_text(json.dumps({
+        "personal_approvals_channel_id": _APPROVALS,
+        "deploy_approvals_channel_id": "55557",
+    }), encoding="utf-8")
     peer_files[0].write_text(
         f'discord:\n  ignored_channels: "{_APPROVALS}, {_NOTIFICATIONS}, 55556"\n', encoding="utf-8",
     )
@@ -150,22 +145,21 @@ def test_fails_when_notifications_is_ambiguous(peer_files: tuple[Path, Path]) ->
     result = _probe(peer_files)
     # Then: fail-closed, never a presumed pass.
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "PEER-IGNORED-CHANNELS-INVALID" in result.stdout
+    assert "PEER-IGNORED-CHANNELS-MISSING" in result.stdout
 
 
-@pytest.mark.parametrize("directory", [
-    '{', '{}', '[]', '{"platforms":{"discord":[]}}',
-    '{"platforms":{"discord":[{"name":"approvals","id":""}]}}',
-    '{"platforms":{"discord":[{"name":"approvals","id":"12345"},'
-    '{"name":"approvals","id":"67890"}]}}',
-    '{"platforms":{"discord":[{"name":"approvals","id":true}]}}',
-    '{"platforms":{"discord":[{"name":"approvals","id":"12345"},null]}}',
+@pytest.mark.parametrize("interop", [
+    '{', '{}', '[]', '{"personal_approvals_channel_id":""}',
+    '{"personal_approvals_channel_id":true}',
+    '{"personal_approvals_channel_id":"１２３"}',
+    '{"personal_approvals_channel_id":"12345","owner_notice_channel_id":false}',
+    '{"personal_approvals_channel_id":"12345","deploy_approvals_channel_id":""}',
 ])
-def test_fails_when_directory_cannot_resolve_a_unique_approvals_id(
-    peer_files: tuple[Path, Path], directory: str,
+def test_fails_when_interop_cannot_establish_required_ids(
+    peer_files: tuple[Path, Path], interop: str,
 ) -> None:
-    # Given: the authoritative channel directory cannot be parsed or resolved.
-    peer_files[1].write_text(directory, encoding="utf-8")
+    # Given: the authoritative interop IDs cannot be parsed or resolved.
+    peer_files[1].write_text(interop, encoding="utf-8")
     # When
     result = _probe(peer_files)
     # Then

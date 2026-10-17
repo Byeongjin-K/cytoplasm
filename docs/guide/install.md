@@ -307,6 +307,20 @@ python3 automation/install/discord_check.py --config ~/.hermes/interop/config.js
 
 토큰이 비어 있으면 rc 2로 사용법 오류를 낸다. 채널 3종의 의미는 전제 문서 §1.5에 있다.
 
+승인 채널은 `personal_approvals_channel_id`, 통지 채널은 선택적
+`owner_notice_channel_id`로 식별한다. `#approvals`·`#notifications`는 관례 이름일
+뿐이며, ID가 유지되면 이름을 바꿔도 된다. 설정된 승인 ID의 조회·이력 읽기가
+가능하면 다른 이름이어도 설치 점검은 PASS다. 설정 ID가 없는 레거시 승인
+디렉터리만 캐시·유일한 `approvals` 이름 검색을 사용한다.
+
+peer interop 설정에도 실제 승인·통지 목적지 ID를 기록한다. LOCAL 차단 점검은
+해당 ID(명시적 `deploy_approvals_channel_id` 포함)가 peer gateway 최상위
+`discord.ignored_channels`에 있는지 확인한다. 기존 설치는
+`autophagy-healthcheck-peer-read` sudoers 자산을 한 번 다시 설치해 peer
+`interop/config.json`의 읽기 한 줄을 추가한다. 권한 부족은 FAIL이며 자동 우회하지
+않는다. SSH 강제명령 허용 목록은 변하지 않는다.
+[기능 소개와 기존 설치 절차](../기능소개/Discord-승인-통지-채널-ID.md)를 따른다.
+
 ### 5.1 승인 표면 필수 키: `agent_chat_channel_id`
 
 정책 v7(첫 태그 v1.0.71)부터 소유자 승인은 `#agent-chat` 아래의 요청별 스레드에 게시된다. 이 채널 ID는 `~/.hermes/interop/config.json`의 `agent_chat_channel_id`에 둔다.

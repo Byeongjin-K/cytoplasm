@@ -100,7 +100,8 @@ no-agent cron이 매분 반응을 읽는다. 소유자 본인(봇 아님)의 반
 초안만 종전대로 폐기하고 알린다 — 초안 생성과 게시가 별개 단계라 게시가 누락되면 어떤
 원장에도 남지 않기 때문이다(2026-07~08 실측 33건 누적, 2026-09-10 재발 3건).
 폐기·취소·만료 통지 중 **승인 스레드도 지시 채널도 없는 건**은 `owner_notice` 파사드를
-지나 `#notifications`로 간다(통지 채널 미설정 설치는 종전대로 소유자 DM).
+지나 `owner_notice_channel_id`의 통지 채널로 간다(`#notifications`는 예시 이름이며 변경 가능,
+통지 채널 미설정 설치는 종전대로 소유자 DM).
 
 ```bash
 python3 /srv/autophagy-skills/live/calendar/scripts/calendar_cli.py confirm --draft <draft-id>

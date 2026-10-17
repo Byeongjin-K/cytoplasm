@@ -5,13 +5,13 @@ if [[ -z "${NODE_PEER_HOME:-}" || -z "${NODE_PEER_ACCOUNT:-}" || -z "${NODE_OPS_
   eval "$(python3 "$(dirname "${BASH_SOURCE[0]}")/node_config_sh.py" --print-env)"
 fi
 readonly PEER_GATEWAY_CONFIG="${HEALTHCHECK_PEER_GATEWAY_CONFIG:-$NODE_PEER_HOME/.hermes/config.yaml}"
-readonly PEER_CHANNEL_DIRECTORY="${HEALTHCHECK_PEER_CHANNEL_DIRECTORY:-$NODE_PEER_HOME/.hermes/channel_directory.json}"
+readonly PEER_INTEROP_CONFIG="${HEALTHCHECK_PEER_INTEROP_CONFIG:-$NODE_PEER_HOME/.hermes/interop/config.json}"
 
 peer_ignored_channels_guidance() {
   printf '%s\n' \
-    'PEER-IGNORED-CHANNELS-RECOVERY: OWNER restore top-level discord.ignored_channels from the unique approvals entry (plus the notifications entry when the peer directory lists one) in the peer channel directory; then follow operations.md gateway-pair restart rules. Never auto-edit config or restart.' \
+    'PEER-IGNORED-CHANNELS-RECOVERY: OWNER restore top-level discord.ignored_channels from personal_approvals_channel_id, deploy_approvals_channel_id and owner_notice_channel_id in the peer interop config; then follow operations.md gateway-pair restart rules. Never auto-edit config or restart.' \
     'PEER-IGNORED-CHANNELS-RECOVERY: if unreadable, OWNER review/install these exact read-only sudoers entries with visudo (no shell or Python sudo grant):'
-  printf '%s ALL=(%s) NOPASSWD: /usr/bin/cat -- %s\n' "$NODE_OPS_ACCOUNT" "$NODE_PEER_ACCOUNT" "$PEER_GATEWAY_CONFIG" "$NODE_OPS_ACCOUNT" "$NODE_PEER_ACCOUNT" "$PEER_CHANNEL_DIRECTORY"
+  printf '%s ALL=(%s) NOPASSWD: /usr/bin/cat -- %s\n' "$NODE_OPS_ACCOUNT" "$NODE_PEER_ACCOUNT" "$PEER_GATEWAY_CONFIG" "$NODE_OPS_ACCOUNT" "$NODE_PEER_ACCOUNT" "$PEER_INTEROP_CONFIG"
   printf '%s\n' 'PEER-IGNORED-CHANNELS-RECOVERY: parser unavailable: OWNER provide python3 with PyYAML (Debian/Ubuntu: apt-get install python3-yaml).'
 }
 
@@ -25,9 +25,9 @@ peer_gateway_read() {
 }
 
 probe_peer_ignored_channels() {
-  local config directory
+  local config interop
   if ! config="$(peer_gateway_read "$PEER_GATEWAY_CONFIG")" \
-    || ! directory="$(peer_gateway_read "$PEER_CHANNEL_DIRECTORY")"; then
+    || ! interop="$(peer_gateway_read "$PEER_INTEROP_CONFIG")"; then
     printf '%s\n' '[healthcheck] PEER-IGNORED-CHANNELS-UNREADABLE'
     peer_ignored_channels_guidance
     return 1
@@ -35,7 +35,7 @@ probe_peer_ignored_channels() {
   # A full YAML parser rejects malformed surrounding config as well as this field.
   # PyYAML is already present in the node's ops python3 and peer Hermes venv.
   # Keep config (which can contain secrets) on inherited fds, never argv or env.
-  if python3 - 4<<< "$config" 5<<< "$directory" <<'PY'
+  if python3 - 4<<< "$config" 5<<< "$interop" <<'PY'
 from __future__ import annotations
 
 import json
@@ -69,27 +69,23 @@ def field(node: yaml.Node, name: str) -> yaml.Node:
 try:
     with os.fdopen(5, encoding="utf-8") as stream:
         raw = json.load(stream)
-    if not isinstance(raw, dict) or not isinstance(raw.get("platforms"), dict):
+    if not isinstance(raw, dict):
         raise ProbeInputError
-    channels = raw["platforms"].get("discord")
-    if not isinstance(channels, list) or not all(isinstance(row, dict) for row in channels):
-        raise ProbeInputError
-
-    def unique_channel(name: str, *, required: bool) -> ChannelId | None:
-        """One channel by name; absence is allowed only for optional surfaces."""
-        matches = [row.get("id") for row in channels if row.get("name") == name]
-        if not matches and not required:
-            return None
-        if len(matches) != 1 or not isinstance(matches[0], str) or not matches[0].isascii() or not matches[0].isdigit():
+    required: set[ChannelId] = set()
+    for key in ("personal_approvals_channel_id", "deploy_approvals_channel_id"):
+        value = raw.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.isascii() or not value.isdigit():
             raise ProbeInputError
-        return ChannelId(matches[0])
-
-    # #approvals must exist; #notifications is required only when the peer can see it —
-    # a peer that receives owner notices opens a thread on every chunk (2026-09-21).
-    required = {unique_channel("approvals", required=True)}
-    notifications = unique_channel("notifications", required=False)
-    if notifications is not None:
-        required.add(notifications)
+        required.add(ChannelId(value))
+    if not required:
+        raise ProbeInputError
+    notice = raw.get("owner_notice_channel_id")
+    if notice is not None:
+        if not isinstance(notice, str) or not notice.isascii() or not notice.isdigit():
+            raise ProbeInputError
+        required.add(ChannelId(notice))
     with os.fdopen(4, encoding="utf-8") as stream:
         root = yaml.compose(stream, Loader=yaml.SafeLoader)
     ignored = field(field(root, "discord"), "ignored_channels")
