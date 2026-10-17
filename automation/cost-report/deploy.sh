@@ -24,4 +24,5 @@ run_agent() { run_account "$NODE_AGENT_ACCOUNT" "$1"; }
 source "$repo_root/automation/deploy_push.sh"
 push_file "$repo_root/automation/cost-report/send_cost_report.py" '.hermes/scripts/send_cost_report.py'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron daily-cost-report "0 9 * * *" send_cost_report.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer daily-cost-report "0 9 * * *" send_cost_report.py local COST_REPORT_SOFT_CAP

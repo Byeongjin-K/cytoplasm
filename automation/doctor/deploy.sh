@@ -20,8 +20,13 @@ run_account() {
 
 source "$repo_root/automation/deploy_push.sh"
 source "$repo_root/automation/deploy_cron.sh"
+source "$repo_root/automation/deploy_timer.sh"
 for account in "$NODE_AGENT_ACCOUNT" "$NODE_PEER_ACCOUNT"; do
   run_agent() { run_account "$account" "$1"; }
   push_file "$repo_root/automation/doctor/cron/doctor_watch.py" '.hermes/scripts/doctor_watch.py'
-  converge_cron doctor-watch "17 * * * *" doctor_watch.py local
 done
+# agent 는 사용자 타이머(P2), peer 는 Hermes cron 그대로 — peer 는 계정째 퇴역할 예정이라 옮기지 않는다(N3).
+run_agent() { run_account "$NODE_AGENT_ACCOUNT" "$1"; }
+converge_timer doctor-watch "17 * * * *" doctor_watch.py local
+run_agent() { run_account "$NODE_PEER_ACCOUNT" "$1"; }
+converge_cron doctor-watch "17 * * * *" doctor_watch.py local

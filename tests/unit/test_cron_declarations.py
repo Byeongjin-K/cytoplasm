@@ -28,6 +28,7 @@ from automation.deploy_declarations import all_declarations
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 HELPER_SOURCE: Final = 'source "$repo_root/automation/deploy_cron.sh"'
+TIMER_SOURCE: Final = 'source "$repo_root/automation/deploy_timer.sh"'
 PINNED: Final = frozenset({
     ("automation/notes_organize", "notes-weekly-organize"),
     ("automation/research_trends", "research-trends"),
@@ -35,7 +36,8 @@ PINNED: Final = frozenset({
     ("skills/mail", "mail-daily-digest"),
     ("skills/mail", "mail-triage-watch"),
 })
-_CONVERGE: Final = re.compile(r"^\s*converge_cron\s+(.+)$")
+_CONVERGE: Final = re.compile(r"^\s*converge_(cron|timer)\s+(.+)$")
+_SWITCH: Final = re.compile(r'^\s*run_agent\(\)\s*\{\s*run_account\s+"\$NODE_(AGENT|PEER)_ACCOUNT"')
 _LOOP: Final = re.compile(r"^\s*for\s+account\s+in\s+(.+?);\s*do\s*$")
 _DONE: Final = re.compile(r"^\s*done\b")
 _LOOP_ACCOUNTS: Final = {"$NODE_AGENT_ACCOUNT": "agent", "$NODE_PEER_ACCOUNT": "peer"}
@@ -63,6 +65,8 @@ class Job:
     schedule: str
     script: str
     deliver: str
+    runner: str = "hermes"
+    env: str = ""
 
     @property
     def key(self) -> tuple[str, str, str]:
@@ -94,8 +98,10 @@ def declared_jobs(root: Path) -> tuple[tuple[Job, ...], tuple[Problem, ...]]:
                 and row.attr("deliver") in _DELIVERIES
                 and (_EVERY.fullmatch(row.attr("schedule")) or _CRON_FIELDS.fullmatch(row.attr("schedule")))):
             problems.append(Problem("malformed", row.owner, row.destination[:80]))
+        runner = row.attr("runner")
         jobs.append(Job(row.owner, row.account, row.destination, row.attr("schedule"),
-                        row.attr("script"), row.attr("deliver")))
+                        row.attr("script"), row.attr("deliver"), runner,
+                        row.attr("env") if runner == "systemd" else ""))
     return tuple(jobs), tuple(problems)
 
 
@@ -123,7 +129,8 @@ def registrations(root: Path) -> tuple[tuple[Registration, ...], tuple[Problem, 
         package = script.parent.relative_to(root).as_posix()
         text = script.read_text(encoding="utf-8")
         loop: tuple[str, ...] = ()
-        uses_helper = False
+        default: tuple[str, ...] = ("agent",)
+        uses_helper = uses_timer = False
         for line in text.splitlines():
             if line.lstrip().startswith("#"):
                 continue
@@ -134,26 +141,33 @@ def registrations(root: Path) -> tuple[tuple[Registration, ...], tuple[Problem, 
             if _DONE.match(line):
                 loop = ()
                 continue
-            accounts = loop or ("agent",)
+            if not loop and (match := _SWITCH.match(line)) is not None:
+                default = (match.group(1).lower(),)
+            accounts = loop or default
             if (match := _CONVERGE.match(line)) is not None:
-                uses_helper = True
+                timer = match.group(1) == "timer"
+                uses_helper = uses_helper or not timer
                 args: list[str] = []
-                for token in shlex.split(match.group(1)):
+                for token in shlex.split(match.group(2)):
                     if token in _OPERATORS:
                         break
                     args.append(token)
-                if len(args) != 4:
+                if len(args) not in ((4, 5) if timer else (4,)):
                     problems.append(Problem("converge-arity", package, line.strip()))
                     continue
-                name, schedule, cron_script, deliver = args
-                found.extend(Registration(Job(package, account, name, schedule, cron_script, deliver),
-                                          "converge") for account in accounts)
+                name, schedule, cron_script, deliver, *env = args
+                runner, via = ("systemd", "timer") if timer else ("hermes", "converge")
+                uses_timer = uses_timer or timer
+                found.extend(Registration(Job(package, account, name, schedule, cron_script, deliver,
+                                              runner, "".join(env)), via) for account in accounts)
             elif _RAW.search(line):
                 jobs, raw_problems = _raw_registration(package, accounts, line)
                 found.extend(Registration(job, "raw") for job in jobs)
                 problems.extend(raw_problems)
         if uses_helper and HELPER_SOURCE not in text:
             problems.append(Problem("helper-not-sourced", package, script.name))
+        if uses_timer and TIMER_SOURCE not in text:
+            problems.append(Problem("timer-helper-not-sourced", package, script.name))
     return tuple(found), tuple(problems)
 
 
@@ -211,10 +225,12 @@ def test_every_registration_matches_its_declaration() -> None:
 
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
-    assert len(names["agent"]) == 30
+    assert len(names["agent"]) == 31
     assert names["peer"] == {"doctor-watch", "selfskill-audit-watch", "memory-relocate-peer-watch"}
-    assert "mail-triage-repair-daily" not in {job.name for job in declared}
-    assert "mail-triage-repair-daily" not in {registration.job.name for registration in registered}
+    timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
+    assert timers == {("agent", name) for name in (
+        "rag-ingest-watch", "stt-eval-capture", "voice-catalog-enroll", "daily-cost-report",
+        "selfskill-audit-watch", "doctor-watch", "mail-triage-repair-daily")}
     raw = {(registration.job.package, registration.job.name) for registration in registered
            if registration.via == "raw"}
     assert raw == PINNED
@@ -231,7 +247,7 @@ def test_the_three_formerly_hand_registered_jobs_are_registered_by_their_deploye
         ("automation/repair", "repair-report-consumer"),
     ):
         want = by_key[(package, "agent", name)]
-        assert Registration(want, "converge") in registered
+        assert Registration(want, "timer" if want.runner == "systemd" else "converge") in registered
         assert HELPER_SOURCE in (_REPO / package / "deploy.sh").read_text(encoding="utf-8")
 
 

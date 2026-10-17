@@ -111,6 +111,12 @@ converge_cron mail-attachment-drive-watch "every 30m" mail_attachment_drive_watc
 push_file "$repo_root/skills/mail/scripts/mail_sync_watch.py" '.hermes/scripts/mail_sync_watch.py'
 run_agent "chmod 700 \"\$HOME/.hermes/scripts/mail_sync_watch.py\""
 converge_cron mail-sync-watch "20 9-19 * * 1-5" mail_sync_watch.py discord
+
+# N1: 다이제스트 실패 → 수리 티켓(09:10 KST). 같은 이름의 손으로 넣은 에이전트 모드 Hermes 잡은
+# converge_timer 가 일시정지한다(지우지 않는다).
+push_file "$repo_root/skills/mail/scripts/mail_digest_repair_watch.py" '.hermes/scripts/mail_digest_repair_watch.py'
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer mail-triage-repair-daily "10 9 * * *" mail_digest_repair_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'
 
 # Build + activate the vendored mailon runtime release on the node.

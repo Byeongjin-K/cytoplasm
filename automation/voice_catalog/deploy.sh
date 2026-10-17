@@ -24,5 +24,6 @@ source "$repo_root/automation/deploy_push.sh"
 push_file "$repo_root/automation/voice_catalog/cron/voice_catalog_enroll_watch.py" '.hermes/scripts/voice_catalog_enroll_watch.py'
 run_account "$account" 'grep -qx "timezone: Asia/Seoul" "$HOME/.hermes/config.yaml"'
 source "$repo_root/automation/deploy_cron.sh"
-converge_cron voice-catalog-enroll "*/10 * * * *" voice_catalog_enroll_watch.py local
+source "$repo_root/automation/deploy_timer.sh"
+converge_timer voice-catalog-enroll "*/10 * * * *" voice_catalog_enroll_watch.py local
 echo "DEPLOY-OK voice-catalog-enroll ($account@$host)"
