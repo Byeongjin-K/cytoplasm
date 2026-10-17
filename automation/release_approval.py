@@ -49,6 +49,7 @@ from automation.release_spec import (
     spec_from_record,
     wrapper_surface,
 )
+from automation.release_released import ReleasedTagsError, parse_released
 from automation.release_retire import notify_stale_approval
 from automation.skill_gate_approval import GateSurface, SkillApprovalGate
 
@@ -114,7 +115,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_retire(args: argparse.Namespace) -> int:
-    return release_abandon.retire_previous(str(args.head), str(getattr(args, "tip", "")), _gate)
+    try:
+        released = parse_released(str(getattr(args, "released", "")))
+    except ReleasedTagsError as error:
+        print(error, file=sys.stderr)
+        return 4
+    return release_abandon.retire_previous(
+        str(args.head), str(getattr(args, "tip", "")), _gate, released,
+    )
 
 
 def _stale_pending_line() -> str | None:
@@ -232,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     retire.add_argument("--head", required=True)
     retire.add_argument("--tip", default="", help="확인한 origin/main tip; 낡은 승인 자가 회수")
+    retire.add_argument("--released", default="",
+                        help="서명 릴리스 태그 v=sha,… — 태그가 가리키는 레코드는 반응과 무관하게 실행 완료")
     retire.set_defaults(run=cmd_retire)
     request = commands.add_parser("request", help="release 승인 요청 게시(재실행=재사용)")
     request.add_argument("--plan-file", required=True)
