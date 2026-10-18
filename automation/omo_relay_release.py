@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 
 from automation.credential_rotation.files import atomic_write
-from automation.node_config import NodeConfig, NodeConfigError, load_node_config
+from automation.node_config import NodeConfigError, load_node_config
+from automation.omo_relay.config import RelayConfig, RelayConfigError, load as load_relay, release_host
 from automation.omo_relay.client import MODE, enabled
 
 ALGORITHM = "omo-relay-v1"
@@ -22,7 +23,7 @@ KNOWN_HOSTS = ".config/autophagy/omo-relay/known_hosts"
 HOST_KEY_SOURCE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 
 
-def host_key_line(config: NodeConfig, source: Path = HOST_KEY_SOURCE) -> str:
+def host_key_line(config: RelayConfig, source: Path = HOST_KEY_SOURCE) -> str:
     """Pin the relay host key from the release host itself, which is the relay target.
 
     The node trusts exactly this line through a dedicated known_hosts file, so a first
@@ -45,20 +46,20 @@ def switch(home: Path) -> bool:
     return True
 
 
-def payload(config: NodeConfig) -> str:
+def payload(config: RelayConfig) -> str:
     """A partial node-config override: only approved relay coordinates, no private key."""
     return (f"omo_relay_target = {json.dumps(config.omo_relay_target)}\n"
             f"omo_relay_key = {json.dumps(str(config.omo_relay_key))}\n")
 
 
-def digest(config: NodeConfig, host_key: str = "") -> str:
+def digest(config: RelayConfig, host_key: str = "") -> str:
     return hashlib.sha256((payload(config) + host_key).encode()).hexdigest()
 
 
 def release_mode(home: Path) -> str:
     if not switch(home):
         return "off"
-    config = load_node_config()
+    config = release_host(home)
     return digest(config, host_key_line(config))
 
 
@@ -69,7 +70,7 @@ def wanted_identity(*, omo_relay_mode: str = "off") -> str:
 def installed(home: Path) -> str:
     if not enabled(home):
         return wanted_identity()
-    config = load_node_config(home / NODE_CONFIG)
+    config = load_relay(home / NODE_CONFIG)
     known = (home / KNOWN_HOSTS).read_text().strip()
     info = config.omo_relay_key.lstat()
     if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.geteuid():
@@ -91,11 +92,11 @@ def install(home: Path, mode: str, text: str, host_key: str = "") -> None:
         raise ValueError("invalid relay config")
     root = home / ".config/autophagy/omo-relay"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # Validate through the shared node-config parser before creating keys or switching.
+    # Validate through the relay parser before creating keys or switching.
     temporary = root / "candidate.toml"
     atomic_write(temporary, text.encode())
     try:
-        config = load_node_config(temporary)
+        config = load_relay(temporary)
         if digest(config, host_key) != mode:
             raise ValueError("relay config differs from approved digest")
         host = config.omo_relay_target.rpartition("@")[2]
@@ -131,7 +132,8 @@ def install(home: Path, mode: str, text: str, host_key: str = "") -> None:
 def deploy(repo: Path, host: str, runtime: str, head: str) -> int:
     """The existing release gate authorizes the exact route before SSH writes."""
     mode = release_mode(Path.home())
-    config = load_node_config()
+    node = load_node_config()
+    config = release_host(Path.home()) if mode != "off" else None
     if mode != "off":
         approved = subprocess.run(
             [str(repo / "automation/release_approval_remote.sh"), "authorize-omo-relay",
@@ -139,12 +141,12 @@ def deploy(repo: Path, host: str, runtime: str, head: str) -> int:
         )
         if approved.returncode:
             return 4
-    host_key = host_key_line(config) if mode != "off" else ""
-    command = shlex.join(("sudo", "-n", "-u", config.agent_account, "-H", "env",
+    host_key = host_key_line(config) if config is not None else ""
+    command = shlex.join(("sudo", "-n", "-u", node.agent_account, "-H", "env",
                           f"PYTHONPATH={runtime}", "python3", "-B", "-m",
                           "automation.omo_relay_release", "install", "--digest", mode,
                           "--host-key", host_key))
-    result = subprocess.run(["ssh", host, command], input=payload(config) if mode != "off" else "",
+    result = subprocess.run(["ssh", host, command], input=payload(config) if config is not None else "",
                             text=True, capture_output=True, check=False, timeout=60)
     if result.returncode:
         print("OMO-RELAY-DEPLOY-FAIL", file=sys.stderr)
@@ -180,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "apply":
             return deploy(Path(args.repo), args.host, args.runtime, args.head)
         return 2
-    except (OSError, ValueError, NodeConfigError, subprocess.SubprocessError):
+    except (OSError, ValueError, NodeConfigError, RelayConfigError, subprocess.SubprocessError):
         print("OMO-RELAY-REFUSED", file=sys.stderr)
         return 4
 

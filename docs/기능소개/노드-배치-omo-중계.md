@@ -8,9 +8,11 @@
 
 ## 켜기와 되돌리기
 
-릴리스 호스트의 노드 설정(`~/.hermes/node.toml`)에 `omo_relay_target`(SSH 대상)과
-`omo_relay_key`(노드 agent 홈의 `.ssh/omo_relay` 절대 경로)를 적는다.
-추적 예시는 `configs/node.example.toml`이며 실제 주소·계정은 커밋하지 않는다.
+릴리스 호스트의 `~/.hermes/omo-relay.toml`에 `omo_relay_target`(SSH 대상)과
+`omo_relay_key`(노드 agent 홈의 `.ssh/omo_relay` 절대 경로) 두 줄만 적는다. 노드 설정(`node.toml`,
+`automation/node_config.py`)에는 넣지 않는다 — 노드 root 수렴 도우미가 `node_config.py`의 정적 사본을 들고 있어서,
+거기에 칸을 더하면 릴리스마다 형의 root 단계가 필요해진다(2026-10-18 실측: HELPER-DRIFT).
+실제 주소·계정은 커밋하지 않는다.
 `~/.hermes/release-flags/omo-relay`의 내용이 개행 없는 `on`이면 릴리스 카드에
 다음 줄과 설정의 SHA-256 지문이 묶인다.
 

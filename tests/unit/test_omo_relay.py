@@ -5,13 +5,12 @@ import fcntl
 import io
 import json
 import subprocess
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from automation import codex_llm
-from automation.node_config import default_node_config
+from automation.omo_relay.config import RelayConfig
 
 
 def relay_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> codex_llm.CodexClient:
@@ -20,9 +19,8 @@ def relay_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> codex_llm.C
     root = tmp_path / ".config/autophagy/omo-relay"
     root.mkdir(parents=True)
     (root / "mode").write_bytes(b"on")
-    config = replace(default_node_config(), omo_relay_target="relay-account@relay.invalid",
-                     omo_relay_key=tmp_path / ".ssh/omo_relay")
-    monkeypatch.setattr(client, "load_node_config", lambda *_args: config)
+    config = RelayConfig("relay-account@relay.invalid", tmp_path / ".ssh/omo_relay")
+    monkeypatch.setattr(client, "load_relay", lambda *_args: config)
     monkeypatch.setattr(client, "record_result", lambda *_args: None)
     return codex_llm.CodexClient.from_environment({"HOME": str(tmp_path)})
 
