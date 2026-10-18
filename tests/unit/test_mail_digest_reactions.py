@@ -214,6 +214,11 @@ def test_the_draft_reaction_writes_a_draft_that_the_watch_tick_does_not_send(
         mail_preflight, "execute_cli_draft", lambda *_a: pytest.fail("a draft was sent"),
     )
 
+    # The seeded digest run is fixed in time; pin the tick's clock to the file's _NOW so the
+    # 3-day card window does not expire the card (it did on 2026-10-18 23:00 UTC).
+    tick = actions.run_tick
+    monkeypatch.setattr(actions, "run_tick", lambda **_k: tick(now=_NOW))
+
     assert triage_cli.cmd_watch(argparse.Namespace()) == 0
     assert triage_cli.cmd_watch(argparse.Namespace()) == 0
 
