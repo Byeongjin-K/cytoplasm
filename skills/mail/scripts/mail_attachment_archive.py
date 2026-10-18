@@ -138,6 +138,12 @@ def state_connection() -> sqlite3.Connection:
         )
         """
     )
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS download_retries (
+          attachment_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0,
+          notified INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
     db.commit()
     STATE_DB.chmod(0o600)
     return db

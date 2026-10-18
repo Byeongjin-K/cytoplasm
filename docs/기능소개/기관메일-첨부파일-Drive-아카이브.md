@@ -14,6 +14,7 @@ MailOn의 첨부파일을 Google Drive `autophagy/메일 첨부파일/<연도>/<
 - 동기화는 `/srv/autophagy-skills/live/mail/scripts/mail_attachment_drive_sync.py`에서만 실행한다. 마운트가 있는 호스트에서 다른 사본을 실행하면 `mail_runtime.governed_copy_refusal`이 거부한다.
 - Hermes cron `mail-attachment-drive-watch`가 30분마다 live 동기화를 호출한다. 홈에는 `~/.hermes/scripts/mail_attachment_drive_watch.py` 래퍼만 있으며 `skills/mail/deploy-manifest.txt`가 이를 선언한다.
 - 성공은 무음이다. 실패는 주소·파일명·본문을 감춘 단일 `MAIL-ATTACHMENT-DRIVE-FAIL code=<code>` 마커로만 전달한다.
+- 다운로드 실패·로컬 파일 누락은 기존 실패 행도 다음 실행부터 MailOn 다운로드 경로로 최대 5회 재시도하며, 소진 시 메일 날짜·첨부명만 소유자 채널에 한 번 알린다(전송 실패는 다음 실행에 재시도, 성공한 Drive 파일은 재업로드하지 않음).
 
 ## 사용 시나리오
 1. **(happy)** 소유자가 새 메일을 받거나 첨부를 보낸다 → 다음 30분 cron tick이 파일을 찾는다 → 연도·월·메일함 폴더에 `<UID>__<원본명>`으로 upsert → 권한과 checksum 메타데이터를 확인 → 성공한 파일만 `archive.db`에 기록한다. 필요하면 다음 명령으로 수동 실행한다.

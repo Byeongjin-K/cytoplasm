@@ -48,7 +48,8 @@ def _draft(args: argparse.Namespace) -> int:
         progress = write_draft(paths, args.slug, content)
         output = workspace(paths, args.slug) / "draft.md"
     else:
-        drafted = patent_core.draft_disclosure(paths, args.slug, Path(args.brief_file))
+        brief = Path(args.brief_file) if args.brief_file else _import_brief(paths, args.slug, Path(args.brief_import))
+        drafted = patent_core.draft_disclosure(paths, args.slug, brief)
         call = drafted.response.call
         progress = drafted.progress
         output = drafted.path
@@ -58,6 +59,13 @@ def _draft(args: argparse.Namespace) -> int:
         f"percent={progress.percent_complete}"
     )
     return 0
+
+
+def _import_brief(paths: PatentPaths, slug: str, source: Path) -> Path:
+    target = workspace(paths, slug) / "brief.md"
+    target.write_bytes(source.read_bytes())
+    target.chmod(0o600)
+    return target
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -79,6 +87,14 @@ def _export_execute(args: argparse.Namespace) -> int:
     print(res)
     return 0
 
+def _export_now(args: argparse.Namespace) -> int:
+    print(patent_export.export_owner_command(
+        _paths(), args.slug, mode=args.mode,
+        channel_id=args.origin_channel_id, message_id=args.origin_message_id,
+    ))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the no-content-on-stdout command surface."""
     parser = argparse.ArgumentParser(prog="patent-prep")
@@ -95,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     source = draft.add_mutually_exclusive_group(required=True)
     source.add_argument("--brief-file")
     source.add_argument("--response-file")
+    source.add_argument("--brief-import", help="copy this file into the private workspace as brief.md, then draft")
     draft.set_defaults(func=_draft)
     status = commands.add_parser("status")
     status.add_argument("--slug", required=True)
@@ -106,6 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_execute = commands.add_parser("export-execute")
     export_execute.add_argument("--slug", required=True)
     export_execute.set_defaults(func=_export_execute)
+    export_now = commands.add_parser("export-now")
+    export_now.add_argument("--slug", required=True)
+    export_now.add_argument("--mode", choices=("enc", "plaintext"), default="enc")
+    export_now.add_argument("--origin-channel-id", required=True)
+    export_now.add_argument("--origin-message-id", required=True)
+    export_now.set_defaults(func=_export_now)
     return parser
 
 
@@ -113,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI without echoing private material on failure."""
     args = build_parser().parse_args(argv)
     try:
-        if args.command in {"create", "checklist", "draft", "export-prepare", "export-execute"}:
+        if args.command in {"create", "checklist", "draft", "export-prepare", "export-execute", "export-now"}:
             message = patent_prep_governed.refusal(Path(__file__))
             if message:
                 print(message, file=sys.stderr)

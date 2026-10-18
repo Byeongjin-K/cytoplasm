@@ -66,7 +66,9 @@ def select_candidate(
 
 
 #: Route → destination of a batched move (owner Q138 ②). OPS_REFERENCE keeps its one-at-a-time path.
-_BATCH_DESTINATIONS: Final[dict[str, str]] = {"PERSON_REFERENCE": "person", "AGENT_RULE": "memory"}
+# Owner 2026-10-18: "memory.md 필요없지 않아? 유도리 너의 omo 메모리 써"
+# Leave AGENT_RULE native; only new discovery changes, not stored move decisions.
+_BATCH_DESTINATIONS: Final[dict[str, str]] = {"PERSON_REFERENCE": "person"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,14 +82,12 @@ def select_batch(
     files: Mapping[str, MemoryFile],
     known_digests: frozenset[str],
 ) -> tuple[BatchCandidate, ...]:
-    """Every unhandled person fact and USER.md handling rule, in file order (one card covers them)."""
+    """Every unhandled person fact, in file order, for per-line move proposals."""
     found: list[BatchCandidate] = []
     claimed: dict[MemoryKind, set[int]] = {kind: set() for kind in _RELOCATABLE_KINDS}
     for verdict in verdicts:
         destination = _BATCH_DESTINATIONS.get(verdict.route)
         if destination is None or verdict.source_kind not in _RELOCATABLE_KINDS:
-            continue
-        if destination == "memory" and verdict.source_kind != "user":
             continue
         memory_file = files.get(verdict.source_kind)
         digest = entry_digest(verdict.source_kind, verdict.entry_text)

@@ -57,7 +57,7 @@ def test_destinations_plan_a_person_note_or_memory_md_and_bind_into_the_hash() -
     assert relocation_action_hash(replace(fields, destination="memory")) != relocation_action_hash(fields)
 
 
-def test_select_batch_takes_people_and_user_rules_only() -> None:
+def test_select_batch_takes_people_only() -> None:
     files = {
         "user": parse_memory_file("\n§\n".join((OWNER, PERSON, RULE)), kind="user"),
         "memory": parse_memory_file(RULE, kind="memory"),
@@ -69,9 +69,9 @@ def test_select_batch_takes_people_and_user_rules_only() -> None:
         _verdict(RULE, "AGENT_RULE", kind="memory"),
     ]
     found = select_batch(verdicts, files, frozenset())
-    assert [(c.candidate.entry_text, c.destination) for c in found] == [(PERSON, "person"), (RULE, "memory")]
+    assert [(c.candidate.entry_text, c.destination) for c in found] == [(PERSON, "person")]
     known = frozenset({entry_digest("user", PERSON)})
-    assert [c.candidate.entry_text for c in select_batch(verdicts, files, known)] == [RULE]
+    assert [c.candidate.entry_text for c in select_batch(verdicts, files, known)] == []
 
 
 def test_one_batch_hash_binds_exactly_the_members_and_the_card_shows_it() -> None:

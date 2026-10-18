@@ -155,7 +155,7 @@ def test_legacy_bytes_when_facade_has_no_capability(
     # When: the actual producer sends through that facade.
     emit(kind, owner_notice.notify_owner)
     # Then: exactly today's content reaches the wire.
-    assert wire == [expected]
+    assert wire == ([] if kind == "recovery" else [expected])
 
 
 @pytest.mark.parametrize(("kind", "expected"), CASES)
@@ -167,7 +167,7 @@ def test_legacy_bytes_when_envelope_import_is_missing(
     # When: the producer uses the real facade.
     emit(kind, owner_notice.notify_owner)
     # Then: its current wire bytes survive the failed import.
-    assert wire == [expected]
+    assert wire == ([] if kind == "recovery" else [expected])
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ def test_envelope_when_notice_is_due(envelopes: list[OwnerMessage | None], kind:
     # When: the state machine sends its notice.
     _ = emit(kind, owner_notice.notify_owner)
     # Then: every field, including absent coordinates, equals the independent literal oracle.
-    assert envelopes == [MESSAGES[kind]]
+    assert envelopes == ([] if kind == "recovery" else [MESSAGES[kind]])
 
 
 @pytest.mark.parametrize("kind", [kind for kind, _ in CASES])
@@ -204,7 +204,7 @@ def test_rendered_wire_when_facade_supports_envelope(wire: list[str], kind: str,
     else:
         _ = emit(kind, owner_notice.notify_owner)
     # Then: the complete delivered copy equals a fixed literal, not a second rendering.
-    assert wire == [expected]
+    assert wire == ([] if kind == "recovery" else [expected])
 
 
 @pytest.mark.parametrize(("kind", "expected"), CASES)
@@ -225,7 +225,7 @@ def test_pending_bytes_when_delivery_fails_and_state_is_reloaded(
     # When: the next process reads the pending notice.
     restored = load_state(tmp_path / "state.json")
     # Then: the durable retry payload remains the literal legacy bytes.
-    assert restored.pending_notice == expected
+    assert restored.pending_notice == (None if kind == "recovery" else expected)
 
 
 @pytest.mark.parametrize("kind", [kind for kind, _ in CASES])
@@ -242,7 +242,7 @@ def test_envelope_when_durable_notice_is_retried(
                                        deliver=owner_notice.notify_owner)
     # Then: all original fields survive, with the honest timeless Result detail.
     assert updated.pending_notice is None
-    assert envelopes == [RETRIES[kind]]
+    assert envelopes == ([] if kind == "recovery" else [RETRIES[kind]])
 
 
 @pytest.mark.parametrize("window", [(float("inf"), 600), (0, float("nan")), (0, 1e30)])

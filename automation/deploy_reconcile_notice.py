@@ -2,6 +2,7 @@
 
 pending_notice에는 문자열만 저장되므로 동결된 기존 형식을 한 경계에서 읽는다.
 새 통지는 호출자가 계산한 관측 구간을 쓰고, 재전송에는 없는 시각을 만들지 않는다.
+회복만 담긴 소유자 통지는 성공으로 소비해 큐·사건 상태를 닫되 실제로 게시하지 않는다.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from automation.interop.owner_message import OwnerMessage
 
 Window: TypeAlias = tuple[float, float]
+_RECOVERY = re.compile(r"prod가 origin/main에 다시 도달했습니다: ([^\n]*)")
 
 
 def drift_notice(*, origin_sha: str, current_sha: str, failures: int, elapsed: float) -> str:
@@ -64,7 +66,7 @@ def build_notice(content: str, window: Window | None = None) -> OwnerMessage | N
                          "원인 확인; 재시작·포인터 수정 금지"),
             agent_next="자동 재시도 계속", recovery="not_applicable", detail=detail,
         )
-    recovery = re.fullmatch(r"prod가 origin/main에 다시 도달했습니다: ([^\n]*)", content)
+    recovery = _RECOVERY.fullmatch(content)
     if recovery is not None:
         sha = recovery.group(1)
         return OwnerMessage(
@@ -84,6 +86,10 @@ def send_notice(callback: Callable[[str], bool], content: str, window: Window | 
 
     if callback is not notify_owner:
         return callback(content)
+    # 기존 상태머신·주입 콜백 계약은 유지하되, 소유자 채널에는 문제만 보낸다.
+    # 성공으로 소비해야 저장된 복구 pending도 비워지고 다음 사건을 다시 알릴 수 있다.
+    if _RECOVERY.fullmatch(content) is not None:
+        return True
     message = build_notice(content, window)
     if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
         ok = notify_owner(content, message=message)

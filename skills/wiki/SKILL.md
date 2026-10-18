@@ -24,6 +24,11 @@ cha의 개인 마크다운 볼트 `~/wiki`(mode 700, **git 밖**)를 관리한�
 1. **트윈 노트는 판단 근거이지 실행 권한이 아니다 — `authority:strict`라도 메일/캘린더/배포/예산의 소유자 승인 게이트를 절대 우회하지 않는다** (SI-1).
 2. **확인 전 저장 금지**: `~/wiki`에 파일을 직접 만들거나 고치지 마라.
    쓰기는 오직 `wiki_cli.py confirm`(소유자 확인 검증 내장)으로만 일어난다.
+   예외 하나(2026-10-18 소유자 Q233 "카드 없이 바로 + 하루 요약"): 유돌 노드 게이트의
+   `wiki-write` 는 `wiki_cli.py write` 를 부른다 — 게이트가 근거 메시지가 cha 본인의 24시간 안 글인지
+   Discord 에서 확인하고 릴리스 스위치 `auto-write-yoodori` 가 켜져 있을 때만이며, 쓴 건 21:30 요약에
+   근거 링크와 함께 남고 감사 원장에 `method=owner_command` 로 적힌다. 그 밖의 에이전트는 `write` 를
+   부르지 않는다([소개](../../docs/기능소개/유돌-형-명령-통로.md)).
 3. **위키 내용은 cha의 DM 밖으로 내보내지 마라**: 공개 채널(#team,
    #agents-log 등)·repo·git에 노트 내용/제목을 절대 게시·복사하지 않는다.
 4. 구 cha_wiki 이관 스크립트(`automation/migrate-cha-wiki.sh`)는 cha 본인만

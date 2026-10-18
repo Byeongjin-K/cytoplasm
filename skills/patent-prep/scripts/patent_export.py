@@ -249,11 +249,48 @@ def execute_export(paths: PatentPaths, slug: str) -> str:
             shutil.rmtree(work, ignore_errors=True)
 
 
+def export_owner_command(paths: PatentPaths, slug: str, *, mode: str, channel_id: str, message_id: str) -> str:
+    """Owner 2026-10-18 18:29 KST "5번도 카드 없이 해": export to the owner's own single-owner
+    archive folder without a card. The YooDori gate verified the owner's message first; the
+    snapshot, ACL preflight, encryption and audit are the same as the card path."""
+    if mode not in ("enc", "plaintext"):
+        raise PatentExportError(f"unsupported export mode: {mode}")
+    draft = draft_path(paths, slug)
+    if not draft.exists() or draft.stat().st_size == 0:
+        raise PatentExportError("Draft does not exist or is empty")
+    folder = patent_export_manifest.archive_folder_id()
+    work = Path(tempfile.mkdtemp(prefix="patent-export-"))
+    try:
+        snapshot = work / "draft.md"
+        shutil.copyfile(draft, snapshot)
+        snapshot.chmod(0o600)
+        plaintext_sha = compute_sha256(snapshot)
+        preflight_acl(folder)
+        if mode == "enc":
+            upload_target = work / "draft.md.age"
+            encrypt_age(snapshot, upload_target, ssh_pubkey())
+            upload_target.chmod(0o600)
+            ciphertext_sha: str | None = compute_sha256(upload_target)
+        else:
+            upload_target, ciphertext_sha = snapshot, None
+        file_id, link = drive_upload_into(upload_target, folder)
+        _write_audit({
+            "approval": {"channel": channel_id, "message_id": message_id, "method": "owner_command",
+                         "owner_id": patent_export_gate.owner_id()},
+            "mode": mode, "plaintext_sha256": plaintext_sha, "ciphertext_sha256": ciphertext_sha,
+            "dest_folder_id": folder, "file_id": file_id,
+            "result": {"status": "owner_command", "webViewLink": link},
+            "target_id": f"patent:{slug}", "nonce": None,
+        })
+        return f"PATENT-EXPORTED slug={slug} file={file_id} link={link}"
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def _append_audit(
     m: patent_export_manifest.Manifest, slug: str, ciphertext_sha: str | None, file_id: str, link: str
 ) -> None:
-    record = {
-        "action": "patent_export.drive_backup",
+    _write_audit({
         "approval": {
             "channel": m.channel_id,
             "message_id": m.message_id,
@@ -268,6 +305,13 @@ def _append_audit(
         "result": {"status": "approved", "webViewLink": link},
         "target_id": f"patent:{slug}",
         "nonce": m.nonce,
+    })
+
+
+def _write_audit(fields: dict) -> None:
+    record = {
+        "action": "patent_export.drive_backup",
+        **fields,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     audit_path = patent_export_manifest._export_root() / "audit.jsonl"
