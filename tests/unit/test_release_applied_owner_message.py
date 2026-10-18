@@ -9,7 +9,7 @@ import pytest
 from automation import owner_notice, release_applied_notice as release
 from automation.interop.owner_message import Action, OwnerMessage, Ref, Result
 
-RELEASE = '릴리스 v1.2.4 가 적용되었습니다. (HEAD aaaaaaaaaaaa)\n모델: 확인 못 함 — 노드의 Hermes 설정을 읽지 못했다'
+RELEASE = '릴리스 v1.2.4 가 적용되었습니다. (HEAD aaaaaaaaaaaa)'
 HEAD = 'aaaaaaaaaaaaaaaa'
 
 
@@ -87,7 +87,6 @@ def test_notice_destination_is_used_when_notice_channel_is_configured(
     assert body == (
         '**✅ 릴리스 v1.2.4**\n'
         '> 릴리스 v1.2.4 가 적용되었습니다. (HEAD aaaaaaaaaaaa)\n'
-        '> 모델: 확인 못 함 — 노드의 Hermes 설정을 읽지 못했다\n'
         '\n'
         '**결과:** 실행 완료 · 조치 없음\n'
         '위치: 링크 없음 (주소 없음); 검색: 릴리스 검색 / v1.2.4 aaaaaaaaaaaaaaaa\n'

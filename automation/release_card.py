@@ -54,7 +54,7 @@ def preflight_new_request(spec: ReleaseSpec) -> tuple[ReleaseSpec | None, str]:
             break  # Never approve a rebuild on a fallback card that omits its outage notice.
         candidate = replace(spec, render_version=version)
         probe = candidate
-        if version == NEW_RENDER_VERSION and not candidate.detail_message_ids:
+        if version == 6 and not candidate.detail_message_ids:
             probe = replace(
                 candidate,
                 detail_message_ids=("9" * 20,),
