@@ -288,6 +288,44 @@ def test_an_approved_release_cuts_the_signed_tag(tmp_path: Path) -> None:
     assert "receipt written by deploy_all" in result.stderr
 
 
+def test_absent_dori_switch_does_not_add_a_plan_argument(tmp_path: Path) -> None:
+    # Given
+    _origin, work = _origin_with_commits(tmp_path)
+    # When
+    result = _run(tmp_path, work, decisions="2 0")
+    # Then
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "--dori-agent-chat" not in (tmp_path / "plan-args").read_text()
+
+
+def test_release_host_switch_is_passed_to_the_real_plan_boundary(tmp_path: Path) -> None:
+    # Given
+    _origin, work = _origin_with_commits(tmp_path)
+    flag = tmp_path / ".hermes/release-flags/dori-agent-chat"
+    flag.parent.mkdir(parents=True)
+    flag.write_text("555")
+    # When
+    result = _run(tmp_path, work, decisions="2 0")
+    # Then
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "--dori-agent-chat 555" in (tmp_path / "plan-args").read_text()
+
+
+def test_invalid_release_host_switch_blocks_before_any_approval(tmp_path: Path) -> None:
+    # Given
+    _origin, work = _origin_with_commits(tmp_path)
+    flag = tmp_path / ".hermes/release-flags/dori-agent-chat"
+    flag.parent.mkdir(parents=True)
+    flag.write_text("not-a-bot")
+    # When
+    result = _run(tmp_path, work, decisions="2 0")
+    # Then
+    assert result.returncode == 4
+    assert "DORI-SWITCH-REFUSED" in result.stderr
+    assert not (tmp_path / "plan-args").exists()
+    assert _origin_tags(work) == ""
+
+
 def test_an_approved_record_uses_its_version_instead_of_the_requested_bump(
     tmp_path: Path,
 ) -> None:

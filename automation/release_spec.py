@@ -4,6 +4,7 @@ Record/detail replay stays staged here; producer-only preflight lives in release
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping
@@ -34,11 +35,19 @@ NEW_RENDER_VERSION: Final = 6
 #: 그 노드에 기대하는 `# wrapper-inputs:` 지문이고, 승인 해시에 다른 표면과 똑같이 들어간다.
 #: 이 표면이 없는 레코드(지금까지의 모든 카드)는 해시도 카드 바이트도 그대로다.
 WRAPPER_SURFACE_PREFIX: Final = "healthcheck-wrapper:"
+DORI_SURFACE_PREFIX: Final = "dori-agent-chat:"
 RAG_MCP_SURFACE: Final = "rag-mcp"
 
 
 def wrapper_surface(node: str) -> str:
     return f"{WRAPPER_SURFACE_PREFIX}{node}"
+
+
+def dori_surface(bot_id: str) -> tuple[str, str]:
+    """Bind the takeover bot to the same release surface authorization as wrappers."""
+    if re.fullmatch(r"[0-9]+", bot_id) is None:
+        raise ReleaseSpecError("DORI-SWITCH-REFUSED: expected a decimal bot id only")
+    return f"{DORI_SURFACE_PREFIX}{bot_id}", hashlib.sha256(bot_id.encode()).hexdigest()
 
 _RELEASE_VERSION: Final = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+\Z")
 _COMMIT_SHA: Final = re.compile(r"[0-9a-f]{40}\Z")
@@ -230,7 +239,7 @@ class ReleaseSpec:
         summary.extend(
             name
             for name, _digest in self.surface_digests
-            if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX)) and name != RAG_MCP_SURFACE
+            if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX)) and name != RAG_MCP_SURFACE
         )
         return " · ".join(summary) or "변경 없음"
 

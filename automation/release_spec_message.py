@@ -192,7 +192,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     A ``healthcheck-wrapper:<node>`` surface adds one line naming those hosts. Without such
     surfaces the bytes are unchanged, so every stored v6 card still replays exactly.
     """
-    from automation.release_spec import RAG_MCP_SURFACE, WRAPPER_SURFACE_PREFIX, EnvelopeUnavailable
+    from automation.release_spec import DORI_SURFACE_PREFIX, RAG_MCP_SURFACE, WRAPPER_SURFACE_PREFIX, EnvelopeUnavailable
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -222,6 +222,9 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
             if wrapper_hosts
             else []
         ),
+        *(["도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(유돌이 받음)"] if any(
+            name.startswith(DORI_SURFACE_PREFIX) for name, _digest in spec.surface_digests
+        ) else []),
         *(["검색 잠깐 끊김(~1분)·되돌림 있음"] if any(
             name == RAG_MCP_SURFACE for name, _digest in spec.surface_digests
         ) else []),

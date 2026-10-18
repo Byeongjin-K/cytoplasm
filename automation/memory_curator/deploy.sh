@@ -36,7 +36,27 @@ source "$repo_root/automation/deploy_push.sh"
 
 # Deploy guard: refuse to push code that origin/main does not have.
 source "$repo_root/automation/deploy_provenance.sh"
-deploy_provenance_check "$repo_root" "$repo_root/automation/memory_curator" || exit 4
+deploy_provenance_check "$repo_root" "$repo_root/automation/memory_curator" \
+  "$repo_root/automation/release_approval_remote.sh" || exit 4
+
+# The switch belongs to this release host, never the node. Check approval before
+# any node writes: an existing but unapproved switch must not silently turn off.
+dori_bot_id="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_agent_chat_ignore --release-switch)" || exit 4
+dori_mode=off
+if [[ -n "$dori_bot_id" ]]; then
+  head="$(git -C "$repo_root" rev-parse HEAD)" || exit 4
+  deployed="$(ssh "$host" "readlink $(printf '%q' "${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}")" </dev/null)" || deployed=""
+  if [[ "${deployed##*/}" != "$head" ]]; then
+    echo "DORI-SWITCH-UNAUTHORIZED: deployed HEAD does not match this checkout; agent config unchanged." >&2
+    exit 4
+  fi
+  if ! "$repo_root/automation/release_approval_remote.sh" authorize-dori-agent-chat \
+    --bot-id "$dori_bot_id" --head "$head"; then
+    echo "DORI-SWITCH-UNAUTHORIZED: this release HEAD did not approve the configured Dori bot; agent config unchanged." >&2
+    exit 4
+  fi
+  dori_mode=on
+fi
 
 # Cron watcher wrapper.
 push_file "$repo_root/automation/memory_curator/cron/memory_curator_watch.py" '.hermes/scripts/memory_curator_watch.py'
@@ -51,7 +71,9 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memo
 # Hermes memory caps (owner decision 2026-10-14): the curator's CAPS and both accounts'
 # config.yaml read the same automation.hermes_memory_config.LIMITS. Gateways load the
 # config at start; the composed profile also selects autophagy_recall without a second
-# config.yaml writer. activation=gateway makes deploy_all restart agent+peer.
+# config.yaml writer. The agent profile ignores agent-chat only with the host opt-in
+# covered by this release approval; absence removes that ignore on the next deploy.
+# the peer retains the memory-only profile. activation=gateway restarts agent+peer.
 source "$repo_root/automation/deploy_config.sh"
-converge_config agent .hermes/config.yaml hermes-memory-profile-with-recall-v1
+converge_config agent .hermes/config.yaml hermes-agent-profile-v1 --dori-agent-chat "$dori_mode"
 converge_config peer .hermes/config.yaml hermes-memory-profile-with-recall-v1

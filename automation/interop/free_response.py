@@ -117,7 +117,7 @@ def _find_key(lines: list[str], block: _Block, key: str) -> _Key | None:
                     items.append(follow)
                     follow += 1
                     continue
-                if not lines[follow].strip():
+                if not lines[follow].strip() or lines[follow].lstrip().startswith("#"):
                     follow += 1
                     continue
                 break
