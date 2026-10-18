@@ -81,7 +81,7 @@ def _hermes(f: Facts) -> Verdict:
 
 
 def _gateway(f: Facts) -> Verdict:
-    if f.gateway == "inactive" and f.gateway_stopped_by_release:
+    if f.gateway in {"inactive", "failed"} and f.gateway_stopped_by_release:
         return _ok(f"{f.gateway_unit} 릴리스로 정지됨(정상, stopped by release — expected)")
     if f.gateway == "active":
         return _ok(f"{f.gateway_unit} 실행 중")

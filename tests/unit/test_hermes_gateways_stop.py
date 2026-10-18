@@ -272,7 +272,8 @@ def test_stop_and_revert_execute_real_marker_and_systemctl_steps(tmp_path: Path)
     systemctl = tmp_path / "bin/systemctl"
     systemctl.write_text(
         '#!/bin/bash\ncase "$2" in\n'
-        'stop) printf inactive > "$HOME/service-state";;\n'
+        'stop) printf failed > "$HOME/service-state";;\n'
+        'reset-failed) printf inactive > "$HOME/service-state";;\n'
         'start) printf active > "$HOME/service-state";;\n'
         'is-active) state="$(cat "$HOME/service-state")"; printf "%s\\n" "$state"; [[ "$state" == active ]];;\n'
         '*) exit 97;;\nesac\n'

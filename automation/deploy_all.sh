@@ -138,7 +138,7 @@ change_gateways() { # Reversible release effect: attempt both accounts, includin
   local verb="$1" acct script failed=0
   for acct in agent peer; do
     if [[ "$verb" == stop ]]; then
-      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
+      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && systemctl --user reset-failed hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
     else
       script='export XDG_RUNTIME_DIR=/run/user/$(id -u); rm -f -- "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user start hermes-gateway.service && systemctl --user is-active hermes-gateway.service'
     fi
