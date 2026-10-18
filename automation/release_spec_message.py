@@ -195,7 +195,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
         DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX,
     )
-    from automation.notice_bot import CARD_LINE, SURFACE
+    from automation.notice_bot import CARD_LINE, SURFACE, FAULT_CARD_LINE, FAULT_PREFIX
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
 
     wrapper_hosts = [
@@ -206,6 +206,8 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
 
     return [
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
+        *([FAULT_CARD_LINE] if any(name.startswith(FAULT_PREFIX)
+                                  for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests
           if name.startswith(SURFACE_PREFIX)],

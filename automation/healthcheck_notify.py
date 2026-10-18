@@ -170,9 +170,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     message = notice_message(state, following)
     if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-        ok = notify_owner(notice, message=message)
+        ok = notify_owner(notice, message=message, fault=True)
     else:
-        ok = notify_owner(notice)
+        ok = notify_owner(notice, fault=True)
     if not ok:
         # 전달 실패는 사건을 연 것으로 치지 않는다 — 다음 스윕이 다시 시도해야 한다.
         print("[healthcheck-notify] NOTIFY-FAILED: 다음 스윕에서 재시도", file=sys.stderr)

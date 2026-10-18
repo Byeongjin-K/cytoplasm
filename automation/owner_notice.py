@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from urllib.request import Request, urlopen
-from automation.notice_bot import notice_channel, resolve_token
+from automation.notice_bot import fault_channel, notice_channel, resolve_token
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -175,7 +175,7 @@ def send_notice_files(token: str, channel_id: str, body: str, files: Sequence[Pa
 
 def notify_owner(
     content: str | None = None, *, notice: str | None = None, message: OwnerMessage | None = None,
-    attachments: Sequence[Path] = (),
+    attachments: Sequence[Path] = (), fault: bool = False,
 ) -> bool:
     """Deliver one notice. False means "not delivered" — never an exception.
 
@@ -185,6 +185,7 @@ def notify_owner(
     `attachments=` 는 구매 검토처럼 초안 파일을 함께 올리는 통지용이다. 목적지 규칙·최선노력·
     실패 마커는 첨부가 있든 없든 같다 — 첨부 때문에 발신자가 자기 전송을 갖게 두면 목적지
     규칙이 두 벌이 되고, 드리프트하는 쪽은 언제나 둘째 사본이다(ON-2/ON-3).
+    `fault=True`는 release가 정한 페어 채널을 우선한다. 미설정은 기존 목적지 그대로다.
     RETAINED: content: str은 budget_confirm.dm_owner의 렌더 완료 본문·기존 폴백을 받는다.
     전체 계약의 영구 예외는 calendar_confirm.send_owner_dm, approval_reminder._PointerSender,
     카드 없는 obsidian_write.gate_binding 위임도 포함한다. meeting 게이트웨이의 별도 문자열
@@ -201,7 +202,8 @@ def notify_owner(
 
     try:
         token = resolve_token()
-        if not token or not (owner_notice_channel() or _config_owner_id()):
+        fault_target = fault_channel() if fault else None
+        if not token or not (fault_target or owner_notice_channel() or _config_owner_id()):
             print(
                 "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
                 file=sys.stderr,
@@ -212,7 +214,7 @@ def notify_owner(
             print("[owner-notice] NOTIFY-FAILED: TypeError", file=sys.stderr)
             return False
         # 채널이 지정되면 그 채널로만 — DM 폴백 없음("해당 채널에서만"이 요구다).
-        channel_id = resolve_notice_target(token)
+        channel_id = fault_target or resolve_notice_target(token)
         if message is not None:
             from automation.interop.owner_message import Ref, render
 

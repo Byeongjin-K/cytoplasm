@@ -103,6 +103,17 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     notice_digest = getattr(args, "notice_bot", None)
+    fault_channel = getattr(args, "fault_channel", None)
+    if fault_channel is not None:
+        from automation.notice_bot import fault_surface
+
+        try:
+            if notice_digest is None:
+                raise ValueError("fault-channel requires notice-bot")
+            surfaces.append(fault_surface(fault_channel))
+        except ValueError as error:
+            print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+            return 4
     if notice_digest is not None:
         if (_SHA256.fullmatch(notice_digest) is None
                 or getattr(args, "hermes_gateways", None) != "stopped"
@@ -307,6 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
+    plan.add_argument("--fault-channel", metavar="CHANNEL_ID", help="고장 알림을 유돌·리드 페어 채널로")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument(
         "--healthcheck-wrapper",
@@ -364,6 +376,20 @@ def main(argv: list[str] | None = None) -> int:
     channel.add_argument("--channel-id", required=True)
     channel.add_argument("--head", required=True)
     channel.set_defaults(run=cmd_authorize_yoodori_channel)
+    fault = commands.add_parser("authorize-fault-channel")
+    fault.add_argument("--channel-id", required=True)
+    fault.add_argument("--head", required=True)
+    def authorize_fault(args: argparse.Namespace) -> int:
+        from automation.notice_bot import fault_surface
+
+        try:
+            name, digest = fault_surface(args.channel_id)
+        except ValueError:
+            return 4
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    fault.set_defaults(run=authorize_fault)
     rag = commands.add_parser("authorize-rag-mcp", help="authorize the release-bound MCP-only rebuild")
     rag.add_argument("--hash", required=True)
     rag.add_argument("--head", required=True)

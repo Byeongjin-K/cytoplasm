@@ -65,6 +65,12 @@ chat_args=()
 notice_digest="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.notice_bot_release digest)" \
   || die "NOTICE-BOT-REFUSED: invalid switch or unavailable credential" 4
 notice_args=()
+fault_channel="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.notice_bot_release fault-channel)" \
+  || die "FAULT-CHANNEL-REFUSED: invalid release-host switch" 4
+if [[ "$fault_channel" != off ]]; then
+  [[ "$notice_digest" != off ]] || die "FAULT-CHANNEL-REFUSED: notice-bot required" 4
+  notice_args+=(--fault-channel "$fault_channel")
+fi
 auto_kinds="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.auto_write_release switches)" \
   || die "AUTO-WRITE-REFUSED: invalid release-host switch" 4
 auto_args=()
@@ -75,7 +81,7 @@ fi
 if [[ "$notice_digest" != off ]]; then
   [[ "$gateway_mode" == stopped && -n "$chat_channel" ]] \
     || die "NOTICE-BOT-REFUSED: stopped gateways and yoodori channel required" 4
-  notice_args=(--notice-bot "$notice_digest")
+  notice_args+=(--notice-bot "$notice_digest")
 fi
 
 # shellcheck source=automation/release_tag_lib.sh
