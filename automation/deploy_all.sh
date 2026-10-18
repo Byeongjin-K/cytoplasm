@@ -57,6 +57,7 @@ fi
 dori_mode=off
 [[ -z "$dori_bot_id" ]] || dori_mode=on
 peer_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.peer_retired --release-switch)" || exit 4
+product_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_product --release-switch)" || exit 4
 if ! gateway_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_gateways --release-switch)"; then
   echo "GATEWAY-STOP-REFUSED: invalid release-host switch ~/.hermes/release-flags/hermes-gateways-stopped" >&2
   exit 4
@@ -119,6 +120,12 @@ retire_peer() {
       || return 4
   done
   ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'umask 077; printf retired > $NODE_PRIVATE_ROOT/peer-retired; cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)'" </dev/null
+}
+
+retire_hermes_product() {
+  "$repo_root/automation/release_approval_remote.sh" authorize-hermes-product --head "$node_sha" \
+    || { log "HERMES-PRODUCT-UNAUTHORIZED: 승인 HEAD에 제품 제거 표면 없음"; return 4; }
+  ssh "$host" "sudo -n -u $NODE_AGENT_ACCOUNT -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.hermes_product --remove --head $node_sha" </dev/null
 }
 
 converge_auto_write() {
@@ -324,6 +331,9 @@ case "$mode" in
       # Execute the node's signed runtime, never copy workstation code for removal.
       retire_peer || exit 4
     fi
+    if [[ "$product_mode" == retired ]]; then
+      retire_hermes_product || exit 4
+    fi
     if [[ "$auto_kinds" != off ]]; then
       converge_auto_write || exit 4
     fi
@@ -432,6 +442,13 @@ case "$mode" in
     fi
     if (( ledger_change )) || [[ "$ledger_mode" == on ]]; then
       converge_ledger || exit 4
+    fi
+    # Recheck product paths a deployer may have recreated, after ledger migration.
+    if [[ "$peer_mode" == retired ]]; then
+      retire_peer || exit 4
+    fi
+    if [[ "$product_mode" == retired ]]; then
+      retire_hermes_product || exit 4
     fi
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then

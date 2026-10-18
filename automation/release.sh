@@ -68,6 +68,10 @@ peer_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.peer_retired -
   || die "PEER-RETIRED-REFUSED: invalid release-host switch" 4
 peer_args=()
 [[ "$peer_mode" != retired ]] || peer_args+=(--peer-retired retired)
+product_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.hermes_product --release-switch)" \
+  || die "HERMES-PRODUCT-REFUSED: invalid release-host switch" 4
+product_args=()
+[[ "$product_mode" != retired ]] || product_args+=(--hermes-product retired)
 chat_channel="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.yoodori_channel --release-switch)" \
   || die "YOODORI-CHANNEL-REFUSED: invalid release-host switch" 4
 chat_args=()
@@ -278,7 +282,7 @@ if (( decision_rc != 0 )); then
     log "RAG-MCP-PLAN-UNKNOWN: RAG 소스·이미지를 판정하지 못해 카드에 갱신을 싣지 않는다 — 수렴 뒤 영수증의 남은 소유자 조치로 남는다"
   fi
   "${plan_approval[@]}" plan --repo "$REPO_ROOT" --base "$base" --head "$head" \
-    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${ledger_args[@]}" "${relay_args[@]}" "${legacy_args[@]}" > "$workdir/plan.json" \
+    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${product_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${ledger_args[@]}" "${relay_args[@]}" "${legacy_args[@]}" > "$workdir/plan.json" \
     || die "release plan failed" 4
   request_refusal="approval request was refused — 살아 있는 다른 요청은 파괴하지 않는다 (⛔ 로 막혔다면 노드 agent 계정에서: python3 -m automation.release_abandon --version <v> --head <sha> --message-id <id> --reason <why>)"
   if ! post_request; then
