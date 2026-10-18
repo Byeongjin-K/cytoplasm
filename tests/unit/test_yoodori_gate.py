@@ -50,6 +50,9 @@ def requests(staged: Path) -> list[tuple[str, list[str], list[str]]]:
             "--bcc", "bcc@example.invalid", "--subject", "안내",
             "--body-b64", b64("첫 줄 & <둘째>\n본문; $100"), "--in-reply-to", "123"]
     return [
+        ("mail-draft", ["1008-0800-3", "--instruction-b64", b64("참석한다고 답장")],
+         [PY, f"{LIVE}/mail/scripts/triage_cli.py", "reply-request", "--key", "1008-0800-3",
+          "--author-id", "123456789", "--instruction", "참석한다고 답장", *ORIGIN]),
         ("mail-compose", mail, [PY, f"{LIVE}/mail/scripts/triage_cli.py", "compose",
          *mail[:8], "--body", "첫 줄 & <둘째>\n본문; $100", *mail[10:], *ORIGIN]),
         ("calendar-request", ["--text", "내일 오후 3시 실험", "--summary", "실험"],
@@ -73,9 +76,10 @@ def requests(staged: Path) -> list[tuple[str, list[str], list[str]]]:
     ]
 
 
-def test_all_card_commands_build_real_request_cli_argv(staged: Path) -> None:
+def test_all_card_commands_build_real_request_cli_argv(staged: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: each supported public request command and its real producer parser.
     cases = requests(staged)
+    monkeypatch.setattr(gate, "_owner_id", lambda: "123456789")
     assert {name for name, _, _ in cases} == set(gate.CARD_COMMANDS)
     for name, args, expected in cases:
         # When

@@ -342,6 +342,11 @@ def _act(card: dict, owner: str, db, *, pressed: str = "") -> int:
     """
     try:
         actions = _owner_reactions(card, owner)
+    except HTTPError as error:
+        if error.code == 429:
+            raise
+        print(f"DIGEST-REACTION-READ-FAIL err={type(error).__name__}", file=sys.stderr)
+        return 0
     except Exception as error:  # noqa: BLE001 — one card's read never stops the others
         print(f"DIGEST-REACTION-READ-FAIL msg={card['message_id']} "
               f"err={type(error).__name__}", file=sys.stderr)
@@ -387,7 +392,15 @@ def run_tick(*, now: datetime | None = None) -> int:
     if not cards:
         return 0
     owner = triage_confirm.owner_id()
-    return sum(_act(card, owner, db) for card in cards)
+    ran = 0
+    for card in cards:
+        try:
+            ran += _act(card, owner, db)
+        except HTTPError as error:
+            if error.code != 429:
+                raise
+            break  # The shared REST client already backed off; leave the rest for later.
+    return ran
 
 
 def run_card(message_id: str, *, now: datetime | None = None, pressed: str = "") -> int:

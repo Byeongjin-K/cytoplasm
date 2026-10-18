@@ -84,6 +84,8 @@ class Plan:
     pending_unknown: bool = False
     delegated_checked: int = 0
     gateways: tuple[GatewayState, ...] = ()
+    hermes_gateways: str = "running"
+    gateway_services: tuple[GatewayState, ...] = ()
 
     @property
     def home_defects(self) -> tuple[HomeState, ...]:
@@ -106,6 +108,8 @@ class Plan:
     @property
     def gateway_restart_needed(self) -> bool:
         """플러그인은 게이트웨이 프로세스 시작 시 로드된다 — 파일 배포만으로는 반영이 아니다."""
+        if self.hermes_gateways == "stopped":
+            return False
         return any(
             s.destination.startswith(".hermes/plugins/") for s in self.home_defects
         ) or any(a.activation == "gateway" for a in self.deployable_artifacts) or deploy_all_gateway.restart_needed(
@@ -117,6 +121,7 @@ class Plan:
         defects = (
             self.mount_stale or self.mount_unmounted or self.mount_orphaned or self.home_defects
             or any(defective(a) for a in self.artifacts) or deploy_all_gateway.blocking(self.gateways)
+            or deploy_all_gateway.blocking(self.gateway_services)
         )
         return not defects and not (self.strict_undeclared and self.undeclared)
 
@@ -135,6 +140,8 @@ def parse_observations(
     undeclared: list[UndeclaredState] = []
     family: list[str] = []
     gateway_rows: list[list[str]] = []
+    service_rows: list[list[str]] = []
+    gateway_mode: str | None = None
     for raw in lines:
         line = raw.strip()
         if not line.startswith("OBS|"):
@@ -159,6 +166,10 @@ def parse_observations(
             ended = True
         elif kind == "gateway":
             gateway_rows.append(parts)
+        elif kind == "gateway-service":
+            service_rows.append(parts)
+        elif kind == "gateway-mode" and len(parts) == 3 and parts[2] in ("running", "stopped") and gateway_mode is None:
+            gateway_mode = parts[2]
         elif kind in deploy_all_kinds.FAMILY:
             family.append(line)
         else:
@@ -172,6 +183,12 @@ def parse_observations(
     if not home:
         raise ObservationError("no home-artifact observations")
     kinds = deploy_all_kinds.parse_artifact_lines(family)
+    accounts = {a.account for a in kinds.artifacts if a.destination == deploy_all_gateway.DROPIN}
+    if gateway_mode == "stopped":
+        accounts |= {"agent", "peer"}
+    services = deploy_all_gateway.fold_services(service_rows, accounts, gateway_mode or "running") if gateway_mode is not None else ()
+    if service_rows and gateway_mode is None:
+        raise ObservationError("gateway service observations require a mode")
     return Plan(
         release_sha=release_sha,
         mount_stale=tuple(mount_stale),
@@ -184,15 +201,19 @@ def parse_observations(
         pending=kinds.pending,
         pending_unknown=kinds.pending_unknown,
         delegated_checked=kinds.delegated_checked,
-        gateways=deploy_all_gateway.fold(gateway_rows, kinds.artifacts),
+        gateways=deploy_all_gateway.fold(gateway_rows, kinds.artifacts, services, hermes_gateways=gateway_mode or "running"),
+        hermes_gateways=gateway_mode or "running",
+        gateway_services=services,
     )
 
 
 def render_plan(plan: Plan) -> str:
     header = f"DEPLOY-ALL: release {plan.release_sha[:16]}"
+    services = [f"  GATEWAY-SERVICE {state.account}: {state.status} want={state.want} have={state.have} ({state.detail})"
+                for state in plan.gateway_services]
     if plan.clean and not plan.undeclared:
         return "\n".join([f"{header} — 전량 일치, 할 일 없음", *render_artifact_lines(plan),
-                          *deploy_all_gateway.render_lines(plan.gateways)])
+                          *deploy_all_gateway.render_lines(plan.gateways), *services])
     lines = [header]
     for skill, expected, mounted in plan.mount_stale:
         lines.append(
@@ -221,6 +242,7 @@ def render_plan(plan: Plan) -> str:
                 f"    {state.account}:{state.destination} sha256={state.sha256_prefix}…"
             )
     lines += render_artifact_lines(plan) + deploy_all_gateway.render_lines(plan.gateways)
+    lines += services
     if plan.gateway_restart_needed:
         lines.append("  GATEWAY-RESTART 필요: 플러그인 갱신은 agent+peer 재시동까지가 반영이다")
     return "\n".join(lines)
@@ -235,6 +257,7 @@ def render_actions(plan: Plan) -> str:
         lines.append(f"ACT|run-deployer|{package}/deploy.sh")
     if plan.gateway_restart_needed:
         lines.append("ACT|restart-gateway|agent+peer")
+    lines += deploy_all_gateway.service_actions(plan.gateway_services, plan.hermes_gateways)
     for skill in plan.mount_orphaned:
         lines.append(f"ACT|manual|orphaned-mount:{skill}")
     for state in plan.home_defects:

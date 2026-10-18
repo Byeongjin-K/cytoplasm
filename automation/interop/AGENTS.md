@@ -6,6 +6,7 @@
 ## 파일 지도
 | 파일 | 역할 |
 |------|------|
+| `channel_move.py` · `approval_directory.channel_override` | 삭제 전 미결 승인 조회(GET·파일 읽기만)와 ops 채널 override 판정. 노드 설정 `private_root/channel-override.json`은 ops 소유·0600 일반 파일·17~20자리 두 채널 ID일 때만 기존 설정보다 우선한다. 홈 경로는 `ProtectHome` 수리 유닛에서 보이지 않아 쓰지 않는다. 부재는 기존 경로, 오류는 값 없는 경고 후 기존 경로다. 승인 판정·lifecycle은 바꾸지 않는다 |
 | `external_effect_gate.py` | `evaluate_tool_call` — denylist(`configs/external-effect-tools.yaml`) 매칭. 미매칭=읽기 허용. 매칭(mutation)=owner 승인 레코드 필요. `action_hash=sha256(정규화 payload)`, method는 `manual_reaction` 또는 `signed_injection_e2e`만 |
 | `approval_types.py` · `approval_reminder.py` · `approval_lease.ReminderJournal` | 기존 승인 레코드의 key·원문 message id·실제 게시 시각에 고정된 리마인더 계산. 기존 key lease 안에서 lifecycle 관찰→영속 claim→최소정보 원문 링크 전송하며 catch-up은 최신 due 구간 1건만 시도한다. 별도 승인 상태머신이 아니다 |
 | `external_effect_gate_e2e.py` · `injection_adapter.py` | E2E 서명(HMAC) 승인 경로. `E2E_TEST_MODE=1`에서만 동작 |

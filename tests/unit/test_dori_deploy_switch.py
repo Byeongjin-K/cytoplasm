@@ -24,7 +24,8 @@ def _rig(
     repo = tmp_path / "repo"
     automation = repo / "automation"
     (automation / "memory_curator").mkdir(parents=True)
-    for name in ("__init__.py", "hermes_agent_chat_ignore.py", "hermes_memory_config.py", "memory_provider"):
+    for name in ("__init__.py", "hermes_agent_chat_ignore.py", "hermes_memory_config.py", "memory_provider",
+                 "yoodori_channel.py", "node_config.py"):
         (automation / name).symlink_to(REPO / "automation" / name)
     for name in ("memory_curator/deploy.sh", "deploy_config.sh"):
         shutil.copyfile(REPO / "automation" / name, automation / name)
@@ -74,10 +75,16 @@ def _rig(
     git = bin_dir / "git"
     git.write_text(f"#!/usr/bin/env bash\nprintf '%s\\n' '{HEAD}'\n")
     git.chmod(0o755)
+    node_config = tmp_path / "node.toml"
+    node_config.write_text(
+        f"private_root = {json.dumps(str(tmp_path / 'private'))}\n"
+        f"ops_home = {json.dumps(str(tmp_path / 'node/ops'))}\n",
+    )
     return repo, home, {
         **os.environ, "HOME": str(home), "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "DEPLOY_SSH_HOST": "fake-node", "NODE_TEST_ROOT": str(tmp_path / "node"),
         "NODE_RELEASE_CURRENT": str(REPO), "CALLS": str(tmp_path / "calls"),
+        "HEALTHCHECK_NODE_CONFIG_PATH": str(node_config),
     }
 
 

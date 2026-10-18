@@ -22,6 +22,7 @@ from automation.node_config import SYSTEM_NODE_CONFIG_PATH, load_node_config
 
 from .choice_files import Mailbox
 from .choices import ChoiceError
+from .peer_mode import peer_retired
 
 HANDOFF_ROOT: Final = Path("/srv/autophagy-repair-report-queue")
 MAILBOX_ROOT: Final = HANDOFF_ROOT / "memory-choices"
@@ -31,7 +32,7 @@ _SHARED_MODE: Final = 0o3770  # setgid keeps the service group; sticky stops cro
 @dataclass(frozen=True, slots=True)
 class Accounts:
     agent: Mailbox
-    peer: Mailbox
+    peer: Mailbox | None
 
 
 def _root_owned(path: Path) -> None:
@@ -86,16 +87,19 @@ def accounts(*, provision: bool = False) -> Accounts:
     _root_owned(SYSTEM_NODE_CONFIG_PATH)
     config = load_node_config(SYSTEM_NODE_CONFIG_PATH)
     agent = pwd.getpwnam(config.agent_account)
-    peer = pwd.getpwnam(config.peer_account)
+    retired = peer_retired()
+    peer = None if retired else pwd.getpwnam(config.peer_account)
     ops = pwd.getpwnam(config.ops_account).pw_uid
     group = grp.getgrnam(config.service_group).gr_gid
-    if agent.pw_uid == peer.pw_uid or 0 in (agent.pw_uid, peer.pw_uid):
+    if agent.pw_uid == 0 or (peer is not None and (
+        agent.pw_uid == peer.pw_uid or peer.pw_uid == 0
+    )):
         raise ChoiceError("distinct_service_accounts_required")
-    for account in (agent, peer):
+    for account in (agent,) if peer is None else (agent, peer):
         if group not in os.getgrouplist(account.pw_name, account.pw_gid):
             raise ChoiceError("service_group_membership_required")
     result = Accounts(Mailbox(MAILBOX_ROOT / "agent", agent.pw_uid, group),
-                      Mailbox(MAILBOX_ROOT / "peer", peer.pw_uid, group))
+                      None if peer is None else Mailbox(MAILBOX_ROOT / "peer", peer.pw_uid, group))
     if provision:
         uid = os.geteuid()
         if uid == ops:
@@ -104,14 +108,15 @@ def accounts(*, provision: bool = False) -> Accounts:
             check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
             return result
         check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
-        own = {result.agent.uid: result.agent, result.peer.uid: result.peer}.get(uid)
+        own = {box.uid: box for box in (result.agent, result.peer) if box is not None}.get(uid)
         if own is None:
             raise ChoiceError("provision_account")
         provision_mailbox(own)
         return result
     check_topology(HANDOFF_ROOT, MAILBOX_ROOT, ops, group)
     result.agent.check()
-    result.peer.check()
+    if result.peer is not None:
+        result.peer.check()
     return result
 
 

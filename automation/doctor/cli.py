@@ -120,10 +120,17 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
             print(report.render_text(account, role, findings) + "\n")
     parity = _model_parity(config, root, run_child)
     payloads.append({"check": "model-parity", "line": parity})
+    from automation.interop.approval_directory import CHANNEL_OVERRIDE_NOTICE, channel_override
+
+    overridden = channel_override() is not None
+    if overridden:
+        payloads.append({"check": "channel-override", "status": "PASS", "line": CHANNEL_OVERRIDE_NOTICE})
     if args.json:
         print(json.dumps(payloads, ensure_ascii=False, indent=2))
     else:
         print(parity)
+        if overridden:
+            print(f"[PASS] {CHANNEL_OVERRIDE_NOTICE}")
     return worst
 
 

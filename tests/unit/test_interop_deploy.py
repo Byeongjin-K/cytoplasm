@@ -37,6 +37,8 @@ _BUNDLE: Final = {
 _LATE: Final = {
     ".hermes/interop/gate_driver.py": "automation/interop/gate_driver.py",
     ".hermes/interop_runtime/automation/__init__.py": "automation/__init__.py",
+    ".hermes/interop_runtime/automation/node_config.py": "automation/node_config.py",
+    ".hermes/interop_runtime/automation/node.example.toml": "configs/node.example.toml",
 }
 _RULES: Final = ".hermes/interop/external-effect-tools.yaml"
 

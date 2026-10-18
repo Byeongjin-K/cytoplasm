@@ -21,7 +21,7 @@ LINE = "도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(�
 
 def test_release_counts_match_gate_without_a_runtime_import() -> None:
     # Given / When / Then: renderer ships in the pre-existing, closed staging set.
-    assert release_spec_message.YOODORI_CARD_COMMAND_COUNT == len(CARD_COMMANDS)
+    assert release_spec_message.YOODORI_CARD_COMMAND_COUNT == len(CARD_COMMANDS) == 7
     assert release_spec_message.YOODORI_GMAIL_READ_COUNT == len(GMAIL_READ_COMMANDS)
 
 

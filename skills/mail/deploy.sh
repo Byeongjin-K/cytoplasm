@@ -56,6 +56,7 @@ deploy_provenance_check "$repo_root" \
   "$repo_root/skills/mail/scripts/mail_attachment_drive_watch.py" \
   "$repo_root/skills/mail/scripts/watch_failure_streak.py" \
   "$repo_root/skills/mail/scripts/mail_triage_watch.py" \
+  "$repo_root/skills/mail/scripts/mail_digest_reactions_watch.py" \
   "$repo_root/skills/mail/scripts/mail_sync_watch.py" \
   "$repo_root/skills/mail/scripts/mailon_runtime_release.sh" \
   "$repo_root/skills/mail/scripts/mailon_vendor_digest.sh" \
@@ -100,6 +101,8 @@ push_file "$repo_root/skills/mail/scripts/mail_triage_watch.py" \
 run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-triage-watch\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "*/2 * * * *" --deliver discord --no-agent --script mail_triage_watch.py; else hermes cron create "*/2 * * * *" --name mail-triage-watch --no-agent --script mail_triage_watch.py --deliver discord; fi'
 source "$repo_root/automation/deploy_timer.sh"
 converge_timer mail-triage-watch "*/2 * * * *" mail_triage_watch.py discord
+push_file "$repo_root/skills/mail/scripts/mail_digest_reactions_watch.py" '.hermes/scripts/mail_digest_reactions_watch.py'
+converge_timer mail-digest-reactions "every 20s" mail_digest_reactions_watch.py local
 # Register (or converge) the daily digest cron. --deliver discord routes the
 # no-agent script's stdout to the owner DM, so a failure marker line + exit 1
 # actually reaches cha (the 2026-07-31 incident vanished under --deliver local,

@@ -6,7 +6,7 @@ from typing import Final, Protocol
 
 from automation.interop.chunker import chunk_lines
 
-YOODORI_CARD_COMMAND_COUNT: Final = 6
+YOODORI_CARD_COMMAND_COUNT: Final = 7
 YOODORI_GMAIL_READ_COUNT: Final = 2
 
 
@@ -195,7 +195,10 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     A ``healthcheck-wrapper:<node>`` surface adds one line naming those hosts. Without such
     surfaces the bytes are unchanged, so every stored v6 card still replays exactly.
     """
-    from automation.release_spec import DORI_SURFACE_PREFIX, RAG_MCP_SURFACE, WRAPPER_SURFACE_PREFIX, EnvelopeUnavailable
+    from automation.release_spec import (
+        DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
+        WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX, EnvelopeUnavailable,
+    )
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -230,6 +233,13 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
            f"유돌 게이트: Gmail 읽기 {YOODORI_GMAIL_READ_COUNT}개 추가"] if any(
             name.startswith(DORI_SURFACE_PREFIX) for name, _digest in spec.surface_digests
         ) else []),
+        *(["게이트웨이 멈춤: 노드 agent·peer Hermes 게이트웨이 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)"]
+          if any(name == GATEWAY_STOP_SURFACE for name, _digest in spec.surface_digests) else []),
+        *[
+            f"채널 합치기: 노드의 대화(#agent-chat)·알림(#notifications)을 채널 "
+            f"{name.removeprefix(YOODORI_CHANNEL_PREFIX)}(유돌 채널)로"
+            for name, _digest in spec.surface_digests if name.startswith(YOODORI_CHANNEL_PREFIX)
+        ],
         *(["검색 잠깐 끊김(~1분)·되돌림 있음"] if any(
             name == RAG_MCP_SURFACE for name, _digest in spec.surface_digests
         ) else []),

@@ -188,6 +188,8 @@ def close_thread(
             payload["name"] = f"{outcome.value} · {name}"[:_THREAD_NAME_LIMIT]
         api("PATCH", f"/channels/{thread_id}", payload)
     except Exception as error:  # noqa: BLE001 — 종결 표시는 결과 통지를 깨지 않는다
+        if isinstance(error, HTTPError) and error.code == 404:
+            return False
         print(
             f"THREAD-CLOSE-FAIL id={record_id} thread={thread_id} err={type(error).__name__}",
             file=sys.stderr,
@@ -201,6 +203,8 @@ def rename_thread(api: ApiCall, thread_id: str, name: str, *, record_id: str = "
     try:
         api("PATCH", f"/channels/{thread_id}", {"name": name[:_THREAD_NAME_LIMIT], "archived": False})
     except Exception as error:  # noqa: BLE001 — a mark never breaks the tick that set it
+        if isinstance(error, HTTPError) and error.code == 404:
+            return False
         print(
             f"THREAD-RENAME-FAIL id={record_id} thread={thread_id} err={type(error).__name__}",
             file=sys.stderr,
@@ -269,6 +273,12 @@ def deliver(
         thread_id = resolve_thread_id(api, origin, thread_name)
         sent = transport_factory(thread_id).send(body_for(thread_id))
     except Exception as error:  # noqa: BLE001 — 결과 통지는 표면 실패로 죽지 않는다
+        if isinstance(error, HTTPError) and error.code == 404 and (
+            outcome is not None or record.get("status") in {
+                "executed", "expired", "cancelled", "abandoned", "applied", "written", "reconciled",
+            }
+        ):
+            return None
         print(
             f"NOTIFY-THREAD-FAIL id={record.get('id', '')} err={type(error).__name__}",
             file=sys.stderr,

@@ -347,12 +347,15 @@ def test_the_gateway_probe_reports_only_gateway_lines_and_fails_while_stale(
     for case, want_rc in (("stale", 1), ("ok", 0), ("held", 0), ("bad", 4)):
         calls: list[bool] = []
 
-        def fake(root: Path, *, gateway_only: bool = False, _case: str = case) -> list[str]:
+        def fake(root: Path, *, gateway_only: bool = False, _case: str = case,
+                 dori_agent_chat: str = "off", hermes_gateways: str = "running",
+                 agent_chat_channel: str = "off") -> list[str]:
             calls.append(gateway_only)
             return answers[_case]
 
         monkeypatch.setattr(deploy_all_observe, "observe_node", fake)
-        rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--runtime-root", str(tmp_path), "--format", "gateways"])
+        rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running",
+                                    "--runtime-root", str(tmp_path), "--format", "gateways"])
         out = capsys.readouterr().out
         assert (case, rc) == (case, want_rc)
         assert calls == [True]
@@ -398,6 +401,8 @@ def _runner(
             return 0, "DELEGATED-END|0\n"
         if args[0] == "sha" and shas is not None:
             return 0, shas[args[1]] + "\n"
+        if args[0] == "gateway-service":
+            return 0, "active\nunmarked\n"
         return answers.get(args[0], (1, ""))
 
     return run
@@ -433,6 +438,8 @@ def test_a_held_generation_carries_each_accounts_own_roster_reason(
     roster = {"agent": agent_rc, "peer": peer_rc}
 
     def run(account: str, args: tuple[str, ...]) -> tuple[int, str]:
+        if args[0] == "gateway-service":
+            return 0, "active\nunmarked\n"
         if args[0] == "roster":
             return roster[account], ""
         if args[0] == "delegated":

@@ -32,7 +32,6 @@ agent|automation/memory_curator/cron/memory_curator_watch.py|.hermes/scripts/mem
 
 # --- automation/memory_relocate/deploy-manifest.txt ---
 agent|automation/memory_relocate/cron/memory_relocate_watch.py|.hermes/scripts/memory_relocate_watch.py|required
-peer|automation/memory_relocate/cron/memory_relocate_peer_watch.py|.hermes/scripts/memory_relocate_peer_watch.py|required
 
 # --- automation/notes_organize/deploy-manifest.txt ---
 agent|automation/notes_organize/notes_organize.py|.hermes/scripts/notes_organize.py|required

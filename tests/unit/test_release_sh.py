@@ -296,6 +296,35 @@ def test_absent_dori_switch_does_not_add_a_plan_argument(tmp_path: Path) -> None
     # Then
     assert result.returncode == 0, result.stdout + result.stderr
     assert "--dori-agent-chat" not in (tmp_path / "plan-args").read_text()
+    assert "--hermes-gateways" not in (tmp_path / "plan-args").read_text()
+
+
+def test_release_host_stop_switch_is_bound_by_the_plan_boundary(tmp_path: Path) -> None:
+    # Given
+    _origin, work = _origin_with_commits(tmp_path)
+    flag = tmp_path / ".hermes/release-flags/hermes-gateways-stopped"
+    flag.parent.mkdir(parents=True)
+    flag.write_text("stopped")
+    # When
+    result = _run(tmp_path, work, decisions="2 0")
+    # Then
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "--hermes-gateways stopped" in (tmp_path / "plan-args").read_text()
+
+
+def test_invalid_gateway_stop_switch_refuses_before_approval(tmp_path: Path) -> None:
+    # Given
+    _origin, work = _origin_with_commits(tmp_path)
+    flag = tmp_path / ".hermes/release-flags/hermes-gateways-stopped"
+    flag.parent.mkdir(parents=True)
+    flag.write_text("stopped\n")
+    # When
+    result = _run(tmp_path, work, decisions="2 0")
+    # Then
+    assert result.returncode == 4
+    assert "GATEWAY-STOP-REFUSED" in result.stderr
+    assert not (tmp_path / "plan-args").exists()
+    assert _origin_tags(work) == ""
 
 
 def test_release_host_switch_is_passed_to_the_real_plan_boundary(tmp_path: Path) -> None:

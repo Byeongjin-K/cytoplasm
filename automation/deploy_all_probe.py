@@ -153,11 +153,16 @@ def observations(
     return lines
 
 
-def _gateways(runtime_root: Path) -> int:
+def _gateways(runtime_root: Path, observer: Observer, wanted: str) -> int:
     """재시동 뒤 대기용 — 게이트웨이 세대 줄만. 0 = 기다릴 것 없음 · 1 = stale/unknown · 4 = 관측 불가."""
     try:
-        lines = deploy_all_observe.observe_node(runtime_root, gateway_only=True)
-        states = deploy_all_gateway.fold((line.split("|") for line in lines), None)
+        lines = observer(runtime_root)
+        states = deploy_all_gateway.fold((line.split("|") for line in lines if line.startswith("OBS|gateway|")), None)
+        services = [line.split("|") for line in lines if line.startswith("OBS|gateway-service|")]
+        accounts = {d.account for d in all_declarations(runtime_root) if d.destination == deploy_all_gateway.DROPIN}
+        if wanted == "stopped":
+            accounts |= {"agent", "peer"}
+        states += deploy_all_gateway.fold_services(services, accounts, wanted)
     except (ManifestError, OSError, deploy_all.ObservationError) as error:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
@@ -190,19 +195,29 @@ def main(argv: list[str] | None = None) -> int:
         help="선언 밖 홈 파일도 drift 로 판정",
     )
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
+    from automation.yoodori_channel import channel_value
+
+    parser.add_argument("--yoodori-channel", type=channel_value, default="off",
+                        help="릴리스 호스트가 선택한 대화·알림 채널 또는 off")
     parser.add_argument(
         "--dori-agent-chat", choices=("on", "off"), required=True,
         help="릴리스 호스트가 읽은 도리 전환(노드는 그 파일을 갖지 않는다)",
     )
+    parser.add_argument("--hermes-gateways", choices=("stopped", "running"), required=True,
+                        help="릴리스 호스트가 읽은 게이트웨이 정지/복구 모드")
     args = parser.parse_args(argv)
-    observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat)
+    observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat,
+                                 hermes_gateways=args.hermes_gateways,
+                                 agent_chat_channel=args.yoodori_channel)
     if args.format == "gateways":
-        return _gateways(args.runtime_root)
+        return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
     try:
         lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer)
         plan = deploy_all.parse_observations(
             lines, strict_undeclared=args.strict_undeclared
         )
+        if plan.hermes_gateways != args.hermes_gateways:
+            raise deploy_all.ObservationError("node observation does not match the host gateway mode")
     except (DriftError, ManifestError, OSError, deploy_all.ObservationError) as error:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4

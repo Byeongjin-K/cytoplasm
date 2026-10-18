@@ -36,6 +36,8 @@ NEW_RENDER_VERSION: Final = 6
 #: 이 표면이 없는 레코드(지금까지의 모든 카드)는 해시도 카드 바이트도 그대로다.
 WRAPPER_SURFACE_PREFIX: Final = "healthcheck-wrapper:"
 DORI_SURFACE_PREFIX: Final = "dori-agent-chat:"
+GATEWAY_STOP_SURFACE: Final = "hermes-gateways:stopped"
+YOODORI_CHANNEL_PREFIX: Final = "yoodori-channel:"
 RAG_MCP_SURFACE: Final = "rag-mcp"
 
 
@@ -48,6 +50,16 @@ def dori_surface(bot_id: str) -> tuple[str, str]:
     if re.fullmatch(r"[0-9]+", bot_id) is None:
         raise ReleaseSpecError("DORI-SWITCH-REFUSED: expected a decimal bot id only")
     return f"{DORI_SURFACE_PREFIX}{bot_id}", hashlib.sha256(bot_id.encode()).hexdigest()
+
+
+def gateway_stop_surface() -> tuple[str, str]:
+    """The reversible stop is an additional release effect, like the Dori cutover."""
+    return GATEWAY_STOP_SURFACE, hashlib.sha256(b"stopped").hexdigest()
+def yoodori_channel_surface(channel_id: str) -> tuple[str, str]:
+    """Bind the destination to this release's existing owner authorization."""
+    if re.fullmatch(r"[1-9][0-9]{16,19}", channel_id) is None:
+        raise ReleaseSpecError("YOODORI-CHANNEL-REFUSED: expected a decimal channel id only")
+    return f"{YOODORI_CHANNEL_PREFIX}{channel_id}", hashlib.sha256(channel_id.encode()).hexdigest()
 
 _RELEASE_VERSION: Final = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+\Z")
 _COMMIT_SHA: Final = re.compile(r"[0-9a-f]{40}\Z")
@@ -239,7 +251,9 @@ class ReleaseSpec:
         summary.extend(
             name
             for name, _digest in self.surface_digests
-            if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX)) and name != RAG_MCP_SURFACE
+            if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX,
+                                    YOODORI_CHANNEL_PREFIX))
+            and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE)
         )
         return " · ".join(summary) or "변경 없음"
 

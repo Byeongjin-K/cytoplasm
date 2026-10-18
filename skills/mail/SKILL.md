@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "메일을 읽거나 찾거나 회신·작성·전달·발송하라고 할 때 사용. 기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.19.0
+version: 1.20.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -155,6 +155,9 @@ cron `mail-sync-watch`(`20 9-19 * * 1-5`, no_agent)가 `mail_wrapper.py list --s
 - `scripts/mail_search.py`는 제목·발신자·본문·스레드·첨부파일의 순수 읽기 점수와 To/Cc 역할, `mass_notice`/`direct_inquiry` 접촉 유형을 계산하며 외부효과나 저장을 수행하지 않는다.
 
 ### 3. 소유자 지시 기반 초안 생성
+게이트웨이가 없어도 `mail-digest-reactions` 사용자 타이머(`every 20s`)가
+`mail_triage_watch.py --digest-reactions-only`와 같은 반응 전용 경로를 실행한다.
+최근 3일 카드 최대 20장씩 순환하고 429는 다음 틱을 미룬다. 2분 전체 틱과 동일 claim을 쓴다.
 **메일별 답장 (2026-10-08, 소유자 지시)**: cha 가 다이제스트 스레드의 메일 메시지에 Discord **답장(Reply)** 을 달면 메시지 앞에 `[Replying to: "### N. … 회신 키 MMDD-HHMM-N …"]` 가 붙어 온다. 그러면 번호 변환 없이 그 회신 키로 바로 실행한다:
 
 ```bash

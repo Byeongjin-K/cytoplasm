@@ -42,6 +42,8 @@ fi
 source "$repo_root/automation/deploy_provenance.sh"
 deploy_provenance_check "$repo_root" \
   "$repo_root/configs/external-effect-tools.yaml" \
+  "$repo_root/configs/node.example.toml" \
+  "$repo_root/automation/node_config.py" \
   "$repo_root/automation/__init__.py" \
   "$repo_root/automation/interop" || exit 4
 # shellcheck source=automation/deploy_push.sh
@@ -135,6 +137,10 @@ for account in "${accounts[@]}"; do
   run_agent 'chmod 700 "$HOME/.hermes/interop/gate_driver.py"' </dev/null || interrupted "making the gate driver executable"
   push_file "$repo_root/automation/__init__.py" .hermes/interop_runtime/automation/__init__.py \
     || interrupted "the runtime package marker"
+  push_file "$repo_root/automation/node_config.py" .hermes/interop_runtime/automation/node_config.py \
+    || interrupted "the node configuration loader"
+  push_file "$repo_root/configs/node.example.toml" .hermes/interop_runtime/automation/node.example.toml \
+    || interrupted "the node configuration seed"
   deploy_tree_swap "$repo_root/automation/interop" .hermes/interop_runtime/automation/interop \
     || interrupted "the interop runtime tree"
 done

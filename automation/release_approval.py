@@ -48,6 +48,8 @@ from automation.release_spec import (
     RAG_MCP_SURFACE,
     spec_from_record,
     dori_surface,
+    gateway_stop_surface,
+    yoodori_channel_surface,
     wrapper_surface,
 )
 from automation.release_released import ReleasedTagsError, parse_released
@@ -91,6 +93,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    if getattr(args, "hermes_gateways", None) == "stopped":
+        surfaces.append(gateway_stop_surface())
+    channel_id = getattr(args, "yoodori_channel", None)
+    if channel_id is not None:
+        try:
+            surfaces.append(yoodori_channel_surface(channel_id))
+        except ReleaseSpecError as error:
+            print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+            return 4
     bot_id = getattr(args, "dori_agent_chat", None)
     if bot_id is not None:
         try:
@@ -238,6 +249,26 @@ def cmd_authorize_dori(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_authorize_gateway_stop(args: argparse.Namespace) -> int:
+    surface, digest = gateway_stop_surface()
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=surface, hash=digest,
+                           head=args.head, peer_attest_mode="")
+    )
+
+
+def cmd_authorize_yoodori_channel(args: argparse.Namespace) -> int:
+    try:
+        surface, digest = yoodori_channel_surface(args.channel_id)
+    except ReleaseSpecError as error:
+        print(error, file=sys.stderr)
+        return 4
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=surface, hash=digest,
+                           head=args.head, peer_attest_mode="")
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="release-approval")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--version", required=True)
     plan.add_argument("--bump", choices=("major", "minor", "patch"), default="patch")
     plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
+    plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
+    plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -297,6 +330,13 @@ def main(argv: list[str] | None = None) -> int:
     dori.add_argument("--bot-id", required=True)
     dori.add_argument("--head", required=True)
     dori.set_defaults(run=cmd_authorize_dori)
+    stop = commands.add_parser("authorize-hermes-gateways-stopped", help="이 릴리스 ✅ 가 양 게이트웨이 정지를 덮는가")
+    stop.add_argument("--head", required=True)
+    stop.set_defaults(run=cmd_authorize_gateway_stop)
+    channel = commands.add_parser("authorize-yoodori-channel", help="이 릴리스 ✅ 가 채널 합치기를 덮는가")
+    channel.add_argument("--channel-id", required=True)
+    channel.add_argument("--head", required=True)
+    channel.set_defaults(run=cmd_authorize_yoodori_channel)
     rag = commands.add_parser("authorize-rag-mcp", help="authorize the release-bound MCP-only rebuild")
     rag.add_argument("--hash", required=True)
     rag.add_argument("--head", required=True)

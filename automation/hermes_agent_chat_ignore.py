@@ -63,7 +63,7 @@ def _value(line: str) -> str:
     return line.split(" #", 1)[0].rstrip("\r\n ")
 
 
-def read_ignored(text: str) -> Ignored:
+def read_ignored(text: str, *, key_name: str = "ignored_channels") -> Ignored:
     """Parse block mappings and decimal channel lists, refusing ambiguous YAML."""
     lines = tuple(text.splitlines(keepends=True))
     roots: dict[str, int] = {}
@@ -110,7 +110,7 @@ def read_ignored(text: str) -> Ignored:
         if key in found:
             raise ConfigShapeError("duplicate discord key")
         found[key] = index
-    key = found.get("ignored_channels")
+    key = found.get(key_name)
     if key is None:
         return Ignored(lines, head, " " * indent, None, (), ())
     stop = min((i for i in found.values() if i > key), default=end)
@@ -147,11 +147,13 @@ def wanted_identity() -> str:
     return "agent_chat_ignored=yes"
 
 
-def apply_ignore(text: str, channel: str, *, remove: bool = False) -> str:
+def apply_ignore(
+    text: str, channel: str, *, remove: bool = False, key_name: str = "ignored_channels",
+) -> str:
     """Keep all bytes outside the selected list, including comments and line endings."""
     if not _ID.fullmatch(channel):
         raise ConfigShapeError("invalid channel id")
-    before = read_ignored(text)
+    before = read_ignored(text, key_name=key_name)
     present = channel in before.channels
     if present != remove:
         return text
@@ -160,8 +162,8 @@ def apply_ignore(text: str, channel: str, *, remove: bool = False) -> str:
     if before.key is None:
         if before.head is None:
             prefix = text + (eol if text and not text.endswith("\n") else "")
-            return prefix + f"discord:{eol}  ignored_channels: '{channel}'{eol}"
-        lines.insert(before.head + 1, f"{before.indent}ignored_channels: '{channel}'{eol}")
+            return prefix + f"discord:{eol}  {key_name}: '{channel}'{eol}"
+        lines.insert(before.head + 1, f"{before.indent}{key_name}: '{channel}'{eol}")
         if not lines[before.head].endswith("\n"):
             lines[before.head] += eol
         return "".join(lines)
@@ -191,7 +193,8 @@ def apply_ignore(text: str, channel: str, *, remove: bool = False) -> str:
 def write_config(path: Path, text: str) -> Path:
     """One backup and atomic replacement, shared by the standalone and composite CLI."""
     backup = path.with_name(f"{path.name}.bak-agent-profile-{time.time_ns()}")
-    shutil.copy2(path, backup)
+    if path.exists():
+        shutil.copy2(path, backup)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.agent-profile-")
     try:
         with os.fdopen(descriptor, "wb") as stream:

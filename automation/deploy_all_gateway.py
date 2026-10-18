@@ -63,9 +63,17 @@ def gateway_lines(
     statuses: Mapping[tuple[str, str], tuple[str, Sequence[tuple[str, str]]]],
     runtime_root: Path,
     call: Runner,
+    services: Sequence[GatewayState] = (),
+    *,
+    hermes_gateways: str = "running",
 ) -> list[str]:
+    if hermes_gateways == "stopped":
+        return []
+    inactive = {s.account for s in services if s.status != "ok"}
     lines: list[str] = []
     for decl in declarations:
+        if decl.account in inactive:
+            continue
         status, details = statuses.get((decl.account, decl.destination), ("", ())) if decl.destination == DROPIN else ("", ())
         if status == "held":
             lines.append(f"OBS|gateway|{decl.account}|held|-|-|{details[0][0] if details else '-'}")
@@ -92,7 +100,10 @@ def _state(parts: list[str]) -> GatewayState:
     return state
 
 
-def fold(rows: Iterable[list[str]], artifacts: Sequence[ArtifactState] | None) -> tuple[GatewayState, ...]:
+def fold(
+    rows: Iterable[list[str]], artifacts: Sequence[ArtifactState] | None,
+    services: Sequence[GatewayState] = (), *, hermes_gateways: str = "running",
+) -> tuple[GatewayState, ...]:
     """`OBS|gateway|…` 를 접는다. artifacts 를 주면 드롭인 행과 정확히 맞물려야 한다 —
     ok 인 드롭인에 줄이 없는 관측은 게이트웨이를 보지 않은 것이지 깨끗한 것이 아니다."""
     states: dict[str, GatewayState] = {}
@@ -103,7 +114,9 @@ def fold(rows: Iterable[list[str]], artifacts: Sequence[ArtifactState] | None) -
         states[state.account] = state
     if artifacts is not None:
         dropins = {a.account: a.status for a in artifacts if a.kind == "file" and a.destination == DROPIN}
-        expected = {account: status == "held" for account, status in dropins.items() if status in ("ok", "held")}
+        inactive = {s.account for s in services if s.status != "ok"}
+        expected = {account: status == "held" for account, status in dropins.items()
+                    if status in ("ok", "held") and account not in inactive and hermes_gateways != "stopped"}
         if {account: s.status == "held" for account, s in states.items()} != expected:
             raise ObservationError("gateway observations do not match the drop-in rows")
     return tuple(states.values())
@@ -137,3 +150,44 @@ def actions(states: Iterable[GatewayState]) -> list[str]:
 def receipt_held(states: Iterable[GatewayState]) -> list[dict[str, str]]:
     return [{"account": s.account, "destination": "gateway-generation", "reason": s.detail}
             for s in states if s.status == "held"]
+
+
+def service_lines(accounts: Sequence[str], wanted: str, call: Runner) -> list[str]:
+    """Observe systemd separately from plugin generation, including the release-owned marker."""
+    lines: list[str] = []
+    for account in accounts:
+        rc, out = call(account, ("gateway-service",))
+        fields = out.strip().splitlines()
+        have, detail = "-", "unreadable-service"
+        if len(fields) == 2 and fields[1] in ("marked", "unmarked"):
+            if rc == 0 and fields[0] == "active":
+                have = "running"
+            elif rc == 3 and fields[0] == "inactive":
+                have = "stopped"
+            if have != "-":
+                detail = ("marker-missing" if wanted == "stopped" and fields[1] != "marked"
+                          else "marker-present" if wanted == "running" and fields[1] == "marked" else "-")
+        status = "unknown" if have == "-" else "ok" if have == wanted and detail == "-" else "stale"
+        lines.append(f"OBS|gateway-service|{account}|{status}|{wanted}|{have}|{detail}")
+    return lines
+
+
+def fold_services(
+    rows: Iterable[list[str]], accounts: set[str], wanted: str,
+) -> tuple[GatewayState, ...]:
+    """A cut or inconsistent service observation must not attest a successful stop."""
+    states = tuple(_state(parts) for parts in rows)
+    if (len(states) != len(accounts) or {s.account for s in states} != accounts
+            or any(s.want != wanted or s.have not in ("running", "stopped", "-")
+                   or s.status not in ("ok", "stale", "unknown")
+                   or (s.status == "unknown") != (s.have == "-")
+                   or (s.status == "stale" and s.have == wanted and s.detail not in ("marker-missing", "marker-present"))
+                   or s.detail not in ("-", "marker-missing", "marker-present", "unreadable-service") for s in states)):
+        raise ObservationError("gateway service observations do not match the requested mode")
+    return states
+
+
+def service_actions(states: Sequence[GatewayState], wanted: str) -> list[str]:
+    verb = "stop" if wanted == "stopped" else "start"
+    change = [f"ACT|{verb}-gateway|agent+peer"] if any(s.status == "stale" for s in states) else []
+    return change + [f"ACT|manual|gateway-service-unknown:{s.account}" for s in states if s.status == "unknown"]

@@ -71,10 +71,13 @@ wrapper_record_commands() { # wrapper_record_commands <node> <outfile>
   done
   # 실패한 체크가 수리 티켓을 내는 경로도 같은 키로 나간다. 이것이 빠지면 체크는 실패를
   # 보고하지 못한 채 실패한다 — 2026-08-20 `release store usage` 가 정확히 그 상태였다.
+  # report_repair 는 어느 노드의 체크든 티켓을 언제나 PRIMARY_NODE 로 보낸다 — 그래서 주 노드
+  # 래퍼는 모든 체크의 수리 명령을 허용해야 한다(2026-10-18: RAG 노드 embedding 실패의 티켓이
+  # 주 노드 래퍼에 없어 rc=126 으로 거부됐다).
   for entry in "${HEALTHCHECK_CHECK_CATALOG[@]}"; do
     definition="${entry#*|}"
     IFS='|' read -r name _type check_node _rest <<< "$definition"
-    [[ "$check_node" == "$node" ]] || continue
+    [[ "$check_node" == "$node" || "$node" == "$PRIMARY_NODE" ]] || continue
     printf '%s\0' "$(healthcheck_repair_command "$name")" >> "$out"
   done
   unset HEALTHCHECK_WRAPPER_RECORDING

@@ -264,7 +264,10 @@ def cmd_reply_request(args: argparse.Namespace) -> int:
         return cmd_draft(argparse.Namespace(
             uid=str(item["uid"]), instruction=args.instruction, attachment=[],
             no_post=args.no_post, with_evidence=args.with_evidence, reply_all=args.reply_all,
-            digest_card={"channel_id": item.get("channel_id", ""), "message_id": item["message_id"]},
+            digest_card={
+                "channel_id": getattr(args, "origin_channel_id", "") or item.get("channel_id", ""),
+                "message_id": getattr(args, "origin_message_id", "") or item["message_id"],
+            },
         ))
 
 
@@ -413,6 +416,15 @@ def _digest_reactions() -> None:
     except Exception as error:  # noqa: BLE001 — approvals below must still be processed
         print(f"DIGEST-REACTION-TICK-FAIL err={triage_core.redact(str(error))[:160]}",
               file=sys.stderr)
+
+
+def cmd_digest_reactions_only(_args: argparse.Namespace) -> int:
+    """Read only digest reactions; no draft approval loop, sync or thread settlement."""
+    if triage_mode.effective_mode() != "no-go":
+        import digest_reaction_scan
+
+        digest_reaction_scan.run()
+    return 0
 
 
 def cmd_digest_react(args: argparse.Namespace) -> int:
@@ -648,6 +660,8 @@ def build_parser() -> argparse.ArgumentParser:
     reply.add_argument("--key", required=True, help="답장 대상 메시지의 회신 키 (예: 1008-0800-3)")
     reply.add_argument("--author-id", required=True, help="답장한 Discord 사용자 id")
     reply.add_argument("--instruction", required=True, help="답장 본문 = 회신 요지")
+    reply.add_argument("--origin-channel-id", default="", help="원 지시 채널")
+    reply.add_argument("--origin-message-id", default="", help="원 지시 메시지")
     reply.add_argument("--no-post", action="store_true", help="초안만 만들고 승인 메시지 게시 생략")
     reply.add_argument("--with-evidence", action="store_true", help="상대·주제 관련 개인 근거 사용")
     reply.add_argument("--reply-all", action="store_true", help="전체회신")
@@ -740,6 +754,10 @@ def build_parser() -> argparse.ArgumentParser:
     digest_react.add_argument("--message-id", required=True)
     digest_react.add_argument("--emoji", default="", help="게이트웨이가 들은 반응(📄 다시 누름이면 스레드 링크를 다시 남김)")
     digest_react.set_defaults(func=cmd_digest_react)
+
+    sub.add_parser("digest-reactions-only", help="최근 다이제스트 반응만 처리").set_defaults(
+        func=cmd_digest_reactions_only,
+    )
 
     confirm = sub.add_parser("confirm", help="소유자 승인 검증 후에만 발송")
     confirm.add_argument("--draft", required=True)

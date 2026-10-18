@@ -62,6 +62,10 @@ _REMOTE_CLEANUP: Final = ("appends the fixed cleanup command `rm -rf -- \"$stagi
 _LOCK_FD: Final = "closes the execution lock descriptor this script opened (frozen deploy-skill.sh)"
 _ALLOWED: Final[dict[tuple[str, str], str]] = {
     ("automation/memory_curator/deploy.sh",
+     'if ! "$repo_root/automation/release_approval_remote.sh" authorize-yoodori-channel \\'):
+        "fixed release approval transport, explicitly provenance-checked; verifies the exact HEAD and "
+        "destination surface before any chat, notice, or ops override write",
+    ("automation/memory_curator/deploy.sh",
      'if ! "$repo_root/automation/release_approval_remote.sh" authorize-dori-agent-chat \\'):
         "fixed release approval transport, included explicitly in this deployer's provenance check; "
         "the existing surface gate verifies the same HEAD and bot before any node config write",

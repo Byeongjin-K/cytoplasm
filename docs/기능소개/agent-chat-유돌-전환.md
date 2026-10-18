@@ -19,6 +19,8 @@ agent의 `hermes-agent-profile-v1`이 메모리 상한·자동 회상과 이 선
 백업 한 번 → 임시 파일 → 원자 교체 → 두 설정 재조회 순서이며,
 peer는 기존 `hermes-memory-profile-with-recall-v1`을 유지한다.
 `activation=gateway`가 릴리스의 agent+peer 동시 재시동을 요구한다.
+단, [게이트웨이 멈춤](hermes-게이트웨이-멈춤.md) 스위치가 함께 켜졌으면 설정만 맞추고
+두 서비스를 정지 상태로 유지한다. 정지 모드에서는 세대 검사·재시동을 하지 않는다.
 
 ## 사용 시나리오
 
@@ -49,10 +51,10 @@ peer는 기존 `hermes-memory-profile-with-recall-v1`을 유지한다.
 
 유돌은 SSH 강제명령으로 기존 읽기(`calendar`, `mail-list`, `mail-get`, `recall`, `status`),
 Gmail 읽기(`gmail-list`, `gmail-get`)와
-아래 **승인 요청 6종**, 노드 비공개 폴더로의 `stage` 파일 전달만 할 수 있다.
+아래 **승인 요청 7종**, 노드 비공개 폴더로의 `stage` 파일 전달만 할 수 있다.
 실행·승인·발송·워처 호출 권한은 없다.
 기존 카드의 소유자 ✅ 뒤에만 노드의 기존 워처가 실행한다. 릴리스 카드에는 전환 표면이 있을 때만
-`유돌 게이트: 카드 올리기 명령 6개 추가(실행 권한 없음)`이 전환 켬 줄 다음에 붙는다.
+`유돌 게이트: 카드 올리기 명령 7개 추가(실행 권한 없음)`이 전환 켬 줄 다음에 붙는다.
 그 다음 줄에는 `유돌 게이트: Gmail 읽기 2개 추가`도 표시된다.
 개수는 렌더러의 고정 상수이며 테스트가 게이트 명령 목록 길이와의 일치를 강제한다.
 
@@ -63,6 +65,7 @@ Gmail 읽기(`gmail-list`, `gmail-get`)와
 | SSH 명령 | 고정 생산자 argv (`P` 뒤) | 허용 입력 |
 |---|---|---|
 | `mail-compose` | `S/mail/scripts/triage_cli.py compose` | 필수 `--to --subject --body`, 선택 `--cc --bcc --in-reply-to` |
+| `mail-draft <회신 키>` | `S/mail/scripts/triage_cli.py reply-request --key <키> --author-id <설정 owner_id>` → 기존 `cmd_draft` | 필수 `--instruction-b64`, 원 지시 좌표; 키는 숫자 4-4-1~3자리, 디코딩한 지시문 최대 2,000자 |
 | `calendar-request` | `S/calendar/scripts/calendar_cli.py draft-create`, 성공 시 같은 CLI `post-confirm --draft <반환 id>` | 필수 `--text`, 선택 `--summary` |
 | `todo-request` | `S/todo/scripts/todo_cli.py request` | 필수 `--title`, 선택 `--notes --due`; tasklist는 기본 `@default` |
 | `drive-save` | `-m automation.effect_request request drive-save` | 필수 `--file --summary`, 선택 `--title --project`; kind는 기본 `doctype` |
@@ -108,9 +111,15 @@ gws가 JSON 앞에 `Using keyring backend: keyring`을 출력해도 첫 `{`부�
 stderr는 섞지 않으며 그 안내나 자격증명 오류 출력은 응답으로 보내지 않는다.
 `send drafts modify labels trash delete batchModify insert import watch settings`는 모두 게이트에서 거부한다.
 
-- **메일 회신 예:** “이 메일에 이렇게 답장해 줘” → 유돌이 원문 UID를 `--in-reply-to`로
+- **다이제스트 답장 예:** 카드의 회신 키 `1008-0800-3`에 “참석한다고 회신해 줘” →
+  `mail-draft 1008-0800-3 --instruction-b64 <UTF-8-Base64> --origin-channel-id <채널> --origin-message-id <지시 메시지>` →
+  기존 `reply-request`가 `digest_items`의 키를 UID로 바꾸고, 같은 잠금 안에서 기존 `cmd_draft`로 초안·승인 카드만 올린다.
+  게이트는 노드 interop 설정의 `owner_id`를 사용하며 호출자가 작성자 ID를 바꿀 수 없다.
+  모르는 키는 기존 `REPLY-REQUEST-UNKNOWN`, 잘못된 키·좌표 누락·2,000자 초과·셸 문자는 게이트에서 거부한다.
+  `--instruction-b64`는 디코딩 뒤에도 셸 문자를 허용하지 않는다. 승인 카드에서 결정하기 전에는 발송하지 않는다.
+- **원문 UID로 메일 회신 예:** “이 메일에 이렇게 답장해 줘” → 유돌이 원문 UID를 `--in-reply-to`로
   넘긴 `mail-compose` 요청 → 원문 인용을 포함한 기존 메일 승인 카드 → 형 ✅ → 기존 메일 워처 발송.
-  일반 `draft --instruction`에는 원문 좌표 인자가 없으므로 허용하지 않는다.
+  일반 `draft --instruction`을 게이트에 직접 호출하는 것은 허용하지 않는다.
 - **요청자 표시:** 생산자에 requester/source 인자는 없다. 카드 발신자는 기존 **노드 봇**이며
   `YooDori`라는 새 요청자 이름이 카드 본문에 추가되지는 않는다. 대신 형의 원 지시 메시지 좌표를
   항상 바인딩한다. 그 메시지가 agent-chat에 있으면 그 메시지에 승인 스레드가 매달린다.

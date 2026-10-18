@@ -32,12 +32,14 @@ ENV = {
 }
 _INT = re.compile(r"[0-9]{1,3}")
 _UID = re.compile(r"[0-9]{1,20}")
+_REPLY_KEY = re.compile(r"[0-9]{4}-[0-9]{4}-[0-9]{1,3}")
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 _SHELL = re.compile(r"[;&|`$<>\\]")
 STAGING = HOME / ".local/share/yoodori-staging"
 CARD_COMMANDS = (
     "mail-compose", "calendar-request", "todo-request",
     "drive-save", "command-request", "obsidian-request",
+    "mail-draft",
 )
 GMAIL_READ_COMMANDS = ("gmail-list", "gmail-get")
 _GMAIL_ID = re.compile(r"[0-9a-f]{8,32}")
@@ -54,6 +56,7 @@ _ORIGIN = {"--origin-channel-id": "id", "--origin-message-id": "id"}
 _FLAGS = {
     "mail-compose": {"--to": "email", "--cc": "email", "--bcc": "email",
                      "--subject": "short", "--body": "body", "--in-reply-to": "id"},
+    "mail-draft": {"--instruction": "body"},
     "calendar-request": {"--text": "text", "--summary": "short"},
     "todo-request": {"--title": "short", "--notes": "body", "--due": "date"},
     "drive-save": {"--file": "file", "--summary": "short", "--title": "short",
@@ -63,6 +66,7 @@ _FLAGS = {
 }
 _REQUIRED = {
     "mail-compose": ("--to", "--subject", "--body"),
+    "mail-draft": ("--instruction",),
     "calendar-request": ("--text",),
     "todo-request": ("--title",),
     "drive-save": ("--file", "--summary"),
@@ -101,12 +105,25 @@ def _value(value: str, kind: str) -> str:
     return checked_value(value, kind, STAGING)
 
 
+def _owner_id() -> str:
+    """The trusted card-only SSH entry uses the configured owner, never a caller's id."""
+    try:
+        value = json.loads((HOME / ".hermes/interop/config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise Refused("owner config unavailable") from None
+    if not isinstance(value, dict) or not isinstance(value.get("owner_id"), str):
+        raise Refused("owner config invalid")
+    return _value(value["owner_id"], "id")
+
+
 def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
     allowed = {**_FLAGS[name], **_ORIGIN}
     values: dict[str, str] = {}
     if len(args) % 2 or len(args) > 32:
         raise Refused("card requests take flag/value pairs only")
     for flag, raw in zip(args[::2], args[1::2]):
+        if name == "mail-draft" and flag == "--instruction":
+            raise Refused("mail draft instruction requires --instruction-b64")
         if name == "obsidian-request" and flag == "--body":
             raise Refused("inline Obsidian body requires --body-b64")
         decoded = flag.removesuffix("-b64") if flag != "--argv-b64" else flag
@@ -116,6 +133,10 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         if flag != decoded and kind not in {"body", "text", "short"}:
             raise Refused("encoding only supported for text")
         values[decoded] = _value(_decode(raw) if flag != decoded else raw, kind)
+        if name == "mail-draft" and decoded == "--instruction" and (
+            len(values[decoded]) > 2000 or _SHELL.search(values[decoded])
+        ):
+            raise Refused("instruction exceeds 2000 characters or contains shell characters")
     if any(flag not in values for flag in (*_REQUIRED[name], *_ORIGIN)):
         raise Refused("missing required request flag or owner message coordinates")
     if name == "obsidian-request" and sum(flag in values for flag in ("--body", "--body-file")) != 1:
@@ -140,6 +161,7 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         tails = ["--", *command]
     py = "/usr/bin/python3"
     skill = {"mail-compose": ("mail", "triage_cli.py", "compose"),
+             "mail-draft": ("mail", "triage_cli.py", "reply-request"),
              "calendar-request": ("calendar", "calendar_cli.py", "draft-create"),
              "todo-request": ("todo", "todo_cli.py", "request")}
     if name in skill:
@@ -162,6 +184,11 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
             raise Refused("stage needs exactly one file name")
         return name, [stage_name(args[0])], STAGING
     if name in CARD_COMMANDS:
+        if name == "mail-draft":
+            if not args or not _REPLY_KEY.fullmatch(args[0]):
+                raise Refused("mail-draft needs a digest reply key")
+            _, argv, cwd = _card(name, args[1:])
+            return name, [*argv[:3], "--key", args[0], "--author-id", _owner_id(), *argv[3:]], cwd
         return _card(name, args)
     py = "/usr/bin/python3"
     if name == "gmail-list":

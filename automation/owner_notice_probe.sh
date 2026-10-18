@@ -44,6 +44,9 @@ _owner_notice_value_present() { # _owner_notice_value_present <path> <key>
 probe_owner_notice_credentials() { # probe_owner_notice_credentials <node> <account> <path>
   local path="${3:-$OWNER_NOTICE_CREDENTIAL_PATH}" key
   local -a missing=()
+  local runtime
+  runtime="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  PYTHONPATH="$runtime" python3 -B -m automation.yoodori_channel --override-status || return 1
   if [[ ! -e "$path" ]]; then
     printf '%s\n' '[healthcheck] OWNER-NOTICE-CREDENTIAL-ABSENT'
     owner_notice_credentials_guidance "$path"

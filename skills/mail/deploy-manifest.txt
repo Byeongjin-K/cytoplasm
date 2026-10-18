@@ -9,6 +9,8 @@ agent|skills/mail/scripts/mailon_vendor_digest.sh|.hermes/scripts/mailon_vendor_
 agent|skills/mail/scripts/mailon_runtime_drift.sh|.hermes/scripts/mailon_runtime_drift.sh|required
 agent|skills/mail/vendor/mailon|.hermes/mailon-runtime/current|v2:derived;algorithm=mailon-py-v1;requirements=skills/mail/vendor/requirements.txt
 agent|skills/mail/scripts/mail_triage_watch.py|mail-triage-watch|v2:cron;schedule=*/2 * * * *;script=mail_triage_watch.py;deliver=discord;mode=no-agent;runner=systemd
+agent|skills/mail/scripts/mail_digest_reactions_watch.py|.hermes/scripts/mail_digest_reactions_watch.py|v2:file
+agent|skills/mail/scripts/mail_digest_reactions_watch.py|mail-digest-reactions|v2:cron;schedule=every 20s;script=mail_digest_reactions_watch.py;deliver=local;mode=no-agent;runner=systemd
 agent|skills/mail/scripts/mail_digest_watch.py|mail-daily-digest|v2:cron;schedule=0 8 * * *;script=mail_digest_watch.py;deliver=discord;mode=no-agent;runner=systemd
 agent|skills/mail/scripts/mail_attachment_drive_watch.py|mail-attachment-drive-watch|v2:cron;schedule=every 30m;script=mail_attachment_drive_watch.py;deliver=discord;mode=no-agent;runner=systemd
 agent|skills/mail/scripts/mail_sync_watch.py|mail-sync-watch|v2:cron;schedule=20 9-19 * * 1-5;script=mail_sync_watch.py;deliver=discord;mode=no-agent;runner=systemd

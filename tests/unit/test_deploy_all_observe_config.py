@@ -56,13 +56,13 @@ def _config(homes: Path, account: str, text: str) -> None:
 
 def _artifacts(root: Path, homes: Path) -> dict[str, deploy_all_kinds.ArtifactState]:
     lines = deploy_all_observe.collect(root, _runner(homes), "", gateway_only=False)
-    parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] != "gateway"])
+    parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] in deploy_all_kinds.FAMILY])
     return {state.account: state for state in parsed.artifacts if state.destination == ".hermes/config.yaml"}
 
 
 def _soul(root: Path, homes: Path) -> deploy_all_kinds.ArtifactState:
     lines = deploy_all_observe.collect(root, _runner(homes), "", gateway_only=False)
-    parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] != "gateway"])
+    parsed = deploy_all_kinds.parse_artifact_lines([line for line in lines if line.split("|")[1] in deploy_all_kinds.FAMILY])
     (state,) = (s for s in parsed.artifacts if s.destination == ".hermes/SOUL.md")
     return state
 

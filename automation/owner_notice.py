@@ -36,7 +36,7 @@ _USER_AGENT: Final = "DiscordBot (https://github.com/orientpine/autophagy-agents
 
 
 def owner_notice_channel(home: Path | None = None) -> str:
-    """ON-1: 지정 통지 채널 id — env 가 먼저, 없으면 이 계정의 interop config.
+    """ON-1: 검증된 계정 override → env → 이 계정의 interop config.
 
     확정(2026-08-28 §10-6): 정기 통지는 별도 `#notifications` 채널로 분리한다. 키는
     `owner_notice_channel_id`(`agent_chat_channel_id` 와 같은 해석 위치). **설정되면
@@ -46,6 +46,11 @@ def owner_notice_channel(home: Path | None = None) -> str:
     확인 불가는 "" 로 답한다 — ProtectHome 유닛에서 홈을 찌르는 코드는 답해야지
     던지면 안 된다(2026-08-21 repair 워처 5일 정지, 9e1b7ad0).
     """
+    from automation.interop.approval_directory import channel_override
+
+    override = channel_override(home)
+    if override is not None:
+        return override["owner_notice_channel_id"]
     from_env = os.environ.get("OWNER_NOTICE_CHANNEL_ID", "").strip()
     if from_env:
         return from_env

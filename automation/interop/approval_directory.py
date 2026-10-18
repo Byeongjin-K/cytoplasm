@@ -22,6 +22,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import stat
 import sys
 import urllib.error
 from dataclasses import dataclass, field
@@ -39,6 +41,7 @@ from automation.interop.approval_surface import (
     request_thread_notice,
     request_thread_title,
 )
+from automation.node_config import NodeConfig, NodeConfigError, load_node_config
 
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
@@ -47,6 +50,54 @@ _INTEROP_CONFIG: Final = "~/.hermes/interop/config.json"
 _OWNER_DM_PATH: Final = "/users/@me/channels"
 _USER_AGENT: Final = "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)"
 _CACHE_FINGERPRINT_LENGTH: Final = 16
+CHANNEL_OVERRIDE_NOTICE: Final = (
+    "채널 덮어씀(정상): /etc/autophagy/interop-ops.json·repair-approval.env 의 옛 값 대신 "
+    "노드 설정 private_root/channel-override.json"
+)
+
+
+def _channel_node_config() -> NodeConfig:
+    configured = os.environ.get("HEALTHCHECK_NODE_CONFIG_PATH")
+    return load_node_config(Path(configured) if configured else None)
+
+
+def channel_override_path(config: NodeConfig | None = None) -> Path:
+    """The ops-owned file must remain visible inside ProtectHome repair units."""
+    return (config or _channel_node_config()).private_root / "channel-override.json"
+
+
+def channel_override(home: Path | None = None) -> dict[str, str] | None:
+    """Account-owned 0600 release override; no Discord calls and no credential logging."""
+    try:
+        config = _channel_node_config()
+    except (OSError, NodeConfigError):
+        print("CHANNEL-OVERRIDE-WARN reason=node-config", file=sys.stderr)
+        return None
+    # Other accounts cannot traverse the ops-private 0700 root, and do not use this override.
+    if (home or Path.home()) != config.ops_home:
+        return None
+    path = channel_override_path(config)
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        print("CHANNEL-OVERRIDE-WARN reason=unreadable", file=sys.stderr)
+        return None
+    try:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o600:
+            raise ValueError("ownership or mode")
+        raw = json.loads(path.read_bytes().decode("utf-8"))
+        keys = ("agent_chat_channel_id", "owner_notice_channel_id")
+        if not isinstance(raw, dict) or any(
+            type(raw.get(key)) is not str or re.fullmatch(r"[1-9][0-9]{16,19}", raw[key]) is None
+            for key in keys
+        ):
+            raise ValueError("shape")
+        return {key: raw[key] for key in keys}
+    except (OSError, UnicodeError, ValueError):
+        print("CHANNEL-OVERRIDE-WARN reason=invalid", file=sys.stderr)
+        return None
 
 
 class DiscordApi(Protocol):
@@ -384,6 +435,9 @@ def _configured_approvals_channel() -> str | None:
 
 
 def _configured_agent_chat_channel() -> str | None:
+    override = channel_override()
+    if override is not None:
+        return override["agent_chat_channel_id"]
     return _interop_config_string("agent_chat_channel_id")
 
 
