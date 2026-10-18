@@ -24,7 +24,7 @@ def _state(path: Path) -> dict:
 def observe(home: Path, repo: Path, run: Run, now: datetime) -> tuple[JobCheck, ...]:
     checks: list[JobCheck] = []
     collection = _state(home / ".hermes/mail-sync/collection.json")
-    if now.astimezone(KST).weekday() < 5 and collection.get("zero_weekday_streak", 0) >= 6:
+    if now.astimezone(KST).weekday() < 5 and collection.get("zero_weekday_streak", 0) >= 36:  # six workday hours at 10-minute ticks
         checks.append(JobCheck("mail-sync-quiet", Status.FAIL,
                                "평일 기관메일 수집 성공 후 새 메일 0건이 6회 이상 이어짐"))
     runtime = home / ".hermes/mailon-runtime"

@@ -120,6 +120,7 @@ _OTHER_INSERTS: Final = {
     "skills/meeting/scripts/meeting_cli.py": {
         ("<module>", "str(Path(__file__).resolve().parent)"), ("_publish_note", "root"),
         ("_correct_terms", "root"), ("_discord_api", "str(_interop_runtime())"),
+        ("_hermes_kanban", "str(runtime_root())"),
     },
     "skills/coordination/scripts/coordinate_io.py": {("calendar_scripts", "str(path)")},
 }

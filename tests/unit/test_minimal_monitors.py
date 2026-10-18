@@ -89,7 +89,7 @@ def test_semantic_checks_are_part_of_scheduled_jobs(tmp_path, monkeypatch) -> No
     folder = home / ".hermes/mail-sync"
     folder.mkdir()
     (folder / "collection.json").write_text(json.dumps({
-        "zero_weekday_streak": 6, "last_status": "ok",
+        "zero_weekday_streak": 36, "last_status": "ok",
         "last_run_at": "2026-10-19T08:00:00+09:00",
     }))
     (home / ".hermes/mailon-runtime").mkdir()
@@ -109,7 +109,7 @@ def test_weekend_quiet_is_not_a_failure(tmp_path) -> None:
     folder = tmp_path / ".hermes/mail-sync"
     folder.mkdir(parents=True)
     (folder / "collection.json").write_text(json.dumps({
-        "zero_weekday_streak": 6, "last_status": "ok",
+        "zero_weekday_streak": 36, "last_status": "ok",
         "last_run_at": "2026-10-18T08:00:00+09:00",
     }))
     checks = scheduled.observe(tmp_path, REPO, lambda _argv, _env: (0, ""), datetime(2026, 10, 18, tzinfo=UTC))

@@ -57,6 +57,8 @@ def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(watch.CLI_ENV, str(cli))
     monkeypatch.delenv(watch.ALERT_AFTER_ENV, raising=False)
     monkeypatch.delenv(watch.QUIET_AFTER_ENV, raising=False)
+    monkeypatch.setenv(watch.LOCK_ENV, str(tmp_path / "mail-sync.lock"))
+    monkeypatch.setattr(watch, "_now", lambda: watch.datetime(2026, 10, 19, 10, 0, tzinfo=watch.KST))
 
 
 def _script(monkeypatch: pytest.MonkeyPatch, outcomes: list[tuple[int, str]]) -> list[list[str]]:
@@ -144,6 +146,5 @@ def test_child_timeout_is_a_failed_tick_not_a_crash(monkeypatch, capsys) -> None
 
 def test_unrecordable_failure_keeps_exit_one(monkeypatch, capsys) -> None:
     _script(monkeypatch, [_DNS])
-    monkeypatch.setattr(watch, "watch_failure_streak", None)
     assert watch.main() == 1
     assert "mail-sync-watch error" in capsys.readouterr().out

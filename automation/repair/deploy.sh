@@ -10,7 +10,7 @@ if [ -z "$host" ]; then
   exit 3
 fi
 
-runtime_files=(__init__.py node_config.py notice_bot.py interop/__init__.py interop/chunker.py interop/discord_transport.py interop/report.py repair/__init__.py repair/repair_capability.py repair/repair_report_consumer.py repair/repair_report_queue.py repair/repair_report_send.py)
+runtime_files=(__init__.py ledger_policy.py ledger/__init__.py ledger/__main__.py ledger/store.py ledger/switch.py node_config.py notice_bot.py interop/__init__.py interop/chunker.py interop/discord_transport.py interop/report.py repair/__init__.py repair/repair_capability.py repair/repair_report_consumer.py repair/repair_report_queue.py repair/repair_report_send.py)
 source "$repo_root/automation/deploy_provenance.sh"
 deploy_provenance_check "$repo_root" "$repo_root/automation/repair/cron/repair_report_consume_watch.py" \
   "${runtime_files[@]/#/$repo_root/automation/}" \
@@ -27,7 +27,7 @@ run_account() {
 run_agent() { run_account "$NODE_AGENT_ACCOUNT" "$1"; }
 
 # 런타임은 래퍼보다 먼저 새 세대 링크로 한 번에 바뀐다. 루트의 옛 automation/ 은 옛 래퍼가 읽으므로 건드리지 않는다.
-deploy_tree_swap --link --prefix automation "$repo_root/automation" .hermes/repair-report-runtime/.current __init__.py node_config.py notice_bot.py interop/__init__.py interop/chunker.py interop/discord_transport.py interop/report.py repair/__init__.py repair/repair_capability.py repair/repair_report_consumer.py repair/repair_report_queue.py repair/repair_report_send.py || exit "$?"
+deploy_tree_swap --link --prefix automation "$repo_root/automation" .hermes/repair-report-runtime/.current __init__.py ledger_policy.py ledger/__init__.py ledger/__main__.py ledger/store.py ledger/switch.py node_config.py notice_bot.py interop/__init__.py interop/chunker.py interop/discord_transport.py interop/report.py repair/__init__.py repair/repair_capability.py repair/repair_report_consumer.py repair/repair_report_queue.py repair/repair_report_send.py || exit "$?"
 push_file "$repo_root/configs/node.example.toml" .hermes/repair-report-runtime/.current/automation/node.example.toml
 # 소비 감시는 cron sandbox가 찾는 계정 홈에만 복사해야 수리 런타임 권한을 넓히지 않는다.
 push_file "$repo_root/automation/repair/cron/repair_report_consume_watch.py" '.hermes/scripts/repair_report_consume_watch.py'

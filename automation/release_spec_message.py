@@ -38,6 +38,12 @@ class ReleaseView(Protocol):
     @property
     def detail_guild_id(self) -> str: ...
 
+    @property
+    def card_summary(self) -> str: ...
+
+    @property
+    def previous_surfaces(self) -> tuple[tuple[str, str], ...] | None: ...
+
     def action_hash(self) -> str: ...
 
     def detail_messages(self) -> tuple[str, ...]: ...
@@ -198,6 +204,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     )
     from automation.notice_bot import CARD_LINE, SURFACE, FAULT_CARD_LINE, FAULT_PREFIX
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
     from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
@@ -208,6 +215,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     ]
 
     return [
+        *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),
         *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
         *([*RETIRE_LINES, ROOT_NOTE]
           if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),
@@ -324,6 +332,49 @@ def render_v7(spec: ReleaseView) -> str:
     switches = approval_surface_lines(spec)
     if switches:
         facts.append(" · ".join(switches))
+    if spec.major_note:
+        facts.append(spec.major_note)
+    facts.append(f"승인 식별값: `{spec.action_hash()}`")
+    facts.append("자세한 건 유돌에게 물어보면 올려요")
+    try:
+        return render(OwnerMessage(
+            subject_key=spec.version, subject=f"릴리스 {spec.version} 배포 승인",
+            fact="\n".join(facts), location=here,
+            owner=Action("react", here, "✅ 승인 또는 ⛔ 취소 (소유자 전용 — 봇/타인 리액션은 거부됨)"),
+            agent_next="승인된 릴리스만 태그·배포", recovery="not_applicable",
+            detail=Approval(None, "배포 미실행, 요청 폐기"), render_version="owner-ko-v2",
+        ), destination=here)
+    except OwnerMessageError as error:
+        raise EnvelopeUnavailable("release owner envelope cannot render") from error
+
+
+def render_v8(spec: ReleaseView) -> str:
+    """v7 with the note's own summary and only the switches this release turns on or changes."""
+    from dataclasses import replace
+
+    from automation.release_spec import EnvelopeUnavailable
+
+    try:
+        from automation.interop.owner_message import (
+            Action, Approval, OwnerMessage, OwnerMessageError, Ref, render,
+        )
+    except ImportError as error:
+        raise EnvelopeUnavailable("release owner envelope is unavailable") from error
+    here = Ref(scope="self")
+    titles = [line.removeprefix("- ") for line in spec.patch_notes.splitlines() if line.startswith("- ")]
+    summary = spec.card_summary or (titles[0][:100] if titles else "릴리스 변경 적용")
+    facts = [summary, f"배포 기준: `{spec.head_sha[:12]}`"]
+    previous = spec.previous_surfaces
+    if previous is None:
+        facts.extend(approval_surface_lines(spec))
+    else:
+        known = set(previous)
+        changed = tuple(row for row in spec.surface_digests if row not in known)
+        facts.extend(approval_surface_lines(replace(spec, surface_digests=changed)))
+        kept = sum(bool(approval_surface_lines(replace(spec, surface_digests=(row,))))
+                   for row in spec.surface_digests if row in known)
+        if kept:
+            facts.append(f"계속 켜져 있는 스위치 {kept}개(바뀐 것 없음)")
     if spec.major_note:
         facts.append(spec.major_note)
     facts.append(f"승인 식별값: `{spec.action_hash()}`")

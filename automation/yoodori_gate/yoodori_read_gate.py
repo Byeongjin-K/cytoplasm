@@ -111,7 +111,7 @@ TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
             frozenset({"transcribe", "ingest", "polish"})),
     "meeting": ("meeting/scripts/meeting_cli.py", frozenset({"evidence"}), frozenset({"ingest"})),
 }
-JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "wiki-write")
+JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "wiki-write", "mail-sync")
 LONG = frozenset({"proposal", "stt", "meeting"})
 JOB_WAIT = 100
 # Test replays, injected approvals and output-root overrides are never caller-controlled.
@@ -139,7 +139,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
          "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
-         "  meeting <ingest|evidence> [args], wiki-write [--edit <slug>] --title .. --body-b64 ..;\n"
+         "  meeting <ingest|evidence> [args], wiki-write [--edit <slug>] --title .. --body-b64 ..,\n"
+         "  mail-sync (collect institutional mail now; waits for a running collection);\n"
          "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
          "  --<flag>-b64 for multi-line text; --out-name <name> for an output file.\n"
          "  job <id> (status/output), job-file <id> <name> (bytes on stdout).\n")
@@ -405,6 +406,13 @@ def build_job(words: list[str]) -> Job:
     name, rest = words[0], words[1:]
     rest, channel, message = _origin(rest)
     py = "/usr/bin/python3"
+    if name == "mail-sync":
+        # Owner 2026-10-19: collect institutional mail now when he asks (a fresh MailOn login,
+        # so only from his own message); waits for a running scheduled collection.
+        if rest:
+            raise Refused("mail-sync takes no arguments besides the origin")
+        argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now"]
+        return Job(name, argv, False, "기관메일 지금 수집", 1800, channel, message)
     if name == "wiki-write":
         values: dict[str, str] = {}
         if len(rest) % 2:
@@ -567,6 +575,10 @@ def _switched(kind: str) -> bool:
 def run_job(job: Job) -> int:
     env = job_env(HOME, RELEASE, ENV)
     link = ""
+    if job.name == "mail-sync":
+        _, notice_bot = _release_modules()
+        link = yoodori_jobs.verify_owner_origin(
+            job.channel_id, job.message_id, _owner_id(), notice_bot.resolve_token(environ=env)).link
     if job.write:
         auto_write, notice_bot = _release_modules()
         try:

@@ -23,6 +23,7 @@ from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
 from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
 from .sessions import SessionsState
 from .sessions_view import render_sessions, summary_line
+from .ledger_view import NAV_CSS, LedgerView, render_ledger
 
 Mode = Literal["served", "file"]
 
@@ -946,6 +947,7 @@ def _project_page(
 def render_dashboard(
     snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
     sessions: SessionsState = "missing", now: datetime | None = None,
+    ledger: LedgerView | None = None,
 ) -> str:
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
@@ -972,17 +974,21 @@ def render_dashboard(
         for i, view in enumerate(snapshot.projects + shelf, 1)
     )
     name = escape(brand or DEFAULT_BRAND)
+    ledger = ledger if served else None
+    ledger_nav = f'<a href="#ledger" data-tab="ledger">{icon("todos")}장부</a>' if ledger is not None else ""
+    nav_class = ' class="ledger-nav"' if ledger is not None else ""
+    ledger_css = NAV_CSS if ledger is not None else ""
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
-        f"<style>{CSS}</style></head><body>"
+        f"<style>{CSS}{ledger_css}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
-        f'<nav aria-label="화면">{_nav(shelf, new_in_shelf)}</nav>{fresh}</div></header><main id="main">'
+        f'<nav aria-label="화면"{nav_class}>{_nav(shelf, new_in_shelf)}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
         f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today)}"
         f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
-        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{_events(snapshot, mode)}{pages}</main>"
+        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span data-live>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"

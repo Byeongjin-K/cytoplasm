@@ -264,3 +264,31 @@ def test_cli_accepts_real_unmounted_skill_directory(
     # util-linux mountpoint returns 32 for an ordinary directory, not 1.
     assert p5_remove.main() == 0
     assert invoked == [tmp_path]
+
+
+def test_retired_home_backs_up_and_removes_paused_jobs_a_deployer_recreated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a completed retirement, then a deployer re-registers two paused Hermes jobs.
+    home, current = _home(tmp_path, "agent")
+    calls: list[tuple[str, ...]] = []
+    _commands(monkeypatch, current, calls)
+    folder = p5_remove.remove(home, "agent", "a" * 40, "hermes", "systemctl")
+    current.update({"aaaaaaaaaaaa": "mail-triage-watch", "bbbbbbbbbbbb": "mail-daily-digest"})
+    # When: the next release runs the retirement step again.
+    assert p5_remove.remove(home, "agent", "b" * 40, "hermes", "systemctl") == folder
+    # Then: the late jobs were backed up before removal and none remain.
+    late = home / ".hermes/retired/p5" / f"{'b' * 40}-late"
+    assert not current
+    assert set(json.loads((late / "job-ids.json").read_text())) == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}
+    assert "mail-daily-digest" in (late / "cron-list.txt").read_text()
+    assert all((late / name).stat().st_mode & 0o777 == 0o600 for name in ("cron-list.txt", "job-ids.json", "jobs.json"))
+
+
+def test_removed_peer_skip_reads_the_ops_only_marker_as_ops() -> None:
+    # Given: the retired marker is ops 0600 under the 0700 private root.
+    deploy = (REPO / "automation/deploy_all.sh").read_text(encoding="utf-8")
+    skip = next(line for line in deploy.splitlines()
+                if '"$role" == peer' in line and "peer-retired" in line and "getent passwd" in line)
+    # Then: the skip reads it as ops, otherwise it never fires and P5 sudoes a deleted account.
+    assert "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'cmp -s $NODE_PRIVATE_ROOT/peer-retired" in skip

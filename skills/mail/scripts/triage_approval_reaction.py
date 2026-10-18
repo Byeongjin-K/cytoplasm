@@ -6,6 +6,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 import mail_approval_attachment
+import mail_card_compact
 
 if TYPE_CHECKING:
     from automation.entity_preflight.contracts import JsonValue
@@ -35,7 +36,8 @@ def resolve_reaction(draft: Mapping[str, JsonValue]) -> str | None:
     if channel_id is None:
         channel_id = str(triage_approval.stored_binding(draft).channel_id)
     message = confirm._api("GET", f"/channels/{channel_id}/messages/{draft['message_id']}")
-    if not isinstance(message, dict) or str(draft["sha256"]) not in str(message.get("content", "")):
+    if not isinstance(message, dict) or not mail_card_compact.references(
+            draft, str(message.get("content", "")), str(draft["sha256"])):
         raise GateError("승인 메시지가 이 드래프트 해시를 참조하지 않음 — 거부", 1)
     if not mail_approval_attachment.matches(draft, message):
         raise GateError("승인 본문 첨부 검증 실패 — 거부", 1)

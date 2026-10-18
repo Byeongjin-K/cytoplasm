@@ -20,6 +20,7 @@ def sample() -> ReleaseSpec:
         "v2.0.1", "a" * 40, "b" * 32,
         tuple((f"home:package-{index:02}", "c" * 64) for index in range(60)),
         "### runtime\n- 릴리스 승인 카드를 짧게 표시\n- 상세는 요청할 때만 조회",
+        render_version=7,
     )
 
 
@@ -62,7 +63,7 @@ def test_v7_posts_only_one_card_and_replays_the_stored_bytes(
     # Then: no detail POST or backlink PATCH, and the bound record replays exactly.
     record = json.loads(capsys.readouterr().out)
     assert rc == 0
-    assert record["render_version"] == "7"
+    assert record["render_version"] == "8"
     assert len(wire.posts) == 1
     assert wire.patches == []
     assert "detail_message_ids" not in record

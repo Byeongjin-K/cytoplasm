@@ -16,6 +16,7 @@ from typing import Final
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from automation.ledger.switch import command_prefix, serialized
 from automation.repair.repair_command import manual_location, parse_repair_command
 from automation.repair.repair_capability import publish
 from automation.repair.repair_core import KanbanPort, PrivateLogPort, RepairEvent, RepairRegistry, RepairService
@@ -78,9 +79,10 @@ class HermesKanban(KanbanPort):
         return status in {"archived", "done"}
 
     @staticmethod
+    @serialized
     def _run(*args: str, timeout: float = _BOARD_TIMEOUT) -> str:
         completed = subprocess.run(
-            ("hermes", "kanban", *args),
+            (*command_prefix(), *args),
             capture_output=True,
             check=False,
             text=True,

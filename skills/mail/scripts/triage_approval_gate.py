@@ -10,6 +10,7 @@ import triage_confirm
 import triage_binding
 import triage_gate
 import mail_approval_attachment
+import mail_card_compact
 if TYPE_CHECKING:
     from automation.entity_preflight.contracts import JsonValue
     from automation.interop.approval_lifecycle import ApprovalIntent, ApprovalRequest, PostedApproval, Probe
@@ -59,7 +60,7 @@ class MailApprovalGate:
         content = self._content(request)
         if content is None:
             return state.MISSING
-        if request.action_hash not in content:
+        if not mail_card_compact.references(self._record(request), content, request.action_hash):
             return state.BINDING_MISMATCH
         channel, message = request.channel_id, request.message_id
         try:
@@ -73,6 +74,13 @@ class MailApprovalGate:
         if triage_confirm._owner_reacted(approve, owner):
             return state.APPROVED
         return state.BOUND_PENDING
+
+    def _record(self, request: ApprovalRequest) -> dict[str, JsonValue]:
+        approval = import_module("triage_approval")
+        if self.draft.get("message_id") == request.message_id:
+            return self.draft
+        return next((item for _, item, key in approval._pending_drafts()
+                     if key == request.key and item.get("message_id") == request.message_id), self.draft)
 
     def _content(self, request: ApprovalRequest) -> str | None:
         approval = import_module("triage_approval")
@@ -88,11 +96,7 @@ class MailApprovalGate:
             raise approval.lifecycle().ApprovalSurfaceError(str(error)) from error
         if not isinstance(message, dict):
             raise approval.lifecycle().ApprovalSurfaceError("승인 메시지 응답이 유효하지 않음")
-        record = self.draft
-        if record.get("message_id") != request.message_id:
-            record = next((item for _, item, key in approval._pending_drafts()
-                           if key == request.key and item.get("message_id") == request.message_id), record)
-        if not mail_approval_attachment.matches(record, message):
+        if not mail_approval_attachment.matches(self._record(request), message):
             return ""
         return str(message.get("content", "")) or None
 
@@ -178,11 +182,13 @@ def prepare_request(draft: dict[str, JsonValue], notice: str) -> tuple[ApprovalI
     approval = import_module("triage_approval")
     cards = approval._repo_module("approval_card")
     version = draft.get("render_version", "1" if draft.get("message_id") else None)
+    selected_version = version or mail_card_compact.VERSION
     prepared = dict(draft)
     try:
         try:
             card = cards.prepare(
-                lambda selected: approval._approval_content({**draft, "render_version": selected}, notice), version,
+                lambda selected: approval._approval_content({**draft, "render_version": selected}, notice),
+                selected_version,
             )
         except triage_gate.GateError:
             if version is not None:
@@ -193,10 +199,13 @@ def prepare_request(draft: dict[str, JsonValue], notice: str) -> tuple[ApprovalI
             })
             card = cards.prepare(
                 lambda selected: approval._approval_content({**prepared, "render_version": selected}, notice),
+                selected_version,
             )
     except cards.CardRenderError as error:
         raise triage_gate.GateError(str(error), 3) from error
     prepared["render_version"] = card.render_version
+    if card.render_version == mail_card_compact.VERSION:
+        prepared["card_sha256"] = mail_card_compact.digest(card.content)
     return approval.confirm_intent(prepared), MailApprovalGate(prepared, notice, card.content)
 
 

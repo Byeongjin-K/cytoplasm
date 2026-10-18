@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Callable, Sequence
@@ -142,6 +143,37 @@ def save_detail(
         finally:
             temporary.unlink(missing_ok=True)
     return path
+
+
+def card_summary(directory: Path, head: str) -> str:
+    """The note draft's first ``# `` line: the one-line summary the short card shows."""
+    try:
+        first = (directory / f"{head}.md").read_text(encoding="utf-8").splitlines()[0]
+    except (OSError, IndexError, UnicodeError):
+        return ""
+    return first.removeprefix("# ").strip()[:120] if first.startswith("# ") else ""
+
+
+def save_surfaces(directory: Path, head: str, surfaces: tuple[tuple[str, str], ...]) -> None:
+    """Remember what this card carried so the next card can show only what changed."""
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = directory / f"{head}.surfaces.json"
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps([list(row) for row in surfaces]), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def previous_surfaces(directory: Path, base: str) -> list[list[str]] | None:
+    """The surfaces the release at ``base`` carried, or None when this host never planned it."""
+    try:
+        rows = json.loads((directory / f"{base}.surfaces.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rows, list) or any(
+            not isinstance(row, list) or len(row) != 2 or not all(isinstance(v, str) for v in row)
+            for row in rows):
+        return None
+    return rows
 
 
 def render_detail_messages(plan: ReleasePlan) -> tuple[str, ...]:
