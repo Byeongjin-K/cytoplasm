@@ -6,6 +6,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -179,6 +180,10 @@ _V5_POSTED = (
 )
 
 
+#: The release thread the fake wire opens under the approval channel 222.
+_THREAD_ID: Final = "333333333333333333"
+
+
 class _DetailWire:
     """실제 producer가 쓰는 gate API 모양만 기록하는 오프라인 Discord."""
 
@@ -193,6 +198,7 @@ class _DetailWire:
         self.fail_post_after = fail_post_after
         self.first_post_id = first_post_id
         self.posts: list[dict[str, JsonValue]] = []
+        self.threads: list[tuple[str, dict[str, JsonValue]]] = []
         self.patches: list[tuple[str, dict[str, JsonValue]]] = []
         self.deletes: list[str] = []
 
@@ -204,6 +210,10 @@ class _DetailWire:
             if self.guild_id is not None:
                 channel["guild_id"] = self.guild_id
             return channel
+        if method == "POST" and path.endswith("/threads"):
+            assert payload is not None
+            self.threads.append((path, payload))
+            return {"id": _THREAD_ID}
         if method == "POST":
             assert payload is not None
             if (
@@ -872,7 +882,7 @@ def test_a_detail_post_failure_is_loud_and_cleans_up_without_a_card(
         f"RELEASE-DETAIL-POST-FAIL OSError posted=1/{len(expected.detail_messages())}"
         in captured.err.splitlines()
     )
-    assert wire.deletes == ["/channels/222/messages/700000000000000001"]
+    assert wire.deletes == [f"/channels/{_THREAD_ID}/messages/700000000000000001", f"/channels/{_THREAD_ID}"]
     assert not (tmp_path / "pending" / "release.json").exists()
 
 
@@ -1007,7 +1017,7 @@ def test_a_card_within_the_limit_is_posted_with_the_version_it_recorded(
     rendered = replay.render()
     detail_ids = json.loads(stored["detail_message_ids"])
     assert detail_ids == ["700000000000000001"]
-    assert f"https://discord.com/channels/{wire.guild_id}/222/{detail_ids[0]}" in rendered
+    assert f"https://discord.com/channels/{wire.guild_id}/{_THREAD_ID}/{detail_ids[0]}" in rendered
     assert "-# 참조: 변경 상세 → https://discord.com/channels/" in rendered
     assert "배포 묶음: 스킬 1 · 홈 패키지 1" in rendered
     assert "`home:skills/mail`, `skill:meeting`" not in rendered
@@ -1032,10 +1042,10 @@ def test_a_card_within_the_limit_is_posted_with_the_version_it_recorded(
     # 상세마다 카드 URL 이 PATCH 로 되돌아가야 한다 — `all()` 만 쓰면 빈 patch 목록도
     # 통과하므로 대상 경로를 먼저 못박는다.
     assert [path for path, _payload in wire.patches] == [
-        f"/channels/222/messages/{detail_id}" for detail_id in detail_ids
+        f"/channels/{_THREAD_ID}/messages/{detail_id}" for detail_id in detail_ids
     ]
     assert all(
-        f"https://discord.com/channels/{wire.guild_id}/222/{stored['message_id']}"
+        f"https://discord.com/channels/{wire.guild_id}/{_THREAD_ID}/{stored['message_id']}"
         in str(payload["content"])
         for _path, payload in wire.patches
     )
@@ -1082,7 +1092,7 @@ def test_malformed_detail_id_is_cleaned_up_before_any_card_or_record(
             ["request", "--plan-file", _plan_file(tmp_path)]
         )
 
-    assert wire.deletes == ["/channels/222/messages/01"]
+    assert wire.deletes == [f"/channels/{_THREAD_ID}/messages/01", f"/channels/{_THREAD_ID}"]
     assert not (tmp_path / "pending" / "release.json").exists()
 
 
@@ -1254,3 +1264,48 @@ def test_a_clicked_fallback_card_stays_bound_after_the_envelope_recovers(
     assert spec_from_record(record).bound(_V3_POSTED, record)
     assert not spec_from_record(record).bound(_V3_POSTED + " ", record)
     assert calls == []
+
+
+def test_a_new_release_card_opens_its_own_thread_and_records_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Given a new request / When it posts / Then a thread opens under the approval channel,
+    every detail and the card land inside it, and the record points at the thread."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
+    wire = _DetailWire()
+    monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
+    monkeypatch.setattr(skill_gate, "_api", wire.api)
+
+    assert release_approval.main(["request", "--plan-file", _plan_file(tmp_path)]) == 0
+
+    _ = capsys.readouterr()
+    assert [path for path, _ in wire.threads] == ["/channels/222/threads"]
+    assert wire.threads[0][1]["name"] == "🏷️ 릴리스 v1.2.3"
+    stored = json.loads((tmp_path / "pending" / "release.json").read_text("utf-8"))
+    assert stored["channel_id"] == _THREAD_ID
+
+
+def test_a_release_card_is_not_posted_when_its_thread_cannot_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Given Discord refuses the thread / When the request runs / Then nothing is posted."""
+    wire = _DetailWire()
+
+    def refuse(method: str, path: str, payload: dict[str, JsonValue] | None = None) -> JsonValue:
+        if path.endswith("/threads"):
+            raise OSError("discord is unreachable")
+        return wire.api(method, path, payload)
+
+    monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
+    monkeypatch.setattr(skill_gate, "_api", refuse)
+
+    with pytest.raises(ApprovalSurfaceError):
+        _ = release_approval.main(["request", "--plan-file", _plan_file(tmp_path)])
+
+    _ = capsys.readouterr()
+    assert wire.posts == []
+    assert not (tmp_path / "pending" / "release.json").exists()

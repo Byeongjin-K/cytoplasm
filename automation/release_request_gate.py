@@ -80,19 +80,51 @@ class ReleaseRequestGate:
         return self._gate.new_record(posted)
 
     def post(self, intent: ApprovalIntent) -> PostedApproval:
+        # Owner 2026-10-18 23:04/23:07 KST: a release approval opens its own thread under the
+        # approval channel; the card's reactions are read there (the binding accepts a thread
+        # only when its live parent is that pinned channel).
+        thread_id = self._open_thread(intent.channel_id)
+        try:
+            return self._post_in(thread_id)
+        except ApprovalSurfaceError:
+            self._delete_thread(thread_id)
+            raise
+
+    def _open_thread(self, channel_id: str) -> str:
+        payload: dict[str, JsonValue] = {
+            "name": f"🏷️ 릴리스 {self.spec.version}",
+            "type": 11,
+            "auto_archive_duration": 10080,
+        }
+        try:
+            raw = self._api("POST", f"/channels/{channel_id}/threads", payload)
+        except _POST_ERRORS as error:
+            raise ApprovalSurfaceError(f"release thread was not opened: {type(error).__name__}") from error
+        thread_id = _snowflake(raw.get("id")) if isinstance(raw, dict) else None
+        if thread_id is None:
+            raise ApprovalSurfaceError("release thread response carries no id")
+        return thread_id
+
+    def _delete_thread(self, thread_id: str) -> None:
+        try:
+            self._api("DELETE", f"/channels/{thread_id}")
+        except _POST_ERRORS as error:
+            print(f"RELEASE-THREAD-CLEANUP-FAIL {type(error).__name__}", file=sys.stderr)
+
+    def _post_in(self, channel_id: str) -> PostedApproval:
         messages = self.spec.detail_messages()
-        detail_ids = self._post_details(intent.channel_id, messages)
-        guild_id = self._guild_id(intent.channel_id)
+        detail_ids = self._post_details(channel_id, messages)
+        guild_id = self._guild_id(channel_id)
         linked = replace(
             self.spec,
             posted_text="",
             detail_message_ids=detail_ids,
-            detail_channel_id=intent.channel_id,
+            detail_channel_id=channel_id,
             detail_guild_id=guild_id,
         )
         card, refusal = finalize_card(linked)
         if card is None:
-            self._delete_details(intent.channel_id, detail_ids)
+            self._delete_details(channel_id, detail_ids)
             raise ApprovalSurfaceError(refusal.removeprefix(f"{CARD_REFUSED_PREFIX} "))
         self._gate = replace(self._gate, spec=card)
         payload: dict[str, JsonValue] = {"content": card.render()}
@@ -103,18 +135,18 @@ class ReleaseRequestGate:
             }
             payload["allowed_mentions"] = {"parse": [], "replied_user": False}
         try:
-            raw = self._api("POST", f"/channels/{intent.channel_id}/messages", payload)
+            raw = self._api("POST", f"/channels/{channel_id}/messages", payload)
             card_id = _snowflake(raw.get("id")) if isinstance(raw, dict) else None
             if card_id is None:
                 raise ApprovalSurfaceError("approval post response carries no message id")
         except _POST_ERRORS as error:
-            self._delete_details(intent.channel_id, detail_ids)
+            self._delete_details(channel_id, detail_ids)
             raise ApprovalSurfaceError(type(error).__name__) from error
         if self.spec.render_version == 6:
             self._backlink_details(
-                intent.channel_id, guild_id, card_id, messages, detail_ids
+                channel_id, guild_id, card_id, messages, detail_ids
             )
-        return PostedApproval(card_id, intent.channel_id)
+        return PostedApproval(card_id, channel_id)
 
     def commit(
         self, intent: ApprovalIntent, posted: PostedApproval, created_at: str

@@ -402,11 +402,17 @@ def _validate_channel(
             # The conventional name still qualifies (stored records keep their old
             # meaning); the configured id or the caller's pin qualifies under any name,
             # so the owner can rename the channel (2026-10-18).
-            is_valid = facts.channel_type == 0 and (
-                facts.name == "approvals"
-                or binding.channel_id == _resolved_channel_id(
-                    binding.kind, binding.surface, directory, skill_channel_id,
-                )
+            def pinned() -> str:
+                return _resolved_channel_id(binding.kind, binding.surface, directory, skill_channel_id)
+
+            is_valid = (facts.channel_type == 0 and (
+                facts.name == "approvals" or binding.channel_id == pinned()
+            )) or (
+                # A release card opens its own thread (owner 2026-10-18 23:04 KST); only a
+                # thread whose live parent IS the pinned approval channel qualifies.
+                facts.channel_type in (11, 12)
+                and facts.parent_id is not None
+                and facts.parent_id == pinned()
             )
         case ApprovalSurface.AGENT_CHAT_THREAD:
             is_valid = facts.channel_type in (11, 12) and (
