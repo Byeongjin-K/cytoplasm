@@ -7,6 +7,7 @@ from typing import Final
 KINDS: Final = {
     "plaud": "Plaud 노트", "yoodori": "유돌 요청", "calendar": "형 일정", "todo": "할 일",
     "obsidian": "옵시디언 노트", "drive-save": "Drive 저장", "project-board": "프로젝트 보드",
+    "yoodori-memory": "유돌 기억 사본",
 }
 SURFACE_PREFIX: Final = "auto-write:"
 CARD_LINES: Final = {
@@ -20,6 +21,8 @@ CARD_LINES: Final = {
     "obsidian": "옵시디언 노트 자동 쓰기: 형 글로 시킨 노트 저장을 카드 없이",
     "drive-save": "Drive 저장 자동 쓰기: 형 글로 시킨 파일을 카드 없이 형 Drive 비공개로 저장",
     "project-board": "프로젝트 보드 자동 반영: 노드가 만든 보드 제안을 카드 없이 반영(쓴 건 매일 21:30 요약)",
+    # Owner Q241 (2026-10-18 20:55 KST): omo memory is canonical, one automatic Obsidian copy a day.
+    "yoodori-memory": "유돌 기억 사본: 유돌 omo 기억을 하루 한 번 옵시디언 노트 한 개로 덮어씀(recall 에 잡힘)",
 }
 
 

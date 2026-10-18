@@ -130,7 +130,8 @@ WIKI_FLAGS = {"--title": "short", "--tags": "short", "--links": "short", "--slug
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
-         "Wiki reads: wiki-search <words...>, wiki-get <slug>.\n"
+         "Wiki reads: wiki-search <words...>, wiki-get <slug>. Obsidian read: note-get <PARA path>.\n"
+         "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Release reads: release-notes <vX.Y.Z>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
@@ -259,6 +260,7 @@ class Job:
     message_id: str
     kind: str = "yoodori"
     marker: str = ""
+    needs_origin: bool = True
 
 
 # Q233 (2026-10-18 17:40 KST "6개 다 카드 없이 바로 + 하루 요약에 남기기"): with that producer's
@@ -266,6 +268,34 @@ class Job:
 CARDLESS = {"calendar-request": "calendar", "todo-request": "todo",
             "obsidian-request": "obsidian", "drive-save": "drive-save"}
 WRITTEN = "OWNER-COMMAND-WRITTEN"
+# Owner Q241 (2026-10-18 20:55 KST): YooDori's omo memory is the source of truth and gets one
+# automatic Obsidian copy a day, so recall and node skills see it. Fixed path, no origin message.
+MEMORY_COPY_RELPATH = "000_PARA/Resource/유돌 기억 자동 사본.md"
+MIRROR = HOME / ".hermes/obsidian-mirror"
+MAX_NOTE = 512 * 1024
+
+
+def memory_copy_job(body: Path) -> Job:
+    argv = ["/usr/bin/python3", "-m", "automation.obsidian_write", "write-now",
+            "--relpath", MEMORY_COPY_RELPATH, "--body-file", str(body),
+            "--title", "유돌 기억 자동 사본",
+            "--origin-channel-id", "owner-policy", "--origin-message-id", "Q241-daily-memory-copy"]
+    return Job("memory-copy", argv, True, "유돌 기억 자동 사본", 600, "owner-policy",
+               "Q241-daily-memory-copy", "yoodori-memory", WRITTEN, False)
+
+
+def note_path(relpath: str) -> Path:
+    """A vault-relative note read from the node's read-only mirror, never outside it."""
+    _value(relpath, "relpath")
+    path = MIRROR / relpath
+    try:
+        real = path.resolve()
+        if (not real.is_relative_to(MIRROR.resolve()) or path.is_symlink() or not real.is_file()
+                or real.stat().st_size > MAX_NOTE):
+            raise Refused("no such note in the mirror")
+    except OSError:
+        raise Refused("note unreadable") from None
+    return real
 
 
 def cardless_job(name: str, argv: list[str]) -> Job:
@@ -444,6 +474,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if not args or len(args) > 2 or not _UID.fullmatch(args[0]) or (len(args) == 2 and args[1] != "--body"):
             raise Refused("mail-get needs <uid> [--body]")
         return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "get", *args], HOME
+    if name == "note-get":
+        if len(args) != 1:
+            raise Refused("note-get needs exactly one PARA-relative path")
+        return name, ["/usr/bin/cat", "--", str(note_path(args[0]))], HOME
     if name == "wiki-search":
         return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "query", _text(args, 200)], HOME
     if name == "wiki-get":
@@ -521,8 +555,9 @@ def run_job(job: Job) -> int:
             switched_on = False
         if not switched_on:
             raise Refused(f"owner-command writes are off on this node (release switch auto-write-{job.kind})")
-        token = notice_bot.resolve_token(environ=env)
-        link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
+        if job.needs_origin:
+            token = notice_bot.resolve_token(environ=env)
+            link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
     path = yoodori_jobs.new_job(HOME, {
         "name": job.name, "argv": job.argv, "write": job.write, "label": job.label,
         "timeout": job.timeout, "kind": job.kind, "marker": job.marker,
@@ -562,6 +597,8 @@ def main() -> int:
         job = build_job(words) if words and words[0] in JOB_COMMANDS else None
         if job is not None:
             name, argv, cwd = job.name, job.argv, HOME
+        elif words == ["memory-copy"]:
+            name, argv, cwd = "memory-copy", [], HOME
         elif words and words[0] in {"job", "job-file"}:
             if len(words) != (2 if words[0] == "job" else 3):
                 raise Refused("job <id> | job-file <id> <name>")
@@ -578,7 +615,10 @@ def main() -> int:
         _log("refused", 2, started)
         return 2
     try:
-        if job is not None:
+        if name == "memory-copy":
+            path, _digest, _size = stage_file(STAGING, "memory-copy.md", sys.stdin.buffer)
+            rc = run_job(memory_copy_job(path))
+        elif job is not None:
             rc = run_job(job)
         elif name == "release-notes":
             print(release_notes(argv[0]))
