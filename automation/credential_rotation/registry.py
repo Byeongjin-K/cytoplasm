@@ -119,27 +119,8 @@ def _dashboard_host() -> str:
 
 _DASHBOARD_HOST: Final = _dashboard_host()
 
-_KANBAN_PROVIDER: Final = ProviderContext(
-    interpreter=Path("/home/agent/.hermes/hermes-agent/venv/bin/python"),
-    working_directory=Path("/home/agent/.hermes/hermes-agent"),
-)
-
 ROTATION_TARGETS: Final[Mapping[str, RotationTarget]] = MappingProxyType(
     {
-        "kanban": RotationTarget(
-            account="agent",
-            verifier_path=Path("/home/agent/.hermes/dashboard-auth.env"),
-            note_path=Path("/home/agent/.hermes/dashboard-cha-credentials.txt"),
-            username_key="HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
-            password_hash_key="HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
-            session_secret_key="HERMES_DASHBOARD_BASIC_AUTH_SECRET",
-            password_hasher=hash_with_dashboard_provider,
-            provider=_KANBAN_PROVIDER,
-            unit_name="hermes-dashboard.service",
-            probe_url=f"http://{_DASHBOARD_HOST}:9119/auth/password-login",
-            probe_builder=make_password_login_probe,
-            probe_success_status=200,
-        ),
         "report-hub": RotationTarget(
             account="ops",
             verifier_path=Path("/home/ops/report-hub/hub.env"),

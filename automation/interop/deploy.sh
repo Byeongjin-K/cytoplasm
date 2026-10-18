@@ -64,6 +64,14 @@ run_account() {
   local account="$1" script="$2"
   ssh "$host" "sudo -n -u $account -H bash -lc $(printf '%q' "cd \"\$HOME\" || exit 1; $script")"
 }
+# The shared rule file remains useful without a Hermes gateway. Retired deployments
+# converge it on agent only; no plugin, roster, peer or gateway action is resurrected.
+if run_account "$NODE_AGENT_ACCOUNT" 'cmp -s "$HOME/.hermes/peer-retired" <(printf retired)' </dev/null; then
+  run_agent() { run_account "$NODE_AGENT_ACCOUNT" "$1"; }
+  push_file "$rules" .hermes/interop/external-effect-tools.yaml
+  echo "INTEROP-RETIRED: shared rules only; gateway bundle remains removed"
+  exit 0
+fi
 block() { printf 'INTEROP-DEPLOY-BLOCK: %s\n' "$*" >&2; exit 5; }
 interrupted() {
   block "$1 failed on $account; the previous bundle is kept in ~/$rollback on each account — re-run this deploy"

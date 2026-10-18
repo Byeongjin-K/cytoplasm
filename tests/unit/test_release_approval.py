@@ -573,7 +573,7 @@ def test_record_persists_every_authorizing_field_and_surface_binding() -> None:
     assert record["surface"] == "skill-approvals"
     assert record["channel_id"] == binding.channel_id
     assert record["policy_version"] == str(POLICY_VERSION)
-    assert record["render_version"] == "6"
+    assert record["render_version"] == "7"
     assert spec.bound(spec.render(), record)
 
 
@@ -796,6 +796,7 @@ def test_the_detail_messages_follow_the_freshly_posted_card_in_order(
 ) -> None:
     """Given a card that was just posted / When the request command finishes /
     Then every detail message reaches the same channel, in order, and is recorded."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire()
     monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
     monkeypatch.setattr(skill_gate, "_api", wire.api)
@@ -854,11 +855,14 @@ def test_a_detail_post_failure_is_loud_and_cleans_up_without_a_card(
 ) -> None:
     """Given Discord fails midway through details / When the request runs /
     Then the partial detail is removed and no card or record survives."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire(fail_post_after=1)
     monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
     monkeypatch.setattr(skill_gate, "_api", wire.api)
     plan_file = _plan_file(tmp_path, _LONG_NOTES)
-    expected = spec_from_plan(json.loads(Path(plan_file).read_text("utf-8")), "0" * 32)
+    expected = replace(
+        spec_from_plan(json.loads(Path(plan_file).read_text("utf-8")), "0" * 32), render_version=6,
+    )
 
     with pytest.raises(ApprovalSurfaceError):
         _ = release_approval.main(["request", "--plan-file", plan_file])
@@ -924,7 +928,7 @@ def test_the_render_version_never_enters_the_action_hash() -> None:
 
 def test_an_unknown_stored_render_version_is_refused_and_never_binds() -> None:
     """모르는 판본은 오늘과 똑같이 거절된다 — 넓히는 것은 6 하나뿐이다."""
-    record = {**_spec().new_record(_MESSAGE_ID, _binding()), "render_version": "7"}
+    record = {**_spec().new_record(_MESSAGE_ID, _binding()), "render_version": "8"}
 
     with pytest.raises(ReleaseSpecError):
         _ = spec_from_record(record)
@@ -987,6 +991,7 @@ def test_a_card_within_the_limit_is_posted_with_the_version_it_recorded(
 ) -> None:
     """Given a release that fits / When the request runs / Then the same seam posts it
     and the stored record replays the exact bytes the owner is looking at."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire()
 
     monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
@@ -1047,6 +1052,7 @@ def test_missing_guild_id_uses_a_search_reference_without_a_fake_link(
     capsys: pytest.CaptureFixture[str],
     guild_id: str | None,
 ) -> None:
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire(guild_id=guild_id)
     monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
     monkeypatch.setattr(skill_gate, "_api", wire.api)
@@ -1066,6 +1072,7 @@ def test_malformed_detail_id_is_cleaned_up_before_any_card_or_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire(first_post_id="01")
     monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
     monkeypatch.setattr(skill_gate, "_api", wire.api)
@@ -1083,6 +1090,7 @@ def test_v5_fallback_does_not_append_an_over_budget_backlink(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
     wire = _DetailWire()
 
     def unavailable(spec: ReleaseSpec, *, bundle_summary: str) -> str:
@@ -1187,26 +1195,25 @@ def test_card_finalization_pins_the_posted_bytes_before_recording_their_digest(
 
     calls: list[int] = []
 
-    def observed(spec: ReleaseSpec, *, bundle_summary: str) -> str:
-        assert bundle_summary
+    def observed(spec: ReleaseSpec) -> str:
         calls.append(spec.render_version)
-        return "posted-release-v6"
+        return "posted-release-v7"
 
-    monkeypatch.setattr(release_spec, "render_v6", observed)
+    monkeypatch.setattr(release_spec, "render_v7", observed)
     card, refusal = card_for_new_request(_spec())
     assert card is not None and refusal == ""
-    assert card.render() == "posted-release-v6"
+    assert card.render() == "posted-release-v7"
     record = card.new_record(_MESSAGE_ID, _binding())
-    assert record["content_sha256"] == sha256(b"posted-release-v6").hexdigest()
-    assert calls and all(version == 6 for version in calls)
+    assert record["content_sha256"] == sha256(b"posted-release-v7").hexdigest()
+    assert calls and all(version == 7 for version in calls)
 
-    def forbidden(spec: ReleaseSpec, *, bundle_summary: str) -> str:
-        del spec, bundle_summary
+    def forbidden(spec: ReleaseSpec) -> str:
+        del spec
         raise AssertionError("finalized card must not render again")
 
-    monkeypatch.setattr(release_spec, "render_v6", forbidden)
-    assert card.render() == "posted-release-v6"
-    assert spec_from_record(record).bound("posted-release-v6", record)
+    monkeypatch.setattr(release_spec, "render_v7", forbidden)
+    assert card.render() == "posted-release-v7"
+    assert spec_from_record(record).bound("posted-release-v7", record)
 
 
 @pytest.mark.parametrize(

@@ -27,6 +27,7 @@ if __package__ in (None, ""):  # pragma: no cover - 스크립트로 직접 실�
 from automation import deploy_all, deploy_all_gateway, deploy_all_observe  # noqa: E402
 from automation.deploy_declarations import all_declarations  # noqa: E402
 from automation.dori_pin import PIN_RELPATH, PinError, load_pin  # noqa: E402
+from automation.peer_retired import retired_destination  # noqa: E402
 from automation.skill_mount_drift import DriftError, inspect_mounts  # noqa: E402
 from automation.watcher_manifest import (  # noqa: E402
     CENTRAL_MANIFEST,
@@ -110,6 +111,7 @@ def observations(
     home_lister: HomeLister,
     observer: Observer | None = None,
     notice_mode: tuple[str, str] | None = None,
+    peer_retired: bool = False,
 ) -> list[str]:
     """관측 줄을 만든다. 목록을 못 보면 선언 밖 파일 부재를 증명할 수 없어 실패한다."""
     lines: list[str] = [f"OBS|release|{runtime_root.resolve().name}"]
@@ -126,6 +128,8 @@ def observations(
     declared: dict[str, set[str]] = {}
     v2_files = deploy_all_observe.v2_file_destinations(runtime_root)
     for row in rows:
+        if peer_retired and retired_destination(row.account, row.destination, row.source):
+            continue
         declared.setdefault(row.account, set()).add(row.destination)
         source_sha = hashlib.sha256((runtime_root / row.source).read_bytes()).hexdigest()
         policy_kind = "optional" if row.policy.startswith("optional") else "required"
@@ -153,20 +157,24 @@ def observations(
     if notice_mode is not None:
         from automation.notice_bot_release import observe as observe_notice_bot
 
-        for account, status in observe_notice_bot(runtime_root, *notice_mode).items():
+        states = (observe_notice_bot(runtime_root, *notice_mode, peer_retired=True)
+                  if peer_retired else observe_notice_bot(runtime_root, *notice_mode))
+        for account, status in states.items():
             lines.append(f"OBS|notice-bot|{account}|{status}")
     lines.append("OBS|end")
     return lines
 
 
-def _gateways(runtime_root: Path, observer: Observer, wanted: str) -> int:
+def _gateways(runtime_root: Path, observer: Observer, wanted: str, *, retired: bool = False) -> int:
     """재시동 뒤 대기용 — 게이트웨이 세대 줄만. 0 = 기다릴 것 없음 · 1 = stale/unknown · 4 = 관측 불가."""
     try:
         lines = observer(runtime_root)
         states = deploy_all_gateway.fold((line.split("|") for line in lines if line.startswith("OBS|gateway|")), None)
         services = [line.split("|") for line in lines if line.startswith("OBS|gateway-service|")]
         accounts = {d.account for d in all_declarations(runtime_root) if d.destination == deploy_all_gateway.DROPIN}
-        if wanted == "stopped":
+        if retired:
+            accounts = set()
+        if wanted == "stopped" and not retired:
             accounts |= {"agent", "peer"}
         states += deploy_all_gateway.fold_services(services, accounts, wanted)
     except (ManifestError, OSError, deploy_all.ObservationError) as error:
@@ -204,6 +212,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
+    parser.add_argument("--report-hub", choices=("on", "off"), default="on")
+    parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
+    parser.add_argument("--hermes-memory", choices=("on", "off"), default="on")
+    parser.add_argument("--peer-retired", choices=("active", "retired"), default="active")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -217,14 +229,27 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat,
                                  hermes_gateways=args.hermes_gateways,
+                                 report_hub=args.report_hub, hermes_dashboard=args.hermes_dashboard,
+                                  hermes_memory=args.hermes_memory,
                                  agent_chat_channel=args.yoodori_channel,
+                                 peer_retired=args.peer_retired == "retired",
                                  omo_relay_mode=args.omo_relay)
     if args.format == "gateways":
-        return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
+        return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways,
+                         retired=args.peer_retired == "retired")
     try:
         from automation import auto_write
         from automation.node_config import load_node_config
 
+        retirement_clean = True
+        if args.peer_retired == "retired":
+            config = load_node_config()
+            retirement_clean = (
+                deploy_all_observe.default_runner(config.ops_account,
+                    ("p5-retired", str(config.private_root)))[0] == 0
+                and _read_home(config.agent_account, ".hermes/peer-retired")
+                == hashlib.sha256(b"retired").hexdigest()
+            )
         auto_kinds = () if args.auto_write == "off" else tuple(args.auto_write.split(","))
         if set(auto_kinds) - auto_write.KINDS.keys():
             raise deploy_all.ObservationError("unknown auto-write kind")
@@ -238,7 +263,8 @@ def main(argv: list[str] | None = None) -> int:
             auto_states[kind] = "ok" if observed == expected else "drift"
         auto_clean = all(state == "ok" for state in auto_states.values())
         lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer,
-                             (args.notice_bot, args.yoodori_channel))
+                             (args.notice_bot, args.yoodori_channel),
+                             peer_retired=args.peer_retired == "retired")
         notice_states = {parts[2]: parts[3] for line in lines
                          if (parts := line.split("|"))[:2] == ["OBS", "notice-bot"]}
         if args.notice_bot != "off" and not notice_states:
@@ -248,13 +274,13 @@ def main(argv: list[str] | None = None) -> int:
             [line for line in lines if not line.startswith("OBS|notice-bot|")],
             strict_undeclared=args.strict_undeclared
         )
-        if plan.hermes_gateways != args.hermes_gateways:
+        if plan.hermes_gateways != ("retired" if args.peer_retired == "retired" else args.hermes_gateways):
             raise deploy_all.ObservationError("node observation does not match the host gateway mode")
     except (DriftError, ManifestError, OSError, subprocess.SubprocessError, deploy_all.ObservationError) as error:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean or not notice_clean or not auto_clean:
+        if not plan.clean or not notice_clean or not auto_clean or not retirement_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -285,6 +311,9 @@ def main(argv: list[str] | None = None) -> int:
         document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
         document["omo_relay"] = {"route": args.omo_relay}
+        if args.peer_retired == "retired":
+            document["peer_retired"] = "retired"
+            document["p5_root_cleanup"] = "owner-block-not-executed-by-release"
         print(json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2))
         return 0
     if args.format == "actions":
@@ -295,13 +324,17 @@ def main(argv: list[str] | None = None) -> int:
             print("ACT|notice-bot|converge")
         if not auto_clean:
             print("ACT|auto-write|converge")
-        return 0 if plan.clean and notice_clean and auto_clean else 1
+        if not retirement_clean:
+            print("ACT|peer-retire|converge")
+        return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
     print(deploy_all.render_plan(plan))
     if not notice_clean:
         print("NOTICE-BOT-DRIFT: account overrides differ from the release")
     if not auto_clean:
         print("AUTO-WRITE-DRIFT: node modes differ from the release")
-    return 0 if plan.clean and notice_clean and auto_clean else 1
+    if not retirement_clean:
+        print("PEER-RETIRED-PENDING: account cleanup completion is not verified")
+    return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

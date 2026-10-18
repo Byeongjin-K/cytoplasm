@@ -41,6 +41,7 @@ def _spec(*extra: tuple[str, str]) -> ReleaseSpec:
         release_nonce="b" * 32,
         surface_digests=(("skill:meeting", "d" * 64), ("repo", "c" * 64), *extra),
         patch_notes="- meeting skill",
+        render_version=6,
         detail_message_ids=("123456789012345678",),
         detail_channel_id="123456789012345679",
         detail_guild_id="123456789012345680",

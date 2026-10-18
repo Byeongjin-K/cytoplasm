@@ -52,7 +52,6 @@
 - **개인 RAG 인프라 (W2-1)** — RAG 노드에 bge-m3 임베딩(로컬 전용) + Qdrant(`personal_cha`) +
   MCP 메모리 서버(Bearer 인증). 무키/오키 접근 401/403 거부, 재부팅 자동 기동.
 - **Obsidian 승인형 쓰기 어댑터 (repair `t_1b8aab9b`)** — RAG mirror와 분리된 clone에서 PARA 노트 한 건만 commit하고, 경로·제목·본문에 hash-bound 된 owner 승인 없이는 push하지 않는다. 원격 read-back hash로 성공을 검증한다. → [소개](기능소개/obsidian-write.md), 증적 `docs/qa/RTS-2/a3-obsidian.txt`, `docs/qa/RTS-2/a4-gate.txt`. **단, 실제 볼트에 대한 쓰기는 아직 한 번도 수행되지 않았다** — `-rw` 키 등록까지만 끝났고 티켓 `t_1b8aab9b`은 `blocked`로 열려 있다(아래 「신규 아이디어」의 종단 검증 항목).
-- **단일 기억 저장 흐름 (repair `t_df400265`)** — 기억 요청을 정확히 한 번 분류하고 같은 결과로 wiki canonical을 먼저 처리한 뒤 허용된 MEMORY.md co-write만 실행한다. skill·tasks·session 라우팅과 부분 실패·멱등 결과도 한 응답에 보존한다. → [소개](기능소개/단일-기억-저장-흐름.md), 증적 `docs/qa/RTS-2/b3-flow.txt`.
 - **문서 저장 목적지 라우팅 (repair `t_929ca5ad`·`t_783134b5`)** — 저장 요청을 산문이 아닌 결정론 코드로 판정해 개인노트=Obsidian 단독, 목적지 미지정=본인 Drive 비공개, 저장 의도 없음=미저장으로 보낸다. 모호하면 `SAVE-CLARIFY`로 **부작용 0건** exit 5. 기존 “Obsidian·Drive 항상 동시 저장” 규칙은 폐기. → [소개](기능소개/저장-목적지-라우팅.md), 증적 `docs/qa/RTS-1/a1-routing.txt`, `docs/qa/RTS-2/a2-cli-guard.txt`. doctype v1.3.1은 라이브 마운트됐으나(`5520ecd2`) 티켓 `t_929ca5ad`는 아직 `todo`다 — 개인노트 분기가 Obsidian 실쓰기에 의존하기 때문.
 - **개인 위키 + 위키 관리 스킬 (W2-2)** — `~agent/wiki` md 볼트, DM "위키에 정리해줘" → 초안 → 본인 확인 후 저장. 확인 메시지는 승인 키당 1건만 살아 있고 저장된 id는 덮어써지지 않는다. 증적 `docs/qa/W2-2/`. → [소개](기능소개/위키-단일-승인-메시지.md)
 - **회의록 인제스트 (W2-3)** — 업로드 → 액션아이템/마일스톤 추출 → 내 Kanban 카드, 타인 건은 #team 규약 통지. 증적 `docs/qa/W2-3/`.

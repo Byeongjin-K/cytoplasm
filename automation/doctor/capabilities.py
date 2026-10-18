@@ -81,6 +81,8 @@ def _hermes(f: Facts) -> Verdict:
 
 
 def _gateway(f: Facts) -> Verdict:
+    if f.hermes_retired and f.gateway in {"inactive", "failed", "unknown"}:
+        return _ok(f"{f.gateway_unit} P5로 퇴역(정상, retired by release — expected)")
     if f.gateway in {"inactive", "failed"} and f.gateway_stopped_by_release:
         return _ok(f"{f.gateway_unit} 릴리스로 정지됨(정상, stopped by release — expected)")
     if f.gateway == "active":
@@ -181,7 +183,7 @@ def _discord(f: Facts) -> Verdict:
         case str() as reason:
             return _warn(f"Discord API 로 확인하지 못했다: {reason}")
         case results:
-            relevant = [result for result in results if not _by_design(result)]
+            relevant = [result for result in results if f.notice_bot_override or not _by_design(result)]
             failed = [result for result in relevant if result.status is Status.FAIL]
             warned = [result for result in relevant if result.status is Status.WARN]
             if failed:
@@ -277,15 +279,17 @@ def _broken_detail(job: CronJob) -> str:
 
 
 def _cron(f: Facts) -> Verdict:
-    if f.cron is None:
+    cron = () if f.cron is None and f.hermes_retired else f.cron
+    if cron is None:
         return _warn("정기 작업 목록이 없다 — 워처가 아직 배포되지 않았다")
-    active = [job for job in f.cron if job.enabled and not job.paused]
+    active = [job for job in cron if job.enabled and not job.paused]
     # 사용자 타이머로 옮긴 잡(runner=systemd)은 Hermes 쪽이 일부러 일시정지돼 있다 — 중지가 아니다.
     # 그 잡은 타이머가 결과를 남기고, 타이머도 꺼져 있고 Hermes 도 멈췄으면 아무도 돌리지 않는 것이다.
     moved = {timer.name for timer in f.timers}
     running = [timer for timer in f.timers if timer.timer == "active"]
-    paused = {job.name for job in f.cron if job.paused}
-    orphaned = [timer.name for timer in f.timers if timer.timer != "active" and timer.name in paused]
+    paused = {job.name for job in cron if job.paused}
+    orphaned = [timer.name for timer in f.timers
+                if timer.timer not in ("active", "released-off") and timer.name in paused]
     timer_jobs = [CronJob(t.name, "", True, False, t.last_status, t.failure_streak, t.last_error) for t in running]
     failing = [job for job in (*active, *timer_jobs) if job.last_status == "error"]
     broken = [job for job in failing if job.failure_streak >= STREAK_FAIL or DRIFT_SKIP in job.last_error]
@@ -294,7 +298,7 @@ def _cron(f: Facts) -> Verdict:
                             *(f"{name}(타이머 꺼짐·Hermes 일시정지 — 아무도 돌리지 않는다)" for name in orphaned)])
         return _fail(f"{len(broken) + len(orphaned)}개 반복 실패·멈춤 — {detail}",
                      (*(job.name for job in broken), *orphaned))
-    stopped = [job for job in f.cron if (not job.enabled or job.paused) and job.name not in moved]
+    stopped = [job for job in cron if (not job.enabled or job.paused) and job.name not in moved]
     if failing or stopped:
         names = tuple(job.name for job in (*failing, *stopped))
         return _warn(f"최근 실패·중지: {', '.join(names)}", names)
@@ -349,7 +353,8 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
             continue
         verdict = capability.judge(facts)
         steps = () if verdict.status is Status.PASS else guides.steps(
-            capability.key, account=facts.account, home=home, unit=facts.gateway_unit,
+            "yoodori-bot" if capability.key == "discord-bot" and facts.notice_bot_override else capability.key,
+            account=facts.account, home=home, unit=facts.gateway_unit,
         )
         findings.append(Finding(capability.key, capability.label, verdict.status, verdict.detail,
                                 capability.affects, steps, verdict.subjects))
@@ -362,4 +367,10 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
         from automation.notice_bot import NOTICE
 
         findings.append(Finding("notice-bot", "발신 봇", Status.PASS, NOTICE, "알림·승인 카드", ()))
+    for name, state in facts.legacy_services:
+        findings.append(Finding(
+            f"legacy-service:{name}", name, Status.PASS if state == "ok" else Status.FAIL,
+            "릴리스로 정지됨(정상)" if state == "ok" else f"릴리스 정지 상태와 유닛 불일치: {state}",
+            "옛 보고·보드 화면", (),
+        ))
     return tuple(findings)

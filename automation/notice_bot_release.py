@@ -44,7 +44,8 @@ def switch_digest(home: Path) -> str:
     return hashlib.sha256(source_token(home).encode()).hexdigest()
 
 
-def deploy(repo: Path, host: str, runtime: str, head: str, digest: str, channel: str) -> int:
+def deploy(repo: Path, host: str, runtime: str, head: str, digest: str, channel: str,
+           *, peer_retired: bool = False) -> int:
     """Authorize before every node write; send captured bytes only on SSH stdin."""
     if digest != "off" and (re.fullmatch(r"[0-9a-f]{64}", digest) is None
                             or re.fullmatch(r"[1-9][0-9]{16,19}", channel) is None):
@@ -66,6 +67,8 @@ def deploy(repo: Path, host: str, runtime: str, head: str, digest: str, channel:
 
     config = load_node_config()
     for account in (config.agent_account, config.peer_account, config.ops_account):
+        if peer_retired and account == config.peer_account:
+            continue
         command = shlex.join(("sudo", "-n", "-u", account, "-H", "env", f"PYTHONPATH={runtime}",
                               "python3", "-B", "-m", "automation.notice_bot", "install",
                               "--digest", digest, "--channel", channel))
@@ -78,13 +81,15 @@ def deploy(repo: Path, host: str, runtime: str, head: str, digest: str, channel:
     return 0
 
 
-def observe(runtime: Path, digest: str, channel: str) -> dict[str, str]:
+def observe(runtime: Path, digest: str, channel: str, *, peer_retired: bool = False) -> dict[str, str]:
     """Read-back all accounts before a clean receipt; no secret bytes are returned."""
     from automation.node_config import load_node_config
 
     config = load_node_config()
     states: dict[str, str] = {}
     for account in (config.agent_account, config.peer_account, config.ops_account):
+        if peer_retired and account == config.peer_account:
+            continue
         result = subprocess.run(
             ("sudo", "-n", "-u", account, "-H", "env", f"PYTHONPATH={runtime}",
              "python3", "-B", "-m", "automation.notice_bot", "installed",
@@ -102,12 +107,14 @@ def main(argv: list[str] | None = None) -> int:
     apply = commands.add_parser("apply")
     for name in ("repo", "host", "runtime", "head", "digest", "channel"):
         apply.add_argument(f"--{name}", required=True)
+    apply.add_argument("--peer-retired", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command == "digest":
             print(switch_digest(Path.home()))
             return 0
-        return deploy(Path(args.repo), args.host, args.runtime, args.head, args.digest, args.channel)
+        return deploy(Path(args.repo), args.host, args.runtime, args.head, args.digest, args.channel,
+                      peer_retired=args.peer_retired)
     except (OSError, ValueError, subprocess.SubprocessError):
         print("NOTICE-BOT-REFUSED reason=source-or-transport", file=sys.stderr)
         return 4

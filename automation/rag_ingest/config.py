@@ -3,6 +3,10 @@
 The deployed config lives at ``~/.hermes/rag-ingest/config.json`` (mode 600,
 agent-only). The repo ships ``config.example.json`` with placeholders only —
 no guild ids, hostnames beyond LAN aliases, or secrets in git.
+
+Hermes conversations and agents-log indexing default off, including for existing
+configs. Explicit ``index_hermes_conversations`` and ``discord.index_agents_log``
+opt back in; other sources and already indexed records are untouched.
 """
 
 from __future__ import annotations
@@ -161,7 +165,8 @@ def load_config(path: Path) -> IngestConfig:
             enabled=True,
             guild_id=str(discord_raw.get("guild_id", "")),
             team_channel=str(discord_raw.get("team_channel", "team")),
-            agents_log_channel=str(discord_raw.get("agents_log_channel", "agents-log")),
+            agents_log_channel=(str(discord_raw.get("agents_log_channel", "agents-log"))
+                                if discord_raw.get("index_agents_log") is True else ""),
             token_env=str(discord_raw.get("token_env", "DISCORD_BOT_TOKEN")),
             bootstrap_limit=int(discord_raw.get("bootstrap_limit", 50)),
         )
@@ -171,7 +176,7 @@ def load_config(path: Path) -> IngestConfig:
 
     obsidian = _parse_obsidian(raw)
 
-    hermes_db_raw = raw.get("hermes_db")
+    hermes_db_raw = raw.get("hermes_db") if raw.get("index_hermes_conversations") is True else None
     hermes_db = Path(str(hermes_db_raw)).expanduser() if hermes_db_raw else None
 
     return IngestConfig(
