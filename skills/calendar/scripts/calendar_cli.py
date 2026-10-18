@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from importlib import import_module
 from pathlib import Path
 
+from calendar_confirm_input import DraftRecord
+
 _repo_root = Path(os.environ.get("AUTOPHAGY_REPO_ROOT", Path(__file__).resolve().parents[3]))
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
@@ -76,7 +78,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_draft_create(args: argparse.Namespace) -> int:
+def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
     now = datetime.now(calendar_core.KST)
     request_text = f"{args.text}\n{args.summary}"
     try:
@@ -107,15 +109,24 @@ def cmd_draft_create(args: argparse.Namespace) -> int:
     if not summary:
         raise calendar_core.ParseRejected("일정 제목을 알 수 없습니다 (--summary로 지정 가능)")
     request = calendar_core.ParsedRequest(summary=summary, start=request.start, end=request.end)
-    record = calendar_gate.build_draft(
+    return calendar_gate.build_draft(
         action="create", argv=calendar_core.build_create_argv(args.calendar, request),
         calendar_id=args.calendar, event_id="", summary=summary,
         start=request.start.isoformat(), end=request.end.isoformat(),
         channel_id=args.channel_id, **_origin_of(args),
     )
+
+
+def cmd_draft_create(args: argparse.Namespace) -> int:
+    record = _build_create_draft(args)
     # 다이제스트 건(--digest-day)은 저장에서 끝나지 않고 그날 승인 스레드에 카드까지 올린다.
     _print_draft(import_module("calendar_digest").submit(record, args.digest_day))
     return 0
+
+
+def cmd_owner_create(args: argparse.Namespace) -> int:
+    """The node gate has verified the owner message and release switch."""
+    return import_module("calendar_owner").create(_build_create_draft(args))
 
 
 def cmd_draft_update(args: argparse.Namespace) -> int:
@@ -208,13 +219,13 @@ def cmd_sign(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_common(parser: argparse.ArgumentParser) -> None:
+def _add_common(parser: argparse.ArgumentParser, *, owner_command: bool = False) -> None:
     parser.add_argument("--calendar", default="primary")
     parser.add_argument("--channel-id", default="dm")
     # 지시가 시작된 채널/메시지 — 결과 통지를 그 스레드로 돌려보내기 위한 것뿐이며,
     # 승인 표면(확인 메시지)에도 초안 해시에도 영향을 주지 않는다.
-    parser.add_argument("--origin-channel-id", default="")
-    parser.add_argument("--origin-message-id", default="")
+    parser.add_argument("--origin-channel-id", default="", required=owner_command)
+    parser.add_argument("--origin-message-id", default="", required=owner_command)
 
 
 def cmd_digest_pending(args: argparse.Namespace) -> int:
@@ -236,12 +247,14 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("--calendar", default="primary")
     listing.set_defaults(func=cmd_list)
 
-    create = sub.add_parser("draft-create", help="생성 초안 (캘린더에 아무것도 쓰지 않음)")
-    create.add_argument("--text", required=True, help="자연어 요청 (예: 내일 오후 3시 실험 미팅)")
-    create.add_argument("--summary", default="", help="제목 명시 (자연어 파싱 대신)")
-    create.add_argument("--digest-day", default="", help="메일 다이제스트 게시일 YYYY-MM-DD — 그날 승인 스레드에 카드까지 게시")
-    _add_common(create)
-    create.set_defaults(func=cmd_draft_create)
+    for command, handler in (("draft-create", cmd_draft_create), ("owner-create", cmd_owner_create)):
+        create = sub.add_parser(command, help="일정 생성 초안 / 검증된 소유자 명령 실행")
+        create.add_argument("--text", required=True, help="자연어 요청 (예: 내일 오후 3시 실험 미팅)")
+        create.add_argument("--summary", default="", help="제목 명시 (자연어 파싱 대신)")
+        if command == "draft-create":
+            create.add_argument("--digest-day", default="", help="메일 다이제스트 게시일 YYYY-MM-DD — 그날 승인 스레드에 카드까지 게시")
+        _add_common(create, owner_command=command == "owner-create")
+        create.set_defaults(func=handler)
 
     update = sub.add_parser("draft-update", help="수정 초안")
     update.add_argument("--event-id", required=True)

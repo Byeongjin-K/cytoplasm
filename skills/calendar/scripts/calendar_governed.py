@@ -16,7 +16,7 @@ SKILL_NAME = "calendar"
 STALE_COPY_MARKER = "STALE-SKILL-COPY-BLOCK"
 MUTATING_SUBCOMMANDS: frozenset[str] = frozenset({
     "draft-create", "draft-update", "draft-delete", "confirm", "post-confirm",
-    "discard", "sign",
+    "discard", "sign", "owner-create",
 })
 
 

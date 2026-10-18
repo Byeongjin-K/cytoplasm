@@ -1,4 +1,4 @@
-"""``python3 -m automation.effect_request request drive-save|command`` and ``status``.
+"""``request drive-save|command``, owner-command ``save-now``, and ``status``.
 
 ``request`` freezes what will run, posts ONE standard approval card in the request's own
 thread and prints the ``APPROVAL-THREAD`` line the reply must cite. It never runs the
@@ -15,6 +15,7 @@ import json
 import sys
 import unicodedata
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
@@ -93,7 +94,7 @@ def _command_payload(args: argparse.Namespace) -> dict[str, object]:
     return {"argv": argv, "target": target, "cwd": str(cwd), "timeout": timeout}
 
 
-def _new_record(args: argparse.Namespace, store: EffectRequestStore) -> EffectRequest:
+def _new_record(args: argparse.Namespace, store: EffectRequestStore, *, reuse_live: bool = True) -> EffectRequest:
     summary = _summary(args.summary)
     effect = args.effect
     seed = hashlib.sha256(f"{effect}\0{summary}\0{datetime.now(UTC).isoformat()}".encode()).hexdigest()[:16]
@@ -102,7 +103,7 @@ def _new_record(args: argparse.Namespace, store: EffectRequestStore) -> EffectRe
     key_basis = json.dumps({"effect": effect, "summary": summary}, ensure_ascii=False, sort_keys=True)
     key = "effect:" + hashlib.sha256(key_basis.encode("utf-8")).hexdigest()[:24]
     for existing in store.all():
-        if existing.key == key and existing.action_hash == digest and existing.status in LIVE_STATUSES:
+        if reuse_live and existing.key == key and existing.action_hash == digest and existing.status in LIVE_STATUSES:
             return existing
     record = EffectRequest(
         request_id=seed, key=key, effect=effect, summary=summary, payload=payload,
@@ -157,19 +158,59 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0 if chosen else 1
 
 
+def cmd_save_now(args: argparse.Namespace) -> int:
+    """Save from a gate-verified owner command; no Discord approval or watcher retry."""
+    from automation.drive_outputs import publish
+
+    from .execute import execute
+    from .render import drive_location
+
+    refused = refusal(args.summary)
+    if refused is not None:
+        print(f"EFFECT-REQUEST-REFUSED code={refused.code} reason={refused.reason}", file=sys.stderr)
+        return EXIT_REFUSED
+    store = EffectRequestStore()
+    record = _new_record(args, store, reuse_live=False)
+    try:
+        receipt = execute(record, publisher=publish)
+    except EffectRequestError as error:
+        store.update(replace(
+            record, status="failed", attempts=1, last_error=str(error)[:300],
+            finished_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        ))
+        raise
+    receipt.update(
+        method="owner_command",
+        origin_channel_id=record.origin_channel_id,
+        origin_message_id=record.origin_message_id,
+    )
+    store.update(replace(
+        record, status="done", attempts=1, receipt=receipt,
+        finished_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    ))
+    links = receipt["links"]
+    location = str(links[0]) if links else drive_location(record.payload)
+    print(f"OWNER-COMMAND-WRITTEN drive-save {location}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 -m automation.effect_request")
     commands = parser.add_subparsers(dest="command", required=True)
     request = commands.add_parser("request", help="post one approval card for an effect no skill owns")
     effects = request.add_subparsers(dest="effect", required=True)
     for name, helptext in ((DRIVE_SAVE, "save one file to Drive, owner-only"),
-                           (COMMAND, "run one command after approval")):
-        sub = effects.add_parser(name, help=helptext)
+                           (COMMAND, "run one command after approval"),
+                           ("save-now", "save from a gate-verified owner command without a card")):
+        immediate = name == "save-now"
+        sub = (commands if immediate else effects).add_parser(name, help=helptext)
         sub.add_argument("--summary", required=True, help="한 줄 설명 — 카드·스레드 제목")
-        sub.add_argument("--origin-channel-id", default="")
-        sub.add_argument("--origin-message-id", default="")
-        sub.set_defaults(handler=cmd_request)
-        if name == DRIVE_SAVE:
+        sub.add_argument("--origin-channel-id", default="", required=immediate)
+        sub.add_argument("--origin-message-id", default="", required=immediate)
+        sub.set_defaults(handler=cmd_save_now if immediate else cmd_request)
+        if immediate:
+            sub.set_defaults(effect=DRIVE_SAVE)
+        if name == DRIVE_SAVE or immediate:
             sub.add_argument("--file", required=True)
             sub.add_argument("--title", default=None, help="Drive 파일 제목(기본: 파일 이름)")
             sub.add_argument("--kind", default=DEFAULT_KIND, help="Drive 카테고리(기본 doctype=문서)")

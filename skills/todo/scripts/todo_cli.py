@@ -291,6 +291,10 @@ def _cmd_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_write_now(args: argparse.Namespace) -> int:
+    return import_module("todo_owner_command").write_now(args)
+
+
 def _cmd_list(args: argparse.Namespace) -> int:
     items = run_gws(list_argv(args.tasklist)).get("items", [])
     rows = items if isinstance(items, list) else []
@@ -313,6 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("plan", _cmd_plan),
         ("request", _cmd_request),
         ("create", _cmd_create),
+        ("write-now", _cmd_write_now),
     ):
         sub = subparsers.add_parser(name)
         sub.add_argument("--title", required=True)
@@ -320,11 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--notes", default=None)
         sub.add_argument("--due", default=None)
         sub.add_argument(
-            "--origin-channel-id", default="",
+            "--origin-channel-id", default="", required=name == "write-now",
             help="지시를 받은 원 채널 id — 등록/취소 결과를 이 채널의 스레드로 통지",
         )
         sub.add_argument(
-            "--origin-message-id", default="",
+            "--origin-message-id", default="", required=name == "write-now",
             help="원 채널의 지시 메시지 id — 있으면 그 메시지에 결과 스레드를 앵커",
         )
         sub.set_defaults(handler=handler)
@@ -338,7 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in {"request", "create"}:
+    if args.command in {"request", "create", "write-now"}:
         import importlib
 
         todo_governed = importlib.import_module("todo_governed")

@@ -1,7 +1,7 @@
 ---
 name: todo
-description: 할 일을 등록하거나 할 일 목록을 보여 달라고 할 때 사용. Google Tasks 할 일 등록·조회 스킬. 등록(mutate)은 외부효과 승인 게이트를 반드시 경유하고, 쓰기 성공 뒤 tasks.tasks.get 재조회로 저장된 제목·식별자를 검증한다. 조회(list)는 READ이므로 게이트 대상이 아니다. 터미널에서 raw `gws tasks tasks insert`를 직접 실행하지 말 것 — 같은 명령이 denylist 규칙 gws_tasks_mutation에 매칭되어 승인 없이는 차단된다.
-version: 1.4.6
+description: 할 일을 등록하거나 할 일 목록을 보여 달라고 할 때 사용. Google Tasks 할 일 등록·조회 스킬. 등록은 승인 카드 또는 소유자 명령을 검증한 YooDori 게이트의 write-now를 경유하고, tasks.tasks.get 재조회로 저장된 제목·식별자를 검증한다. 조회(list)는 READ이므로 게이트 대상이 아니다. 터미널에서 raw `gws tasks tasks insert`를 직접 실행하지 말 것.
+version: 1.4.7
 author: autophagy-agents
 license: proprietary
 metadata:
@@ -10,6 +10,26 @@ metadata:
 ---
 
 # todo — 승인 게이트 경유 Google Tasks
+
+## 소유자 명령 즉시 등록 (Q233)
+
+2026-10-18 17:40 KST 소유자 지시: **"6개 다 카드 없이 바로 + 하루 요약에 남기기"**.
+YooDori 노드 게이트가 소유자 본인의 Discord 지시와 릴리스 스위치 `auto-write-todo`를
+검증한 경우에만 `write-now`를 호출한다. 아래 기존 카드 절차는 그 외 요청에 적용된다.
+
+```bash
+python3 /srv/autophagy-skills/live/todo/scripts/todo_cli.py write-now \
+  --title "실험 노트 정리" --notes "합성 메모" --due 2026-10-20T00:00:00Z \
+  --origin-channel-id <채널ID> --origin-message-id <메시지ID>
+```
+
+`request`와 같은 `--tasklist`(기본 `@default`)·제목·메모·마감일을 받으며 원 지시 좌표는
+둘 다 필수다. CLI 자체는 소유자 신원을 재검증하지 않는다. 게이트를 거치지 않고 호출하지 않는다.
+카드 없이 기존 엔티티 preflight·insert·get 경로로 등록하고, 검증된 경우에만
+`OWNER-COMMAND-WRITTEN todo <task id>`를 출력한다. 잡 러너는 이 줄을 받아 하루 요약 원장에 남긴다.
+감사 영수증은 `TODO_APPROVAL_ROOT/owner-command/`에 `method=owner_command`·원 지시 좌표·task id로
+남는다(0600). 같은 지시·같은 인자는 O_EXCL로 한 번만 시작하며 실패·중단 후에도 자동 재삽입하지
+않는다. 재조회 불일치는 exit 6, 이미 시작된 명령은 exit 7이며 성공 표식은 없다.
 
 ## 이 스킬이 존재하는 이유
 
@@ -94,7 +114,8 @@ python3 /srv/autophagy-skills/live/todo/scripts/todo_cli.py create --title "실�
 
 ## 라우팅 규칙 (에이전트용)
 
-- 소유자가 "할 일 추가/투두 등록"을 요청하면 이 스킬의 `create`를 쓴다.
+- 소유자가 "할 일 추가/투두 등록"을 요청하면 검증된 YooDori 게이트는 `write-now`를,
+  그 외 경로는 `request`를 쓴다.
   **`gws tasks tasks insert`를 터미널에서 직접 실행하지 않는다** — 게이트가 차단한다.
 - 일정(특정 시각이 있는 약속)은 todo가 아니라 `calendar` 스킬이다. 마감일만 있는
   작업 항목이 todo다. 애매하면 소유자에게 되묻는다(fail-closed).

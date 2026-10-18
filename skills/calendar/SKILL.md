@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 게이트 없이 즉시. 생성/수정/삭제는 변경 요약 초안 → 소유자 전용 승인 스레드의 ✅/⛔ 반응 확인(텍스트 실행/취소는 fallback) → 실행 + approvals.jsonl 기록 게이트를 거친다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다. W3-1."
-version: 1.6.1
+version: 1.6.2
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -18,8 +18,9 @@ cha 본인의 Google 캘린더를 gws CLI(OAuth, W0-6)로 관리한다.
 
 ## 절대 규칙 (안전)
 
-1. **확인 전 변경 금지**: 캘린더 생성/수정/삭제는 오직
+1. **확인 전 변경 금지**: 일반 캘린더 생성/수정/삭제는
    `calendar_cli.py confirm`(소유자 확인 검증 내장)으로만 일어난다.
+   예외는 아래 `owner-create`: 유돌 게이트가 소유자 지시와 릴리스 스위치를 검증한 본인 일정 생성이다.
    `gws calendar events insert/update/patch/delete`를 터미널에서 직접 실행하지
    마라 — pre_tool_call 외부효과 게이트가 승인 없는 호출을 차단한다.
 2. **모호한 시간은 추측하지 마라**: CLI가 exit 5 + `AMBIGUOUS-TIME 되묻기:`를
@@ -86,6 +87,33 @@ JSONL에는 확인 메시지의 channel/message id·초안 SHA-256·렌더 버�
 초안에는 고정된 카드 내용과 `approval_thread_id`(승인 해시 밖)가 저장된다.
 v1/v2/v3로 이미 게시된 카드와 해시는 그대로 재생하며 새 문구로 바꿔 승인받지 않는다.
 v4의 마지막 줄은 전체 SHA-256을 인라인 코드로 표시한다. 이 단계도 캘린더에는 아무것도 쓰지 않는다.
+
+### 소유자 직접 지시 생성 — `owner-create`
+
+소유자 결정 Q233(2026-10-18 17:40 KST): **"6개 다 카드 없이 바로 + 하루 요약에 남기기"**.
+유돌 노드 게이트가 원 Discord 메시지가 소유자 본인의 지시인지와
+릴리스 스위치 `auto-write-calendar`가 켜졌는지를 확인한 뒤에만 호출한다.
+
+```bash
+python3 /srv/autophagy-skills/live/calendar/scripts/calendar_cli.py owner-create \
+  --text "내일 오후 3시 실험 미팅" --summary "실험 미팅" \
+  --origin-channel-id <채널 id> --origin-message-id <지시 메시지 id>
+```
+
+`--summary`는 선택이다. 기존 `draft-create`의 파싱·라우팅·초안 생성기를 그대로 쓴다.
+본인 외 참석자가 없는 초안은 기존 승인 실행기와 Google 재조회 검증으로 즉시 생성하고,
+같은 초안 저장소에 실행 완료와 `owner_command` 감사 기록(원 채널·메시지)을 남긴다.
+성공한 경우에만 `OWNER-COMMAND-WRITTEN calendar <draft id> create`를 출력하여
+상위 잡 러너가 하루 요약 원장에 기록한다. 실행 중이거나 결과가 불확실한 초안은
+pending으로 노출하지 않아 워처가 재실행하거나 고아 승인 카드를 게시하지 않는다.
+
+동결된 실행 본문에 본인 외 참석자가 있거나 참석자의 본인 여부를 확인할 수 없으면,
+그 초안의 기존 `post-confirm`을 호출한다. `APPROVAL-THREAD` 링크와
+`CARD-POSTED draft=<id>`를 반환하며 즉시 쓰기나 성공 마커는 없다.
+답장에는 그 스레드 링크를 그대로 인용하고 기존 카드의 ✅를 기다린다.
+현재 자연어 생성기는 참석자를 추가하지 않는다. 이 검사는 향후 생성기가 참석자를
+지원해도 실행 본문에 초대가 있으면 카드로 돌아가게 한다.
+파싱·실행·재조회 실패는 비정상 종료이며 성공 마커를 내지 않는다.
 
 ### 3) 실행 — cha의 ✅ 반응이 기본, 텍스트는 fallback
 
