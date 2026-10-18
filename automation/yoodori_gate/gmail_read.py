@@ -31,7 +31,10 @@ def _read(operation: str, params: dict[str, Json]) -> dict[str, Json]:
                              stdin=subprocess.DEVNULL, env=dict(os.environ), timeout=60, check=False)
     if process.returncode:
         raise GmailReadError("gws-failed")
-    parsed = json.loads(process.stdout)
+    start = process.stdout.find("{")
+    if start < 0:
+        raise GmailReadError("invalid-response")
+    parsed = json.loads(process.stdout[start:])
     if not isinstance(parsed, dict):
         raise GmailReadError("invalid-response")
     return parsed

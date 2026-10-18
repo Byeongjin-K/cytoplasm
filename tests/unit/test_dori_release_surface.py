@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from automation import release_approval, skill_gate
+from automation import release_approval, release_spec_message, skill_gate
 from automation.release_spec import dori_surface
 from automation.yoodori_gate.yoodori_read_gate import CARD_COMMANDS, GMAIL_READ_COMMANDS
 from tests.unit import test_release_authorize as auth
@@ -17,6 +17,12 @@ from tests.unit.test_healthcheck_wrapper_release import _fake_plan, _plan_args, 
 
 BOT = "555555555555555555"
 LINE = "도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(유돌이 받음)"
+
+
+def test_release_counts_match_gate_without_a_runtime_import() -> None:
+    # Given / When / Then: renderer ships in the pre-existing, closed staging set.
+    assert release_spec_message.YOODORI_CARD_COMMAND_COUNT == len(CARD_COMMANDS)
+    assert release_spec_message.YOODORI_GMAIL_READ_COUNT == len(GMAIL_READ_COMMANDS)
 
 
 def test_no_switch_keeps_the_existing_card_and_hash() -> None:

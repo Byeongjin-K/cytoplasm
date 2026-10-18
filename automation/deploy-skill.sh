@@ -738,8 +738,7 @@ push_skill peer "$SRC_DIR" "$SKILL"
 GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py
               typing_compat.py git_tag_signature.py peer_attestation.py peer_signed_attestation.py peer_attest_runtime.py skill_gate_e2e.py
               skill_gate_specs.py stored_content.py release_spec.py release_spec_message.py skill_gate_approval.py skill_gate_request.py
-               skill_gate_retire.py skill_gate_surface.py yoodori_gate/yoodori_read_gate.py
-               yoodori_gate/yoodori_request_runtime.py)
+              skill_gate_retire.py skill_gate_surface.py)
 GATE_INTEROP_HELPERS=(interop/approval_lease.py interop/approval_lifecycle.py interop/approval_card.py
                       interop/approval_reminder.py interop/approval_reminder_config.py
                       interop/approval_types.py interop/approval_surface.py
@@ -929,7 +928,7 @@ DEPLOY_APPROVALS_CHANNEL_ID="$(run_as "$NODE_AGENT_ACCOUNT" "python3 -c 'import 
 run_as "$NODE_AGENT_ACCOUNT" "umask 077; mkdir -p \"\$HOME/.hermes/skill-gate\" && cat > \"\$HOME/.hermes/skill-gate/skill_gate.py\"" \
   < "$REPO_ROOT/automation/skill_gate.py"
 for helper in "${GATE_HELPERS[@]}"; do
-  run_as "$NODE_AGENT_ACCOUNT" "umask 077; mkdir -p \"\$HOME/.hermes/interop_runtime/automation/$(dirname "$helper")\" && cat > \"\$HOME/.hermes/interop_runtime/automation/$helper\"" \
+  run_as "$NODE_AGENT_ACCOUNT" "umask 077; mkdir -p \"\$HOME/.hermes/interop_runtime/automation\" && cat > \"\$HOME/.hermes/interop_runtime/automation/$helper\"" \
     < "$REPO_ROOT/automation/$helper"
 done
 for helper in "${GATE_INTEROP_HELPERS[@]}"; do

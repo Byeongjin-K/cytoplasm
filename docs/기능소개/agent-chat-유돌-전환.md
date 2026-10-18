@@ -49,10 +49,12 @@ peer는 기존 `hermes-memory-profile-with-recall-v1`을 유지한다.
 
 유돌은 SSH 강제명령으로 기존 읽기(`calendar`, `mail-list`, `mail-get`, `recall`, `status`),
 Gmail 읽기(`gmail-list`, `gmail-get`)와
-아래 **승인 요청 6종**만 할 수 있다. 실행·승인·발송·워처 호출 권한은 없다.
+아래 **승인 요청 6종**, 노드 비공개 폴더로의 `stage` 파일 전달만 할 수 있다.
+실행·승인·발송·워처 호출 권한은 없다.
 기존 카드의 소유자 ✅ 뒤에만 노드의 기존 워처가 실행한다. 릴리스 카드에는 전환 표면이 있을 때만
 `유돌 게이트: 카드 올리기 명령 6개 추가(실행 권한 없음)`이 전환 켬 줄 다음에 붙는다.
-그 다음 줄에는 `유돌 게이트: Gmail 읽기 2개 추가`도 표시된다(각 명령 상수에서 개수를 계산).
+그 다음 줄에는 `유돌 게이트: Gmail 읽기 2개 추가`도 표시된다.
+개수는 렌더러의 고정 상수이며 테스트가 게이트 명령 목록 길이와의 일치를 강제한다.
 
 아래 표에서 `S`는 `/srv/autophagy-skills/live`, `P`는 `/usr/bin/python3`다.
 모든 요청에 `--origin-channel-id <숫자> --origin-message-id <숫자>`가 필수이며 그대로
@@ -65,7 +67,29 @@ Gmail 읽기(`gmail-list`, `gmail-get`)와
 | `todo-request` | `S/todo/scripts/todo_cli.py request` | 필수 `--title`, 선택 `--notes --due`; tasklist는 기본 `@default` |
 | `drive-save` | `-m automation.effect_request request drive-save` | 필수 `--file --summary`, 선택 `--title --project`; kind는 기본 `doctype` |
 | `command-request` | `-m automation.effect_request request command … -- <argv>` | 필수 `--summary --target --argv-b64`; cwd·timeout은 기존 CLI 기본값 |
-| `obsidian-request` | `-m automation.obsidian_write request` | 필수 `--relpath --body-file`, 선택 `--title` |
+| `obsidian-request` | `-m automation.obsidian_write request` | 필수 `--relpath`, `--body-file` 또는 `--body-b64` 중 하나, 선택 `--title` |
+
+### PC에서 파일 전달: `stage <name>`
+
+제한 SSH 키에는 scp/sftp가 없으므로 파일은 **같은 SSH 명령의 stdin**으로 전달한다.
+
+```bash
+ssh <노드-별칭> 'stage report.pdf' < ./report.pdf
+```
+
+게이트는 원시 바이트를 agent 홈 `.local/share/yoodori-staging/report.pdf`에 저장하고
+`STAGED report.pdf sha256=<64자리 hex> bytes=<바이트 수>`를 출력한다.
+이름은 `[A-Za-z0-9._-]{1,120}`이고 선두 점·슬래시는 금지한다. 파일은 최대 64 MiB다.
+임시 파일(0600)에 받아 해시·크기를 계산하고 끝까지 받은 뒤 이름을 원자 교체한다.
+초과·읽기 실패는 `YOODORI-GATE-REFUSED`이며 부분 파일을 지우고 기존 완성 파일은 보존한다.
+폴더는 0700이고 이 단계는 노드 비공개 저장일 뿐, Drive·Obsidian에 쓰거나 카드를 올리지 않는다.
+
+전달 후 `drive-save --file <노드-agent-home>/.local/share/yoodori-staging/report.pdf …`로
+기존 승인 카드를 요청한다. 형의 카드 ✅ 이후에만 Drive에 저장한다.
+노트 본문은 별도 업로드 없이 `obsidian-request --relpath … --body-b64 <UTF-8-Base64> …`로
+줄 수도 있다. 런타임이 검증한 본문을 같은 비공개 폴더의 해시 기반 `.md`로 저장한 뒤
+기존 CLI의 `--body-file`로 넘기며, 본문 두 입력을 함께 주거나 둘 다 생략하면 거부한다.
+원 지시 좌표와 본문 8,000자 상한은 그대로다.
 
 Gmail 읽기는 원 지시 좌표 없이 사용한다.
 
@@ -80,6 +104,8 @@ Gmail 읽기는 원 지시 좌표 없이 사용한다.
 없으면 HTML을 텍스트로 바꾼다. 첨부파일 조회·다운로드는 하지 않는다.
 잘못된 id·쿼리·범위는 `YOODORI-GATE-REFUSED`이고, gws 실패·깨진 응답은
 `{"status":"error","error":"gmail-read-failed"}` 및 종료 코드 3이다. gws 오류 출력이나 토큰은 돌려주지 않는다.
+gws가 JSON 앞에 `Using keyring backend: keyring`을 출력해도 첫 `{`부터 JSON을 읽는다.
+stderr는 섞지 않으며 그 안내나 자격증명 오류 출력은 응답으로 보내지 않는다.
 `send drafts modify labels trash delete batchModify insert import watch settings`는 모두 게이트에서 거부한다.
 
 - **메일 회신 예:** “이 메일에 이렇게 답장해 줘” → 유돌이 원문 UID를 `--in-reply-to`로
@@ -110,7 +136,7 @@ SSH 원문에는 기존 셸 금지문자(`; & | 백틱 $ < > 역슬래시`)와 �
 파일은 노드 agent 홈의 `.local/share/yoodori-staging/` 아래에 **이미 있는**
 64 MiB 이하 일반 파일만 허용한다. `..`, 디렉터리, 밖으로 향하는 심링크, 없는 파일,
 메일 첨부·본문 파일·공유 등 허용 목록 밖 파일 옵션은 거부한다.
-배포기가 이 비공개 staging 디렉터리(0700)를 준비하지만, 게이트가 파일을 받거나 업로드하지는 않는다.
+배포기가 이 비공개 staging 디렉터리(0700)를 준비하고, `stage`가 그 안에만 파일을 받는다.
 Obsidian의 목적지는 `000_PARA/` 또는 `001_KIMM_PARA/` 아래 안전한 `.md` 상대 경로다.
 
 `--argv-b64`는 JSON 문자열 배열을 Base64로 인코딩한다(1~32개).
@@ -140,8 +166,8 @@ agent|automation/yoodori_gate/yoodori_request_runtime.py|.local/libexec/yoodori_
 릴리스의 전량 수렴이 provenance 검사 뒤 `push_file`의 해시 재조회로 설치하고 0755를 확인한다.
 v2 파일 선언은 홈 기준 상대 경로를 지원하므로 기존 `HOME_DEPLOYED_PATTERN`을 넓히거나
 legacy 중앙 표를 변경할 필요가 없다. `authorized_keys`·접속 PC·키·sudo 권한은 변경하지 않는다.
-스킬 배포 샌드박스도 릴리스 카드의 명령 개수를 재생하므로 기존 `GATE_HELPERS`에
-게이트 모듈을 포함하고 중첩 디렉터리까지 만들어 복사한다(승인·실행 로직 변경 없음).
+릴리스 렌더러는 게이트를 import하지 않는다. 카운트 상수의 일치만 테스트에서 대조하므로
+`deploy-skill.sh`의 `GATE_HELPERS`나 `interop_runtime`에 게이트 파일을 더하지 않는다.
 
 ## 되돌리기
 

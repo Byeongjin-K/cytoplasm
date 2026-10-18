@@ -98,8 +98,10 @@ def _message(mid: str, html: bool = False) -> dict[str, gmail.Json]:
     ["list", "2", "from:reader@example.invalid is:unread"], ["list", "2"],
     ["get", ID], ["get", ID, "--body"],
 ])
+@pytest.mark.parametrize("notice_stream", ["stdout", "stderr"])
 def test_gws_reads_only_list_and_get_and_outputs_compact_json(
-    words: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    words: list[str], notice_stream: str,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     # Given: fake only the external gws process, not the parser/MIME/argv builder.
     calls: list[tuple[list[str], dict[str, gmail.Json]]] = []
@@ -111,7 +113,10 @@ def test_gws_reads_only_list_and_get_and_outputs_compact_json(
         params = json.loads(argv[6])
         calls.append((argv, params))
         response = {"messages": [{"id": ID}, {"id": OTHER}]} if argv[4] == "list" else _message(params["id"])
-        return SimpleNamespace(returncode=0, stdout=json.dumps(response), stderr="not exposed")
+        notice = "Using keyring backend: keyring\n"
+        return SimpleNamespace(returncode=0,
+                               stdout=(notice if notice_stream == "stdout" else "") + json.dumps(response),
+                               stderr=notice if notice_stream == "stderr" else "")
     monkeypatch.setattr(gmail.subprocess, "run", run)
     # When
     assert gmail.main(words) == 0
