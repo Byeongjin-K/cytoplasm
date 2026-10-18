@@ -64,6 +64,11 @@ fi
 chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel --release-switch)" || exit 4
 chat_channel="${chat_channel:-off}"
 notice_digest="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release digest)" || exit 4
+fault_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release fault-channel)" || exit 4
+if [[ "$fault_channel" != off && "$notice_digest" == off ]]; then
+  echo "FAULT-CHANNEL-REFUSED: notice-bot required" >&2
+  exit 4
+fi
 auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
@@ -86,7 +91,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 retire_peer() {
@@ -118,7 +123,7 @@ converge_notice_bot() {
   [[ "$peer_mode" != retired ]] || retired_args=(--peer-retired)
   PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release apply \
     --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" \
-    --digest "$notice_digest" --channel "$chat_channel" "${retired_args[@]}"
+    --digest "$notice_digest" --channel "$chat_channel" --fault-channel "$fault_channel" "${retired_args[@]}"
 }
 
 #: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다

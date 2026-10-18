@@ -5,13 +5,14 @@ from __future__ import annotations
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Final
 
 import mail_attachment_archive as archive
 
 MAX_ATTEMPTS: Final = 5
+RECENT_DAYS: Final = 14
 
 
 def fetch_attachment(uid: str, filename: str) -> None:
@@ -46,11 +47,24 @@ def notify_exhausted(text: str) -> bool:
         fact=text,
         location=Ref(scope="resource", search=("Drive", "기관메일 첨부 보관 폴더")),
         owner=Action("none"),
-        agent_next="더 시도하지 않습니다. 원 메일에서 첨부를 직접 받아 주세요.",
+        agent_next="유돌이 원인과 시도 내역을 확인하고, 해결하지 못하면 페어 채널에서 짱도리에게 요청합니다.",
         recovery="not_applicable",
         detail=Result("executed"),
     )
-    return notify_owner(text, message=message)
+    return notify_owner(text, message=message, fault=True)
+
+
+def _recent(received: str | None, first_seen: int | str | None, now: datetime) -> bool:
+    """Unknown, future or old dates cannot opt historical attachments into recovery."""
+    try:
+        candidate = str(received or first_seen or "")
+        stamp = (datetime.fromtimestamp(int(candidate), timezone.utc) if candidate.isdecimal()
+                 else datetime.fromisoformat(candidate))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return False
+    return now - timedelta(days=RECENT_DAYS) <= stamp <= now
 
 
 def _available(uid: str, filename: str) -> bool:
@@ -66,19 +80,22 @@ def _available(uid: str, filename: str) -> bool:
 
 
 def recover(state: sqlite3.Connection) -> int:
-    """Try each unresolved attachment once per tick, including historical failures."""
+    """Retry recent, unspent MailOn items once per tick; pending is not job failure."""
     if not archive.SOURCE_DB.is_file():
         return 0  # discover() owns the existing source_db_missing error.
     with sqlite3.connect(f"file:{archive.SOURCE_DB}?mode=ro", uri=True) as source:
         rows = source.execute(
             """SELECT a.uid, a.filename, a.status, a.local_path,
-                      m.recv_date, a.first_seen
+                      m.recv_date, a.first_seen, a.attempts
                FROM attachments AS a LEFT JOIN messages AS m ON a.uid=m.uid
                ORDER BY a.uid, a.filename"""
         ).fetchall()
-    failed = 0
-    for uid, filename, status, local, received, first_seen in rows:
+    now = datetime.now(timezone.utc)
+    exhausted: list[tuple[str, str]] = []
+    for uid, filename, status, local, received, first_seen, mailon_attempts in rows:
         if not uid or not filename or filename in archive.BOGUS_NAMES:
+            continue
+        if (mailon_attempts or 0) >= MAX_ATTEMPTS or not _recent(received, first_seen, now):
             continue
         key = archive.attachment_key(uid, filename)
         if state.execute(
@@ -108,22 +125,23 @@ def recover(state: sqlite3.Connection) -> int:
                 continue
         # Exhausted rows have their dedicated notice; do not make the cron wrapper
         # deliver the generic failure marker again on every later tick.
-        failed += int(attempts < MAX_ATTEMPTS)
         if attempts >= MAX_ATTEMPTS and not notified:
-            raw_date = str(received or "")
-            if not raw_date:
-                try:
-                    raw_date = datetime.fromtimestamp(int(first_seen), timezone.utc).date().isoformat()
-                except (TypeError, ValueError, OverflowError, OSError):
-                    raw_date = "날짜 미상"
+            raw_date = str(received or first_seen)
+            if raw_date.isdecimal():
+                raw_date = datetime.fromtimestamp(int(raw_date), timezone.utc).date().isoformat()
             date = " ".join(raw_date[:10].split())
-            name = " ".join(Path(filename).name.split())
-            if notify_exhausted(f"기관메일 첨부 보관 실패(5회): {date} · {name}"):
-                state.execute(
-                    "UPDATE download_retries SET notified=1 WHERE attachment_key=?", (key,)
-                )
-                state.commit()
-    return failed
+            name = " ".join(Path(filename).name.split())[:80]
+            exhausted.append((key, f"{date} · {name}"))
+    if exhausted:
+        preview = " / ".join(label for _, label in exhausted[:3])
+        text = f"기관메일 첨부 보관 실패(5회): {len(exhausted)}건 · {preview}"
+        if notify_exhausted(text):
+            state.executemany(
+                "UPDATE download_retries SET notified=1 WHERE attachment_key=?",
+                ((key,) for key, _ in exhausted),
+            )
+            state.commit()
+    return 0
 
 
 def main() -> int:

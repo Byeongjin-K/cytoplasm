@@ -33,22 +33,9 @@ def summarize(
         pending = rows[state["rows"]:]
         if not pending:
             return False
-        content = auto_write.summary_text(pending)
+        content = auto_write.summary_text(pending, day=day)
         if send is None:
-            # The facade otherwise chunks long bodies into several Discord messages.
-            # Keep one post and every note line by attaching the complete list.
-            if len(content) > 2000:
-                attachment = root / f"summary-{day}.md"
-                atomic_write(attachment, content.encode())
-                try:
-                    sent = owner_notice.notify_owner(
-                        "## 📝 오늘 자동으로 쓴 것\n\n전체 목록은 첨부 파일에 있습니다.",
-                        attachments=(attachment,),
-                    )
-                finally:
-                    attachment.unlink(missing_ok=True)
-            else:
-                sent = owner_notice.notify_owner(content)
+            sent = owner_notice.notify_owner(content)
         else:
             sent = send(content)
         if not sent:

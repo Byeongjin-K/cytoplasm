@@ -21,12 +21,15 @@ OVERRIDE: Final = ".hermes/notice-bot.json"
 NOTICE: Final = "발신 봇: 유돌(덮어씀)"
 SURFACE: Final = "notice-bot:yoodori"
 CARD_LINE: Final = "발신 봇 바꾸기: 노드 알림·승인 카드를 유돌 봇으로 보냄(Agent·Peer·Ops 봇은 아무것도 보내지 않음)"
+FAULT_PREFIX: Final = "fault-channel:"
+FAULT_CARD_LINE: Final = "고장 알림은 #dori-pair 로(유돌 먼저)"
 
 
 @dataclass(frozen=True, slots=True)
 class Override:
     token: str = field(repr=False)
     channel_id: str
+    fault_channel_id: str | None = None
 
     @property
     def digest(self) -> str:
@@ -45,14 +48,18 @@ def override_path(home: Path | None = None, config: NodeConfig | None = None) ->
 
 def parse_override(text: str) -> Override:
     raw = json.loads(text)
-    if not isinstance(raw, dict) or set(raw) != {"token", "channel_id"}:
+    if (not isinstance(raw, dict)
+            or set(raw) not in ({"token", "channel_id"}, {"token", "channel_id", "fault_channel_id"})):
         raise ValueError("invalid override shape")
     token, channel = raw["token"], raw["channel_id"]
     if (not isinstance(token, str) or not token or len(token) > 4096
             or any(char in token for char in "\r\n\0")
             or not isinstance(channel, str) or re.fullmatch(r"[1-9][0-9]{16,19}", channel) is None):
         raise ValueError("invalid override fields")
-    return Override(token, channel)
+    fault = raw.get("fault_channel_id")
+    if "fault_channel_id" in raw:
+        fault_surface(fault)
+    return Override(token, channel, fault)
 
 
 def read_override(home: Path | None = None) -> Override | None:
@@ -105,33 +112,51 @@ def notice_channel(home: Path | None = None) -> str | None:
     return override.channel_id if override is not None else None
 
 
-def installed(digest: str, channel: str) -> bool:
+def fault_surface(channel: str) -> tuple[str, str]:
+    """The installation-specific fault destination is an approved release effect."""
+    if not isinstance(channel, str) or re.fullmatch(r"[1-9][0-9]{16,19}", channel) is None:
+        raise ValueError("invalid fault channel")
+    return FAULT_PREFIX + channel, hashlib.sha256(channel.encode()).hexdigest()
+
+
+def fault_channel(home: Path | None = None) -> str | None:
+    """One fault resolver for all senders; absence preserves each legacy destination."""
+    override = read_override(home)
+    return override.fault_channel_id if override is not None else None
+
+
+def installed(digest: str, channel: str, fault: str = "off") -> bool:
     path = override_path()
     if digest == "off":
         return not path.exists() and not path.is_symlink()
     override = read_override()
-    return override is not None and (override.digest, override.channel_id) == (digest, channel)
+    return override is not None and (
+        override.digest, override.channel_id, override.fault_channel_id or "off"
+    ) == (digest, channel, fault)
 
 
-def install(digest: str, channel: str) -> None:
+def install(digest: str, channel: str, fault: str = "off") -> None:
     path = override_path()
     if digest == "off":
         path.unlink(missing_ok=True)
         return
     value = parse_override(sys.stdin.read(8193))
-    if (value.digest, value.channel_id) != (digest, channel):
+    if (value.digest, value.channel_id, value.fault_channel_id or "off") != (digest, channel, fault):
         raise ValueError("stdin differs from approved identity")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".notice-bot-", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(json.dumps({"token": value.token, "channel_id": value.channel_id}))
+            payload = {"token": value.token, "channel_id": value.channel_id}
+            if value.fault_channel_id is not None:
+                payload["fault_channel_id"] = value.fault_channel_id
+            stream.write(json.dumps(payload))
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)
     finally:
         Path(name).unlink(missing_ok=True)
-    if not installed(digest, channel):
+    if not installed(digest, channel, fault):
         raise ValueError("override readback differs")
 
 
@@ -177,6 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         mode = sub.add_parser(command)
         mode.add_argument("--digest", required=True)
         mode.add_argument("--channel", required=True)
+        mode.add_argument("--fault-channel", default="off")
     args = parser.parse_args(argv)
     try:
         if args.command == "status":
@@ -188,8 +214,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.digest != "off" and re.fullmatch(r"[0-9a-f]{64}", args.digest) is None:
             raise ValueError("invalid digest")
         if args.command == "install":
-            install(args.digest, args.channel)
-        ok = installed(args.digest, args.channel)
+            install(args.digest, args.channel, args.fault_channel)
+        ok = installed(args.digest, args.channel, args.fault_channel)
         print(f"NOTICE-BOT installed={'yes' if ok else 'no'}")
         return 0 if ok else 1
     except (OSError, ValueError, UnicodeError, NodeConfigError):

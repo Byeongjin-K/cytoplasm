@@ -8,6 +8,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -106,17 +107,22 @@ def record(kind: str, entry: Entry, *, root: Path | None = None) -> None:
             os.fsync(ledger.fileno())
 
 
-def summary_text(rows: list[dict[str, str]]) -> str:
-    lines = ["## 📝 오늘 자동으로 쓴 것"]
-    for kind, label in KINDS.items():
-        selected = [row for row in rows if row["kind"] == kind]
-        if not selected:
-            continue
-        lines.extend(("", f"### {label}"))
-        for row in selected:
-            stamp = datetime.fromisoformat(row["recorded_at"]).astimezone(KST)
-            path = " ".join(row["path"].split())
-            lines.append(f"- {stamp:%m-%d %H:%M} · {path}")
+def summary_text(rows: list[dict[str, str]], *, day: str | None = None) -> str:
+    """One bounded post; evidence and origin links stay only in the private ledger."""
+    if not rows:
+        return ""
+    recent = sorted(rows, key=lambda row: datetime.fromisoformat(row["written_at"]), reverse=True)
+    day = day or datetime.fromisoformat(recent[0]["written_at"]).astimezone(KST).date().isoformat()
+    lines = [
+        f"## 📝 {day} 자동으로 쓴 것 · 총 {len(rows)}건",
+        " · ".join(f"{label} {sum(row['kind'] == kind for row in rows)}"
+                   for kind, label in KINDS.items() if any(row["kind"] == kind for row in rows)),
+    ]
+    for row in recent[:5]:
+        title = re.sub(r"https?://\S+|discord\.com/\S+", "", row["path"])
+        title = Path(" ".join(title.split()).strip(" ·")).name.removesuffix(".md")
+        lines.append(f"- {title[:60] or KINDS[row['kind']]}")
+    lines.append("자세한 건 유돌에게 물어보면 올려요")
     return "\n".join(lines)
 
 

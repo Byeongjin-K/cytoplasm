@@ -200,7 +200,9 @@ def test_job_runs_detached_collects_outputs_and_records_the_link(tmp_path: Path,
     row = json.loads((ledger / "ledger.jsonl").read_text())
     assert (row["kind"], row["source_id"]) == ("yoodori", "discord:1/2")
     assert row["path"] == "report report 주간 · https://discord.com/channels/9/1/2"
-    assert "https://discord.com/channels/9/1/2" in auto_write.summary_text([row])
+    # Owner 21:38 KST: the link stays in the ledger only, the post shows the short title.
+    post = auto_write.summary_text([row])
+    assert "https://discord.com" not in post and "report report 주간" in post
     with pytest.raises(jobs.JobRefused):
         jobs.output_file(path, "../spec.json")
 
