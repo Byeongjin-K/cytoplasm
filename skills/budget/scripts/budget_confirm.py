@@ -56,8 +56,11 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    budget_gate.repo_module("approval_directory")
-    from automation.notice_bot import file_token, resolve_token
+    try:
+        from automation.notice_bot import file_token, resolve_token
+    except ImportError:
+        budget_gate.repo_module("approval_directory")
+        from automation.notice_bot import file_token, resolve_token
 
     token = resolve_token()
     if token:
@@ -139,15 +142,15 @@ def dm_owner(content: str) -> str:
     결과 문구에는 금액·잔액을 싣지 않는다. ``owner_notice``가 지정 통지 채널을
     우선하고, 설정이 없을 때만 소유자 DM을 연다.
     """
+    runtime = _interop_runtime()
+    if str(runtime) not in sys.path:
+        sys.path.insert(0, str(runtime))
     from automation.notice_bot import resolve_token
 
     if not resolve_token().strip():
         os.environ["DISCORD_BOT_TOKEN"] = bot_token()
     if not os.environ.get("AUTOPHAGY_OWNER_ID", "").strip():
         os.environ["AUTOPHAGY_OWNER_ID"] = owner_id()
-    runtime = _interop_runtime()
-    if str(runtime) not in sys.path:
-        sys.path.insert(0, str(runtime))
     from automation.owner_notice import notify_owner  # noqa: PLC0415
 
     if not notify_owner(content):

@@ -16,6 +16,15 @@ from automation.interop.owner_message import Action, OwnerMessage, Periodic, Ref
 _UNCONFIGURED: Final = (
     "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent\n"
 )
+_IMPORT = __import__
+
+
+def _without_envelope(name, *args, **kwargs):
+    # Simulate the missing optional renderer, not missing stdlib modules such as
+    # ntpath (Path construction imports it when the sender checks its override).
+    if name == "automation.interop.owner_message":
+        raise ImportError("unavailable")
+    return _IMPORT(name, *args, **kwargs)
 
 
 class NoticeFacade(Protocol):
@@ -256,7 +265,7 @@ def test_false_when_envelope_import_is_unavailable(
     facade: NoticeFacade, message: OwnerMessage, capsys: pytest.CaptureFixture[str],
 ) -> None:
     # Given: an old runtime cannot load the envelope module.
-    with patch("builtins.__import__", side_effect=ImportError("unavailable")):
+    with patch("builtins.__import__", side_effect=_without_envelope):
         # When
         delivered = facade("legacy", message=message)
     # Then
@@ -266,7 +275,7 @@ def test_false_when_envelope_import_is_unavailable(
 
 def test_legacy_delivery_when_envelope_import_is_unavailable(facade: NoticeFacade) -> None:
     # Given
-    with patch("builtins.__import__", side_effect=ImportError("unavailable")):
+    with patch("builtins.__import__", side_effect=_without_envelope):
         # When
         delivered = facade("legacy")
     # Then: the string-only route does not load the new dependency.

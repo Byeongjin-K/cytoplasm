@@ -33,8 +33,21 @@ def direct_reads(path: Path) -> list[int]:
         return (isinstance(node, ast.Constant) and node.value in aliases
                 or isinstance(node, ast.Name) and node.id in aliases
                 or isinstance(node, ast.Attribute) and node.attr == "token_env")
+    # A read inside ``except ImportError`` runs only when the resolver itself cannot be imported, i.e. an
+    # older runtime that has no override to honour; everywhere else the resolver must be used.
+    fallback = {
+        id(inner)
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler) and handler.type is not None
+        and any(isinstance(name, ast.Name) and name.id in {"ImportError", "ModuleNotFoundError"}
+                for name in (handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]))
+        for statement in handler.body
+        for inner in ast.walk(statement)
+    }
     found = []
     for node in ast.walk(tree):
+        if id(node) in fallback:
+            continue
         if isinstance(node, ast.Call) and node.args and key(node.args[0]):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
             if name in {"get", "getenv", "__getitem__", "_require_env", "startswith"}:

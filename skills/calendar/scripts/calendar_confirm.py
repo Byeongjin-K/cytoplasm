@@ -80,8 +80,11 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    calendar_binding._repo_module("approval_directory")
-    from automation.notice_bot import file_token, resolve_token
+    try:
+        from automation.notice_bot import file_token, resolve_token
+    except ImportError:
+        calendar_binding._repo_module("approval_directory")
+        from automation.notice_bot import file_token, resolve_token
 
     token = resolve_token().strip()
     if token:

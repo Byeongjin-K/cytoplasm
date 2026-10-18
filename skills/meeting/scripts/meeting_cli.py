@@ -143,8 +143,11 @@ def _transport(channel_id: str):
 
 
 def _discord_api(method: str, path: str, payload: dict | None = None) -> object:
-    sys.path.insert(0, str(_interop_runtime()))
-    from automation.notice_bot import resolve_token
+    try:
+        from automation.notice_bot import resolve_token
+    except ImportError:
+        sys.path.insert(0, str(_interop_runtime()))
+        from automation.notice_bot import resolve_token
 
     request = Request(
         f"https://discord.com/api/v10{path}",

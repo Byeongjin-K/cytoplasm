@@ -75,8 +75,11 @@ def interop_config() -> dict[str, str]:
 
 
 def discord_bot_token() -> str:
-    ensure_runtime()
-    from automation.notice_bot import file_token, resolve_token
+    try:
+        from automation.notice_bot import file_token, resolve_token
+    except ImportError:
+        ensure_runtime()
+        from automation.notice_bot import file_token, resolve_token
 
     token = resolve_token()
     if token:

@@ -234,8 +234,6 @@ def _peer_signing_key() -> Path:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run only from the protected runtime as the peer account."""
-    from automation.notice_bot import resolve_token
-
     tamperable = _find_tamperable_path(REPO_ROOT)
     if tamperable is not None:
         print(f"FATAL: peer attestor checkout is group/other-writable: {tamperable}", file=sys.stderr)
@@ -243,6 +241,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not _is_trusted_attestor_root(REPO_ROOT):
         print("FATAL: peer attestor must run from the release runtime or /srv/autophagy-agents", file=sys.stderr)
         return 2
+    from automation.notice_bot import resolve_token
+
     request = _parse_request(sys.argv[1:] if argv is None else argv)
     token = resolve_token()
     if request is None:
