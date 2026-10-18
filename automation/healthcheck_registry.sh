@@ -74,6 +74,11 @@ readonly -a HEALTHCHECK_DECLARED_SERVICES
 #: Narrowing is opted INTO, per installation, in the operator's environment.
 healthcheck_service_declared() { # healthcheck_service_declared <group>
   local group="$1" name
+  # The catalog/SSH allowlist stays intact for reversal; the live sweep drops this group.
+  if [[ "$group" == report-hub ]] && cmp -s \
+      "${NODE_OPS_HOME:-$HOME}/.hermes/legacy-services/report-hub.mode" <(printf off); then
+    return 1
+  fi
   if (( ${#HEALTHCHECK_DECLARED_SERVICES[@]} == 0 )); then
     return 0
   fi

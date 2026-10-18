@@ -1,0 +1,158 @@
+"""Reversible, release-bound shutdown of the old reporting and board views."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import shlex
+import subprocess
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import Final
+
+UNITS: Final = {
+    "report-hub": ("report-hub-collector.service", "report-hub-dashboard.service"),
+    "hermes-dashboard": ("hermes-dashboard.service",),
+}
+CARD_LINES: Final = {
+    "report-hub": "report-hub 끄기: 옛 #agents-log 보고 대시보드 유닛 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)",
+    "hermes-dashboard": "Hermes 보드 화면 끄기: hermes-dashboard 유닛 정지(보드 데이터 kanban.db는 그대로, 파일 삭제 후 재배포로 다시 켬)",
+}
+ALGORITHM: Final = "legacy-service-v1"
+Run = Callable[[tuple[str, ...]], tuple[int, str]]
+
+
+def release_mode(home: Path, name: str) -> str:
+    """Only the exact host file bytes opt into shutdown."""
+    try:
+        value = (home / f".hermes/release-flags/{name}-off").read_bytes()
+    except FileNotFoundError:
+        return "on"
+    if value != b"off":
+        raise ValueError("LEGACY-SERVICE-REFUSED: expected literal off")
+    return "off"
+
+
+def surface(name: str) -> tuple[str, str]:
+    return f"{name}:off", hashlib.sha256(b"off").hexdigest()
+
+
+def marker_path(home: Path, name: str) -> Path:
+    return home / f".hermes/legacy-services/{name}.mode"
+
+
+def released_off(home: Path, name: str) -> bool:
+    try:
+        return marker_path(home, name).read_bytes() == b"off"
+    except OSError:
+        return False
+
+
+def _run(argv: tuple[str, ...]) -> tuple[int, str]:
+    result = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=60,
+                            env={**os.environ, "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"})
+    return result.returncode, result.stdout.strip()
+
+
+def check(home: Path, name: str, mode: str, run: Run = _run) -> str:
+    """Unmanaged legacy installs remain unchanged; marked shutdowns are read back."""
+    path = marker_path(home, name)
+    try:
+        marked = path.read_bytes()
+    except FileNotFoundError:
+        return "ok" if mode == "on" else "stale"
+    except OSError:
+        return "unknown"
+    if marked != b"off" or mode != "off":
+        return "stale"
+    for unit in UNITS[name]:
+        code, output = run(("systemctl", "--user", "is-active", unit))
+        if output.strip() != "inactive":
+            return "unknown" if code not in (0, 3, 4) else "stale"
+    return "ok"
+
+
+def install(home: Path, name: str, mode: str, run: Run = _run) -> int:
+    """Stop/start only the view units; never disable units or alter their data."""
+    marker = marker_path(home, name)
+    if mode == "on" and not marker.exists():
+        return 0
+    for unit in UNITS[name]:
+        code, _ = run(("systemctl", "--user", "stop" if mode == "off" else "start", unit))
+        if code:
+            return 5
+        code, output = run(("systemctl", "--user", "is-active", unit))
+        if output.strip() != ("inactive" if mode == "off" else "active") or code not in (0, 3):
+            return 5
+    if mode == "off":
+        marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = marker.with_suffix(".tmp")
+        temporary.write_bytes(b"off")
+        temporary.chmod(0o600)
+        temporary.replace(marker)
+    else:
+        marker.unlink()
+    return 0
+
+
+def deploy(repo: Path, host: str, runtime: str, head: str) -> int:
+    """The existing release surface gate authorizes every host-selected stop."""
+    from automation.node_config import load_node_config
+
+    config = load_node_config()
+    modes = {name: release_mode(Path.home(), name) for name in UNITS}
+    pointer = subprocess.run(("ssh", host, shlex.join(("readlink", runtime))),
+                             capture_output=True, text=True, check=False, timeout=30)
+    if pointer.returncode or Path(pointer.stdout.strip()).name != head:
+        return 4
+    for name, mode in modes.items():
+        if mode == "off":
+            result = subprocess.run(
+                (str(repo / "automation/release_approval_remote.sh"), "authorize-legacy-service",
+                 "--name", name, "--head", head), check=False,
+            )
+            if result.returncode:
+                return 4
+    for name, mode in modes.items():
+        account = config.ops_account if name == "report-hub" else config.agent_account
+        command = shlex.join(("sudo", "-n", "-u", account, "-H", "env", f"PYTHONPATH={runtime}",
+                              "python3", "-B", "-m", "automation.legacy_services",
+                              "install", "--name", name, "--mode", mode))
+        result = subprocess.run(("ssh", host, command), check=False, timeout=150)
+        if result.returncode:
+            return 5
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("switch", "install", "check", "deploy"))
+    parser.add_argument("--name", choices=tuple(UNITS))
+    parser.add_argument("--mode", choices=("on", "off"), default="on")
+    parser.add_argument("--repo", type=Path)
+    parser.add_argument("--host")
+    parser.add_argument("--runtime", default="/srv/autophagy-agent-current")
+    parser.add_argument("--head")
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "deploy":
+            if args.repo is None or not args.host or not args.head:
+                parser.error("deploy requires repo, host and head")
+            return deploy(args.repo, args.host, args.runtime, args.head)
+        if args.name is None:
+            parser.error("name is required")
+        if args.command == "switch":
+            print(release_mode(Path.home(), args.name))
+            return 0
+        if args.command == "check":
+            print(check(Path.home(), args.name, args.mode))
+            return 0
+        return install(Path.home(), args.name, args.mode)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"LEGACY-SERVICE-REFUSED reason={type(error).__name__}", file=sys.stderr)
+        return 4
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

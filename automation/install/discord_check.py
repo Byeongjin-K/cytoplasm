@@ -311,7 +311,7 @@ def evaluate_channel(
     actual_name = channel.payload.get("name")
     guild_id = channel.payload.get("guild_id")
     detail = f"#{actual_name} (guild={guild_id}) 조회·이력 읽기 가능"
-    if requirement.role != "approvals" and actual_name != requirement.expected_name:
+    if requirement.role not in {"approvals", "yoodori"} and actual_name != requirement.expected_name:
         return CheckResult(
             name,
             Status.WARN,

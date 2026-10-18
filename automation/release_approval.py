@@ -94,6 +94,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    from automation.legacy_services import surface as legacy_surface
+
+    surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
     from automation.auto_write_policy import surface as auto_write_surface
 
     try:
@@ -272,6 +275,14 @@ def cmd_authorize_gateway_stop(args: argparse.Namespace) -> int:
                            head=args.head, peer_attest_mode="")
     )
 
+def cmd_authorize_legacy_service(args: argparse.Namespace) -> int:
+    from automation.legacy_services import surface
+
+    name, digest = surface(args.name)
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="")
+    )
+
 
 def cmd_authorize_yoodori_channel(args: argparse.Namespace) -> int:
     try:
@@ -299,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
+    plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard"))
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -351,6 +363,10 @@ def main(argv: list[str] | None = None) -> int:
     stop = commands.add_parser("authorize-hermes-gateways-stopped", help="이 릴리스 ✅ 가 양 게이트웨이 정지를 덮는가")
     stop.add_argument("--head", required=True)
     stop.set_defaults(run=cmd_authorize_gateway_stop)
+    legacy = commands.add_parser("authorize-legacy-service")
+    legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard"), required=True)
+    legacy.add_argument("--head", required=True)
+    legacy.set_defaults(run=cmd_authorize_legacy_service)
     channel = commands.add_parser("authorize-yoodori-channel", help="이 릴리스 ✅ 가 채널 합치기를 덮는가")
     channel.add_argument("--channel-id", required=True)
     channel.add_argument("--head", required=True)

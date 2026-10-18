@@ -58,6 +58,7 @@ case "$1" in
   derived) d="$HOME/$3"; [[ -e "$d" ]] || gone "$d"; . "$2" || exit 44
     if [[ -d "$d/mailon" ]]; then mailon_vendor_digest "$d/mailon" || exit 44; else echo -; fi
     [[ ! -e "$d/runtime-manifest.json" ]] || cat -- "$d/runtime-manifest.json" || exit 44 ;;
+  legacy-service) PYTHONPATH="$2" python3 -B -m automation.legacy_services check --name "$3" --mode "$4" ;;
   config) PYTHONPATH="$2" python3 -B -m "$3" --show "${@:4}" ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
@@ -179,6 +180,17 @@ def _file(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]
 
 
 def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
+    if decl.attr("algorithm") == "legacy-service-v1":
+        from automation.legacy_services import UNITS
+
+        name = Path(decl.destination).stem
+        mode = _cache.get(name, "on")
+        if name not in UNITS or mode not in ("on", "off"):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("legacy-service", str(root), name, str(mode)))
+        state = out.strip() if rc == 0 and out.strip() in ("ok", "stale") else "unknown"
+        return _Seen(want, want if state == "ok" else "?" if state == "unknown" else "-", state)
     helper = str(root / DIGEST_HELPER)
     try:
         proc = subprocess.run(("bash", "-c", '. "$1"; mailon_vendor_digest "$2"', "_", helper, str(root / decl.source)),
@@ -292,6 +304,8 @@ def collect(
     dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    report_hub: str = "on",
+    hermes_dashboard: str = "on",
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
 
@@ -308,6 +322,7 @@ def collect(
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
     cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
+    cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard})
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
@@ -343,6 +358,8 @@ def observe_node(
     runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    report_hub: str = "on",
+    hermes_dashboard: str = "on",
 ) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
     try:
@@ -351,4 +368,5 @@ def observe_node(
         ops_account = ""
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
+                   report_hub=report_hub, hermes_dashboard=hermes_dashboard,
                    agent_chat_channel=agent_chat_channel)

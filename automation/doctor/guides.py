@@ -15,6 +15,11 @@ GWS_SCOPES: Final = ",".join((
 ))
 
 _STEPS: Final[Mapping[str, tuple[str, ...]]] = {
+    "yoodori-bot": (
+        "유돌 봇의 개인 서버 초대·Message Content Intent와 대화·통지 채널 읽기/쓰기 권한을 확인한다",
+        "릴리스·공급망 카드도 발신 봇 채널을 따른다(Q236). notice-bot override의 채널 id와 유돌 봇 접근 권한을 확인한다",
+        "발신 자격증명은 notice-bot 릴리스 전환으로 배치한다(발신-봇-유돌 소개 참조). 멈춘 Hermes 게이트웨이를 재시동하지 않는다",
+    ),
     "hermes-cli": (
         "이 계정에 Hermes 를 설치한다 — 버전 핀과 설치 명령: docs/guide/third-party-runtime-prereqs.md §3",
     ),

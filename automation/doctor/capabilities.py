@@ -175,7 +175,7 @@ def _discord(f: Facts) -> Verdict:
         case str() as reason:
             return _warn(f"Discord API 로 확인하지 못했다: {reason}")
         case results:
-            relevant = [result for result in results if not _by_design(result)]
+            relevant = [result for result in results if f.notice_bot_override or not _by_design(result)]
             failed = [result for result in relevant if result.status is Status.FAIL]
             warned = [result for result in relevant if result.status is Status.WARN]
             if failed:
@@ -343,7 +343,8 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
             continue
         verdict = capability.judge(facts)
         steps = () if verdict.status is Status.PASS else guides.steps(
-            capability.key, account=facts.account, home=home, unit=facts.gateway_unit,
+            "yoodori-bot" if capability.key == "discord-bot" and facts.notice_bot_override else capability.key,
+            account=facts.account, home=home, unit=facts.gateway_unit,
         )
         findings.append(Finding(capability.key, capability.label, verdict.status, verdict.detail,
                                 capability.affects, steps, verdict.subjects))
@@ -356,4 +357,10 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
         from automation.notice_bot import NOTICE
 
         findings.append(Finding("notice-bot", "발신 봇", Status.PASS, NOTICE, "알림·승인 카드", ()))
+    for name, state in facts.legacy_services:
+        findings.append(Finding(
+            f"legacy-service:{name}", name, Status.PASS if state == "ok" else Status.FAIL,
+            "릴리스로 정지됨(정상)" if state == "ok" else f"릴리스 정지 상태와 유닛 불일치: {state}",
+            "옛 보고·보드 화면", (),
+        ))
     return tuple(findings)

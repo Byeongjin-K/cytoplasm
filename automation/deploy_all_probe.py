@@ -203,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
+    parser.add_argument("--report-hub", choices=("on", "off"), default="on")
+    parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -216,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat,
                                  hermes_gateways=args.hermes_gateways,
+                                 report_hub=args.report_hub, hermes_dashboard=args.hermes_dashboard,
                                  agent_chat_channel=args.yoodori_channel)
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
