@@ -1,0 +1,4 @@
+# Forced-command path already bound by the operator's restricted SSH key.
+agent|automation/yoodori_gate/yoodori_read_gate.py|.local/libexec/yoodori-read-gate|v2:file
+agent|automation/yoodori_gate/gmail_read.py|.local/libexec/gmail_read.py|v2:file
+agent|automation/yoodori_gate/yoodori_request_runtime.py|.local/libexec/yoodori_request_runtime.py|v2:file

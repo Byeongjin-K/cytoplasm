@@ -9,13 +9,20 @@ from pathlib import Path
 
 import pytest
 
-from automation import release_approval, skill_gate
+from automation import release_approval, release_spec_message, skill_gate
 from automation.release_spec import dori_surface
+from automation.yoodori_gate.yoodori_read_gate import CARD_COMMANDS, GMAIL_READ_COMMANDS
 from tests.unit import test_release_authorize as auth
 from tests.unit.test_healthcheck_wrapper_release import _fake_plan, _plan_args, _spec
 
 BOT = "555555555555555555"
 LINE = "도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(유돌이 받음)"
+
+
+def test_release_counts_match_gate_without_a_runtime_import() -> None:
+    # Given / When / Then: renderer ships in the pre-existing, closed staging set.
+    assert release_spec_message.YOODORI_CARD_COMMAND_COUNT == len(CARD_COMMANDS)
+    assert release_spec_message.YOODORI_GMAIL_READ_COUNT == len(GMAIL_READ_COMMANDS)
 
 
 def test_no_switch_keeps_the_existing_card_and_hash() -> None:
@@ -37,6 +44,8 @@ def test_switch_card_renders_one_line_and_binds_the_bot() -> None:
     # Then
     assert card.count(LINE) == 1
     assert f"> {LINE}" in card.splitlines()
+    assert card.count(f"유돌 게이트: 카드 올리기 명령 {len(CARD_COMMANDS)}개 추가(실행 권한 없음)") == 1
+    assert card.count(f"유돌 게이트: Gmail 읽기 {len(GMAIL_READ_COMMANDS)}개 추가") == 1
     assert "dori-agent-chat:" not in card
     assert enabled.action_hash() != plain.action_hash()
     assert _spec(dori_surface("666")).action_hash() != enabled.action_hash()

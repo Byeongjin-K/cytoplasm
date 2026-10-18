@@ -6,6 +6,9 @@ from typing import Final, Protocol
 
 from automation.interop.chunker import chunk_lines
 
+YOODORI_CARD_COMMAND_COUNT: Final = 6
+YOODORI_GMAIL_READ_COUNT: Final = 2
+
 
 class ReleaseView(Protocol):
     @property
@@ -222,7 +225,9 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
             if wrapper_hosts
             else []
         ),
-        *(["도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(유돌이 받음)"] if any(
+        *(["도리 전환 켬: 노드 agent 게이트웨이가 #agent-chat 무시(유돌이 받음)",
+           f"유돌 게이트: 카드 올리기 명령 {YOODORI_CARD_COMMAND_COUNT}개 추가(실행 권한 없음)",
+           f"유돌 게이트: Gmail 읽기 {YOODORI_GMAIL_READ_COUNT}개 추가"] if any(
             name.startswith(DORI_SURFACE_PREFIX) for name, _digest in spec.surface_digests
         ) else []),
         *(["검색 잠깐 끊김(~1분)·되돌림 있음"] if any(
