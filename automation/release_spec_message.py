@@ -196,9 +196,10 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
         LEGACY_SERVICE_LINES as LEGACY_LINES, legacy_service_surface as legacy_surface,
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX,
     )
-    from automation.notice_bot import CARD_LINE, SURFACE
+    from automation.notice_bot import CARD_LINE, SURFACE, FAULT_CARD_LINE, FAULT_PREFIX
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
     from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
+    from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
     wrapper_hosts = [
@@ -213,6 +214,8 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
         *([*RETIRE_LINES, ROOT_NOTE]
           if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
+        *([FAULT_CARD_LINE] if any(name.startswith(FAULT_PREFIX)
+                                  for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests
           if name.startswith(SURFACE_PREFIX)],
@@ -226,6 +229,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
            f"유돌 게이트: Gmail 읽기 {YOODORI_GMAIL_READ_COUNT}개 추가"] if any(
             name.startswith(DORI_SURFACE_PREFIX) for name, _digest in spec.surface_digests
         ) else []),
+        *([RELAY_LINE] if any(name == RELAY_SURFACE for name, _digest in spec.surface_digests) else []),
         *(["게이트웨이 멈춤: 노드 agent·peer Hermes 게이트웨이 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)"]
           if any(name == GATEWAY_STOP_SURFACE for name, _digest in spec.surface_digests) else []),
         *[

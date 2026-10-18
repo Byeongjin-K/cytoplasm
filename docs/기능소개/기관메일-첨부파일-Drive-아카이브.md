@@ -14,7 +14,7 @@ MailOn의 첨부파일을 Google Drive `autophagy/메일 첨부파일/<연도>/<
 - 동기화는 `/srv/autophagy-skills/live/mail/scripts/mail_attachment_drive_sync.py`에서만 실행한다. 마운트가 있는 호스트에서 다른 사본을 실행하면 `mail_runtime.governed_copy_refusal`이 거부한다.
 - Hermes cron `mail-attachment-drive-watch`가 30분마다 live 동기화를 호출한다. 홈에는 `~/.hermes/scripts/mail_attachment_drive_watch.py` 래퍼만 있으며 `skills/mail/deploy-manifest.txt`가 이를 선언한다.
 - 성공은 무음이다. 실패는 주소·파일명·본문을 감춘 단일 `MAIL-ATTACHMENT-DRIVE-FAIL code=<code>` 마커로만 전달한다.
-- 다운로드 실패·로컬 파일 누락은 기존 실패 행도 다음 실행부터 MailOn 다운로드 경로로 최대 5회 재시도하며, 소진 시 메일 날짜·첨부명만 소유자 채널에 한 번 알린다(전송 실패는 다음 실행에 재시도, 성공한 Drive 파일은 재업로드하지 않음).
+- 다운로드 실패·로컬 파일 누락은 수신일(없으면 `first_seen`)이 최근 14일이고 MailOn 자체 시도가 5회 미만인 행만 복구한다. 오래된 행·MailOn 소진 행은 조용히 넘긴다. 진행 중 재시도는 성공·무음이며, 별도 복구 예산 5회 소진은 틱당 한 통(건수·첨부명 최대 3개)으로 페어 채널에 알린다. 고장 채널 미설정은 기존 통지 경로다(전송 실패는 다음 실행에 재시도, 성공한 Drive 파일은 재업로드하지 않음).
 
 ## 사용 시나리오
 1. **(happy)** 소유자가 새 메일을 받거나 첨부를 보낸다 → 다음 30분 cron tick이 파일을 찾는다 → 연도·월·메일함 폴더에 `<UID>__<원본명>`으로 upsert → 권한과 checksum 메타데이터를 확인 → 성공한 파일만 `archive.db`에 기록한다. 필요하면 다음 명령으로 수동 실행한다.
@@ -23,7 +23,7 @@ MailOn의 첨부파일을 Google Drive `autophagy/메일 첨부파일/<연도>/<
    python3 /srv/autophagy-skills/live/mail/scripts/mail_attachment_drive_sync.py [--limit N] [--workers 1..8]
    ```
 
-2. **(실패)** Drive 업로드 또는 검증이 실패하면 원장 기록을 남기지 않아 다음 tick이 안전하게 재시도한다. 소유자에게는 `MAIL-ATTACHMENT-DRIVE-FAIL code=<code>` 한 줄만 도착한다.
+2. **(실패)** Drive 업로드 또는 검증이 실패하면 원장 기록을 남기지 않아 다음 tick이 안전하게 재시도한다. `MAIL-ATTACHMENT-DRIVE-FAIL code=<code>` 진단은 설정된 페어 채널에서 유돌이 먼저 받는다. 고장 채널이 없는 설치는 기존 경로를 유지한다.
 3. **(거부)** 관측 미러·리뷰 체크아웃 등 live 마운트 밖의 사본으로 동기화를 실행하면 실행 경로 가드가 거부한다. 낡은 사본이 보관 상태를 바꾸지 못한다.
 
 ## 관련
