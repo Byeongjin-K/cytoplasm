@@ -127,8 +127,8 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py get <uid> --body
 - 게시된 승인 메시지의 ✅(확정) / ⛔(취소) 리액션을 확인하고 처리한다. 현재 정책에서 폐지된 표면에 남은 미결정 초안은 옛 메시지를 삭제한 뒤 `expired`로 종결하며, 승인·발송으로 간주하지 않는다. 이미 누른 소유자 결정은 항상 먼저 처리한다.
 - 승인된 초안의 실제 메일 발송.
 
-### 1b. 평일 매시 수집 (09:20~19:20 KST)
-cron `mail-sync-watch`(`20 9-19 * * 1-5`, no_agent)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 실패한 시각은 다음 시각이 다시 시도하고 놓친 메일은 증분 수집이 이어서 저장한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 새 메일 0건이 6회 이어지면(`MAIL_SYNC_QUIET_AFTER`) 소유자에게 한 번 알리고, 회복 시 한 번 더 알린다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-평일-매시-수집과-정지-알림.md)
+### 1b. 10분마다 수집 (매일 07:00~24:00 KST)
+cron `mail-sync-watch`(`*/10 7-23 * * *`, no_agent, 2026-10-19 — 형 "매 분마다 갱신" 요청에 리드가 10분으로 정함: 한 번에 중앙값 61초·매번 새 로그인이라 1분은 하루 1,440번 로그인)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 수집은 한 번에 하나만 돈다(`~/.local/state/autophagy/mail-sync.lock`, 바쁘면 그 틱은 건너뜀). 실패한 틱은 다음 틱이 다시 시도한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 **평일 09~20시 틱에서** 새 메일 0건이 36회(약 6시간) 이어지면(`MAIL_SYNC_QUIET_AFTER`, 저녁·주말 틱은 세지 않음) 한 번 알리고, 회복 시 한 번 더 알린다. 형이 "메일 왔어?"처럼 지금 확인을 원하면 유돌이 게이트 `mail-sync`(형 메시지 근거 필수, 돌고 있는 수집이 있으면 기다림)로 한 번 수집한 뒤 `mail-list` 로 읽는다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-10분-수집과-지금-수집.md)
 
 ### 1c. 다이제스트 실패 → 수리 티켓 (매일 09:10 KST, 사용자 타이머)
 `mail-triage-repair-daily`(`10 9 * * *`, no_agent, `runner=systemd`)가 `mail_digest_repair_watch.py` 를 돌린다. 지난번 이후의 분류 실패(`classification_failed`)·`(요약 실패)`·`DIGEST-FAIL stage=… code=…`·트리아지 워처 실패를 종류마다 수리 티켓 하나로 올린다(`repair_cli.py manual`, 메일 제목·주소·본문 비노출, 자동 수리 없음). 같은 종류의 재발은 같은 카드의 재발로 센다. 2026-10-02 노드에 손으로 넣은 에이전트 모드 잡을 대신하며, 그 Hermes 잡은 지우지 않고 일시정지된다. 상세: [소개](../../docs/기능소개/정기-작업-사용자-타이머-이전.md)
