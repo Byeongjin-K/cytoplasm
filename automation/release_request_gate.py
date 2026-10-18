@@ -83,16 +83,45 @@ class ReleaseRequestGate:
         # Owner 2026-10-18 23:04/23:07 KST: a release approval opens its own thread under the
         # approval channel; the card's reactions are read there (the binding accepts a thread
         # only when its live parent is that pinned channel).
-        thread_id = self._open_thread(intent.channel_id)
+        # Owner 2026-10-19 00:00 KST: once that work's thread is open, later cards stay in it —
+        # a replaced request for the same version posts into the same thread.
+        thread_id = self._existing_thread(intent.channel_id)
+        created = thread_id is None
+        if thread_id is None:
+            thread_id = self._open_thread(intent.channel_id)
         try:
             return self._post_in(thread_id)
         except ApprovalSurfaceError:
-            self._delete_thread(thread_id)
+            if created:
+                self._delete_thread(thread_id)
             raise
+
+    def _thread_name(self) -> str:
+        return f"🏷️ 릴리스 {self.spec.version}"
+
+    def _existing_thread(self, channel_id: str) -> str | None:
+        """This version's thread under the approval channel, active or archived; None to open one."""
+        guild_id = self._guild_id(channel_id)
+        paths = ([f"/guilds/{guild_id}/threads/active"] if guild_id else []) + [
+            f"/channels/{channel_id}/threads/archived/public",
+        ]
+        for path in paths:
+            try:
+                raw = self._api("GET", path)
+            except _WIRE_ERRORS:
+                continue
+            threads = raw.get("threads") if isinstance(raw, dict) else None
+            for thread in threads if isinstance(threads, list) else []:
+                if (isinstance(thread, dict) and thread.get("parent_id") == channel_id
+                        and thread.get("name") == self._thread_name()):
+                    found = _snowflake(thread.get("id"))
+                    if found is not None:
+                        return found
+        return None
 
     def _open_thread(self, channel_id: str) -> str:
         payload: dict[str, JsonValue] = {
-            "name": f"🏷️ 릴리스 {self.spec.version}",
+            "name": self._thread_name(),
             "type": 11,
             "auto_archive_duration": 10080,
         }

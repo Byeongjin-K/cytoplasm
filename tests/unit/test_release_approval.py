@@ -199,12 +199,16 @@ class _DetailWire:
         self.first_post_id = first_post_id
         self.posts: list[dict[str, JsonValue]] = []
         self.threads: list[tuple[str, dict[str, JsonValue]]] = []
+        self.existing_threads: list[dict[str, JsonValue]] = []
         self.patches: list[tuple[str, dict[str, JsonValue]]] = []
         self.deletes: list[str] = []
 
     def api(
         self, method: str, path: str, payload: dict[str, JsonValue] | None = None
     ) -> JsonValue:
+        if method == "GET" and "/threads" in path:
+            return {"threads": [dict(thread) for thread in self.existing_threads
+                                if ("/archived/" in path) == bool(thread.get("archived"))]}
         if method == "GET":
             channel: dict[str, JsonValue] = {"id": "222"}
             if self.guild_id is not None:
@@ -1309,3 +1313,50 @@ def test_a_release_card_is_not_posted_when_its_thread_cannot_open(
     _ = capsys.readouterr()
     assert wire.posts == []
     assert not (tmp_path / "pending" / "release.json").exists()
+
+
+@pytest.mark.parametrize("archived", [False, True])
+def test_a_replaced_request_posts_into_the_same_release_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    archived: bool,
+) -> None:
+    """Given this version's thread is already open (or archived) / When a new card posts /
+    Then no second thread opens and the card lands in that thread (owner 2026-10-19 00:00 KST)."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
+    wire = _DetailWire()
+    wire.existing_threads = [
+        {"id": "444444444444444444", "parent_id": "999", "name": "🏷️ 릴리스 v1.2.3"},
+        {"id": "555555555555555555", "parent_id": "222", "name": "🏷️ 릴리스 v1.2.3", "archived": archived},
+    ]
+    monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
+    monkeypatch.setattr(skill_gate, "_api", wire.api)
+
+    assert release_approval.main(["request", "--plan-file", _plan_file(tmp_path)]) == 0
+
+    _ = capsys.readouterr()
+    assert wire.threads == []
+    stored = json.loads((tmp_path / "pending" / "release.json").read_text("utf-8"))
+    assert stored["channel_id"] == "555555555555555555"
+
+
+def test_a_failed_card_in_a_reused_thread_keeps_that_thread(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Given the version's thread holds earlier cards / When the new card fails / Then the
+    thread is not deleted; only this attempt's detail message is cleaned up."""
+    monkeypatch.setattr("automation.release_card.NEW_RENDER_VERSION", 6)
+    wire = _DetailWire(fail_post_after=1)
+    wire.existing_threads = [{"id": "555555555555555555", "parent_id": "222", "name": "🏷️ 릴리스 v1.2.3"}]
+    monkeypatch.setattr(release_approval, "_gate", _actual_gate(tmp_path, wire))
+    monkeypatch.setattr(skill_gate, "_api", wire.api)
+
+    with pytest.raises(ApprovalSurfaceError):
+        _ = release_approval.main(["request", "--plan-file", _plan_file(tmp_path, _LONG_NOTES)])
+
+    _ = capsys.readouterr()
+    assert "/channels/555555555555555555" not in wire.deletes
+    assert wire.deletes == ["/channels/555555555555555555/messages/700000000000000001"]
