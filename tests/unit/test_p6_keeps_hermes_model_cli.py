@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-_KEPT = re.compile(r"\.local/bin/hermes|\.hermes/config\.yaml|\.hermes/auth\.json")
+_KEPT = re.compile(r"\.local/bin/hermes|\.hermes/config\.yaml|\.hermes/auth\.json|\.hermes/kanban\.db")
 _REMOVAL = re.compile(r"\brm\b|unlink|rmtree|shutil\.move|os\.remove|uninstall")
 
 

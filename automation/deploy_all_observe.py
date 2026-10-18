@@ -23,6 +23,7 @@ from automation.cron_timer import Job, identity
 from automation.deploy_all_cron_listing import parse_cron_listing
 from automation.deploy_declarations import Declaration, all_declarations
 from automation.node_config import NodeConfigError, load_node_config
+from automation.peer_retired import retired_destination
 
 #: 계정·경로는 원격 고정 스크립트의 위치 인자다 — 안전하게 다룰 수 없는 값은 보내지 않는다.
 SAFE: Final = re.compile(r"^[A-Za-z0-9_./-]+$")
@@ -62,6 +63,7 @@ case "$1" in
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
   timer) PATH="$HOME/.local/bin:$PATH" PYTHONPATH="$2" python3 -B -m automation.cron_timer check-declared --role "$3" --name "$4" ;;
+  p5-retired) cmp -s "$2/peer-retired" <(printf retired) ;;
   delegated) timeout 300 bash "$2/automation/healthcheck_delegated.sh" ;;
   gateway) r="$2"; shift 2; PYTHONPATH="$r" python3 -B -m automation.gateway_generation --check --runtime-root "$r" "$@" ;;
   gateway-service) export XDG_RUNTIME_DIR="/run/user/$(id -u)"
@@ -292,6 +294,7 @@ def collect(
     dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    peer_retired: bool = False,
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
 
@@ -301,6 +304,11 @@ def collect(
         return runner(account, args) if _safe(account, *args) else (64, "")
 
     declarations = [d for d in all_declarations(runtime_root) if not d.legacy and d.attr("node") != "rag"]
+    if peer_retired:
+        declarations = [d for d in declarations
+                        if not retired_destination(d.account, d.destination, d.source)
+                        and not (d.attr("activation") == "gateway" and d.kind == "config"
+                                 and d.attr("algorithm") != "yoodori-channel-v1")]
     if gateway_only:
         declarations = deploy_all_gateway.bundle(declarations)
     gated = [d for d in declarations if d.attr("requires") == "roster"]
@@ -322,7 +330,7 @@ def collect(
                      f"|{'-' if decl.policy == 'retired' else seen.want}|{seen.have}")
         lines += [f"OBS|artifact-detail|{head}|{reason}|{quote(rel, safe='/._-+,@=~')}" for reason, rel in details]
     accounts = sorted({d.account for d in declarations if d.destination == deploy_all_gateway.DROPIN}
-                      | ({"agent", "peer"} if hermes_gateways == "stopped" else set()))
+                      | ({"agent", "peer"} if hermes_gateways == "stopped" and not peer_retired else set()))
     services = deploy_all_gateway.service_lines(accounts, hermes_gateways, call)
     service_states = deploy_all_gateway.fold_services((line.split("|") for line in services), set(accounts), hermes_gateways)
     lines += deploy_all_gateway.gateway_lines(declarations, statuses, runtime_root, call,
@@ -330,7 +338,7 @@ def collect(
     if gateway_only:
         return [line for line in lines if line.startswith("OBS|gateway|")] + services
     count = sum(1 for line in lines if line.startswith("OBS|artifact|"))
-    return [*lines, f"OBS|gateway-mode|{hermes_gateways}", *services,
+    return [*lines, f"OBS|gateway-mode|{'retired' if peer_retired else hermes_gateways}", *services,
             *_delegated(runtime_root, call, ops_account), f"OBS|artifacts|{count}"]
 
 
@@ -343,6 +351,7 @@ def observe_node(
     runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    peer_retired: bool = False,
 ) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
     try:
@@ -351,4 +360,4 @@ def observe_node(
         ops_account = ""
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
-                   agent_chat_channel=agent_chat_channel)
+                   agent_chat_channel=agent_chat_channel, peer_retired=peer_retired)

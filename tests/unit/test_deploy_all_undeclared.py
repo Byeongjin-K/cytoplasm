@@ -133,7 +133,7 @@ def test_strict_undeclared_flag_escalates_warning_to_drift(
         "OBS|undeclared|agent|.hermes/scripts/hand.py|bbbbbbbbbbbb",
         "OBS|end",
     ]
-    monkeypatch.setattr(deploy_all_probe, "observations", lambda *_args: lines)
+    monkeypatch.setattr(deploy_all_probe, "observations", lambda *_args, peer_retired=False: lines)
     monkeypatch.setattr(deploy_all_probe, "_read_home", lambda *_args: "")
 
     assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running"]) == 0
