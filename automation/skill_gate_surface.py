@@ -143,6 +143,11 @@ class SupplyChainSurface:
         """Decide, once, where a brand-new supply-chain approval must be posted."""
         return resolve_new_binding(self.kind, self.directory, self.owner, self.new_pinned or self.pinned)
 
+    def _thread_parent(self, channel_id: str) -> str | None:
+        # A release card lives in its own thread under the sender-bot channel (owner
+        # 2026-10-18 23:04 KST); its record's channel is that thread, not the channel.
+        return _parent_of(self.directory, channel_id) if channel_id else None
+
     def stored(self, record: Mapping[str, str]) -> ApprovalBinding:
         """Replay a record's own binding; a pre-schema record drains through the migrator."""
         from automation.notice_bot import notice_channel
@@ -151,7 +156,9 @@ class SupplyChainSurface:
         # Already-posted cards still drain at their own stored coordinates.
         stamped, channel_id = record.get("policy_version", ""), record.get("channel_id", "")
         selected = notice_channel()
-        pinned = selected if selected is not None and channel_id == selected else self.pinned
+        pinned = selected if selected is not None and (
+            channel_id == selected or self._thread_parent(channel_id) == selected
+        ) else self.pinned
         surface, kind = record.get("surface", ""), record.get("kind", "")
         if not stamped.isdigit() or not channel_id or not surface:
             return legacy_binding(
@@ -167,6 +174,15 @@ class SupplyChainSurface:
         return validate_stored_binding(
             binding, self.directory, self.owner, skill_channel_id=pinned,
         )
+
+
+def _parent_of(directory: ChannelDirectory, channel_id: str) -> str | None:
+    """A thread's live parent, or None (not a thread, unreadable): validation still decides."""
+    try:
+        facts = directory.describe(channel_id)
+    except Exception:  # noqa: BLE001 - an unreadable channel keeps the old pin and fails closed; # noqa: BROAD_EXCEPT_OK
+        return None
+    return facts.parent_id if facts.channel_type in (11, 12) else None
 
 
 def surface_for(kind: ApprovalKind, identity: GateIdentity) -> SupplyChainSurface:
