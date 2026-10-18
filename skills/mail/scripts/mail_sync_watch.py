@@ -143,7 +143,9 @@ def _workday(moment: datetime) -> bool:
 
 def _lock(wait_seconds: float):
     """The one collection at a time: return the held lock file, or None when still busy."""
-    path = Path(os.environ.get(LOCK_ENV, "") or Path.home() / ".hermes/mail-sync.lock").expanduser()
+    # Outside ~/.hermes on purpose: that tree is being retired on the node (no new paths there).
+    path = Path(os.environ.get(LOCK_ENV, "")
+                or Path.home() / ".local/state/autophagy/mail-sync.lock").expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = path.open("a")
     deadline = time.monotonic() + wait_seconds
