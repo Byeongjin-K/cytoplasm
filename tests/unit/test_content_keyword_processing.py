@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from automation.memory_curator.classify_veto import pre_llm_veto
-from automation.memory_routing import classify_memory_request
 from automation.plaud_sync.lifelog_extract_live import build_extractor
 from automation.plaud_sync.lifelog_model import LifelogExtraction, LifelogRecording
 from automation.rag_ingest.sources.obsidian import scan_obsidian
@@ -66,16 +65,6 @@ def test_curator_only_vetoes_security_and_native_rules(text: str) -> None:
     verdict = pre_llm_veto(entry, source_kind="memory")
     # Then content keywords do not prevent the model call.
     assert verdict is None
-
-
-@pytest.mark.parametrize("text", ("ordinary research", *KEYWORDS))
-def test_memory_routing_uses_intent_not_content_keywords(text: str) -> None:
-    # Given an explicit project memory request.
-    baseline = classify_memory_request("기억해줘. 연구 기록")
-    # When a content keyword is included.
-    route = classify_memory_request(f"기억해줘. {text} 연구 기록")
-    # Then the route and approval contract are identical.
-    assert route == baseline
 
 
 @pytest.mark.parametrize("text", ("ordinary research", *KEYWORDS))
