@@ -56,6 +56,12 @@ if ! dori_bot_id="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_agen
 fi
 dori_mode=off
 [[ -z "$dori_bot_id" ]] || dori_mode=on
+if ! gateway_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_gateways --release-switch)"; then
+  echo "GATEWAY-STOP-REFUSED: invalid release-host switch ~/.hermes/release-flags/hermes-gateways-stopped" >&2
+  exit 4
+fi
+chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel --release-switch)" || exit 4
+chat_channel="${chat_channel:-off}"
 
 readonly RUNTIME_ROOT="${DEPLOY_ALL_RUNTIME_ROOT:-/srv/autophagy-agent-current}"
 readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-all}"
@@ -66,7 +72,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --dori-agent-chat $dori_mode --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 #: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다
@@ -126,6 +132,21 @@ restart_gateways() { # 「게이트웨이 재시동 규칙」(2026-07-22) — �
     ssh "$host" "sudo -n -u $acct -H bash -lc 'export XDG_RUNTIME_DIR=/run/user/\$(id -u); systemctl --user restart hermes-gateway.service && systemctl --user is-active hermes-gateway.service'" < /dev/null \
       || { log "GATEWAY-RESTART-FAIL: $acct"; return 1; }
   done
+}
+
+change_gateways() { # Reversible release effect: attempt both accounts, including after a failure.
+  local verb="$1" acct script failed=0
+  for acct in agent peer; do
+    if [[ "$verb" == stop ]]; then
+      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
+    else
+      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); rm -f -- "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user start hermes-gateway.service && systemctl --user is-active hermes-gateway.service'
+    fi
+    log "$verb $acct gateway"
+    ssh "$host" "sudo -n -u $acct -H bash -lc '$script'" </dev/null \
+      || { log "GATEWAY-${verb^^}-FAIL: $acct"; failed=1; }
+  done
+  return "$failed"
 }
 
 #: `systemctl restart` 는 exec 직후 돌아온다 — 게이트웨이가 플러그인을 등록해 세대를 기록하기 전이다.
@@ -232,6 +253,12 @@ case "$mode" in
       log "  릴리스 수렴(2분 리컨실러)을 기다리거나 체크아웃을 그 sha 로 맞춘 뒤 다시 실행"
       exit 4
     fi
+    if [[ "$gateway_mode" == stopped ]]; then
+      if ! "$repo_root/automation/release_approval_remote.sh" authorize-hermes-gateways-stopped --head "$node_sha"; then
+        log "GATEWAY-STOP-UNAUTHORIZED: the deployed HEAD's approved card did not authorize stopping agent+peer"
+        exit 4
+      fi
+    fi
     actions="$(probe actions)"
     rc=$?
     if (( rc == 4 )); then
@@ -253,6 +280,7 @@ case "$mode" in
       exit $?
     fi
     restart_needed=0
+    gateway_change=""
     failures=()
     # actions 는 fd 9 로 읽는다 — 배포기 내부의 ssh 가 fd 0 을 삼키므로, stdin 에
     # 실으면 첫 action 뒤의 줄이 전부 사라진다(2026-08-31 실측: 매 실행 1건만 배포).
@@ -271,6 +299,12 @@ case "$mode" in
         restart-gateway)
           restart_needed=1
           ;;
+        stop-gateway)
+          [[ "$gateway_mode" != stopped ]] || gateway_change=stop
+          ;;
+        start-gateway)
+          [[ "$gateway_mode" != running ]] || gateway_change=start
+          ;;
         owner)
           ;;
         manual)
@@ -279,6 +313,19 @@ case "$mode" in
           ;;
       esac
     done 9<<< "$actions"
+    if [[ "$gateway_mode" == stopped ]]; then
+      restart_needed=0
+      # A bundle deployer may have started a gateway itself; reassert the approved
+      # stop after every apply, even when its initial service observation was clean.
+      gateway_change=stop
+    fi
+    if [[ -n "$gateway_change" ]] && { [[ "$gateway_change" == stop ]] || ((${#failures[@]} == 0)); }; then
+      if ! change_gateways "$gateway_change"; then
+        failures+=("gateway-$gateway_change")
+      elif [[ "$gateway_change" == start && "$restart_needed" == 0 ]] && ! wait_gateway_generation; then
+        failures+=("gateway-generation")
+      fi
+    fi
     if (( restart_needed )) && ((${#failures[@]})); then
       skip_cause="deployer failures"
       printf '%s\n' "${failures[@]}" | grep -qv '^manual:' || skip_cause="unresolved manual items"

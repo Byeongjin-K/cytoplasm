@@ -10,6 +10,7 @@ from automation.memory_curator.watch_steps import read_native
 from .apply import ApplyOutcome
 from .choice_accounts import Accounts
 from .choice_delete import NativeDelete
+from .choice_files import atomic_text
 from .choice_request import ChoiceRequest, encode_request, parse_request
 from .choice_snapshot import ApprovalReader, Snapshot, SnapshotStore, encode_snapshot, parse_snapshot
 from .choices import Choice, ChoiceError
@@ -26,6 +27,13 @@ class AgentChoices:
     accounts: Accounts
     verifier: ApprovalReader
     snapshots: SnapshotStore
+
+    def publish_decision(self, snapshot: Snapshot) -> None:
+        """Retirement must not dispatch new destructive work to an old peer watcher."""
+        if self.accounts.peer is not None:
+            self.accounts.agent.publish(
+                f"{snapshot.request.key}.decision.json", encode_snapshot(snapshot),
+            )
 
     def request(self, record: RelocationRecord) -> ChoiceRequest:
         # The original manifest survives native deletion and status transitions.
@@ -48,6 +56,8 @@ class AgentChoices:
         return request
 
     def snapshot(self, request: ChoiceRequest) -> Snapshot | None:
+        if self.accounts.peer is None:
+            return None
         document = self.accounts.peer.read(f"{request.key}.json")
         if document is None:
             return None
@@ -64,7 +74,7 @@ class AgentChoices:
                 return "pending"
             if self.verifier.decision(self._frozen_request(snapshot)) != "approved":
                 return "pending"
-            self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(snapshot))
+            self.publish_decision(snapshot)
             self._persist_choices(snapshot)
             return "kept" if snapshot.choices[0] is Choice.KEEP else "approved"
         # Fresh cancellation stops unfinished effects without changing frozen rows.
@@ -77,7 +87,7 @@ class AgentChoices:
                 if previous is not None:
                     cancelled = replace(previous, cancelled=True)
                     self.snapshots.save(cancelled)
-                    self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(cancelled))
+                    self.publish_decision(cancelled)
                 return "cancelled"
             case "pending":
                 return "pending"
@@ -88,7 +98,7 @@ class AgentChoices:
         snapshot = self.snapshots.freeze(request, self.verifier)
         if snapshot is None:
             return "pending"
-        self.accounts.agent.publish(f"{request.key}.decision.json", encode_snapshot(snapshot))
+        self.publish_decision(snapshot)
         if snapshot.cancelled:
             return "cancelled"
         match snapshot.phase:
@@ -144,10 +154,13 @@ class AgentChoices:
     def delete(self, record: RelocationRecord) -> ApplyOutcome:
         request = self.request(record)
         snapshot = self.snapshots.load(request)
-        receipt = self.snapshot(request)
+        retired = self.accounts.peer is None
+        receipt = None if retired else self.snapshot(request)
         if snapshot is not None and receipt is not None and receipt.choices != snapshot.choices:
             raise ChoiceError("peer_receipt_binding")
-        if snapshot is None or receipt is None or record.entry_sha256 not in receipt.peer_done:
+        if snapshot is None or (not retired and (
+            receipt is None or record.entry_sha256 not in receipt.peer_done
+        )):
             return ApplyOutcome(False, "peer_pending", None, 0)
         number = request.index(record)
         if snapshot.cancelled:
@@ -157,4 +170,9 @@ class AgentChoices:
         if self.verifier.decision(self._frozen_request(snapshot)) != "approved":
             return ApplyOutcome(False, "not_approved", None, 0)
         backups = self.native.apply(request, number)
+        if retired:
+            atomic_text(
+                self.native.receipts / f"{request.key}.{record.entry_sha256}.peer-retired.json",
+                '{"peer_retired":true,"scope":"agent","status":"done"}',
+            )
         return ApplyOutcome(True, None, backups[0] if backups else None, 0)

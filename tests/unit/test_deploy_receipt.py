@@ -238,7 +238,8 @@ def test_the_receipt_command_records_the_declared_reason_of_a_held_row(
     monkeypatch.setattr(deploy_all_observe, "observe_node",
                         lambda root, **kw: deploy_all_observe.collect(root, runner, "ops", **kw))
 
-    rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--runtime-root", str(runtime), "--live-root", str(tmp_path / "live"), "--format", "receipt"]
+    rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running",
+                                "--runtime-root", str(runtime), "--live-root", str(tmp_path / "live"), "--format", "receipt"]
     )
 
     assert rc == 0

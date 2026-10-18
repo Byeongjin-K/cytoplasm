@@ -13,6 +13,7 @@ from .choice_files import atomic_text
 from .choices import Choice, RENDER_VERSION
 from .model import RelocationState
 from .line_choices import RENDER_VERSION as LINE_VERSION
+from .peer_mode import peer_retired
 
 
 def notify_completed(state: RelocationState, root: Path, transport: DiscordTransport) -> None:
@@ -31,13 +32,14 @@ def notify_completed(state: RelocationState, root: Path, transport: DiscordTrans
         moved = sum(r.status == "reconciled" and r.choice is Choice.MOVE for r in records)
         deleted = sum(r.status == "reconciled" and r.choice is Choice.DELETE for r in records)
         kept = len(records) - moved - deleted
+        scope = "agent만 삭제(peer 은퇴)" if peer_retired() else "양 계정 삭제"
         location = origin_notice.approval_location({
             "approval_thread_id": record.channel_id, "approval_guild_id": record.approval_guild_id,
             "message_id": record.message_id,
         })
         message = om.OwnerMessage(
             subject_key=batch or "", subject="메모리 정리 결과",
-            fact=f"이동 {moved}건 · 양 계정 삭제 {deleted}건 · 유지/취소 {kept}건. 삭제 전 백업은 각 계정에 보관했습니다.",
+            fact=f"이동 {moved}건 · {scope} {deleted}건 · 유지/취소 {kept}건. 삭제 전 백업은 실행 계정에 보관했습니다.",
             location=location, owner=om.Action("none"), agent_next=None,
             recovery=om.Action("reply", location, "백업 복원이 필요하면 요청해 주세요"),
             detail=om.Result("executed"), render_version="owner-ko-v2",

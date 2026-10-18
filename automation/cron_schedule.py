@@ -1,6 +1,6 @@
 """Hermes cron 주기 → systemd `OnCalendar=` 한 줄(순수 변환).
 
-선언의 `schedule=` 은 Hermes 문법이다(cron 다섯 칸 또는 `every <N>m|h`). 잡을 Hermes 에서 사용자
+선언의 `schedule=` 은 cron 다섯 칸 또는 `every <N>s|m|h`다(초 단위는 사용자 타이머 전용). 잡을 Hermes 에서 사용자
 타이머로 옮겨도(`runner=systemd`) 주기 문자열은 그대로 두고 여기서 바꾼다 — 같은 행이 두 실행
 주체 어느 쪽으로도 같은 시각을 뜻하게.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from typing import Final
 
-_EVERY: Final = re.compile(r"every ([1-9][0-9]*)([mh])")
+_EVERY: Final = re.compile(r"every ([1-9][0-9]*)([smh])")
 _NUMBER: Final = re.compile(r"[0-9]+")
 _DAYS: Final = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 #: (최소, 최대, `*/N` 의 시작값) — 분·시·일·월.
@@ -86,9 +86,11 @@ def on_calendar(schedule: str, timezone: str = "") -> str:
     text = " ".join(schedule.split())
     if every := _EVERY.fullmatch(text):
         n, unit = int(every[1]), every[2]
-        whole = 60 if unit == "m" else 24
+        whole = 24 if unit == "h" else 60
         if whole % n:
             raise ScheduleError(f"interval does not divide {'an hour' if unit == 'm' else 'a day'}: {text}")
+        if unit == "s":
+            return f"*-*-* *:*:00/{n}{suffix}" if n < 60 else f"*-*-* *:*:00{suffix}"
         if unit == "m":
             return f"*-*-* *:00/{n}:00{suffix}" if n < 60 else f"*-*-* *:00:00{suffix}"
         return f"*-*-* 00/{n}:00:00{suffix}" if n < 24 else f"*-*-* 00:00:00{suffix}"

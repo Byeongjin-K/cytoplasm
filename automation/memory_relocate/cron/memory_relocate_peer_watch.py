@@ -33,6 +33,8 @@ from automation.memory_relocate.cron.memory_relocate_watch import (  # noqa: E40
 
 def run_once(now: datetime) -> int:
     participants = accounts()
+    if participants.peer is None:
+        return 0
     if os.getuid() != participants.peer.uid:
         raise ChoiceError("peer_account_required")
     root = Path.home() / ".hermes" / "memory-relocate-peer"

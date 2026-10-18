@@ -22,6 +22,9 @@ wrapper the moment the owner presses 📄/✍️ on a digest card, so the press 
 in seconds instead of on the next */2 tick. Same secrets and runtime root as the tick;
 it is not a tick, so it never touches the failure streak — the exit code and a masked
 stderr line go back to the plugin, which logs them.
+
+``--digest-reactions-only`` runs the bounded reaction scan alone. The
+``mail-digest-reactions`` user timer runs it through a fixed entry script every 20s.
 """
 from __future__ import annotations
 
@@ -109,15 +112,17 @@ def _announce(*, ok: bool, detail: str = "") -> bool:
     return True
 
 
-def digest_card(message_id: str, emoji: str = "") -> int:
+def digest_card(message_id: str, emoji: str = "", *, scan: bool = False) -> int:
     """One digest card press, heard by the gateway — not a tick (no failure streak)."""
     _load_env_secrets()
     if not CLI.exists():
         print("mail skill is not mounted", file=sys.stderr)
         return 3
     result = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
-        [sys.executable, str(CLI), "digest-react", "--message-id", message_id,
-         *(["--emoji", emoji] if emoji else [])],
+        [sys.executable, str(CLI), *(
+            ["digest-reactions-only"] if scan else
+            ["digest-react", "--message-id", message_id, *(["--emoji", emoji] if emoji else [])]
+        )],
         capture_output=True, text=True, timeout=600, check=False,
         cwd=str(Path.home()),
         env={**os.environ, "AUTOPHAGY_REPO_ROOT": str(_runtime_root())},
@@ -129,6 +134,8 @@ def digest_card(message_id: str, emoji: str = "") -> int:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--digest-reactions-only"]:
+        return digest_card("", scan=True)
     if len(sys.argv) in (3, 5) and sys.argv[1] == "--digest-card":
         emoji = sys.argv[4] if len(sys.argv) == 5 and sys.argv[3] == "--emoji" else ""
         return digest_card(sys.argv[2], emoji)

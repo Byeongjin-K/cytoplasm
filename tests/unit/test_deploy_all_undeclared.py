@@ -92,7 +92,8 @@ def test_unreadable_home_listing_is_an_observation_failure(
         lambda _account, _destination: declared_sha,
     )
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda _account: "?")
-    assert deploy_all_probe.main(["--dori-agent-chat", "off", "--runtime-root", str(runtime), "--live-root", str(live)]
+    assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running",
+                                  "--runtime-root", str(runtime), "--live-root", str(live)]
     ) == 4
     assert "DEPLOY-ALL-UNVERIFIABLE" in capsys.readouterr().err
 
@@ -134,8 +135,8 @@ def test_strict_undeclared_flag_escalates_warning_to_drift(
     ]
     monkeypatch.setattr(deploy_all_probe, "observations", lambda *_args: lines)
 
-    assert deploy_all_probe.main(["--dori-agent-chat", "off"]) == 0
-    assert deploy_all_probe.main(["--dori-agent-chat", "off", "--strict-undeclared"]) == 1
+    assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running"]) == 0
+    assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running", "--strict-undeclared"]) == 1
 
 
 def test_home_listing_survives_a_caller_cwd_the_account_cannot_reenter(

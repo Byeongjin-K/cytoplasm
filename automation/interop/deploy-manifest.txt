@@ -9,6 +9,8 @@ agent|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v
 agent|automation/interop/gateway-dropin.conf|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;requires=roster;activation=gateway
 agent|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;requires=roster
 agent|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;requires=roster
+agent|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;requires=roster
+agent|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;requires=roster
 agent|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;requires=roster
 peer|configs/external-effect-tools.yaml|.hermes/interop/external-effect-tools.yaml|v2:file
 peer|automation/interop/plugin_shim/__init__.py|.hermes/plugins/interop-protocol/__init__.py|v2:file;requires=roster;activation=gateway
@@ -18,4 +20,6 @@ peer|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v2
 peer|automation/interop/gateway-dropin.conf|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;requires=roster;activation=gateway
 peer|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;requires=roster
 peer|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;requires=roster
+peer|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;requires=roster
+peer|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;requires=roster
 peer|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;requires=roster

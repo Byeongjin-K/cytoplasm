@@ -22,6 +22,7 @@ _converge_config_module() { # _converge_config_module <algorithm> → "<module> 
     hermes-soul-recall-v2) printf '%s' "automation.hermes_soul_recall .hermes/SOUL.md" ;;
     hermes-memory-profile-with-recall-v1) printf '%s' "automation.memory_provider.config .hermes/config.yaml" ;;
     hermes-agent-profile-v1) printf '%s' "automation.memory_provider.agent_config .hermes/config.yaml" ;;
+    yoodori-channel-v1) printf '%s' "automation.yoodori_channel .hermes/interop/config.json" ;;
     *) return 1 ;;
   esac
 }
@@ -29,17 +30,30 @@ _converge_config_module() { # _converge_config_module <algorithm> → "<module> 
 converge_config() { # converge_config <account> <destination-relative-to-HOME> <algorithm> [--dori-agent-chat on|off]
   local -
   set +e
-  if (( $# != 3 && $# != 5 )); then
+  if (( $# != 3 && $# != 5 && $# != 7 )); then
     printf 'DEPLOY-BLOCK: converge_config refuses unexpected arguments.\n' >&2
     return 2
   fi
   local account="$1" destination="$2" algorithm="$3" module target runtime rc out extra=""
-  if (( $# == 5 )); then
+  if [[ "$algorithm" == yoodori-channel-v1 ]]; then
+    if (( $# != 5 )) || [[ "$4" != --yoodori-channel || ! "$5" =~ ^(off|[1-9][0-9]{16,19})$ || ! "$account" =~ ^(agent|peer|ops)$ ]]; then
+      printf 'DEPLOY-BLOCK: invalid yoodori channel arguments.\n' >&2
+      return 2
+    fi
+    extra=" --yoodori-channel $5 --role $account"
+  elif (( $# >= 5 )); then
     if [[ "$algorithm" != hermes-agent-profile-v1 || "$4" != --dori-agent-chat || ! "$5" =~ ^(on|off)$ ]]; then
-      printf 'DEPLOY-BLOCK: converge_config only accepts --dori-agent-chat on|off for the agent profile.\n' >&2
+      printf 'DEPLOY-BLOCK: invalid agent profile arguments.\n' >&2
       return 2
     fi
     extra=" --dori-agent-chat $5"
+    if (( $# == 7 )); then
+      if [[ "$6" != --yoodori-channel || ! "$7" =~ ^(off|[1-9][0-9]{16,19})$ ]]; then
+        printf 'DEPLOY-BLOCK: invalid yoodori profile arguments.\n' >&2
+        return 2
+      fi
+      extra+=" --yoodori-channel $7"
+    fi
   fi
   runtime="${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}"
   if [[ ! "$account" =~ $_CONVERGE_CONFIG_SAFE || ! "$runtime" =~ $_CONVERGE_CONFIG_SAFE ]]; then
@@ -51,6 +65,8 @@ converge_config() { # converge_config <account> <destination-relative-to-HOME> <
     return 2
   fi
   module="${target%% *}"
+  # The ops algorithm binds this logical destination to node.private_root, outside ProtectHome.
+  [[ "$algorithm" != yoodori-channel-v1 || "$account" != ops ]] || target="$module private/channel-override.json"
   if [[ "$destination" != "${target#* }" ]]; then
     printf 'DEPLOY-BLOCK: algorithm %q writes %s, not %q.\n' "$algorithm" "${target#* }" "$destination" >&2
     return 2

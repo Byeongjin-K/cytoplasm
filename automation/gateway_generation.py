@@ -169,8 +169,12 @@ def _plugin_matches(home: Path, name: str, recorded: Mapping[object, object]) ->
 
 def check(home: Path, runtime_root: Path | str, required: Sequence[str]) -> Result:
     """Return ``(status, want, have, detail)`` for the gateway of ``home``."""
+    from automation.hermes_gateways import stopped_by_release
+
     expected_root = os.path.realpath(runtime_root)
     want = Path(expected_root).name
+    if stopped_by_release(home):
+        return ("ok", want, want, "stopped-by-release")
     live_pid = _live_pid(home)
     if live_pid is None:
         return ("unknown", want, "-", "pidfile")

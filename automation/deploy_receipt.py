@@ -99,8 +99,10 @@ def render_receipt(
         "version": RECEIPT_VERSION,
         "release_sha": plan.release_sha,
         "verified_at": verified_at,
+        "hermes_gateways": plan.hermes_gateways,
         "surfaces": {
             "skill_mounts": "ok",
+            "gateway_services": {state.account: state.have for state in plan.gateway_services},
             "home_artifacts": {
                 "ok": sum(1 for s in plan.home if s.status == "ok"),
                 "ok_absent_optional": sum(1 for s in plan.home if s.status == "ok-absent"),

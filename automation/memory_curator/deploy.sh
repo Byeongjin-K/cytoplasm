@@ -42,6 +42,22 @@ deploy_provenance_check "$repo_root" "$repo_root/automation/memory_curator" \
 # The switch belongs to this release host, never the node. Check approval before
 # any node writes: an existing but unapproved switch must not silently turn off.
 dori_bot_id="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_agent_chat_ignore --release-switch)" || exit 4
+chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel --release-switch)" || exit 4
+chat_args=()
+if [[ -n "$chat_channel" ]]; then
+  head="$(git -C "$repo_root" rev-parse HEAD)" || exit 4
+  deployed="$(ssh "$host" "readlink $(printf '%q' "${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}")" </dev/null)" || deployed=""
+  if [[ "${deployed##*/}" != "$head" ]]; then
+    echo "YOODORI-CHANNEL-UNAUTHORIZED: deployed HEAD differs; unchanged." >&2
+    exit 4
+  fi
+  if ! "$repo_root/automation/release_approval_remote.sh" authorize-yoodori-channel \
+    --channel-id "$chat_channel" --head "$head"; then
+    echo "YOODORI-CHANNEL-UNAUTHORIZED: this deployed HEAD did not approve the selected channel; unchanged." >&2
+    exit 4
+  fi
+  chat_args=(--yoodori-channel "$chat_channel")
+fi
 dori_mode=off
 if [[ -n "$dori_bot_id" ]]; then
   head="$(git -C "$repo_root" rev-parse HEAD)" || exit 4
@@ -75,5 +91,8 @@ run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memo
 # covered by this release approval; absence removes that ignore on the next deploy.
 # the peer retains the memory-only profile. activation=gateway restarts agent+peer.
 source "$repo_root/automation/deploy_config.sh"
-converge_config agent .hermes/config.yaml hermes-agent-profile-v1 --dori-agent-chat "$dori_mode"
+converge_config agent .hermes/config.yaml hermes-agent-profile-v1 --dori-agent-chat "$dori_mode" "${chat_args[@]}"
 converge_config peer .hermes/config.yaml hermes-memory-profile-with-recall-v1
+converge_config agent .hermes/interop/config.json yoodori-channel-v1 --yoodori-channel "${chat_channel:-off}"
+converge_config peer .hermes/interop/config.json yoodori-channel-v1 --yoodori-channel "${chat_channel:-off}"
+converge_config ops private/channel-override.json yoodori-channel-v1 --yoodori-channel "${chat_channel:-off}"

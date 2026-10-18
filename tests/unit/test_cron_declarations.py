@@ -53,7 +53,7 @@ _OPERATORS: Final = frozenset({"||", "&&", ";", "|", "&"})
 _NAME: Final = re.compile(r"[a-z0-9][a-z0-9-]*")
 _SCRIPT: Final = re.compile(r"[A-Za-z0-9_]+\.py")
 _DELIVERIES: Final = frozenset({"local", "discord"})
-_EVERY: Final = re.compile(r"every [1-9][0-9]*[mh]")
+_EVERY: Final = re.compile(r"every [1-9][0-9]*[smh]")
 _CRON_FIELDS: Final = re.compile(r"[0-9*/,-]+( [0-9*/,-]+){4}")
 
 
@@ -90,7 +90,7 @@ def declared_jobs(root: Path) -> tuple[tuple[Job, ...], tuple[Problem, ...]]:
     jobs: list[Job] = []
     problems: list[Problem] = []
     for row in all_declarations(root):
-        if row.kind != "cron":
+        if row.kind != "cron" or row.policy in ("held", "retired"):
             continue
         if row.attr("mode") != "no-agent":
             problems.append(Problem("mode", row.owner, row.destination))
@@ -234,8 +234,8 @@ def test_every_registration_matches_its_declaration() -> None:
 
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
-    assert len(names["agent"]) == 31
-    assert names["peer"] == {"doctor-watch", "selfskill-audit-watch", "memory-relocate-peer-watch"}
+    assert len(names["agent"]) == 32
+    assert names["peer"] == {"doctor-watch", "selfskill-audit-watch"}
     timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
     assert timers == {("agent", name) for name in names["agent"]}  # 바로 전환: agent 잡 전부가 타이머
     raw = {(registration.job.package, registration.job.name) for registration in registered

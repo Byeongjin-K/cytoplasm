@@ -37,7 +37,16 @@ if [[ -z "${HEALTHCHECK_PROBES_LOADED:-}" ]]; then
     local status
 
     valid_account "$account" && valid_unit "$unit" || return 1
-    status="$(capture_on_node "$node" "sudo -n -u ${account} -H XDG_RUNTIME_DIR=/run/user/\$(id -u ${account}) systemctl --user is-active ${unit}")" || return 1
+    if [[ "$unit" == "${NODE_AGENT_GATEWAY_UNIT:-hermes-gateway.service}" && "$account" == "${NODE_AGENT_ACCOUNT:-agent}" ||
+          "$unit" == "${NODE_PEER_GATEWAY_UNIT:-hermes-gateway.service}" && "$account" == "${NODE_PEER_ACCOUNT:-peer}" ]]; then
+      status="$(capture_on_node "$node" "sudo -n -u ${account} -H bash -c 'export XDG_RUNTIME_DIR=/run/user/\$(id -u); state=\$(systemctl --user is-active ${unit}); if [[ \"\$state\" == inactive ]] && cmp -s \"\$HOME/.hermes/gateway-stopped-by-release\" <(printf stopped); then printf stopped-by-release; elif [[ \"\$state\" == active ]]; then printf active; else exit 1; fi'")" || return 1
+      if [[ "$status" == stopped-by-release ]]; then
+        log "PASS $account $unit: 릴리스로 정지됨(정상, stopped by release — expected)"
+        return 0
+      fi
+    else
+      status="$(capture_on_node "$node" "sudo -n -u ${account} -H XDG_RUNTIME_DIR=/run/user/\$(id -u ${account}) systemctl --user is-active ${unit}")" || return 1
+    fi
     [[ "$status" == "active" ]]
   }
 
@@ -63,8 +72,14 @@ if [[ -z "${HEALTHCHECK_PROBES_LOADED:-}" ]]; then
     local response
 
     valid_account "$account" && valid_http_url "$url" || return 1
-    response="$(capture_on_node "$node" "sudo -n -u ${account} -H curl --fail --silent '${url}'")" || return 1
-    [[ "$response" == *'"status"'*'"ok"'* && "$response" == *'"model"'*'"BAAI/bge-m3"'* && "$response" == *'"dimensions"'*1024* ]]
+    # One slow answer is not an outage (2026-10-18: a single 26 s reply under load opened an incident).
+    # Each try is capped; a second try runs only after the first failed, and two failures stay a failure.
+    local attempt
+    for attempt in 1 2; do
+      response="$(capture_on_node "$node" "sudo -n -u ${account} -H curl --fail --silent --max-time 10 '${url}'")" || continue
+      [[ "$response" == *'"status"'*'"ok"'* && "$response" == *'"model"'*'"BAAI/bge-m3"'* && "$response" == *'"dimensions"'*1024* ]] && return 0
+    done
+    return 1
   }
 
   probe_qdrant_health() {

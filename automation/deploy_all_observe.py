@@ -64,6 +64,10 @@ case "$1" in
   timer) PATH="$HOME/.local/bin:$PATH" PYTHONPATH="$2" python3 -B -m automation.cron_timer check-declared --role "$3" --name "$4" ;;
   delegated) timeout 300 bash "$2/automation/healthcheck_delegated.sh" ;;
   gateway) r="$2"; shift 2; PYTHONPATH="$r" python3 -B -m automation.gateway_generation --check --runtime-root "$r" "$@" ;;
+  gateway-service) export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    systemctl --user is-active hermes-gateway.service; rc=$?
+    if cmp -s "$HOME/.hermes/gateway-stopped-by-release" <(printf stopped); then echo marked; else echo unmarked; fi
+    exit "$rc" ;;
   *) exit 64 ;;
 esac"""
 
@@ -239,7 +243,11 @@ _CONFIG_MODULES: Final = deploy_all_config.CONFIG_MODULES
 def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
     """계정 설정 파일의 저장소가 정한 값 — 원하는 값은 이 릴리스 트리의 알고리즘 모듈이 말한다."""
     mode = _cache.get("dori_agent_chat")
-    return _Seen(*deploy_all_config.observe_config(decl, root, call, dori_mode=mode if isinstance(mode, str) else None))
+    channel = _cache.get("agent_chat_channel", "off")
+    return _Seen(*deploy_all_config.observe_config(
+        decl, root, call, dori_mode=mode if isinstance(mode, str) else None,
+        chat_channel=channel if isinstance(channel, str) else "off",
+    ))
 
 
 _OBSERVERS: Final = {"file": _file, "tree": _tree, "derived": _derived, "cron": _cron, "config": _config}
@@ -282,6 +290,8 @@ def _delegated(root: Path, call: Runner, ops_account: str) -> list[str]:
 def collect(
     runtime_root: Path, runner: Runner, ops_account: str, *, gateway_only: bool = False,
     dori_agent_chat: str | None = None,
+    hermes_gateways: str = "running",
+    agent_chat_channel: str = "off",
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
 
@@ -297,7 +307,7 @@ def collect(
     roster_rc = {a: call(a, ("roster", str(runtime_root)))[0] for a in {d.account for d in gated}}
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
-    cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat}
+    cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
@@ -311,11 +321,17 @@ def collect(
         lines.append(f"OBS|artifact|{head}|{decl.owner}|{decl.policy}|{decl.attr('activation')}|{status}"
                      f"|{'-' if decl.policy == 'retired' else seen.want}|{seen.have}")
         lines += [f"OBS|artifact-detail|{head}|{reason}|{quote(rel, safe='/._-+,@=~')}" for reason, rel in details]
-    lines += deploy_all_gateway.gateway_lines(declarations, statuses, runtime_root, call)
+    accounts = sorted({d.account for d in declarations if d.destination == deploy_all_gateway.DROPIN}
+                      | ({"agent", "peer"} if hermes_gateways == "stopped" else set()))
+    services = deploy_all_gateway.service_lines(accounts, hermes_gateways, call)
+    service_states = deploy_all_gateway.fold_services((line.split("|") for line in services), set(accounts), hermes_gateways)
+    lines += deploy_all_gateway.gateway_lines(declarations, statuses, runtime_root, call,
+                                              service_states, hermes_gateways=hermes_gateways)
     if gateway_only:
-        return [line for line in lines if line.startswith("OBS|gateway|")]
+        return [line for line in lines if line.startswith("OBS|gateway|")] + services
     count = sum(1 for line in lines if line.startswith("OBS|artifact|"))
-    return [*lines, *_delegated(runtime_root, call, ops_account), f"OBS|artifacts|{count}"]
+    return [*lines, f"OBS|gateway-mode|{hermes_gateways}", *services,
+            *_delegated(runtime_root, call, ops_account), f"OBS|artifacts|{count}"]
 
 
 def v2_file_destinations(runtime_root: Path) -> frozenset[tuple[str, str]]:
@@ -323,11 +339,16 @@ def v2_file_destinations(runtime_root: Path) -> frozenset[tuple[str, str]]:
     return frozenset((d.account, d.destination) for d in all_declarations(runtime_root) if not d.legacy and d.kind == "file")
 
 
-def observe_node(runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None) -> list[str]:
+def observe_node(
+    runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None,
+    hermes_gateways: str = "running",
+    agent_chat_channel: str = "off",
+) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
     try:
         ops_account = load_node_config().ops_account
     except (NodeConfigError, OSError):
         ops_account = ""
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
-                   dori_agent_chat=dori_agent_chat)
+                   dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
+                   agent_chat_channel=agent_chat_channel)

@@ -44,6 +44,7 @@ ssh "$host" 'sudo -n -u ops -H git -C /srv/autophagy-agents pull --ff-only'
 
 # No-agent reaction watcher wrapper.
 push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_watch.py" '.hermes/scripts/memory_relocate_watch.py'
+push_file "$repo_root/automation/memory_relocate/peer-mode.json" '.hermes/memory-relocate/peer-mode.json'
 
 # Reactions every 2m; expensive idle discovery retains its internal 30m cadence.
 source "$repo_root/automation/deploy_cron.sh"
@@ -66,10 +67,5 @@ module="cd $release_root && python3 -E -s -m automation.memory_relocate"
 provision="$module.choice_accounts --provision"
 run_account ops "$provision"
 run_account "$NODE_AGENT_ACCOUNT" "$provision"
-run_account "$NODE_PEER_ACCOUNT" "$provision"
-
-# Peer local executor of agent decisions; no owner-chat credentials are needed.
-for account in "$NODE_PEER_ACCOUNT"; do
-  push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_peer_watch.py" '.hermes/scripts/memory_relocate_peer_watch.py'
-  converge_cron memory-relocate-peer-watch "every 2m" memory_relocate_peer_watch.py local
-done
+# This release explicitly retires peer deletion (peer-mode.json above). No peer
+# provisioning or new executor registration; the old paused gateway job is retained.
