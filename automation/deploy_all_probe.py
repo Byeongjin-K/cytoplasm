@@ -109,6 +109,7 @@ def observations(
     home_reader: HomeReader,
     home_lister: HomeLister,
     observer: Observer | None = None,
+    notice_mode: tuple[str, str] | None = None,
 ) -> list[str]:
     """관측 줄을 만든다. 목록을 못 보면 선언 밖 파일 부재를 증명할 수 없어 실패한다."""
     lines: list[str] = [f"OBS|release|{runtime_root.resolve().name}"]
@@ -149,6 +150,11 @@ def observations(
                 f"OBS|undeclared|{account}|{destination}|{deployed[:12]}"
             )
     lines += (observer or deploy_all_observe.observe_node)(runtime_root)
+    if notice_mode is not None:
+        from automation.notice_bot_release import observe as observe_notice_bot
+
+        for account, status in observe_notice_bot(runtime_root, *notice_mode).items():
+            lines.append(f"OBS|notice-bot|{account}|{status}")
     lines.append("OBS|end")
     return lines
 
@@ -212,22 +218,21 @@ def main(argv: list[str] | None = None) -> int:
                                  agent_chat_channel=args.yoodori_channel)
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
-    from automation.notice_bot_release import observe as observe_notice_bot
-
     try:
-        notice_states = observe_notice_bot(args.runtime_root, args.notice_bot, args.yoodori_channel)
-    except (OSError, subprocess.SubprocessError):
-        print("NOTICE-BOT-UNVERIFIABLE", file=sys.stderr)
-        return 4
-    notice_clean = all(state == "ok" for state in notice_states.values())
-    try:
-        lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer)
+        lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer,
+                             (args.notice_bot, args.yoodori_channel))
+        notice_states = {parts[2]: parts[3] for line in lines
+                         if (parts := line.split("|"))[:2] == ["OBS", "notice-bot"]}
+        if args.notice_bot != "off" and not notice_states:
+            raise deploy_all.ObservationError("notice-bot observation is missing")
+        notice_clean = all(state == "ok" for state in notice_states.values())
         plan = deploy_all.parse_observations(
-            lines, strict_undeclared=args.strict_undeclared
+            [line for line in lines if not line.startswith("OBS|notice-bot|")],
+            strict_undeclared=args.strict_undeclared
         )
         if plan.hermes_gateways != args.hermes_gateways:
             raise deploy_all.ObservationError("node observation does not match the host gateway mode")
-    except (DriftError, ManifestError, OSError, deploy_all.ObservationError) as error:
+    except (DriftError, ManifestError, OSError, subprocess.SubprocessError, deploy_all.ObservationError) as error:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
