@@ -111,6 +111,28 @@ def card_env(home: Path, release: Path, baseline: dict[str, str]) -> dict[str, s
     return values
 
 
+_ENV_KEY = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
+_KEEP = frozenset({"HOME", "USER", "LOGNAME", "PATH", "LANG"})
+
+
+def job_env(home: Path, release: Path, baseline: dict[str, str]) -> dict[str, str]:
+    """Skill jobs get the account's own settings files, as Hermes gave them; they stay on the node."""
+    values = dict(baseline)
+    for source in (home / ".hermes/.env", home / ".env.secrets"):
+        try:
+            lines = source.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            continue
+        for line in lines:
+            key, sep, value = line.strip().removeprefix("export ").partition("=")
+            key = key.strip()
+            if sep and _ENV_KEY.fullmatch(key) and key not in _KEEP:
+                values[key] = value.split(" #", 1)[0].strip().strip("\"'")
+    values.update(PYTHONPATH=str(release), AUTOPHAGY_REPO_ROOT=str(release),
+                  AUTOPHAGY_RUNTIME_ROOT=str(release))
+    return values
+
+
 def calendar_card(argv: list[str], cwd: Path, env: dict[str, str], timeout: int) -> int:
     """Create one draft, then post that exact id with the existing card producer."""
     draft = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,

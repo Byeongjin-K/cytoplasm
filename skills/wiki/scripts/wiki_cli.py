@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import sys
 from importlib import import_module
@@ -77,9 +78,8 @@ def _summary(record: dict[str, Any]) -> str:
     )
 
 
-def cmd_draft(args: argparse.Namespace, evidence_pack: object | None = None) -> int:
+def _compose(args: argparse.Namespace, pack: object | None) -> tuple[str, str, str, str, dict[str, Any], object | None]:
     body = _read_body(args)
-    pack = evidence_pack
     now = wiki_store.utc_now()
     if args.edit:
         note = wiki_store.load_note(WIKI_ROOT, args.edit)
@@ -95,27 +95,29 @@ def cmd_draft(args: argparse.Namespace, evidence_pack: object | None = None) -> 
         final_body = body if body is not None else note.body
         final_body, pack = wiki_evidence.prepare_draft(
             str(meta["title"]), list(meta["tags"]), final_body, bool(args.with_evidence), pack)
-        note_text = wiki_store.compose_note(meta, final_body)
-        record = wiki_gate.create_draft("edit", args.edit, note_text, args.channel_id)
-    else:
-        if not args.title:
-            raise wiki_store.SchemaError(["title: 새 노트에는 --title이 필요합니다"])
-        slug = args.slug or wiki_store.slugify(args.title)
-        meta = _with_twin_flags(
-            {
-                "title": args.title,
-                "tags": _tags(args.tags or ""),
-                "created": now,
-                "updated": now,
-                "links": _tags(args.links or ""),
-            },
-            args,
-        )
-        final_body = body or ""
-        final_body, pack = wiki_evidence.prepare_draft(
-            str(meta["title"]), list(meta["tags"]), final_body, bool(args.with_evidence), pack)
-        note_text = wiki_store.compose_note(meta, final_body)
-        record = wiki_gate.create_draft("create", slug, note_text, args.channel_id)
+        return "edit", args.edit, wiki_store.compose_note(meta, final_body), final_body, meta, pack
+    if not args.title:
+        raise wiki_store.SchemaError(["title: 새 노트에는 --title이 필요합니다"])
+    slug = args.slug or wiki_store.slugify(args.title)
+    meta = _with_twin_flags(
+        {
+            "title": args.title,
+            "tags": _tags(args.tags or ""),
+            "created": now,
+            "updated": now,
+            "links": _tags(args.links or ""),
+        },
+        args,
+    )
+    final_body = body or ""
+    final_body, pack = wiki_evidence.prepare_draft(
+        str(meta["title"]), list(meta["tags"]), final_body, bool(args.with_evidence), pack)
+    return "create", slug, wiki_store.compose_note(meta, final_body), final_body, meta, pack
+
+
+def cmd_draft(args: argparse.Namespace, evidence_pack: object | None = None) -> int:
+    action, slug, note_text, final_body, meta, pack = _compose(args, evidence_pack)
+    record = wiki_gate.create_draft(action, slug, note_text, args.channel_id)
     if pack is not None:
         wiki_evidence.write_sidecar(wiki_gate.GATE_DIR, str(record["id"]), pack)
     print(_summary(record))
@@ -145,6 +147,35 @@ def cmd_confirm(args: argparse.Namespace) -> int:
         method = "dm_text"
     path = wiki_gate.apply_draft(WIKI_ROOT, draft, ref, method)
     print(f"SAVED path={path} method={method} ref={ref}")
+    return 0
+
+
+def cmd_write(args: argparse.Namespace) -> int:
+    """Owner-command write without a card (owner 2026-10-18 Q233); the YooDori gate has
+    already confirmed the origin is the owner's own recent message."""
+    action, slug, note_text, _body, _meta, _pack = _compose(args, None)
+    wiki_store.parse_note(note_text)
+    WIKI_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    wiki_gate.GATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = wiki_store.note_path(WIKI_ROOT, slug)
+    if action == "create" and path.exists():
+        raise wiki_gate.GateError(f"이미 존재하는 노트: {slug} (수정은 --edit 사용)", 2)
+    if action == "edit" and not path.exists():
+        raise wiki_gate.GateError(f"수정 대상 노트 없음: {slug}", 2)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(note_text, encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(path)
+    ref = f"discord:{args.origin_channel_id}/{args.origin_message_id}"
+    digest = hashlib.sha256(note_text.encode("utf-8")).hexdigest()
+    wiki_gate._append_audit({"action": action, "sha256": digest, "slug": slug,
+                             "channel_id": args.origin_channel_id}, ref, "owner_command")
+    print(f"SAVED path={path} slug={slug} action={action} method=owner_command ref={ref}")
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    print(wiki_store.load_note(WIKI_ROOT, args.slug).path.read_text(encoding="utf-8"))
     return 0
 
 
@@ -243,6 +274,18 @@ def build_parser() -> argparse.ArgumentParser:
     confirm.add_argument("--injection-file", default="")
     confirm.set_defaults(func=cmd_confirm)
 
+    write = sub.add_parser("write", help="형 명령 쓰기 — 유돌 게이트가 형 메시지를 확인한 뒤에만(카드 없음)")
+    for flag in ("--title", "--tags", "--links", "--slug", "--body", "--body-file"):
+        write.add_argument(flag)
+    write.add_argument("--edit", metavar="SLUG")
+    write.add_argument("--origin-channel-id", required=True)
+    write.add_argument("--origin-message-id", required=True)
+    write.set_defaults(func=cmd_write, stdin=False, with_evidence=False)
+
+    show = sub.add_parser("show", help="노트 한 개 원문 (읽기 전용)")
+    show.add_argument("slug")
+    show.set_defaults(func=cmd_show)
+
     discard = sub.add_parser("discard", help="초안 폐기")
     discard.add_argument("--draft", required=True)
     discard.set_defaults(func=cmd_discard)
@@ -284,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    if args.command in {"draft", "confirm", "discard", "sign"}:
+    if args.command in {"draft", "confirm", "discard", "sign", "write"}:
         refusal = wiki_governed.refusal(Path(__file__))
         if refusal:
             print(refusal, file=sys.stderr)

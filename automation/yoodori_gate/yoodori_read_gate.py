@@ -10,13 +10,15 @@ import shlex
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 # sshd runs this file with -I: only its own declared helper directory is added.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from yoodori_request_runtime import (  # noqa: E402
-    Refused, card_env, calendar_card, checked_value, stage_body, stage_file, stage_name,
+    Refused, card_env, calendar_card, checked_value, job_env, stage_body, stage_file, stage_name,
 )
+import yoodori_jobs  # noqa: E402
 
 HOME = Path.home()
 LIVE = Path("/srv/autophagy-skills/live")
@@ -53,9 +55,13 @@ REFUSED_WORDS = frozenset({
     "python", "python3", "perl", "ruby", "node", "bun", "env",
 }) | GMAIL_WRITE_WORDS
 _ORIGIN = {"--origin-channel-id": "id", "--origin-message-id": "id"}
+_REPEATABLE = {"mail-compose": frozenset({"--cc", "--bcc", "--share-with", "--attachment"})}
 _FLAGS = {
     "mail-compose": {"--to": "email", "--cc": "email", "--bcc": "email",
-                     "--subject": "short", "--body": "body", "--in-reply-to": "id"},
+                     "--subject": "short", "--body": "body", "--in-reply-to": "id",
+                     "--forward": "id", "--forward-gmail": "short", "--attachment": "file",
+                     "--bcc-file": "file", "--bcc-column": "short",
+                     "--drive-share": "file", "--share-with": "email", "--drive-folder": "short"},
     "mail-draft": {"--instruction": "body"},
     "calendar-request": {"--text": "text", "--summary": "short"},
     "todo-request": {"--title": "short", "--notes": "body", "--due": "date"},
@@ -65,7 +71,7 @@ _FLAGS = {
     "obsidian-request": {"--relpath": "relpath", "--body-file": "file", "--body": "body", "--title": "short"},
 }
 _REQUIRED = {
-    "mail-compose": ("--to", "--subject", "--body"),
+    "mail-compose": ("--to",),
     "mail-draft": ("--instruction",),
     "calendar-request": ("--text",),
     "todo-request": ("--title",),
@@ -74,11 +80,61 @@ _REQUIRED = {
     "obsidian-request": ("--relpath",),
 }
 
+# Owner-command tools: (script, read subcommands, write subcommands). Writes run without a
+# card (owner 2026-10-18 Q233; patent export 18:29 KST "5번도 카드 없이 해") only for a
+# verified owner message; outbound steps inside them still raise their own cards.
+TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
+    "doctype": ("doctype/scripts/doctype_cli.py", frozenset({"list", "show"}),
+                frozenset({"register-from-example", "draft", "refine"})),
+    "report": ("report/scripts/report_cli.py", frozenset({"evidence"}),
+               frozenset({"report", "slides", "script"})),
+    "proposal": ("proposal/scripts/proposal_cli.py",
+                 frozenset({"version", "delta", "sections", "evidence", "research", "corpus",
+                            "status", "prompt-preview", "preflight"}),
+                 frozenset({"create", "section-add", "draft", "contribute", "assemble", "compose",
+                            "figures", "images", "render", "refine", "publish", "improve",
+                            "review", "visual-review"})),
+    "procurement": ("procurement/scripts/procure_cli.py",
+                    frozenset({"templates-list", "templates-show", "collect-status", "preflight", "verify"}),
+                    frozenset({"collect-start", "collect-answer", "generate", "register", "review"})),
+    "prompt": ("prompt/scripts/prompt_cli.py", frozenset({"search", "get"}), frozenset({"add"})),
+    "topics": ("topics/scripts/topics_cli.py", frozenset({"list", "evidence", "suggest"}),
+               frozenset({"add", "remove"})),
+    "patent": ("patent-prep/scripts/patent_cli.py", frozenset({"status"}),
+               frozenset({"create", "checklist", "draft", "export"})),
+    "stt": ("speechtotext/scripts/speechtotext_cli.py", frozenset(),
+            frozenset({"transcribe", "ingest", "polish"})),
+    "meeting": ("meeting/scripts/meeting_cli.py", frozenset({"evidence"}), frozenset({"ingest"})),
+}
+JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "wiki-write")
+LONG = frozenset({"proposal", "stt", "meeting"})
+JOB_WAIT = 100
+# Test replays, injected approvals and output-root overrides are never caller-controlled.
+DENIED_FLAGS = frozenset({
+    "--out", "--outputs-root", "--notes-root", "--recorded", "--meeting-recorded",
+    "--recorded-response", "--response-file", "--injection-file", "--dm-target",
+    "--write-body", "--forge-signature", "--user-id", "--notify-channel", "--notify-message-id",
+    "--origin-channel-id", "--origin-message-id", "--allow-plaintext",
+})
+_FLAG = re.compile(r"--[a-z][a-z0-9-]{0,40}")
+_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,80}")
+_OUT_NAME = re.compile(r"(?!\.)[A-Za-z0-9._-]{1,120}")
+WIKI_FLAGS = {"--title": "short", "--tags": "short", "--links": "short", "--slug": "short",
+              "--edit": "short", "--body": "body"}
+
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
+         "Wiki reads: wiki-search <words...>, wiki-get <slug>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
-         "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n")
+         "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
+         "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
+         "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
+         "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
+         "  meeting <ingest|evidence> [args], wiki-write [--edit <slug>] --title .. --body-b64 ..;\n"
+         "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
+         "  --<flag>-b64 for multi-line text; --out-name <name> for an output file.\n"
+         "  job <id> (status/output), job-file <id> <name> (bytes on stdout).\n")
 
 
 def _int(value: str, low: int, high: int) -> str:
@@ -118,8 +174,10 @@ def _owner_id() -> str:
 
 def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
     allowed = {**_FLAGS[name], **_ORIGIN}
+    repeatable = _REPEATABLE.get(name, frozenset())
     values: dict[str, str] = {}
-    if len(args) % 2 or len(args) > 32:
+    repeats: list[tuple[str, str]] = []
+    if len(args) % 2 or len(args) > 64:
         raise Refused("card requests take flag/value pairs only")
     for flag, raw in zip(args[::2], args[1::2]):
         if name == "mail-draft" and flag == "--instruction":
@@ -127,12 +185,18 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         if name == "obsidian-request" and flag == "--body":
             raise Refused("inline Obsidian body requires --body-b64")
         decoded = flag.removesuffix("-b64") if flag != "--argv-b64" else flag
-        if decoded not in allowed or decoded in values:
+        if decoded not in allowed or (decoded in values and decoded not in repeatable):
             raise Refused("unknown or repeated flag")
         kind = allowed[decoded]
         if flag != decoded and kind not in {"body", "text", "short"}:
             raise Refused("encoding only supported for text")
-        values[decoded] = _value(_decode(raw) if flag != decoded else raw, kind)
+        value = _value(_decode(raw) if flag != decoded else raw, kind)
+        if decoded == "--forward-gmail" and not _GMAIL_ID.fullmatch(value):
+            raise Refused("--forward-gmail needs a hex Gmail message id")
+        if decoded in values:
+            repeats.append((decoded, value))
+            continue
+        values[decoded] = value
         if name == "mail-draft" and decoded == "--instruction" and (
             len(values[decoded]) > 2000 or _SHELL.search(values[decoded])
         ):
@@ -141,6 +205,8 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         raise Refused("missing required request flag or owner message coordinates")
     if name == "obsidian-request" and sum(flag in values for flag in ("--body", "--body-file")) != 1:
         raise Refused("choose exactly one of --body-file or --body-b64")
+    if name == "mail-compose" and sum(f in values for f in ("--forward", "--forward-gmail", "--in-reply-to")) > 1:
+        raise Refused("choose one of --forward, --forward-gmail or --in-reply-to")
     tails: list[str] = []
     if name == "command-request":
         try:
@@ -172,7 +238,130 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         argv = [py, "-m", module, "request"]
         if name != "obsidian-request":
             argv += ["drive-save" if name == "drive-save" else "command"]
-    return name, argv + [v for pair in values.items() for v in pair] + tails, RELEASE
+    pairs = [v for pair in values.items() for v in pair] + [v for pair in repeats for v in pair]
+    return name, argv + pairs + tails, RELEASE
+
+
+@dataclass(frozen=True, slots=True)
+class Job:
+    name: str
+    argv: list[str]
+    write: bool
+    label: str
+    timeout: int
+    channel_id: str
+    message_id: str
+
+
+def _origin(args: list[str]) -> tuple[list[str], str, str]:
+    if len(args) < 4 or args[-4] != "--origin-channel-id" or args[-2] != "--origin-message-id":
+        raise Refused("owner-command jobs end with --origin-channel-id N --origin-message-id N")
+    return args[:-4], _value(args[-3], "id"), _value(args[-1], "id")
+
+
+def _job_path(value: str) -> str:
+    """A file argument is a staged upload or an earlier job's output, nothing else."""
+    path = Path(value)
+    jobs = yoodori_jobs.jobs_root(HOME).resolve()
+    try:
+        real = path.resolve()
+        if (path.is_absolute() and ".." not in path.parts and not path.is_symlink()
+                and real.is_relative_to(jobs) and real.parent.name == "out" and real.is_file()):
+            return value
+    except OSError:
+        raise Refused("file unreadable") from None
+    return _value(value, "file")
+
+
+def _tool_args(tokens: list[str]) -> list[str]:
+    out: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if token.startswith("--"):
+            if not _FLAG.fullmatch(token):
+                raise Refused("malformed flag")
+            flag = token.removesuffix("-b64")
+            if flag in DENIED_FLAGS:
+                raise Refused(f"flag not allowed through the gate: {flag}")
+            if token.endswith("-b64") or token == "--out-name":
+                if index >= len(tokens):
+                    raise Refused("flag needs a value")
+                raw = tokens[index]
+                index += 1
+                if token == "--out-name":
+                    if not _OUT_NAME.fullmatch(raw):
+                        raise Refused("--out-name needs a plain file name")
+                    out += ["--out", "{OUT}/" + raw]
+                else:
+                    out += [flag, _value(_decode(raw), "body")]
+                continue
+            out.append(flag)
+            continue
+        if token.startswith("/"):
+            out.append(_job_path(token))
+        elif token.startswith("~") or ".." in token.split("/"):
+            raise Refused("relative or home paths are not accepted; stage the file first")
+        else:
+            out.append(_value(token, "text"))
+    return out
+
+
+def _label(tool: str, sub: str, args: list[str]) -> str:
+    for key in ("--slug", "--name", "--title", "--label", "--file", "--report", "--template-name", "--edit"):
+        if key in args[:-1]:
+            value = args[args.index(key) + 1]
+            return f"{tool} {sub} {Path(value).name if value.startswith('/') else value}"[:160]
+    return f"{tool} {sub}"
+
+
+def build_job(words: list[str]) -> Job:
+    name, rest = words[0], words[1:]
+    rest, channel, message = _origin(rest)
+    py = "/usr/bin/python3"
+    if name == "wiki-write":
+        values: dict[str, str] = {}
+        if len(rest) % 2:
+            raise Refused("wiki-write takes flag/value pairs only")
+        for flag, raw in zip(rest[::2], rest[1::2]):
+            decoded = flag.removesuffix("-b64")
+            if decoded not in WIKI_FLAGS or decoded in values or (flag != decoded and decoded != "--body"):
+                raise Refused("unknown or repeated wiki flag (body needs --body-b64)")
+            if decoded == "--body" and flag == decoded:
+                raise Refused("wiki body requires --body-b64")
+            values[decoded] = _value(_decode(raw) if flag != decoded else raw, WIKI_FLAGS[decoded])
+        for key in ("--slug", "--edit"):
+            if key in values and not _SLUG.fullmatch(values[key]):
+                raise Refused("slug must be lowercase letters, digits and hyphens")
+        if "--edit" not in values and "--title" not in values:
+            raise Refused("wiki-write needs --title for a new note or --edit <slug>")
+        argv = [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "write",
+                *[v for pair in values.items() for v in pair],
+                "--origin-channel-id", channel, "--origin-message-id", message]
+        label = f"위키 {values.get('--edit') or values.get('--slug') or '새 노트'}"
+        return Job(name, argv, True, label[:160], 300, channel, message)
+    if name == "doc":
+        if not rest or rest[0] not in TOOLS or rest[0] in {"patent", "stt", "meeting"}:
+            raise Refused("doc needs one of: " + ", ".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}))
+        tool, rest = rest[0], rest[1:]
+    else:
+        tool = name
+    script, reads, writes = TOOLS[tool]
+    if not rest or rest[0] not in reads | writes:
+        raise Refused(f"{tool} subcommands: " + ", ".join(sorted(reads | writes)))
+    sub, args = rest[0], _tool_args(rest[1:])
+    cli_sub = sub
+    if tool == "patent" and sub == "export":
+        cli_sub = "export-now"
+        args += ["--origin-channel-id", channel, "--origin-message-id", message]
+    if tool == "report" and sub in writes:
+        args += ["--outputs-root", "{OUT}"]
+    if (tool, sub) in {("stt", "ingest"), ("meeting", "ingest")}:
+        args += ["--notify-channel", channel, "--notify-message-id", message]
+    argv = [py, str(LIVE / script), cli_sub, *args]
+    timeout = 4 * 3600 if tool in LONG else 1800
+    return Job(name, argv, sub in writes, _label(tool, sub, args), timeout, channel, message)
 
 
 def build(words: list[str]) -> tuple[str, list[str], Path]:
@@ -216,6 +405,12 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if not args or len(args) > 2 or not _UID.fullmatch(args[0]) or (len(args) == 2 and args[1] != "--body"):
             raise Refused("mail-get needs <uid> [--body]")
         return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "get", *args], HOME
+    if name == "wiki-search":
+        return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "query", _text(args, 200)], HOME
+    if name == "wiki-get":
+        if len(args) != 1 or not _SLUG.fullmatch(args[0]):
+            raise Refused("wiki-get needs exactly one <slug>")
+        return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "show", args[0]], HOME
     if name == "recall":
         return name, [py, str(LIVE / "recall/scripts/recall_cli.py"), "search", _text(args, 300)], HOME
     if name == "status":
@@ -223,6 +418,39 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
             raise Refused("status takes no arguments")
         return name, [py, "-m", "automation.doctor"], RELEASE
     raise Refused(f"unknown command: {name[:40]}")
+
+
+def _release_modules():
+    if str(RELEASE) not in sys.path:
+        sys.path.insert(1, str(RELEASE))
+    from automation import auto_write, notice_bot
+
+    return auto_write, notice_bot
+
+
+def run_job(job: Job) -> int:
+    env = job_env(HOME, RELEASE, ENV)
+    link = ""
+    if job.write:
+        auto_write, notice_bot = _release_modules()
+        try:
+            switched_on = auto_write.enabled("yoodori")
+        except ValueError:
+            switched_on = False
+        if not switched_on:
+            raise Refused("owner-command writes are off on this node (release switch auto-write-yoodori)")
+        token = notice_bot.resolve_token(environ=env)
+        link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
+    path = yoodori_jobs.new_job(HOME, {
+        "name": job.name, "argv": job.argv, "write": job.write, "label": job.label,
+        "timeout": job.timeout,
+        "origin": {"channel_id": job.channel_id, "message_id": job.message_id, "link": link},
+    })
+    yoodori_jobs.launch(path, env)
+    finished = yoodori_jobs.wait(path, JOB_WAIT)
+    rc, text = yoodori_jobs.report(path)
+    sys.stdout.write(text)
+    return rc if finished else 0
 
 
 def _log(name: str, rc: int, started: float) -> None:
@@ -247,15 +475,36 @@ def main() -> int:
             words = shlex.split(raw)
         except ValueError as exc:
             raise Refused(f"cannot parse: {exc}") from None
-        if words and words[0] not in CARD_COMMANDS and len(raw) > 600:
+        if words and words[0] not in (*CARD_COMMANDS, *JOB_COMMANDS) and len(raw) > 600:
             raise Refused("read command too long")
-        name, argv, cwd = build(words)
-    except Refused as exc:
+        job = build_job(words) if words and words[0] in JOB_COMMANDS else None
+        if job is not None:
+            name, argv, cwd = job.name, job.argv, HOME
+        elif words and words[0] in {"job", "job-file"}:
+            if len(words) != (2 if words[0] == "job" else 3):
+                raise Refused("job <id> | job-file <id> <name>")
+            name, argv, cwd = words[0], words[1:], HOME
+            yoodori_jobs.job_dir(HOME, argv[0])
+        else:
+            name, argv, cwd = build(words)
+    except (Refused, yoodori_jobs.JobRefused) as exc:
         sys.stderr.write(f"YOODORI-GATE-REFUSED {exc}\n{USAGE}")
         _log("refused", 2, started)
         return 2
     try:
-        if name == "stage":
+        if job is not None:
+            rc = run_job(job)
+        elif name == "job":
+            rc, text = yoodori_jobs.report(yoodori_jobs.job_dir(HOME, argv[0]))
+            sys.stdout.write(text)
+        elif name == "job-file":
+            target = yoodori_jobs.output_file(yoodori_jobs.job_dir(HOME, argv[0]), argv[1])
+            sys.stdout.flush()
+            with target.open("rb") as handle:
+                while chunk := handle.read(65536):
+                    sys.stdout.buffer.write(chunk)
+            rc = 0
+        elif name == "stage":
             _path, digest, size = stage_file(STAGING, argv[0], sys.stdin.buffer)
             print(f"STAGED {argv[0]} sha256={digest} bytes={size}")
             rc = 0
@@ -267,7 +516,7 @@ def main() -> int:
                 rc = calendar_card(argv, RELEASE, env, TIMEOUT)
             else:
                 rc = subprocess.run(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, timeout=TIMEOUT, check=False).returncode
-    except Refused as exc:
+    except (Refused, yoodori_jobs.JobRefused) as exc:
         sys.stderr.write(f"YOODORI-GATE-REFUSED {exc}\n")
         rc = 2
     except (OSError, UnicodeError):

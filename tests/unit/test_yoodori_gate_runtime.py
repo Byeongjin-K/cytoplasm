@@ -94,7 +94,7 @@ def test_release_declares_forced_command_without_changing_the_legacy_manifest() 
     # Given / When
     rows = [r for r in all_declarations(REPO) if r.owner == "automation/yoodori_gate"]
     # Then: v2:file is sanctioned for paths outside scripts/plugins; no pattern broadening.
-    assert len(rows) == 3
+    assert len(rows) == 4
     row = next(r for r in rows if r.destination.endswith("yoodori-read-gate"))
     assert (row.account, row.source, row.destination, row.kind, row.policy) == (
         "agent", "automation/yoodori_gate/yoodori_read_gate.py",
@@ -113,7 +113,8 @@ def test_deployer_uses_provenance_and_verified_push_locally(
     repo = tmp_path / "repo"
     package = repo / "automation/yoodori_gate"
     package.mkdir(parents=True)
-    for name in ("deploy.sh", "yoodori_read_gate.py", "gmail_read.py", "yoodori_request_runtime.py"):
+    for name in ("deploy.sh", "yoodori_read_gate.py", "gmail_read.py", "yoodori_request_runtime.py",
+                 "yoodori_jobs.py"):
         (package / name).write_bytes((REPO / "automation/yoodori_gate" / name).read_bytes())
     (repo / "automation/deploy_push.sh").write_bytes((REPO / "automation/deploy_push.sh").read_bytes())
     (repo / "automation/deploy_provenance.sh").write_text(

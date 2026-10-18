@@ -21,7 +21,8 @@ def test_probe_refuses_stale_or_unreadable_mode(tmp_path, monkeypatch, capsys, m
     monkeypatch.setattr(deploy_all_probe, "inspect_mounts",
                         lambda *_: SimpleNamespace(stale=(), unmounted=(), orphaned=()))
     monkeypatch.setattr(deploy_all_probe, "_read_home",
-                        lambda account, path: observed if path.endswith(".mode") else digest)
+                        lambda account, path: observed if path.endswith("plaud.mode")
+                        else "" if path.endswith(".mode") else digest)
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda *_: (".hermes/scripts/declared.py",))
     monkeypatch.setattr(deploy_all_observe, "observe_node", lambda *a, **k: [])
     monkeypatch.setattr(notice_bot_release, "observe", lambda *a: {"agent": "ok"})
@@ -36,7 +37,7 @@ def test_probe_refuses_stale_or_unreadable_mode(tmp_path, monkeypatch, capsys, m
     # Then: only a matching node setting receives a successful receipt.
     if expected == 0:
         assert json.loads(output)["auto_write"] == {
-            "enabled": [] if mode == "off" else ["plaud"], "kinds": {"plaud": "ok"},
+            "enabled": [] if mode == "off" else ["plaud"], "kinds": {kind: "ok" for kind in auto_write.KINDS},
         }
     else:
         assert not output

@@ -79,6 +79,14 @@ def _export_execute(args: argparse.Namespace) -> int:
     print(res)
     return 0
 
+def _export_now(args: argparse.Namespace) -> int:
+    print(patent_export.export_owner_command(
+        _paths(), args.slug, mode=args.mode,
+        channel_id=args.origin_channel_id, message_id=args.origin_message_id,
+    ))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the no-content-on-stdout command surface."""
     parser = argparse.ArgumentParser(prog="patent-prep")
@@ -106,6 +114,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_execute = commands.add_parser("export-execute")
     export_execute.add_argument("--slug", required=True)
     export_execute.set_defaults(func=_export_execute)
+    export_now = commands.add_parser("export-now")
+    export_now.add_argument("--slug", required=True)
+    export_now.add_argument("--mode", choices=("enc", "plaintext"), default="enc")
+    export_now.add_argument("--origin-channel-id", required=True)
+    export_now.add_argument("--origin-message-id", required=True)
+    export_now.set_defaults(func=_export_now)
     return parser
 
 
@@ -113,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI without echoing private material on failure."""
     args = build_parser().parse_args(argv)
     try:
-        if args.command in {"create", "checklist", "draft", "export-prepare", "export-execute"}:
+        if args.command in {"create", "checklist", "draft", "export-prepare", "export-execute", "export-now"}:
             message = patent_prep_governed.refusal(Path(__file__))
             if message:
                 print(message, file=sys.stderr)
