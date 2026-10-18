@@ -2,12 +2,39 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
 STOP_MARKER: Final = ".hermes/gateway-stopped-by-release"
+
+
+def stopped_in_receipt(path: Path, accounts: Sequence[str]) -> bool:
+    """Retain the last fully applied mode; ops can read this outside protected homes."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False  # Legacy installations before their first deploy-all receipt.
+    if not isinstance(raw, dict):
+        raise ValueError("GATEWAY-RECEIPT-INVALID: expected an object")
+    sha = raw.get("release_sha")
+    surfaces = raw.get("surfaces")
+    if (type(raw.get("version")) is not int or raw["version"] not in (1, 2)
+            or not isinstance(sha, str) or re.fullmatch(r"[0-9a-f]{40,64}", sha) is None
+            or not isinstance(surfaces, dict)):
+        raise ValueError("GATEWAY-RECEIPT-INVALID: incomplete deployment receipt")
+    if "hermes_gateways" not in raw:
+        return False  # Receipts written before the release stop switch existed.
+    mode = raw["hermes_gateways"]
+    if mode not in ("running", "stopped"):
+        raise ValueError("GATEWAY-RECEIPT-INVALID: unknown gateway mode")
+    if (raw["version"] != 2
+            or surfaces.get("gateway_services") != {account: mode for account in accounts}):
+        raise ValueError("GATEWAY-RECEIPT-INVALID: incomplete gateway observation")
+    return mode == "stopped"
 
 
 def release_switch(home: Path) -> str:
