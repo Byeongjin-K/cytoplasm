@@ -132,6 +132,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
          "Wiki reads: wiki-search <words...>, wiki-get <slug>. Obsidian read: note-get <PARA path>.\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
+         "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
@@ -282,6 +283,25 @@ def memory_copy_job(body: Path) -> Job:
             "--origin-channel-id", "owner-policy", "--origin-message-id", "Q241-daily-memory-copy"]
     return Job("memory-copy", argv, True, "유돌 기억 자동 사본", 600, "owner-policy",
                "Q241-daily-memory-copy", "yoodori-memory", WRITTEN, False)
+
+
+# Owner Q244 (2026-10-18 21:03 KST): one daily note of the owner's #yoodori conversation
+# (decisions, todos, facts) so recall indexes it. Same switch and summary path as Q241.
+DAY_SUMMARY_DIR = "000_PARA/Resource/유돌 대화 요약"
+_DAY = re.compile(r"20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])")
+# Outside people's contacts must not reach the vault: an address or phone number refuses the note.
+_CONTACT = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+|\b0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}\b")
+
+
+def day_summary_job(day: str, body: Path) -> Job:
+    if _CONTACT.search(body.read_text(encoding="utf-8")):
+        raise Refused("summary contains an e-mail address or phone number")
+    relpath = f"{DAY_SUMMARY_DIR}/{day}.md"
+    argv = ["/usr/bin/python3", "-m", "automation.obsidian_write", "write-now",
+            "--relpath", relpath, "--body-file", str(body), "--title", f"유돌 대화 요약 {day}",
+            "--origin-channel-id", "owner-policy", "--origin-message-id", "Q244-daily-conversation-summary"]
+    return Job("day-summary", argv, True, f"유돌 대화 요약 {day}", 600, "owner-policy",
+               "Q244-daily-conversation-summary", "yoodori-memory", WRITTEN, False)
 
 
 def note_path(relpath: str) -> Path:
@@ -599,6 +619,10 @@ def main() -> int:
             name, argv, cwd = job.name, job.argv, HOME
         elif words == ["memory-copy"]:
             name, argv, cwd = "memory-copy", [], HOME
+        elif words and words[0] == "day-summary":
+            if len(words) != 2 or not _DAY.fullmatch(words[1]):
+                raise Refused("day-summary <YYYY-MM-DD>")
+            name, argv, cwd = "day-summary", [words[1]], HOME
         elif words and words[0] in {"job", "job-file"}:
             if len(words) != (2 if words[0] == "job" else 3):
                 raise Refused("job <id> | job-file <id> <name>")
@@ -618,6 +642,9 @@ def main() -> int:
         if name == "memory-copy":
             path, _digest, _size = stage_file(STAGING, "memory-copy.md", sys.stdin.buffer)
             rc = run_job(memory_copy_job(path))
+        elif name == "day-summary":
+            path, _digest, _size = stage_file(STAGING, f"day-summary-{argv[0]}.md", sys.stdin.buffer)
+            rc = run_job(day_summary_job(argv[0], path))
         elif job is not None:
             rc = run_job(job)
         elif name == "release-notes":

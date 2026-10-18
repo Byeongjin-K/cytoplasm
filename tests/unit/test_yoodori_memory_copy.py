@@ -69,3 +69,29 @@ def test_note_get_reads_only_inside_the_mirror(home: Path) -> None:
     (gate.MIRROR / "000_PARA/link.md").symlink_to(note)
     with pytest.raises(gate.Refused):
         gate.build(["note-get", "000_PARA/link.md"])
+
+
+def test_day_summary_overwrites_one_note_per_day(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[gate.Job] = []
+    monkeypatch.setattr(gate, "run_job", lambda job: seen.append(job) or 0)
+    monkeypatch.setattr(gate.sys, "stdin", io.TextIOWrapper(io.BytesIO("## 결정\n- 회의록 PDF 기본".encode())))
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", "day-summary 2026-10-18")
+    assert gate.main() == 0
+    job = seen[0]
+    assert (job.kind, job.needs_origin) == ("yoodori-memory", False)
+    assert job.argv[job.argv.index("--relpath") + 1] == f"{gate.DAY_SUMMARY_DIR}/2026-10-18.md"
+
+
+@pytest.mark.parametrize("command", ["day-summary", "day-summary 2026-13-01", "day-summary ../x", "day-summary 2026-10-18 x"])
+def test_day_summary_refuses_bad_dates(home: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    monkeypatch.setattr(gate, "run_job", lambda job: pytest.fail("must not run"))
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", command)
+    assert gate.main() == 2
+
+
+@pytest.mark.parametrize("body", ["- 연락처 someone@example.org", "- 전화 010-1234-5678"])
+def test_day_summary_refuses_contacts(home: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> None:
+    monkeypatch.setattr(gate, "run_job", lambda job: pytest.fail("must not run"))
+    monkeypatch.setattr(gate.sys, "stdin", io.TextIOWrapper(io.BytesIO(body.encode())))
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", "day-summary 2026-10-18")
+    assert gate.main() == 2
