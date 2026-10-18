@@ -83,15 +83,22 @@ def test_card_version_and_probe_when_request_posts(producer: str, available: boo
         case _:
             raise AssertionError(producer)
     if not binding_intact:
-        fake.contents[bound.message_id] = fake.contents[bound.message_id].replace(bound.action_hash, "wrong-binding")
+        if producer == "mail":  # v4 mail cards bind by the recorded digest of the posted text
+            fake.contents[bound.message_id] += " (변조)"
+        else:
+            fake.contents[bound.message_id] = fake.contents[bound.message_id].replace(bound.action_hash, "wrong-binding")
     probe = gate.probe(bound)
     # Then the actual consumer accepts only intact wire, including legacy fallback cards.
-    expected_version = "4" if producer == "calendar" else ("3" if available else "1")
+    expected_version = "4" if producer in ("calendar", "mail") else ("3" if available else "1")
     assert version == expected_version
     assert probe is (Probe.BOUND_PENDING if binding_intact else Probe.BINDING_MISMATCH)
     assert fake.posts == 1
     content = next(iter(fake.contents.values()))
-    assert content.startswith("**🔔 ") is available
+    if producer == "mail":
+        assert content.startswith("📨 **")
+        assert str(stored["sha256"]) not in content and str(stored["id"]) not in content
+    else:
+        assert content.startswith("**🔔 ") is available
 
 
 @pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "coordination"])
