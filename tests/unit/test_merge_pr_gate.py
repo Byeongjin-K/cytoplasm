@@ -417,3 +417,47 @@ def test_a_failing_external_check_is_refused_even_when_the_scan_would_be_clean(
 
     assert result.returncode != 0
     assert _calls(log) == []
+
+
+def _helper_stub(tmp_path: Path, changed: str, body: str) -> tuple[Path, Path, Path]:
+    """Wrap the fake gh: chosen changed files for pr diff --name-only, chosen PR body."""
+    gh, tag, log = _stubs(tmp_path, [_view(_all_green())])
+    inner = tmp_path / "gh-inner"
+    gh.rename(inner)
+    (tmp_path / "changed.txt").write_text(changed, encoding="utf-8")
+    (tmp_path / "body.txt").write_text(body, encoding="utf-8")
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        f'dir="{tmp_path}"\n'
+        'if [[ "$1 $2" == "pr diff" && " $* " == *" --name-only "* ]]; then cat "$dir/changed.txt"; exit 0; fi\n'
+        'if [[ "$1 $2" == "pr view" && " $* " == *" body "* ]]; then printf "body\\n" >> "$dir/calls.log"; cat "$dir/body.txt"; exit 0; fi\n'
+        f'exec "{inner}" "$@"\n',
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    return gh, tag, log
+
+
+def test_a_root_helper_change_without_the_owner_step_is_refused(tmp_path: Path) -> None:
+    # Given: a PR that changes a file the node keeps as a root-owned copy, with no marker.
+    gh, tag, log = _helper_stub(tmp_path, "automation/node_config.py\nREADME.md\n", "plain body")
+    # When/Then: it does not merge and names the file and its provisioner.
+    result = _run(tmp_path, gh, tag)
+    assert result.returncode != 0
+    assert "automation/node_config.py (provision-deploy-converge.sh)" in result.stderr
+    assert "merge" not in _calls(log)
+
+
+def test_a_root_helper_change_that_names_the_owner_step_merges(tmp_path: Path) -> None:
+    gh, tag, log = _helper_stub(tmp_path, "automation/node_config.py\n",
+                                "ROOT-HELPER-BLOCK: owner reruns provision-deploy-converge.sh")
+    result = _run(tmp_path, gh, tag)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "merge" in _calls(log)
+
+
+def test_an_unrelated_change_merges_without_reading_the_body(tmp_path: Path) -> None:
+    gh, tag, log = _helper_stub(tmp_path, "README.md\n", "plain body")
+    result = _run(tmp_path, gh, tag)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "body" not in _calls(log)

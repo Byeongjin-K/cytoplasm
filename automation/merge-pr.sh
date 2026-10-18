@@ -199,6 +199,21 @@ while :; do
   sleep "$POLL_SECONDS"
 done
 
+# Root-helper sources are installed on the node as root-owned copies; a merge alone does not
+# update them and the next release.sh stops with HELPER-DRIFT. Say so in the PR body first.
+if changed="$("$GH" pr diff "$pr" --name-only 2>/dev/null)"; then
+  helper_hits="$(printf '%s\n' "$changed" | (cd "$REPO_ROOT" && python3 -B -m automation.root_helper_sources "$REPO_ROOT"))" \
+    || die "cannot judge root-helper sources"
+  if [[ -n "$helper_hits" ]]; then
+    body="$("$GH" pr view "$pr" --json body --jq .body 2>/dev/null)" || die "cannot read the body of pull request $pr"
+    grep -q "ROOT-HELPER-BLOCK" <<<"$body" || die "REFUSED — pull request $pr changes files the node keeps as root-owned copies:
+$helper_hits
+The next release.sh stops with HELPER-DRIFT until the owner reruns that provisioner as root. Add a line 'ROOT-HELPER-BLOCK: <the owner root step>' to the PR body, or keep the change out of these files."
+  fi
+else
+  log "ROOT-HELPER-UNKNOWN: cannot list the changed files; release.sh still checks the node helper before any card"
+fi
+
 log "merging pull request $pr"
 "$GH" pr merge "$pr" --merge \
   || die "merge failed"
