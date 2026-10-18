@@ -8,7 +8,10 @@ deploy_provenance_check "$repo_root" "$repo_root/automation/omo_relay" \
   "$repo_root/configs/node.example.toml" || exit 4
 eval "$(python3 "$repo_root/automation/node_config_sh.py" --print-env)"
 host="${DEPLOY_SSH_HOST:-${NODE_DEPLOY_SSH_HOST:-}}"
-[[ -n "$host" ]] || exit 3
+if [[ -z "$host" ]]; then
+  echo "DEPLOY-BLOCK: DEPLOY_SSH_HOST is unset. Export it (or configure ~/.hermes/node.toml)" >&2
+  exit 3
+fi
 PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release apply \
   --repo "$repo_root" --host "$host" --runtime "$NODE_RELEASE_CURRENT" \
   --head "$(git -C "$repo_root" rev-parse HEAD)"
