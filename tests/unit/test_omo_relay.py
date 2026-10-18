@@ -42,8 +42,10 @@ def test_enabled_client_uses_stdin_and_actual_served_route(tmp_path, monkeypatch
     # Then: only stdin carries the prompt; no model selection is passed.
     assert answer == codex_llm.Served("5", "actual", "answerer")
     argv, kwargs = calls[0]
-    assert argv == ["ssh", "-T", "-o", "BatchMode=yes", "-i",
-                    str(tmp_path / ".ssh/omo_relay"), "relay-account@relay.invalid"]
+    assert argv == ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+                    "-o", f"UserKnownHostsFile={tmp_path / '.hermes/omo-relay/known_hosts'}",
+                    "-o", "GlobalKnownHostsFile=/dev/null",
+                    "-i", str(tmp_path / ".ssh/omo_relay"), "relay-account@relay.invalid"]
     assert kwargs["input"] == "private prompt"
     assert not {"--model", "-m", "--provider", "--usage-file"} & set(argv)
 

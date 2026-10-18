@@ -25,13 +25,24 @@ def route(home):
                    omo_relay_key=home / ".ssh/omo_relay")
 
 
+HOST_KEY = "relay.invalid ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOnly"
+
+
+def host_key_file(tmp_path):
+    path = tmp_path / "ssh_host_ed25519_key.pub"
+    path.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOnly root@relay\n")
+    return path
+
+
 def test_switch_is_exact_and_missing_is_legacy(tmp_path, monkeypatch):
     monkeypatch.setattr(release, "load_node_config", lambda: route(tmp_path))
+    monkeypatch.setattr(release, "HOST_KEY_SOURCE", host_key_file(tmp_path))
+    monkeypatch.setattr(release.host_key_line, "__defaults__", (release.HOST_KEY_SOURCE,))
     assert release.release_mode(tmp_path) == "off"
     flag = tmp_path / ".hermes/release-flags/omo-relay"
     flag.parent.mkdir(parents=True)
     flag.write_bytes(b"on")
-    assert release.release_mode(tmp_path) == release.digest(route(tmp_path))
+    assert release.release_mode(tmp_path) == release.digest(route(tmp_path), HOST_KEY)
     flag.write_bytes(b"on\n")
     with pytest.raises(ValueError):
         release.release_mode(tmp_path)
@@ -39,19 +50,35 @@ def test_switch_is_exact_and_missing_is_legacy(tmp_path, monkeypatch):
 
 def test_install_creates_private_key_readback_and_revert_keeps_key(tmp_path, capsys):
     config = route(tmp_path)
-    mode = release.digest(config)
-    release.install(tmp_path, mode, release.payload(config))
+    mode = release.digest(config, HOST_KEY)
+    release.install(tmp_path, mode, release.payload(config), HOST_KEY)
     first = config.omo_relay_key.read_bytes()
+    known = tmp_path / release.KNOWN_HOSTS
+    assert known.read_text() == HOST_KEY + "\n" and known.stat().st_mode & 0o777 == 0o600
     assert release.installed(tmp_path) == f"route={mode}"
     assert client.enabled(tmp_path)
     assert config.omo_relay_key.stat().st_mode & 0o777 == 0o600
     assert capsys.readouterr().out.startswith("ssh-ed25519 ")
-    release.install(tmp_path, mode, release.payload(config))
+    release.install(tmp_path, mode, release.payload(config), HOST_KEY)
     assert config.omo_relay_key.read_bytes() == first
     release.install(tmp_path, "off", "")
+    assert not known.exists()
     assert not client.enabled(tmp_path)
     assert release.installed(tmp_path) == "route=off"
     assert config.omo_relay_key.read_bytes() == first
+
+
+def test_install_refuses_a_host_key_the_card_did_not_approve(tmp_path):
+    # Given: a card digest bound to one relay host key.
+    config = route(tmp_path)
+    mode = release.digest(config, HOST_KEY)
+    other = "relay.invalid ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAnotherHostKey"
+    # When/Then: a different key (or a key for another host) is refused before any key or route is written.
+    for wrong in (other, "elsewhere.invalid " + HOST_KEY.split(" ", 1)[1]):
+        with pytest.raises(ValueError):
+            release.install(tmp_path, mode, release.payload(config), wrong)
+    assert not client.enabled(tmp_path)
+    assert not (tmp_path / release.KNOWN_HOSTS).exists()
 
 
 def test_unauthorized_deploy_has_no_ssh_write(tmp_path, monkeypatch):

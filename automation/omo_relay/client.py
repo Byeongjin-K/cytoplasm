@@ -22,8 +22,10 @@ if TYPE_CHECKING:
 
 def argv(home: Path) -> list[str]:
     config = load_node_config(home / ".hermes/omo-relay/node.toml")
-    return ["ssh", "-T", "-o", "BatchMode=yes", "-i",
-            str(config.omo_relay_key), config.omo_relay_target]
+    known = home / ".hermes/omo-relay/known_hosts"
+    return ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+            "-o", f"UserKnownHostsFile={known}", "-o", "GlobalKnownHostsFile=/dev/null",
+            "-i", str(config.omo_relay_key), config.omo_relay_target]
 
 
 def complete(home: str, prompt: str, timeout: float) -> Served:
