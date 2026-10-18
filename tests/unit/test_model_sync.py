@@ -88,22 +88,27 @@ def test_apply_refuses_a_provider_the_peer_cannot_log_in_to(capsys: pytest.Captu
     assert node.writes == []
 
 
-def test_doctor_operator_mode_warns_on_drift_and_passes_when_aligned(
+def test_doctor_operator_mode_never_reads_peer_or_runs_model_parity(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     node = _Node(PEER_CONFIG)
     monkeypatch.setattr(doctor_cli, "_config", lambda: None)
+    calls = []
 
     def child(node: _Node) -> Callable[[tuple[str, ...], object], tuple[int, str, str]]:
         def run(argv: tuple[str, ...], _cwd: object) -> tuple[int, str, str]:
+            calls.append(argv)
             if argv[-1] in (model_sync._READ_CONFIG, model_sync._READ_LOGINS):  # pyright: ignore[reportPrivateUsage]
                 return node.run(argv, None)
             return 1, "", "no doctor here"
         return run
 
     _ = doctor_cli._operator(doctor_cli._Arguments(), None, child(node))  # pyright: ignore[reportPrivateUsage]
-    assert "[WARN] model-parity" in capsys.readouterr().out
+    assert "model-parity" not in capsys.readouterr().out
 
     node.files["peer"] = model_sync.replace_blocks(PEER_CONFIG, model_sync.blocks(AGENT_CONFIG))
     _ = doctor_cli._operator(doctor_cli._Arguments(), None, child(node))  # pyright: ignore[reportPrivateUsage]
-    assert "[PASS] model-parity" in capsys.readouterr().out
+    assert "model-parity" not in capsys.readouterr().out
+    assert len(calls) == 2
+    assert all(argv[3] == "agent" for argv in calls)
+    assert all(argv[-1] not in (model_sync._READ_CONFIG, model_sync._READ_LOGINS) for argv in calls)

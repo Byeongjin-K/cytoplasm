@@ -1,32 +1,14 @@
-#!/usr/bin/env python3
 """no_agent wrapper for `mail-sync-watch` — MailOn collection every 10 minutes, 07:00-24:00 KST.
 
 2026-10-19 (owner 00:04 KST asked for every minute; one run takes a median 61 s with a fresh
 login, so the lead chose 10 minutes): ticks never overlap a running collection (a busy lock
 skips the tick), and ``--now`` is YooDori's on-request collection that waits for a running one.
 
-Until 2026-10-13 the only scheduled collection was the sync inside the 08:00 KST digest.
-That morning a DNS outage failed it, two ad-hoc syncs in the afternoon were killed by
-the 900 s timeout, and nothing stored new institutional mail until the next morning —
-while the owner and the project board, which reads the stored mail, were told nothing.
-
-This tick runs the existing read path, ``mail_wrapper.py list --sync`` from the governed
-live mount (subprocess only — importing the skill would re-enter the W3-2 cron-sandbox
-PYTHONPATH trap), so a failed hour is retried by the next one and missed mail is picked
-up by the normal incremental walk. Two failure streaks decide when to speak:
-
-* ``mail-sync-watch`` — collection failed ``MAIL_SYNC_ALERT_AFTER`` ticks in a row
-  (default 3 = about three workday hours with nothing stored). A local state.db
-  fallback (wrapper sync exit 3) is a failed collection, not a success.
-* ``mail-sync-quiet`` — collection succeeded but stored no new mail
-  ``MAIL_SYNC_QUIET_AFTER`` workday ticks in a row (default 36 = six workday hours at 10
-  minutes; only weekday 09:00-19:59 KST ticks count, so evenings and weekends never open it),
-  which on a workday usually means the webmail list rendered empty.
-
-Each streak speaks once when it opens and once when it recovers (watch_failure_streak);
-the line goes to stdout, which Hermes ``--deliver discord`` delivers to the owner. A
-recorded failure exits 0 (the scheduler would otherwise post its own banner every hour);
-only a failure the streak could not record exits 1.
+Every tick returns the real collection result (a failure prints one masked line and exits 1;
+the timer runner owns failure counting). Successful zero-new-mail results are kept privately
+in ``~/.local/state/autophagy/mail-sync/collection.json`` for doctor scheduled-jobs; only weekday 09:00-19:59
+KST ticks advance that quiet count, so evenings and weekends never raise it. The retired
+watch-failure ledger is neither read nor updated.
 """
 from __future__ import annotations
 
@@ -42,10 +24,6 @@ from pathlib import Path
 from typing import Final
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-try:
-    import watch_failure_streak
-except ImportError:  # pragma: no cover — only reachable on a half-deployed node
-    watch_failure_streak = None
 
 WATCH_NAME: Final = "mail-sync-watch"
 QUIET_NAME: Final = "mail-sync-quiet"
@@ -183,26 +161,33 @@ def main() -> int:
         return 0  # a collection (an on-request one) is running; the next tick follows it
     with held:
         collected, new, detail = _collect()
-    if watch_failure_streak is None:
-        if collected:
-            return 0
+    _record_collection(Path.home(), collected, new, _now())
+    if not collected:
         print(f"{WATCH_NAME} error: {detail}"[:300])
-        return 1
-    notices = [watch_failure_streak.record(
-        WATCH_NAME, ok=collected,
-        detail=f"기관메일 수집 실패(10분 동기화) — {detail}",
-        threshold=_threshold(ALERT_AFTER_ENV, 3),
-    )]
-    if collected and (new is None or new > 0 or _workday(_now())):
-        notices.append(watch_failure_streak.record(
-            QUIET_NAME, ok=new is None or new > 0,
-            detail="기관메일 수집은 성공했지만 업무시간 동안 새로 저장된 메일 0건 — 웹메일 목록이 비어 보였는지 확인",
-            threshold=_threshold(QUIET_AFTER_ENV, 36),
-        ))
-    for notice in notices:
-        if notice is not None:
-            print(notice[:300])
-    return 0
+    return 0 if collected else 1
+
+
+def _record_collection(home: Path, collected: bool, new: int | None, now: datetime) -> None:
+    """Keep the result doctor's meaning check needs, not another failure incident."""
+    path = home / ".local/state/autophagy/mail-sync/collection.json"
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        previous = {}
+    streak = int(previous.get("zero_weekday_streak", 0))
+    local = now.astimezone(KST)
+    if local.weekday() >= 5 or (collected and new != 0):
+        streak = 0  # a weekend or new mail starts over; Friday's count never alarms on Monday
+    elif collected and _workday(local):
+        streak += 1
+    payload = {"last_run_at": now.isoformat(), "last_status": "ok" if collected else "error",
+               "new_mails": new, "zero_weekday_streak": streak}
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")
+    os.replace(tmp, path)
 
 
 if __name__ == "__main__":

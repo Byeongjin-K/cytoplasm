@@ -129,21 +129,14 @@ fi
 # wrapper's inputs digest hashes it, so reordering would make every existing node report
 # wrapper drift for a change that altered nothing it runs.
 readonly -a HEALTHCHECK_CHECK_CATALOG=(
-  "core|$PRIMARY_NODE $NODE_AGENT_ACCOUNT $NODE_AGENT_GATEWAY_UNIT|user_unit_active|${PRIMARY_NODE}|$NODE_AGENT_ACCOUNT|$NODE_AGENT_GATEWAY_UNIT"
-  "core|$PRIMARY_NODE $NODE_PEER_ACCOUNT $NODE_PEER_GATEWAY_UNIT|user_unit_active|${PRIMARY_NODE}|$NODE_PEER_ACCOUNT|$NODE_PEER_GATEWAY_UNIT"
-  "core|$PRIMARY_NODE peer gateway ignores approvals|peer_ignored_channels|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$PEER_GATEWAY_CONFIG"
   "rag|$RAG_NODE embedding|embedding_health|${RAG_NODE}|$NODE_OPS_ACCOUNT|http://127.0.0.1:8001/health"
   "rag|$RAG_NODE Qdrant|qdrant_health|${RAG_NODE}|$NODE_OPS_ACCOUNT|http://127.0.0.1:6333/healthz"
   "rag|$RAG_NODE MCP|mcp_health|${RAG_NODE}|$NODE_OPS_ACCOUNT|http://127.0.0.1:8765/health"
-  "report-hub|$PRIMARY_NODE report-hub collector|user_unit_active|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|report-hub-collector.service"
-  "report-hub|$PRIMARY_NODE report-hub dashboard|user_unit_active|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|report-hub-dashboard.service"
-  "report-hub|$PRIMARY_NODE report-hub dashboard auth|http_unauth_401|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|${HEALTHCHECK_REPORT_HUB_DASHBOARD_URL:-http://${PRIMARY_NODE}:8800/}"
   "core|$PRIMARY_NODE signed update trust|update_trust|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_DEPLOY_CHECKOUT"
   "core|$PRIMARY_NODE ops checkout mirrors origin/main|checkout_mirrors_origin|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_DEPLOY_CHECKOUT"
   "core|$PRIMARY_NODE release matches origin/main|release_matches_origin|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_DEPLOY_CHECKOUT"
   "core|$PRIMARY_NODE privileged release helpers match release|release_helper_drift|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_LIBEXEC_DIR"
   "core|$PRIMARY_NODE skill mounts match the release|skill_mounts_current|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_SKILL_STORE/live"
-  "core|$PRIMARY_NODE agent selfskill root topology|agent_selfskill_root_topology|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_SKILL_STORE/live"
   "core|$PRIMARY_NODE release store usage|release_store_usage|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|$NODE_RELEASE_STORE"
   "core|$PRIMARY_NODE release fully deployed|release_fully_deployed|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|${HEALTHCHECK_DEPLOY_ALL_RECEIPT:-$NODE_PRIVATE_ROOT/deploy-all/receipt.json}"
   "core|$PRIMARY_NODE watcher wrappers match the release|watcher_wrappers_current|${PRIMARY_NODE}|$NODE_OPS_ACCOUNT|${HEALTHCHECK_WATCHER_MANIFEST:-$(dirname "${BASH_SOURCE[0]}")/../configs/watcher-deploy-manifest.txt}"

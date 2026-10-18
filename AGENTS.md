@@ -64,8 +64,19 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 | 에이전트 자가 스킬 루트·감사 원장 | `<계정 홈>/.hermes/skills`(계정 소유 0700, 1차 루트), `automation/selfskill_audit/`, `~/.hermes/selfskill-audit/{state.json,ledger.jsonl}` | 자가 저작은 **승인 없이 착륙**하고 사후 감사한다(소유자 결정 2026-08-15 옵션 B). 관리자 배포 스킬은 `/srv/autophagy-skills/live`에 남아 Hermes `skills.external_dirs`로 읽기 전용 발견된다. 회수는 `hermes curator archive/pin`. 상세: [소개](docs/기능소개/에이전트-자가-스킬.md) |
 
 ## CODE MAP
+
+감시 최소화(Q250·Q251, 2026-10-18): 헬스체크는 서비스·배포, doctor는 agent의 로그인·작업 결과만 본다.
+Hermes 실행 파일·게이트웨이·무멘션 응답 및 운영자 peer 진단은 doctor 목록에서 제거했다.
+헬스체크의 게이트웨이 둘·peer 채널 무시·자가 스킬 루트·report-hub 셋도 카탈로그에서 제거했다.
+미러 지연·허용 목록·워처 래퍼 드리프트는 `확인`(사건·수리 없음), dirty·ahead는 기존 FAIL이다.
+현재 릴리스 카드의 동일 HEAD·지문 갱신 표면을 읽었을 때만 `갱신 대기`로 표시한다.
+평일 메일 수집 0건·mailon 런타임 드리프트와 공급망 리마인더 실패는 doctor `scheduled-jobs`가 읽는다.
+런타임 래퍼는 옛 `watch-failure` 장부를 쓰거나 읽지 않는다(과거 증적 재생용 모듈·기존 파일은 보존).
+새 프로브는 계속 카탈로그 끝에만 붙인다. 통지 경로 변경(Q252)은 별도 PR이다.
+
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `hermes_product` | module | `automation/hermes_product.py` · `automation/hermes_product_live.py` | `hermes-product:retired`를 같은 HEAD 릴리스 승인에 묶어 agent의 명시한 Hermes 제품 경로만 제거한다. 유닛·프로세스·배포 선언 사용 중이면 무삭제 거부, kanban 원본만 0600 해시 검증 백업한다(Q248). 전량 적용 맨 끝에 한 번 실행하고, 선언된 살아 있는 `SOUL.md` 는 남긴다. kanban은 장부의 개수·상태 이관 영수증과 현재 원본 지문 대조 후에만 제거하며 CLI·config·auth·hermes-agent·SOUL 과 `.hermes` 런타임은 보존한다. [소개](docs/기능소개/hermes-유산-정리.md#hermes-제품-제거카드-c) |
 | `ledger` | package | `automation/ledger/` · `automation/ledger_policy.py` | Q246·Q247: 수리·회의록 액션·제안서의 작은 SQLite 장부(`~/.local/state/autophagy/ledger.db`, 0600). 릴리스 호스트 `release-flags/ledger`의 정확한 `on`이 승인 해시에 묶인다. 보관 포함 전체 export·원본 DB/장부 개수·상태·문서 재조회 대조 뒤에만 같은 트랜잭션으로 호출 전환, 실패는 Hermes 유지. 기본 보드의 NULL id·중복 생성 키·댓글·차단 이벤트 보존, counts-only 이관 영수증, 삭제+재배포로 호출 복귀(DB 삭제·역동기화 없음). [소개](docs/기능소개/작은-할일-장부.md) |
 | `omo_relay` | package | `automation/omo_relay/` · `automation/omo_relay_release.py` | Q245: 공용 `codex_llm` API·호출자 유지, SSH stdin → 빈 0700 cwd의 도구 없는 omo. 릴리스 스위치·설정 지문 바인딩, 노드 전용 키 자동 생성, v2 설정 관측·영수증, 재시도 1회·장애/회복 통지·doctor. [소개](docs/기능소개/노드-배치-omo-중계.md) |
 | `legacy_services` 메모리 정지 | module | `automation/legacy_services.py` | Q4: 호스트 `hermes-memory-off`의 정확한 `off`를 `hermes-memory:off` 승인 표면에 묶어 agent의 curator·relocate 타이머만 disable·stop한다. 기존 pending 판독+워처 잠금 아래 미결이면 어느 타이머도 끄지 않는다. 파일·백업·recall 보존, 파일 삭제+재배포로 복구, 실제 disabled·inactive를 릴리스·doctor가 검증한다. 짧은 사실·선호·규칙은 유돌 omo(소유자 규칙은 `system/human.md`), 문서·긴 기록은 `obsidian-request`다. [소개](docs/기능소개/hermes-유산-정리.md#메모리) |

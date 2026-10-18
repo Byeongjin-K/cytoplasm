@@ -1,11 +1,7 @@
-"""no_agent wrapper for Hermes cron `notes-weekly-organize` (평일 08:00 KST).
+"""Run weekly notes organization; keep the delivered-week watermark.
 
-성공 시 무음(exit 0). 실패 스트릭이 열리거나 닫힐 때만 자식 stderr 마지막 줄을
-마스킹해 한 줄로 알린다(mail_triage_watch 선례). 자식 stdout/stderr는 직접 전달하지 않는다.
-스트릭에 기록된 실패 틱도 exit 0이다 — `--deliver discord`에서 스케줄러는 rc≠0이면
-stdout과 무관하게 자체 실패 배너를 게시하므로(2026-08-24 budget-watch 실측), 침묵은
-기록된 실패의 exit 0으로만 산다. 기록 불가(헬퍼 부재·record 예외)만 exit 1을 유지한다.
-"""
+Success is silent and only successful delivery advances the watermark. Failures
+remain nonzero for the timer runner; the old watch-failure ledger is retired."""
 from __future__ import annotations
 
 import os
@@ -120,36 +116,10 @@ def _record_delivered_week(week: str) -> None:
 
 
 def _announce(*, ok: bool, detail: str = "", fallback: str = "") -> bool:
-    """Emit only incident transitions when the shared helper is available.
-
-    Returns True when the streak recorded the tick — only then may a failing tick
-    exit 0. Under ``--deliver discord`` the scheduler posts its own failure banner
-    for ANY non-zero exit regardless of stdout (2026-08-24 budget-watch
-    measurement), so a recorded expected failure must exit 0 to stay silent, while
-    an unrecorded one keeps exit 1 so the banner remains the last line of defence.
-    """
-    try:
-        if watch_failure_streak is None:
-            if not ok:
-                print((fallback or f"notes-organize error: {detail}")[:300])
-            return False
-        notice = watch_failure_streak.record(
-            WATCH_NAME,
-            ok=ok,
-            detail=detail,
-            threshold=FAILURE_NOTICE_THRESHOLD,
-        )
-    except Exception:  # noqa: BLE001 - notice state/output never changes tick semantics
-        return False
-    unpersisted = notice is not None and notice == getattr(
-        watch_failure_streak, "PERSISTENCE_FAILURE", None
-    )
-    try:
-        if notice is not None:
-            print(notice[:300])
-    except Exception:  # noqa: BLE001 - a closed sink loses the line, not the record
-        pass
-    return not unpersisted
+    """The timer runner owns failure counting; report the actual failing exit."""
+    if not ok:
+        print((fallback or f"notes-organize error: {detail}")[:300])
+    return False
 
 
 def main() -> int:

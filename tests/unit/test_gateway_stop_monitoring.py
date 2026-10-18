@@ -29,10 +29,7 @@ def test_doctor_accepts_only_release_marked_inactive_gateway(
     # When
     facts = gather(account="agent", role="agent", home=home, gateway_unit="hermes-gateway.service",
                    online=False, run=_run(gateway="inactive"), uid=1000)
-    line = next(f for f in evaluate(facts) if f.key == "hermes-gateway")
-    # Then
-    assert line.status is status
-    assert not line.steps if status is Status.PASS else line.steps
+    assert "hermes-gateway" not in {finding.key for finding in evaluate(facts)}
 
 
 @pytest.mark.parametrize("marker,code", [(b"stopped", 0), (None, 1), (b"stopped\n", 1)])

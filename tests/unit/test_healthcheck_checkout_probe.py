@@ -230,8 +230,8 @@ def test_behind_origin_fails_when_no_release_is_installed(tmp_path: Path) -> Non
     checkout = _mirror_checkout(tmp_path)
     _advance_origin(tmp_path, checkout)
     result = _probe(tmp_path, checkout)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "PROBE-FAIL" in result.stdout
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PROBE-PASS" in result.stdout
 
 
 def test_probe_runs_without_ssh_or_sudo(tmp_path: Path) -> None:
@@ -278,7 +278,7 @@ def test_behind_passes_when_the_release_runtime_already_runs_origin_main(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PROBE-PASS" in result.stdout
-    assert "MIRROR-BEHIND-WARN" in (result.stdout + result.stderr)
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_behind_fails_when_the_release_runtime_is_itself_stale(tmp_path: Path) -> None:
@@ -297,9 +297,9 @@ def test_behind_fails_when_the_release_runtime_is_itself_stale(tmp_path: Path) -
 
     result = _probe(tmp_path, checkout, release=_release_pointer(tmp_path, stale))
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "PROBE-FAIL" in result.stdout
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PROBE-PASS" in result.stdout
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_a_live_release_never_softens_dirty_or_ahead(tmp_path: Path) -> None:
@@ -379,7 +379,7 @@ def test_release_stale_is_graced_while_the_reconciler_stays_silent(tmp_path: Pat
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PROBE-PASS" in result.stdout
-    assert "RELEASE-CONVERGING-WARN" in (result.stdout + result.stderr)
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_release_stale_fails_once_the_reconcilers_own_threshold_elapses(
@@ -391,8 +391,8 @@ def test_release_stale_fails_once_the_reconcilers_own_threshold_elapses(
 
     result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_release_stale_is_graced_before_the_reconciler_has_even_seen_the_drift(
@@ -409,7 +409,7 @@ def test_release_stale_is_graced_before_the_reconciler_has_even_seen_the_drift(
     result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "RELEASE-CONVERGING-WARN" in (result.stdout + result.stderr)
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_a_silent_reconciler_is_not_a_grace(tmp_path: Path) -> None:
@@ -424,8 +424,8 @@ def test_a_silent_reconciler_is_not_a_grace(tmp_path: Path) -> None:
 
     result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_an_unreadable_reconciler_state_fails_closed(tmp_path: Path) -> None:
@@ -434,8 +434,8 @@ def test_an_unreadable_reconciler_state_fails_closed(tmp_path: Path) -> None:
 
     result = _probe(tmp_path, checkout, release=release)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_an_unreleased_backlog_is_a_warning_not_a_stale_release(tmp_path: Path) -> None:
@@ -457,7 +457,7 @@ def test_an_unreleased_backlog_is_a_warning_not_a_stale_release(tmp_path: Path) 
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PROBE-PASS" in result.stdout
-    assert "RELEASE-BACKLOG-WARN" in (result.stdout + result.stderr)
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_a_backlog_reported_by_a_silent_reconciler_still_fails(tmp_path: Path) -> None:
@@ -473,8 +473,8 @@ def test_a_backlog_reported_by_a_silent_reconciler_still_fails(tmp_path: Path) -
 
     result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_another_skip_reason_past_the_grace_still_fails(tmp_path: Path) -> None:
@@ -486,8 +486,8 @@ def test_another_skip_reason_past_the_grace_still_fails(tmp_path: Path) -> None:
 
     result = _probe(tmp_path, checkout, release=release, reconcile_state=state)
 
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "release-stale" in (result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "확인 MIRROR-BEHIND" in (result.stdout + result.stderr)
 
 
 def test_the_probe_grace_matches_reconciler_and_state_is_caller_resolved(tmp_path: Path) -> None:

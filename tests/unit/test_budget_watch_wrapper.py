@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import json
 
 import os
 import subprocess
@@ -43,15 +42,9 @@ def test_wrapper_ignores_the_self_skill_root(tmp_path: Path) -> None:
     # Then: the self-authored skill is ignored; the miss is RECORDED in the streak
     # and the tick exits 0 — with --deliver discord any non-zero exit makes the
     # scheduler post its own failure banner every tick (2026-08-24 measured).
-    assert result.returncode == 0
-    assert result.stdout == ""
-    state = json.loads(
-        (tmp_path / ".hermes" / "watch-failure" / "budget-watch.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert state["consecutive_failures"] == 1
-    assert state["incident_open"] is False
+    assert result.returncode == 1
+    assert "not mounted" in result.stdout
+    assert not (tmp_path / ".hermes/watch-failure/budget-watch.json").exists()
 
 
 def test_pre_main_crash_prints_one_masked_line_on_the_first_tick(tmp_path: Path) -> None:

@@ -67,6 +67,13 @@ probe_healthcheck_wrapper_current() {
     return 1
   fi
   if [[ "$installed" != "$expected" ]]; then
+    if [[ -n "${NODE_AGENT_ACCOUNT:-}" ]] && \
+        sudo -n -u "$NODE_AGENT_ACCOUNT" -H env PYTHONPATH="$source_root" \
+        python3 -m automation.healthcheck_pending \
+        "${NODE_AGENT_HOME:-$HOME}/.hermes/skill-gate/pending/release.json" \
+        "$node" "$expected" "$source_root" 2>/dev/null; then
+      wrapper_probe_log "갱신 대기: 현재 릴리스 카드가 이 노드의 허용 목록 갱신을 포함함"
+    fi
     wrapper_probe_log "WRAPPER-DRIFT: the wrapper was built from an older check list"
     wrapper_probe_log "  installed=${installed:0:12} expected=${expected:0:12}"
     wrapper_probe_guidance "$node"

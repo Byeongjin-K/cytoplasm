@@ -62,7 +62,7 @@ def test_shared_helper_adopter_inventory_pins_each_notice_threshold(
     """Each adopter must retain its explicit threshold when using the shared helper."""
     text = source.read_text(encoding="utf-8")
 
-    assert "watch_failure_streak.record(" in text, (
+    assert "watch_failure_streak.record(" not in text, (
         f"{watch_name} must call the shared watch_failure_streak helper"
     )
     assert _failure_notice_threshold(source) == expected_threshold, (

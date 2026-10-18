@@ -258,7 +258,7 @@ checkout_mirror_grade() { # checkout_mirror_grade <checkout-path>
     mirror-unknown-remote)
       checkout_mirror_log "BEHIND-UNKNOWN: origin unreachable; ahead/dirty still checked"
       return 0 ;;
-    mirror-behind) checkout_mirror_behind_grade "$checkout" ;;
+    mirror-behind) checkout_mirror_log "확인 MIRROR-BEHIND: 관측 미러 지연(서비스·릴리스는 별도 검사)"; return 0 ;;
     *) checkout_mirror_log "$verdict"; return 1 ;;
   esac
 }

@@ -108,6 +108,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from automation.release_spec import legacy_service_surface as legacy_surface
 
     surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
+    if getattr(args, "hermes_product", None) == "retired":
+        from automation.hermes_product import surface as product_surface
+
+        surfaces.append(product_surface())
     if getattr(args, "peer_retired", None) == "retired":
         from automation.peer_retired import surface
 
@@ -337,6 +341,16 @@ def cmd_authorize_peer_retired(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_authorize_hermes_product(args: argparse.Namespace) -> int:
+    from automation.hermes_product import surface
+
+    name, digest = surface()
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=name, hash=digest,
+                           head=args.head, peer_attest_mode="")
+    )
+
+
 def cmd_authorize_yoodori_channel(args: argparse.Namespace) -> int:
     try:
         surface, digest = yoodori_channel_surface(args.channel_id)
@@ -361,6 +375,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
     plan.add_argument("--peer-retired", choices=("retired",), help="백업 뒤 P5 비루트 제거")
+    plan.add_argument("--hermes-product", choices=("retired",), help="설정·장부 원본 백업 뒤 Hermes 제품만 제거")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--fault-channel", metavar="CHANNEL_ID", help="고장 알림을 유돌·리드 페어 채널로")
@@ -427,6 +442,9 @@ def main(argv: list[str] | None = None) -> int:
     retired = commands.add_parser("authorize-peer-retired")
     retired.add_argument("--head", required=True)
     retired.set_defaults(run=cmd_authorize_peer_retired)
+    product = commands.add_parser("authorize-hermes-product")
+    product.add_argument("--head", required=True)
+    product.set_defaults(run=cmd_authorize_hermes_product)
     channel = commands.add_parser("authorize-yoodori-channel", help="이 릴리스 ✅ 가 채널 합치기를 덮는가")
     channel.add_argument("--channel-id", required=True)
     channel.add_argument("--head", required=True)

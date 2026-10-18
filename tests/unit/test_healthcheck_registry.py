@@ -94,7 +94,7 @@ def _rows(result: subprocess.CompletedProcess[str]) -> tuple[str, ...]:
 def test_an_installation_without_report_hub_is_not_probed_for_it() -> None:
     # Given: the probes an installation running everything would get.
     every = _rows(_emit())
-    assert [row for row in every if "report-hub" in row], "fixture is stale: nothing to omit"
+    assert not [row for row in every if "report-hub" in row]
 
     # When: the installation declares the groups it actually runs.
     declared = _rows(_emit("core rag"))
@@ -116,7 +116,7 @@ def test_declaring_neither_optional_group_leaves_only_the_core_probes() -> None:
     without_rag = _rows(_emit("core report-hub"))
     report_hub = [row for row in every if row not in without_report_hub]
     rag = [row for row in every if row not in without_rag]
-    assert report_hub and rag, "fixture is stale: an optional group is empty"
+    assert not report_hub and rag
 
     # When: the installation declares neither optional group.
     core = _rows(_emit("core"))
@@ -148,7 +148,7 @@ def test_a_declaration_written_across_lines_is_not_truncated() -> None:
     # the operator asked for and still exit 0 — the precise silence this option exists
     # to remove, so it must not be reintroduced by how the value is parsed.
     assert list(multiline) == list(_rows(_emit("core rag")))
-    assert len(multiline) < len(every)
+    assert len(multiline) == len(every)
 
 
 def test_an_unknown_name_on_a_later_line_is_still_refused() -> None:
@@ -171,7 +171,7 @@ def test_an_undeclared_environment_keeps_every_probe() -> None:
     # the failure this guards against is monitoring less while reporting healthy.
     assert list(default) == list(explicit)
     assert list(blank) == list(explicit)
-    assert [row for row in default if "report-hub" in row]
+    assert not [row for row in default if "report-hub" in row]
 
 
 def test_the_record_format_the_other_readers_parse_is_unchanged() -> None:
@@ -238,7 +238,7 @@ def test_each_group_holds_the_probes_that_belong_to_it() -> None:
     rag = [row for row in every if row.split("|")[2] == rag_node]
     report_hub = [row for row in every if "report-hub" in row.split("|")[0]]
     core = [row for row in every if row not in rag and row not in report_hub]
-    assert (len(core), len(report_hub), len(rag)) == (15, 3, 5), (
+    assert (len(core), len(report_hub), len(rag)) == (11, 0, 5), (
         len(core), len(report_hub), len(rag)
     )
 

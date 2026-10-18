@@ -130,7 +130,7 @@ _NOT_OWNER_FACING: dict[str, str] = {
     "automation/repair/repair_report_send.py::_send_direct": "agents-log 봇 보고 프로토콜이며 소유자 통지 표면이 아니다",
 
     "automation/skill_gate_approval.py::SkillApprovalGate.post": "승인 라이프사이클 카드 게시 — skill 및 release 생산자의 렌더 경로가 검사 대상이다",
-    "automation/release_request_gate.py::ReleaseRequestGate.post": "릴리스 승인 게시 트랜잭션 — 카드 봉투는 release 생산자의 render_v6 경로가 검사하고, 여기서는 실제 상세 좌표와 reply payload만 결합한다",
+    "automation/release_request_gate.py::ReleaseRequestGate._post_in": "릴리스 승인 게시 트랜잭션 — 카드 봉투는 release 생산자의 render_v6 경로가 검사하고, 여기서는 실제 상세 좌표와 reply payload만 결합한다",
     "automation/release_request_gate.py::ReleaseRequestGate._post_details": "릴리스 변경 상세 전송 내부 — 저장된 패치노트와 전체 번들 목록의 기계적 분할이며 승인 카드 생산자는 render_v6 경로가 검사한다",
 
     "automation/supply_chain_watch_cli.py::main.deliver": "승인 리마인더의 주입 전송 — approval_reminder 발신자가 봉투를 소유한다",

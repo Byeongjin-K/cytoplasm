@@ -118,33 +118,13 @@ def _redact(text: str) -> str:
 
 
 def _announce(*, ok: bool, detail: str = "") -> bool:
-    """Speak only when the helper opens or closes this watcher's incident.
-
-    Returns True when the streak recorded the tick — only then may a failing tick
-    exit 0. Under ``--deliver discord`` the scheduler posts its own failure banner
-    for ANY non-zero exit regardless of stdout (2026-08-24 budget-watch
-    measurement), so a recorded expected failure must exit 0 to stay silent, while
-    an unrecorded one keeps exit 1 so the banner remains the last line of defence.
-    """
-    try:
-        if watch_failure_streak is None:
-            if not ok:
-                print(f"{WATCH_NAME} error: {detail}"[:300])
-            return False
-        notice = watch_failure_streak.record(
-            WATCH_NAME, ok=ok, detail=detail, threshold=FAILURE_NOTICE_THRESHOLD
-        )
-    except Exception:  # noqa: BLE001 - an auxiliary notice cannot change the tick verdict
-        return False
-    unpersisted = notice is not None and notice == getattr(
-        watch_failure_streak, "PERSISTENCE_FAILURE", None
-    )
-    try:
-        if notice is not None:
-            print(notice[:300])
-    except Exception:  # noqa: BLE001 - a closed sink loses the line, not the record
-        pass
-    return not unpersisted
+    """The timer runner owns failure counting; report the actual failing exit."""
+    if not ok:
+        try:
+            print(_redact(f"{WATCH_NAME} error: {detail}")[:300])
+        except BrokenPipeError:
+            pass
+    return False
 
 
 def _append_log(name: str, record: dict[str, str]) -> None:

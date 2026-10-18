@@ -279,7 +279,9 @@ def _broken_detail(job: CronJob) -> str:
 
 
 def _cron(f: Facts) -> Verdict:
-    cron = () if f.cron is None and f.hermes_retired else f.cron
+    cron = () if f.cron is None and (
+        f.hermes_retired or any(timer.timer == "active" for timer in f.timers) or f.job_checks
+    ) else f.cron
     if cron is None:
         return _warn("정기 작업 목록이 없다 — 워처가 아직 배포되지 않았다")
     active = [job for job in cron if job.enabled and not job.paused]
@@ -293,14 +295,16 @@ def _cron(f: Facts) -> Verdict:
     timer_jobs = [CronJob(t.name, "", True, False, t.last_status, t.failure_streak, t.last_error) for t in running]
     failing = [job for job in (*active, *timer_jobs) if job.last_status == "error"]
     broken = [job for job in failing if job.failure_streak >= STREAK_FAIL or DRIFT_SKIP in job.last_error]
-    if broken or orphaned:
+    semantic_failures = [check for check in f.job_checks if check.status is Status.FAIL]
+    if broken or orphaned or semantic_failures:
         detail = "; ".join([*(_broken_detail(job) for job in broken),
-                            *(f"{name}(타이머 꺼짐·Hermes 일시정지 — 아무도 돌리지 않는다)" for name in orphaned)])
-        return _fail(f"{len(broken) + len(orphaned)}개 반복 실패·멈춤 — {detail}",
-                     (*(job.name for job in broken), *orphaned))
+                            *(f"{name}(타이머 꺼짐·Hermes 일시정지 — 아무도 돌리지 않는다)" for name in orphaned),
+                            *(f"{check.name}({check.detail})" for check in semantic_failures)])
+        return _fail(f"{len(broken) + len(orphaned) + len(semantic_failures)}개 반복 실패·멈춤 — {detail}",
+                     (*(job.name for job in broken), *orphaned, *(check.name for check in semantic_failures)))
     stopped = [job for job in cron if (not job.enabled or job.paused) and job.name not in moved]
-    if failing or stopped:
-        names = tuple(job.name for job in (*failing, *stopped))
+    if failing or stopped or f.job_checks:
+        names = (*(job.name for job in (*failing, *stopped)), *(check.name for check in f.job_checks))
         return _warn(f"최근 실패·중지: {', '.join(names)}", names)
     if running:
         return _ok(f"{len(active) + len(running)}개 정상(사용자 타이머 {len(running)}개)")
@@ -315,8 +319,6 @@ _BOTH: Final[frozenset[Role]] = frozenset(("agent", "peer"))
 _AGENT: Final[frozenset[Role]] = frozenset(("agent",))
 
 CAPABILITIES: Final = (
-    Capability("hermes-cli", "Hermes 런타임", _BOTH, "이 계정에 Hermes 설치", "에이전트 전체", _hermes),
-    Capability("hermes-gateway", "Hermes 게이트웨이", _BOTH, "", "Discord 대화·승인 버튼", _gateway),
     Capability("primary-model", "주 모델(~/.hermes/config.yaml 의 model:)", _BOTH,
                "ChatGPT 구독 계정의 기기 코드 승인", "모든 대화·요약·배치 모델 호출", _primary),
     Capability("model-fallback", "폴백 모델 로그인", _BOTH,
@@ -327,8 +329,6 @@ CAPABILITIES: Final = (
     Capability("approval-surface", "승인 채널", _AGENT,
                "개인 서버 agent-chat 채널·#notifications 채널 id 와 소유자 id",
                "메일·캘린더·과제비·할 일 등 모든 승인 요청", _surface),
-    Capability("agent-chat-free-response", "agent-chat 채널 무멘션 응답", _AGENT,
-               "", "agent-chat 채널 에서 @ 없이 에이전트에게 말하기", _free_response),
     Capability("google-workspace", "Google Workspace", _AGENT,
                "Google 동의 화면(OAuth) — 캘린더·Gmail·Drive·Sheets·Tasks",
                "메일 발송·캘린더·Drive 발행·과제비·할 일", _gws),

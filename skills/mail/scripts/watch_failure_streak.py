@@ -1,4 +1,7 @@
-"""Consecutive-failure escalation for no-agent cron watchers — one notice per incident.
+"""Historical failure-ledger replay; live wrappers retired this path in Q251.
+
+The timer runner and doctor now own live failure observation. Existing files and this
+pure replay API remain for historical evidence, not for scheduled writers or readers.
 
 WHY (2026-08-18): `mail-triage-watch` failed 111 ticks in a row and calendar/coordination
 222 each, and cha learned about none of them — those jobs run `--deliver local`, which has

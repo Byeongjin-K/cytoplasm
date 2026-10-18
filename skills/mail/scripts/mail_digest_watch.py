@@ -126,61 +126,11 @@ def _is_retry_safe(marker: str) -> bool:
     return "retry_safe=true" in marker
 
 
-def _note_outcome(*, ok: bool, detail: str = "") -> None:
-    """Track the digest's failure streak so a recovery is announced exactly once.
-
-    The failure side stays untouched: the DIGEST-FAIL marker is this watcher's contract
-    with the cron and with tests/unit/test_mail_digest_watch_retry.py, so the escalation
-    line the streak returns on a failing tick is deliberately dropped. What was missing
-    was the other half of the pattern — nothing ever told cha the digest started working
-    again, so a fixed outage looked identical to an outage nobody had noticed.
-    """
-    if watch_failure_streak is None:
-        return
-    notice = watch_failure_streak.record(WATCH_NAME, ok=ok, detail=detail, threshold=1)
-    if ok and notice is not None:
-        print(notice[:300])
-
-
-def _report_runtime_drift() -> None:
-    """Say once when the node's mailon runtime is not the vendor code origin/main carries.
-
-    2026-07-29 -> 08-18: a committed vendor fix took **19 days** to reach production and
-    nothing said so — skills are judged by `readlink live/<skill>` and code converges
-    through the reconciler, but the vendor runtime is neither. The daily digest is the
-    one agent-owned job that already delivers to the owner, so the probe rides it. The
-    streak store (threshold 1) keeps a long-standing drift to one notice plus one when
-    it clears, instead of a line every morning.
-    """
-    probe = Path(__file__).resolve().parent / "mailon_runtime_drift.sh"
-    if not probe.exists() or watch_failure_streak is None:
-        return  # a half-deployed node must not turn a working digest into a failure
-    try:
-        outcome = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
-            ["/bin/bash", str(probe)],
-            capture_output=True, text=True, timeout=120, check=False,
-            cwd=str(Path.home()),
-            # The same runtime root the digest child gets: the probe reads it as the
-            # release tree whose vendor digest the deployed runtime must match (규약 b-2).
-            env={**os.environ, "AUTOPHAGY_REPO_ROOT": str(_runtime_root())},
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return
-    if outcome.returncode == 2:
-        return  # undecidable is not an incident to announce; it is a gap to fix on the node
-    detail = (outcome.stdout or "").strip().splitlines()
-    notice = watch_failure_streak.record(
-        DRIFT_WATCH_NAME, ok=outcome.returncode == 0,
-        detail=_redact(detail[-1]) if detail else "", threshold=1,
-    )
-    if notice is not None:
-        print(notice[:300])
 
 
 def main() -> int:
     _load_env_secrets()
     if not CLI.exists():
-        _note_outcome(ok=False, detail="mail skill is not mounted")
         print("DIGEST-FAIL stage=runner retry_safe=false code=not_mounted detail=mail skill is not mounted")
         return 1
     result = _run_digest()
@@ -190,19 +140,15 @@ def main() -> int:
             break
         time.sleep(delay)
         result = _run_digest()
-    _report_runtime_drift()
     if result.returncode == 0:
-        _note_outcome(ok=True)
         return 0
     marker = _child_marker(result.stderr or result.stdout)
     if marker is not None:
         detail = _redact(marker)
-        _note_outcome(ok=False, detail=detail)
         print(detail[:300])
     else:
         tail = (result.stderr or result.stdout).strip().splitlines()
         detail = _redact(tail[-1]) if tail else ""
-        _note_outcome(ok=False, detail=detail or f"rc={result.returncode}")
         print(
             f"DIGEST-FAIL stage=runner retry_safe=false code=child_exit "
             f"child_rc={result.returncode} detail={detail[:200]}"

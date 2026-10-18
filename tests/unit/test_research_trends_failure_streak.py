@@ -63,16 +63,11 @@ def test_first_failed_tick_writes_state_and_emits_threshold_one_notice(
         lambda: (_ for _ in ()).throw(RuntimeError("denied owner@example.com id 123456789")),
     )
 
-    # 기록된 실패 틱은 exit 0 — rc≠0 이면 스케줄러가 자체 배너를 함께 게시한다(2026-08-24).
-    assert research_trends.main() == 0
-
+    assert research_trends.main() == 1
     output = capsys.readouterr().out
-    assert stub.notices == [
-        "research-trends failed 1 ticks in a row: "
-        "RuntimeError: denied [MASKED-EMAIL] id [MASKED-NUM]"
-    ]
-    assert output == f"{stub.notices[0]}\n"
-    assert _state(tmp_path) == {"consecutive_failures": 1, "incident_open": True}
+    assert "[MASKED-EMAIL]" in output and "[MASKED-NUM]" in output
+    assert stub.notices == []
+    assert not (tmp_path / "watch-failure").exists()
 
 
 def test_success_after_failure_emits_recovery_and_resets_state(
@@ -85,16 +80,14 @@ def test_success_after_failure_emits_recovery_and_resets_state(
         "run",
         lambda: (_ for _ in ()).throw(RuntimeError("temporary outage")),
     )
-    assert research_trends.main() == 0
+    assert research_trends.main() == 1
     _ = capsys.readouterr()
 
     monkeypatch.setattr(research_trends, "run", lambda: 0)
     assert research_trends.main() == 0
 
-    output = capsys.readouterr().out
-    assert output.startswith("research-trends recovered after 1 consecutive failures (")
-    assert " UTC) — last failure: RuntimeError: temporary outage\n" in output
-    assert _state(tmp_path) == {"consecutive_failures": 0, "incident_open": False}
+    assert capsys.readouterr().out == ""
+    assert not (tmp_path / "watch-failure").exists()
 
 
 def test_already_delivered_noop_is_exit_zero_with_empty_stdout(
@@ -148,7 +141,7 @@ def test_unpersisted_failure_streak_keeps_the_failure_exit_visible(
     )
 
     assert research_trends.main() == 1
-    assert capsys.readouterr().out == f"{marker}\n"
+    assert "RuntimeError: tick broke" in capsys.readouterr().out
 
 
 def test_stale_open_incident_does_not_double_notify(
@@ -168,9 +161,9 @@ def test_stale_open_incident_does_not_double_notify(
         lambda: (_ for _ in ()).throw(RuntimeError("still down")),
     )
 
-    assert research_trends.main() == 0
-    assert capsys.readouterr().out == ""
-    assert _state(tmp_path) == {"consecutive_failures": 5, "incident_open": True}
+    assert research_trends.main() == 1
+    assert "still down" in capsys.readouterr().out
+    assert _state(tmp_path) == {"consecutive_failures": 4, "incident_open": True}
 
 
 def test_garbage_streak_state_does_not_crash_tick(
@@ -225,7 +218,7 @@ def test_broken_notice_output_does_not_change_tick_exit_semantics(
 
     # record() 는 print 전에 이미 성공했다 — 닫힌 sink 는 notice 만 잃고 기록은 남으므로
     # 실패 틱도 exit 0 이다(기록된 실패=무배너, 2026-08-24 계약).
-    assert research_trends.main() == 0
+    assert research_trends.main() == (0 if run_ok else 1)
 
 
 def test_notice_failure_does_not_change_tick_exit_semantics(
@@ -246,4 +239,4 @@ def test_notice_failure_does_not_change_tick_exit_semantics(
         lambda: (_ for _ in ()).throw(RuntimeError("tick broke")),
     )
     assert research_trends.main() == 1
-    assert capsys.readouterr().out == ""
+    assert "RuntimeError: tick broke" in capsys.readouterr().out

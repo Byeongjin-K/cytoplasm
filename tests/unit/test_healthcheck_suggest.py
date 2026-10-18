@@ -126,14 +126,14 @@ def test_a_failing_optional_check_says_so_where_it_fails() -> None:
          'PRIMARY_NODE="$NODE_PRIMARY_NODE_NAME"; RAG_NODE="$NODE_RAG_NODE_NAME"\n'
          'PEER_GATEWAY_CONFIG=/pinned/p.json\n'
          f'source "{_REGISTRY}"; source "{_SUGGEST}"\n'
-         'healthcheck_optional_group_hint "$PRIMARY_NODE report-hub collector"\n'),
+         'healthcheck_optional_group_hint "$RAG_NODE embedding"\n'),
         cwd=_REPO, capture_output=True, text=True, check=False,
     )
 
     # Then: the failure itself carries the remedy. The operator met this as a bare FAIL and
     # had to find the documentation; the answer belongs at the moment of the question.
     assert hint.returncode == 0, hint.stderr
-    assert "report-hub" in hint.stdout and "--suggest" in hint.stdout
+    assert "rag" in hint.stdout and "--suggest" in hint.stdout
 
 
 def test_a_failing_core_check_offers_no_such_hint() -> None:
@@ -187,7 +187,7 @@ def test_a_narrowed_wrapper_still_allows_every_advisor_probe() -> None:
     full = manifest(None)
     narrowed = manifest("core")
     assert full.strip(), "the production command recorder must emit real commands"
-    assert "report-hub collector" in full
+    assert "report-hub collector" not in full
     assert narrowed == full
 
 

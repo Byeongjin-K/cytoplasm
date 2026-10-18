@@ -204,13 +204,16 @@ def test_the_deploy_script_carries_the_drift_probe_and_its_helper() -> None:
 
 
 
-def test_the_daily_digest_reports_drift_once_and_then_stays_quiet(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_doctor_scheduled_jobs_replaces_digest_drift_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """탐지만 해놓고 아무도 돌리지 않으면 19일이 다시 반복된다 — 다이제스트가 태운다."""
+    """실제 드리프트 프로브를 doctor가 읽고 옛 다이제스트 장부는 호출하지 않는다."""
     import importlib.util
-    import subprocess as sp
     import sys
+    from datetime import UTC, datetime
+
+    from automation.doctor.scheduled import observe
+    from automation.install.checks import Status
 
     spec = importlib.util.spec_from_file_location(
         "mail_digest_watch_drift", _SCRIPTS / "mail_digest_watch.py"
@@ -221,16 +224,25 @@ def test_the_daily_digest_reports_drift_once_and_then_stays_quiet(
     spec.loader.exec_module(watch)
     monkeypatch.setenv("WATCH_FAILURE_ROOT", str(tmp_path / "streak"))
 
-    def drifting(argv: list[str], **_kwargs: object) -> sp.CompletedProcess[str]:
-        return sp.CompletedProcess(argv, 1, "DRIFT mailon-runtime-drift: runtime=old repo=new\n", "")
+    release = tmp_path / "release"
+    vendor = _vendor(release)
+    home = tmp_path / "home"
+    runtime = _runtime(home / ".hermes/mailon-runtime", "0123456789abcdef")
+    script = release / "skills/mail/scripts/mailon_runtime_drift.sh"
+    script.parent.mkdir(parents=True)
+    script.symlink_to(_DRIFT)
+    (script.parent / "mailon_vendor_digest.sh").symlink_to(_DIGEST_HELPER)
 
-    monkeypatch.setattr(watch.subprocess, "run", drifting)
+    def run(argv: tuple[str, ...], environment: dict[str, str]) -> tuple[int, str]:
+        result = subprocess.run(
+            argv, env=environment, capture_output=True, text=True, timeout=20, check=False,
+        )
+        return result.returncode, result.stdout
 
-    watch._report_runtime_drift()
-    first = capsys.readouterr().out
-    watch._report_runtime_drift()
-    second = capsys.readouterr().out
-
-    # Then: the owner hears about it once, not every morning for nineteen days.
-    assert "mailon-runtime-drift" in first
-    assert second == ""
+    checks = observe(home, release, run, datetime(2026, 10, 18, tzinfo=UTC))
+    assert [(check.name, check.status) for check in checks] == [("mailon-runtime-drift", Status.FAIL)]
+    (runtime / "current").unlink()
+    _runtime(runtime, _digest(vendor))
+    assert observe(home, release, run, datetime(2026, 10, 18, tzinfo=UTC)) == ()
+    assert not hasattr(watch, "_report_runtime_drift")
+    assert not (tmp_path / "streak").exists()

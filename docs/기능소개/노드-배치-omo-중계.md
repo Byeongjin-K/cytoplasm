@@ -32,8 +32,10 @@
 `<relay-script-absolute-path>`는 이 PC의 실행 가능한 스크립트 경로다.
 
 ```text
-command="<relay-script-absolute-path>",restrict,from="<node-source-address>" ssh-ed25519 <node-public-key-base64>
+command="env PATH=<omo-bin-dir>:/usr/bin:/bin <relay-script-absolute-path>",restrict,from="<node-source-address>" ssh-ed25519 <node-public-key-base64>
 ```
+
+강제명령은 로그인 셸 없이 최소 PATH(`/usr/bin:/bin`)로 돌기 때문에, `omo`가 설치된 디렉터리(예: bun 전역 bin)를 위처럼 `env PATH=…`로 앞에 둔다. 빠지면 노드의 모든 호출이 `omo` 를 찾지 못해 실패한다(2026-10-18 실측).
 
 노드는 처음 접속에서도 호스트 키를 추측하지 않는다. 릴리스 호스트가 곧 중계 대상이므로
 배포기가 릴리스 호스트의 `/etc/ssh/ssh_host_ed25519_key.pub`를 대상 호스트 이름과 함께

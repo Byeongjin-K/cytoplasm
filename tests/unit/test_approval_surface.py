@@ -780,3 +780,19 @@ def test_reuse_skips_unverifiable_or_empty_candidates_and_other_surfaces() -> No
     assert module.reuse_request_thread(
         ApprovalKind.SKILL_DEPLOY, [LiveRequest(LIVE_REQUEST_THREAD_ID)], directory, OWNER_ID,
     ) is None
+
+
+@pytest.mark.parametrize(("parent", "accepted"), [("123", True), ("999", False), (None, False)])
+def test_stored_release_card_in_a_thread_needs_the_pinned_parent(parent: str | None, accepted: bool) -> None:
+    # Given: a release card posted in its own thread (owner 2026-10-18 23:04 KST).
+    directory = FakeDirectory()
+    directory.facts["777"] = ChannelFacts(11, "🏷️ 릴리스 v1.2.3", (), parent)
+    binding = ApprovalBinding(
+        ApprovalKind.RELEASE, ApprovalSurface.SKILL_APPROVALS, "777", POLICY_VERSION,
+    )
+    # When / Then: only a thread under the pinned approval channel qualifies.
+    if accepted:
+        assert validate_stored_binding(binding, directory, OWNER_ID, skill_channel_id="123") == binding
+    else:
+        with pytest.raises(ApprovalSurfaceError):
+            validate_stored_binding(binding, directory, OWNER_ID, skill_channel_id="123")

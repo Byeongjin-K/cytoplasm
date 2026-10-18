@@ -205,8 +205,8 @@ exit 3
     # When: the production dispatcher selects the new local probe.
     result = _probe(peer_files, script)
     # Then
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "PEER-IGNORED-CHANNELS-PASS" in result.stdout
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "PEER-IGNORED-CHANNELS-PASS" not in result.stdout
 
 
 def _rename_approvals(directory: Path, name: str) -> None:

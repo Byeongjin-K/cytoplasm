@@ -78,6 +78,7 @@ def write_tick_summary(
     release_sha: str,
     timestamp: str,
     failures: Mapping[str, FailureAttempt] | None = None,
+    reminder_failures: Mapping[str, FailureAttempt] | None = None,
 ) -> None:
     payload = {
         "release_sha": release_sha,
@@ -96,6 +97,12 @@ def write_tick_summary(
             for key, failure in sorted((failures or {}).items())
         },
     }
+    if reminder_failures:
+        payload["reminder_failures"] = {
+            key: {"attempts": failure.attempts, "fingerprint": failure.fingerprint,
+                  "next_attempt_at": failure.next_attempt_at}
+            for key, failure in sorted(reminder_failures.items())
+        }
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
         _ = json.dump(payload, handle, ensure_ascii=False, sort_keys=True)
@@ -105,12 +112,12 @@ def write_tick_summary(
     os.replace(temporary, path)
 
 
-def load_failures(path: Path) -> dict[str, FailureAttempt]:
+def load_failures(path: Path, field: str = "failures") -> dict[str, FailureAttempt]:
     try:
         decoded = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, json.JSONDecodeError):
         return {}
-    rows = decoded.get("failures") if isinstance(decoded, dict) else None
+    rows = decoded.get(field) if isinstance(decoded, dict) else None
     if not isinstance(rows, dict):
         return {}
     failures: dict[str, FailureAttempt] = {}
@@ -182,6 +189,7 @@ def main() -> int:
 
     path = state_path()
     failures = load_failures(path)
+    reminder_failures = load_failures(path, "reminder_failures")
     now = time.time()
 
     origin_sha = Path(".origin-sha")
@@ -222,8 +230,14 @@ def main() -> int:
 
     def channel_of(record: Mapping[str, str]) -> str:
         return skill_gate_surface.surface_for(
-            ApprovalKind.SKILL_DEPLOY, identity
+            ApprovalKind(record.get("kind", ApprovalKind.SKILL_DEPLOY)), identity
         ).stored(record).channel_id
+
+    reminder_errors: dict[str, str] = {}
+
+    def reminder_error(key: str, reason: str) -> None:
+        reminder_errors[key] = reason
+        print(f"[supply-chain-watch] {key} reminder-error ({reason})", file=sys.stderr)
 
     _ = remind_unanswered(
         results,
@@ -235,11 +249,16 @@ def main() -> int:
         lease=skill_gate_request.lease(skill_gate.GATE_DIR),
         config=load_approval_reminder_config(),
         clock=lambda: datetime.now(UTC),
-        on_error=lambda key, reason: print(
-            f"[supply-chain-watch] {key} reminder-error ({reason})",
-            file=sys.stderr,
-        ),
+        on_error=reminder_error,
+        on_sent=lambda key: reminder_failures.pop(key, None),
     )
+    if tick.succeeded:
+        pending = {result.request.key for result in results
+                   if result.outcome == "retain" and result.reason == "unanswered"}
+        reminder_failures = {key: failure for key, failure in reminder_failures.items() if key in pending}
+    for key, reason in reminder_errors.items():
+        previous = reminder_failures.get(key)
+        reminder_failures[key] = FailureAttempt(reason, previous.attempts + 1 if previous else 1, 0)
 
     next_failures = dict(failures)
     if tick.succeeded:
@@ -284,6 +303,7 @@ def main() -> int:
         release_sha=release_sha,
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         failures=next_failures,
+        reminder_failures=reminder_failures,
     )
     try:  # SC-1: 그림자 검사는 틱을 절대 막지 않는다(fail-soft) — 저널 한 줄이 신호다
         shadows = run_shadow_check()
@@ -291,7 +311,7 @@ def main() -> int:
             print(f"[supply-chain-watch] SHADOWS-GOVERNED {' '.join(shadows)}", file=sys.stderr)
     except Exception as error:  # noqa: BLE001 - 탐지 실패가 승인 재개를 세우면 안 된다
         print(f"[supply-chain-watch] shadow-check-error ({type(error).__name__})", file=sys.stderr)
-    return 1 if alerted else 0
+    return 1 if alerted or reminder_errors else 0
 
 
 if __name__ == "__main__":

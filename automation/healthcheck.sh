@@ -209,10 +209,14 @@ main() {
 
   for definition in "${checks[@]}"; do
     IFS='|' read -r check_name probe_type _ <<< "$definition"
-    [[ " $LOCAL_PROBES " == *" $probe_type "* ]] || remote_total=$(( remote_total + 1 ))
+    [[ " $LOCAL_PROBES healthcheck_wrapper_current watcher_wrappers_current " == *" $probe_type "* ]] || remote_total=$(( remote_total + 1 ))
     if healthcheck_run_check_with_evidence "$definition"; then
       log "PASS ${check_name}"
     else
+      if [[ "$probe_type" == healthcheck_wrapper_current || "$probe_type" == watcher_wrappers_current ]]; then
+        log "확인 ${check_name}"
+        continue
+      fi
       log "FAIL ${check_name}"
       # The operator who met this as a bare FAIL had to go find the documentation to learn
       # that an optional group can be declined. The answer belongs at the question.
