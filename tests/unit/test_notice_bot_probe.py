@@ -23,8 +23,8 @@ def test_cli_snapshot_includes_all_sender_accounts(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda *_: (".hermes/scripts/declared.py",))
     monkeypatch.setattr(deploy_all_observe, "observe_node", lambda *a, **k: [])
     calls = []
-    def observe(root, wanted, channel):
-        calls.append((root, wanted, channel))
+    def observe(root, wanted, channel, fault):
+        calls.append((root, wanted, channel, fault))
         return {"agent": state, "peer": "ok", "ops": "ok"}
     monkeypatch.setattr(notice_bot_release, "observe", observe)
     args = ["--runtime-root", str(runtime), "--live-root", str(live), "--dori-agent-chat", "off",
@@ -32,7 +32,7 @@ def test_cli_snapshot_includes_all_sender_accounts(tmp_path, monkeypatch, capsys
     assert deploy_all_probe.main([*args, "--format", "actions"]) == expected
     actions = capsys.readouterr().out
     assert ("ACT|notice-bot|converge" in actions) == (state == "drift")
-    assert calls == [(runtime, mode, CHANNEL)]
+    assert calls == [(runtime, mode, CHANNEL, "off")]
     assert deploy_all_probe.main([*args, "--format", "receipt"]) == expected
     output = capsys.readouterr().out
     if expected == 0:

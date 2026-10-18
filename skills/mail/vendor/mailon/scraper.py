@@ -151,6 +151,9 @@ class MailRef:
 # Observed pattern: "파일명.확장자 547980148" (size = 547 MB mp4).
 # We require at least 4 digits to avoid eating legitimate numeric suffixes.
 _TRAILING_SIZE_RE = re.compile(r"\s+(\d{4,})\s*$")
+# Also seen (2024-2026 node data, 25 rows): "파일명.pptx (1.37 MB)" / "파일명.mp4 12.9 MB".
+_TRAILING_HUMAN_SIZE_RE = re.compile(r"\s*\(?\s*(\d+(?:\.\d+)?)\s*([KMG])B\s*\)?\s*$", re.I)
+_UNIT = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
 
 
 def split_filename_and_size(raw: str) -> tuple[str, int | None]:
@@ -170,6 +173,10 @@ def split_filename_and_size(raw: str) -> tuple[str, int | None]:
     s = raw.strip()
     m = _TRAILING_SIZE_RE.search(s)
     if not m:
+        human = _TRAILING_HUMAN_SIZE_RE.search(s)
+        name = s[:human.start()].strip() if human else ""
+        if human and "." in name:
+            return name, int(float(human.group(1)) * _UNIT[human.group(2).upper()])
         return s, None
     try:
         size = int(m.group(1))

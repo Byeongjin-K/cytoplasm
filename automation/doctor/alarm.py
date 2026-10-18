@@ -85,8 +85,8 @@ def _send(body: str, message: OwnerMessage | None) -> bool:
     from automation.owner_notice import notify_owner
 
     if message is not None:
-        return notify_owner(body, message=message)
-    return notify_owner(body)
+        return notify_owner(body, message=message, fault=True)
+    return notify_owner(body, fault=True)
 
 
 def _load(path: Path) -> tuple[dict[str, str] | None, datetime | None]:

@@ -174,7 +174,7 @@ def _record(spec: Mapping[str, object], path: Path, release: Path) -> None:
     assert isinstance(origin, dict)
     auto_write.record(str(spec.get("kind", "yoodori")), auto_write.Entry(
         source_id=f"discord:{origin['channel_id']}/{origin['message_id']}",
-        path=f"{spec['label']} · {origin['link']}",
+        path=f"{spec['label']} · {origin['link']}" if origin.get("link") else str(spec["label"]),
         revision=path.name, recorded_at=now, written_at=now,
     ))
 
