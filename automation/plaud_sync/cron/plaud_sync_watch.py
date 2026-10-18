@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""No-agent cron: discover Plaud recordings and drive owner-gated lifelog notes.
+"""No-agent cron: discover Plaud recordings and drive lifelog notes.
 
 Watcher contract: only Discord REACTIONS are polled (규약 a) — the Plaud cloud
-poll is a proposal source like the relocate classifier, and every proposal still
-needs cha's ✅ before a byte is pushed. `~/.env.secrets` is self-loaded (b), the
+poll is a proposal source like the relocate classifier. By default each note needs
+an owner card; a release-authorized Plaud auto-write policy replaces that card.
+`~/.env.secrets` is self-loaded (b), the
 repo import goes through the runtime-root resolver (c), the deployed file name
 is skill-unique (e), and records advance only after the effect succeeded (f).
 """

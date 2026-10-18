@@ -7,6 +7,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -44,6 +45,7 @@ class WriteReceipt:
     relpath: PurePosixPath
     content_sha256: str
     remote_ref: str
+    commit_sha: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +90,7 @@ def write_note(
     runner: _GitRunner = subprocess.run,
     *,
     approval_context: ApprovalContext | None = None,
+    authorize_push: Callable[[NotePlan], bool] | None = None,
 ) -> WriteReceipt:
     """Upsert one note, push only it, then verify its remote content hash.
 
@@ -97,7 +100,7 @@ def write_note(
     """
     _validate_write_target(config)
     with clone_lock.hold(config.clone_dir):
-        return _write_locked(plan, config, runner, approval_context)
+        return _write_locked(plan, config, runner, approval_context, authorize_push)
 
 
 def _write_locked(
@@ -105,6 +108,7 @@ def _write_locked(
     config: ObsidianWriteConfig,
     runner: _GitRunner,
     approval_context: ApprovalContext | None,
+    authorize_push: Callable[[NotePlan], bool] | None = None,
 ) -> WriteReceipt:
     context = _WriteContext(config, runner, _git_environment(config))
     _ensure_write_clone(context)
@@ -140,7 +144,7 @@ def _write_locked(
             config.clone_dir,
             "commit note",
         )
-        _push(context, plan, approval_context)
+        _push(context, plan, approval_context, authorize_push)
     _fetch(context, "fetch for verification")
     remote_content = context.run(
         _GitInvocation(("git", "show", f"{remote_ref}:{relpath}")),
@@ -154,7 +158,13 @@ def _write_locked(
     content_sha256 = hashlib.sha256(local_content).hexdigest()
     if hashlib.sha256(remote_content.encode("utf-8")).hexdigest() != content_sha256:
         raise ObsidianWriteError("Obsidian write remote verification did not match", True)
-    return WriteReceipt(plan.relpath, content_sha256, remote_ref)
+    commit_sha = ""
+    if authorize_push is not None:
+        commit_sha = context.run(
+            _GitInvocation(("git", "rev-parse", remote_ref)),
+            config.clone_dir, "read verified commit",
+        ).stdout.strip()
+    return WriteReceipt(plan.relpath, content_sha256, remote_ref, commit_sha)
 
 
 def _fetch(context: _WriteContext, step: str) -> None:
@@ -273,12 +283,13 @@ def _push(
     context: _WriteContext,
     plan: NotePlan,
     approval_context: ApprovalContext | None,
+    authorize_push: Callable[[NotePlan], bool] | None = None,
 ) -> None:
     push_guard = context.config.push_guard
     if push_guard is not None:
         push_guard()
-    decision = gate_binding.evaluate(plan, context=approval_context)
-    if not decision.allowed:
+    command_allowed = authorize_push is not None and authorize_push(plan)
+    if not command_allowed and not gate_binding.evaluate(plan, context=approval_context).allowed:
         raise ObsidianWriteError("Obsidian note push requires a valid owner approval", False)
     _ = context.run(
         _GitInvocation(("git", "push", "origin", f"HEAD:{context.config.branch}")),
