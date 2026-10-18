@@ -14,9 +14,6 @@ primary_node_name = "example-primary-node"
 rag_node_name = "example-rag-node"
 # SSH destination used by workstation-side deployment scripts; use an empty string locally.
 deploy_ssh_host = "example-primary-node"
-# Node agent -> release workstation, with a forced-command-only key.
-omo_relay_target = "relay-account@relay.invalid"
-omo_relay_key = "/home/agent/.ssh/omo_relay"
 
 # Human/operator login allowed to orchestrate the service accounts through sudo.
 operator_account = "operator"

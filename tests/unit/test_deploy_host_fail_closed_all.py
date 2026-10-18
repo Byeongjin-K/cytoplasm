@@ -73,6 +73,11 @@ def _sandbox(tmp_path: Path) -> dict[str, str]:
         key: value for key, value in os.environ.items() if key not in _HOST_VARIABLES
     }
     environment["PATH"] = f"{tmp_path}:/usr/bin:/bin"
+    # A deployer that is not on origin/main yet is stopped by the provenance guard, which
+    # prints its own DEPLOY-BLOCK and hides a missing host check until after the merge
+    # (PR #97 and #93 both turned main red that way). Skip provenance so every deployer
+    # reaches its own host check on its branch; ssh stays the stub.
+    environment["DEPLOY_ALLOW_UNPUSHED"] = "1"
     return environment
 
 

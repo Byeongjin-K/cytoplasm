@@ -15,14 +15,14 @@ from automation.doctor import capabilities, facts
 from automation.install.checks import Status
 from automation.node_config import default_node_config
 from automation.omo_relay import availability, client
+from automation.omo_relay.config import RelayConfig
 from automation.release_spec import ReleaseSpec
 
 REPO = Path(__file__).resolve().parents[2]
 
 
 def route(home):
-    return replace(default_node_config(), omo_relay_target="worker@relay.invalid",
-                   omo_relay_key=home / ".ssh/omo_relay")
+    return RelayConfig("worker@relay.invalid", home / ".ssh/omo_relay")
 
 
 HOST_KEY = "relay.invalid ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOnly"
@@ -35,7 +35,7 @@ def host_key_file(tmp_path):
 
 
 def test_switch_is_exact_and_missing_is_legacy(tmp_path, monkeypatch):
-    monkeypatch.setattr(release, "load_node_config", lambda: route(tmp_path))
+    monkeypatch.setattr(release, "release_host", lambda _home: route(tmp_path))
     monkeypatch.setattr(release, "HOST_KEY_SOURCE", host_key_file(tmp_path))
     monkeypatch.setattr(release.host_key_line, "__defaults__", (release.HOST_KEY_SOURCE,))
     assert release.release_mode(tmp_path) == "off"
@@ -83,7 +83,8 @@ def test_install_refuses_a_host_key_the_card_did_not_approve(tmp_path):
 
 def test_unauthorized_deploy_has_no_ssh_write(tmp_path, monkeypatch):
     monkeypatch.setattr(release, "release_mode", lambda _: "a" * 64)
-    monkeypatch.setattr(release, "load_node_config", lambda: route(tmp_path))
+    monkeypatch.setattr(release, "release_host", lambda _home: route(tmp_path))
+    monkeypatch.setattr(release, "load_node_config", default_node_config)
     calls = []
 
     def run(argv, **kwargs):
@@ -179,7 +180,7 @@ def test_actual_local_response_fixture_is_the_client_wire_contract(tmp_path, mon
 def test_doctor_reports_relay_readiness_without_model_call(tmp_path, monkeypatch):
     config = route(tmp_path)
     monkeypatch.setattr(facts, "_timers", lambda *a: ())
-    monkeypatch.setattr(client, "load_node_config", lambda *_args: config)
+    monkeypatch.setattr(client, "load_relay", lambda *_args: config)
     root = tmp_path / ".config/autophagy/omo-relay"
     root.mkdir(parents=True)
     (root / "mode").write_bytes(b"on")
