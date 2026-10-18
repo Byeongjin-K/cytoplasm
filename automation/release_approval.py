@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import secrets
 import sys
@@ -95,8 +96,17 @@ def cmd_plan(args: argparse.Namespace) -> int:
         return 4
     surfaces = list(plan.surface_digests)
     if getattr(args, "ledger", None) == "on":
-        from automation.ledger_policy import surface
+        from automation.ledger_policy import surface as ledger_surface
+        surfaces.append(ledger_surface())
+    from automation.release_spec import legacy_service_surface as legacy_surface
 
+    surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
+    if getattr(args, "peer_retired", None) == "retired":
+        from automation.peer_retired import surface
+
+        if getattr(args, "hermes_gateways", None) != "stopped":
+            print("RELEASE-PLAN-BLOCK: peer retirement requires stopped gateways", file=sys.stderr)
+            return 4
         surfaces.append(surface())
     from automation.auto_write_policy import surface as auto_write_surface
 
@@ -144,11 +154,21 @@ def cmd_plan(args: argparse.Namespace) -> int:
     payload = {
         "base": plan.base,
         "head": plan.head,
-        "major_note": release_notes.major_note(plan),
+        "major_note": (release_notes.major_note(plan, p5_retired=True)
+                       if getattr(args, "peer_retired", None) == "retired"
+                       else release_notes.major_note(plan)),
         "patch_notes": release_notes.detail_body(plan),
         "surface_digests": [list(row) for row in sorted(surfaces)],
         "version": plan.version,
     }
+    try:
+        release_notes.save_detail(
+            Path(os.environ.get("RELEASE_NOTES_DIR") or Path.home() / ".hermes/release-notes"),
+            plan.head, tuple(sorted(surfaces)), release_notes.detail_body(plan),
+        )
+    except OSError as error:
+        print(f"RELEASE-PLAN-BLOCK: cannot save release detail: {type(error).__name__}", file=sys.stderr)
+        return 4
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 
@@ -276,6 +296,24 @@ def cmd_authorize_gateway_stop(args: argparse.Namespace) -> int:
                            head=args.head, peer_attest_mode="")
     )
 
+def cmd_authorize_legacy_service(args: argparse.Namespace) -> int:
+    from automation.release_spec import legacy_service_surface
+
+    name, digest = legacy_service_surface(args.name)
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="")
+    )
+
+
+def cmd_authorize_peer_retired(args: argparse.Namespace) -> int:
+    from automation.peer_retired import surface
+
+    name, digest = surface()
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=name, hash=digest,
+                           head=args.head, peer_attest_mode="")
+    )
+
 
 def cmd_authorize_yoodori_channel(args: argparse.Namespace) -> int:
     try:
@@ -300,10 +338,12 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--bump", choices=("major", "minor", "patch"), default="patch")
     plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
+    plan.add_argument("--peer-retired", choices=("retired",), help="백업 뒤 P5 비루트 제거")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
+    plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -356,6 +396,13 @@ def main(argv: list[str] | None = None) -> int:
     stop = commands.add_parser("authorize-hermes-gateways-stopped", help="이 릴리스 ✅ 가 양 게이트웨이 정지를 덮는가")
     stop.add_argument("--head", required=True)
     stop.set_defaults(run=cmd_authorize_gateway_stop)
+    legacy = commands.add_parser("authorize-legacy-service")
+    legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard", "hermes-memory"), required=True)
+    legacy.add_argument("--head", required=True)
+    legacy.set_defaults(run=cmd_authorize_legacy_service)
+    retired = commands.add_parser("authorize-peer-retired")
+    retired.add_argument("--head", required=True)
+    retired.set_defaults(run=cmd_authorize_peer_retired)
     channel = commands.add_parser("authorize-yoodori-channel", help="이 릴리스 ✅ 가 채널 합치기를 덮는가")
     channel.add_argument("--channel-id", required=True)
     channel.add_argument("--head", required=True)

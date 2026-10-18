@@ -184,7 +184,7 @@ _NON_APPROVAL_DM_SENDERS: Final[Mapping[str, str]] = {}
 # Text that legitimately tells the owner WHERE to look, or reports on a surface
 # to ops. Everything else must go through `approval_surface.reaction_instruction`.
 _SURFACE_NAMING_ALLOWED: Final[Mapping[str, str]] = {
-    "automation/release_spec_message.py::render_v6":
+    "automation/release_spec_message.py::approval_surface_lines":
         "소유자가 승인하는 선택적 도리 전환의 영향 채널을 명시한 고정 카드 문구다. "
         + "승인 목적지를 선택하거나 반응을 안내하지 않으며, 전환 표면이 없으면 기존 카드 바이트 그대로다.",
     "automation/doctor/capabilities.py::<module>":

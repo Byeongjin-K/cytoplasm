@@ -108,7 +108,7 @@ class Plan:
     @property
     def gateway_restart_needed(self) -> bool:
         """플러그인은 게이트웨이 프로세스 시작 시 로드된다 — 파일 배포만으로는 반영이 아니다."""
-        if self.hermes_gateways == "stopped":
+        if self.hermes_gateways in ("stopped", "retired"):
             return False
         return any(
             s.destination.startswith(".hermes/plugins/") for s in self.home_defects
@@ -168,7 +168,7 @@ def parse_observations(
             gateway_rows.append(parts)
         elif kind == "gateway-service":
             service_rows.append(parts)
-        elif kind == "gateway-mode" and len(parts) == 3 and parts[2] in ("running", "stopped") and gateway_mode is None:
+        elif kind == "gateway-mode" and len(parts) == 3 and parts[2] in ("running", "stopped", "retired") and gateway_mode is None:
             gateway_mode = parts[2]
         elif kind in deploy_all_kinds.FAMILY:
             family.append(line)

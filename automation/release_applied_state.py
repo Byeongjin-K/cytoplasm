@@ -15,8 +15,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, assert_never
 
-from automation import release_models
-
 MODULE: Final = "automation.release_applied_notice"
 
 
@@ -105,8 +103,7 @@ class Sweep:
     def _notify(self, sha: str, version: str) -> None:
         pending = ("--pending", json.dumps(list(self.pending))) if self.pending else ()
         completed = subprocess.run(
-            (*send_command(self.repo), "send", "--version", version, "--head", sha,
-             "--models", release_models.probe(), *pending),
+            (*send_command(self.repo), "send", "--version", version, "--head", sha, *pending),
             env={**os.environ, "RELEASE_APPROVAL_MODULE": MODULE},
             check=False,
         )

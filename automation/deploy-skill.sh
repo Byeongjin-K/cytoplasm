@@ -84,6 +84,9 @@ run_as() { # run_as <account> <script>  (stdin passes through for file pushes)
   fi
 }
 
+PEER_RETIRED=active
+SANDBOX_ACCOUNT="$NODE_PEER_ACCOUNT"
+
 # WHY the chmod before every rm below: skill trees are shipped read-only (E9 seals
 # releases 0555/0444) and tar PRESERVES those modes, so the previous deploy's copy
 # lands unwritable — and a directory without write permission cannot have its own
@@ -130,7 +133,7 @@ PEER_STAGING_PUSHED=0
 # same treatment or the copy silently survives (measured 2026-08-15: coordination, prompt
 # and wiki were still staged on peer from 2026-08-01/08-04, all dr-xr-xr-x).
 remove_peer_skill_copy() { # remove_peer_skill_copy <name>
-  run_as "$NODE_PEER_ACCOUNT" "chmod -R u+w \"\$HOME/.hermes/skills/$1\" 2>/dev/null; rm -rf \"\$HOME/.hermes/skills/$1\"" || true
+  run_as "$SANDBOX_ACCOUNT" "chmod -R u+w \"\$HOME/.hermes/skills/$1\" 2>/dev/null; rm -rf \"\$HOME/.hermes/skills/$1\"" || true
 }
 
 # Peer staging must not outlive this execution on ANY exit path, so the EXIT trap owns the
@@ -313,6 +316,10 @@ PEER_ATTEST_BLOB=""
 
 gate_check() {
   local extra="$1"; shift
+  if [[ "$PEER_RETIRED" == retired ]]; then
+    gate "$extra" check "$@" --peer-attest-mode "$NODE_PEER_ATTEST_MODE"
+    return $?
+  fi
   case "$NODE_PEER_ATTEST_MODE" in
     discord)
       gate "$extra" check "$@" --peer-attest-mode discord
@@ -386,7 +393,7 @@ check_with_attestation_refresh() {
   gate_check "$check_env" --skill "$SKILL" --hash "$digest" --message-id "$MESSAGE_ID" \
     --deploy-nonce "$DEPLOY_NONCE" "${PROVENANCE_REQUEST_ARGS[@]}" "${injection_args[@]}" >&2 \
     || approved=$?
-  if [[ "$approved" == 1 ]]; then
+  if [[ "$approved" == 1 && "$PEER_RETIRED" != retired ]]; then
     approved=0
     refresh_gate_check --skill "$SKILL" --hash "$digest" --message-id "$MESSAGE_ID" \
       --deploy-nonce "$DEPLOY_NONCE" "${PROVENANCE_REQUEST_ARGS[@]}" "${injection_args[@]}" >&2 \
@@ -408,6 +415,10 @@ check_with_attestation_refresh() {
 }
 
 gate_release_authorize() { # gate_release_authorize <digest> — stdout: <message_id>:<release_nonce>
+  if [[ "$PEER_RETIRED" == retired ]]; then
+    gate "" release-authorize --skill "$SKILL" --hash "$1" --peer-attest-mode "$NODE_PEER_ATTEST_MODE"
+    return $?
+  fi
   case "$NODE_PEER_ATTEST_MODE" in
     discord)
       gate "" release-authorize --skill "$SKILL" --hash "$1" --peer-attest-mode discord
@@ -705,6 +716,10 @@ fi
 # provenance — because it is the first step that leaves this host: a missing quarantine
 # directory must fail as itself, not as an ssh error. It still precedes stage 1, so no
 # ops sync, no execution lease and nothing staged on peer happens before it.
+PEER_RETIRED="$(run_as "$NODE_AGENT_ACCOUNT" 'if [[ ! -e "$HOME/.hermes/peer-retired" ]]; then printf active; elif cmp -s "$HOME/.hermes/peer-retired" <(printf retired); then printf retired; else exit 4; fi')" \
+  || die "PEER-RETIRED-REFUSED: cannot read deployed retirement mode"
+[[ "$PEER_RETIRED" == active || "$PEER_RETIRED" == retired ]] || die "invalid retirement mode"
+[[ "$PEER_RETIRED" != retired ]] || SANDBOX_ACCOUNT="$NODE_AGENT_ACCOUNT"
 assert_agent_root_has_no_self_skill
 
 # ---------- stage 1: sandbox on peer with DUMMY secrets ----------
@@ -715,6 +730,7 @@ sync_ops_checkout_for_peer_attest
 start_execution_lock
 # Classify peer's root BEFORE overwriting it. The execution lease is already held, so the
 # classification and the overwrite cannot interleave with another deploy.
+if [[ "$PEER_RETIRED" != retired ]]; then
 PEER_ROOT_STATE="$(peer_skill_root_state)" \
   || die "SELF-SKILL-COLLISION-BLOCK: cannot classify the peer skill root for $SKILL (unreadable or ambiguous)" 4
 case "$PEER_ROOT_STATE" in
@@ -724,9 +740,10 @@ case "$PEER_ROOT_STATE" in
   foreign) self_skill_collision_block "$NODE_PEER_ACCOUNT" "$NODE_PEER_HOME/.hermes/skills/$SKILL carries no 'author: autophagy-agents' marker" ;;
   *) die "SELF-SKILL-COLLISION-BLOCK: peer skill root probe returned an invalid state" 4 ;;
 esac
+fi
 # Set BEFORE the push: a push that fails midway still leaves a partial tree to remove.
 PEER_STAGING_PUSHED=1
-push_skill peer "$SRC_DIR" "$SKILL"
+push_skill "$SANDBOX_ACCOUNT" "$SRC_DIR" "$SKILL"
 
 # Modules the staged gate imports at runtime. skill_gate.py imports the shared
 # approval lifecycle (approval_lifecycle → approval_lease) plus its skill-gate
@@ -735,7 +752,7 @@ push_skill peer "$SRC_DIR" "$SKILL"
 # fails closed, including the deploy that would ship the fix. automation/ and
 # automation/interop/ resolve as PEP 420 namespace packages on the node, so no
 # __init__.py needs staging.
-GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py auto_write_policy.py ledger_policy.py
+GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py auto_write_policy.py ledger_policy.py peer_retired.py
               typing_compat.py git_tag_signature.py peer_attestation.py peer_signed_attestation.py peer_attest_runtime.py skill_gate_e2e.py
               skill_gate_specs.py stored_content.py release_spec.py release_spec_message.py skill_gate_approval.py skill_gate_request.py
               skill_gate_retire.py skill_gate_surface.py)
@@ -842,7 +859,7 @@ validate_gate_staging_imports
 # approval watcher). The peer runs the same hermes runtime, so parse every module the
 # skill ships under that exact interpreter before the 3.12 scenario below can pass it.
 # Dev-time twin scan: tests/unit/test_py311_syntax_guard.py.
-RUNTIME_PARSE="$(run_as "$NODE_PEER_ACCOUNT" "\"\$HOME/.hermes/hermes-agent/venv/bin/python\" - \"\$HOME/.hermes/skills/$SKILL\" <<'PY'
+RUNTIME_PARSE="$(run_as "$SANDBOX_ACCOUNT" "\"\$HOME/.hermes/hermes-agent/venv/bin/python\" - \"\$HOME/.hermes/skills/$SKILL\" <<'PY'
 import pathlib, sys
 root = pathlib.Path(sys.argv[1])
 failures = []
@@ -861,7 +878,7 @@ PY
 ")" || sandbox_block "skill does not parse under the hermes runtime interpreter (py3.11); 3.12-only syntax? ${RUNTIME_PARSE:-runtime python missing on peer} (see tests/unit/test_py311_syntax_guard.py)"
 log "runtime parse (peer): $(tail -n1 <<<"$RUNTIME_PARSE")"
 
-run_as "$NODE_PEER_ACCOUNT" "python3 - \"\$HOME/.hermes/skills/$SKILL/SKILL.md\" \"$SKILL\" <<'PY'
+run_as "$SANDBOX_ACCOUNT" "python3 - \"\$HOME/.hermes/skills/$SKILL/SKILL.md\" \"$SKILL\" <<'PY'
 import sys, pathlib
 text = pathlib.Path(sys.argv[1]).read_text(encoding=\"utf-8\")
 parts = text.split(\"---\n\")
@@ -876,10 +893,10 @@ assert len(fields.get(\"description\", \"\")) >= 10, \"description missing/too s
 print(\"LINT-PASS name+description ok\")
 PY" || sandbox_block "SKILL.md frontmatter lint failed"
 
-hermes_lists_skill peer "$SKILL" || sandbox_block "hermes skills list does not show $SKILL on peer"
+hermes_lists_skill "$SANDBOX_ACCOUNT" "$SKILL" || sandbox_block "hermes skills list does not show $SKILL in sandbox"
 log "hermes discovery on peer: OK"
 
-run_as "$NODE_PEER_ACCOUNT" "test -x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" || chmod +x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" 2>/dev/null; test -f \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"" \
+run_as "$SANDBOX_ACCOUNT" "test -x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" || chmod +x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" 2>/dev/null; test -f \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"" \
   || sandbox_block "skill ships no scripts/scenario.sh (sandbox scenario is mandatory)"
 
 # The scenario reaches shared repo modules through AUTOPHAGY_REPO_ROOT, and different
@@ -892,13 +909,15 @@ run_as "$NODE_PEER_ACCOUNT" "test -x \"\$HOME/.hermes/skills/$SKILL/scripts/scen
 # STALE-SKILL-COPY-BLOCK). The sandbox therefore declares its own root as the live root
 # so the guard sees "this copy IS the governed dir" (2026-09-03: without this, v1.1.0
 # left 13 guarded skills SKILL-STALE — stage 1 blocked every one of them).
-SCENARIO_OUT="$(run_as "$NODE_PEER_ACCOUNT" "$NODE_RUNTIME_ROOT_SNIPPET; RR=\$(node_runtime_root); REAL_HOME=\"\$HOME\"; IR=\"\$REAL_HOME/.hermes/interop_runtime\"; [ -d \"\$IR\" ] || { echo 'SANDBOX-HOME-BLOCK interop runtime missing' >&2; exit 90; }; SH=\$(mktemp -d) || exit 91; chmod 700 \"\$SH\" || { rm -rf \"\$SH\"; exit 91; }; trap 'rm -rf \"\$SH\"' EXIT; env -i HOME=\"\$SH\" PATH=/usr/bin:/bin \"\$(printf '%s=%s' AUTOPHAGY_REPO_ROOT \"\$RR\")\" INTEROP_RUNTIME=\"\$IR\" AUTOPHAGY_SKILL_LIVE_ROOT=\"\$REAL_HOME/.hermes/skills\" AUTOPHAGY_DEMO_SECRET=\"DUMMY-w18-sandbox-\$(date +%s)\" bash \"\$REAL_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"")" \
+SCENARIO_OUT="$(run_as "$SANDBOX_ACCOUNT" "$NODE_RUNTIME_ROOT_SNIPPET; RR=\$(node_runtime_root); REAL_HOME=\"\$HOME\"; IR=\"\$REAL_HOME/.hermes/interop_runtime\"; [[ '$PEER_RETIRED' != retired ]] || IR=\"\$RR\"; [ -d \"\$IR\" ] || { echo 'SANDBOX-HOME-BLOCK interop runtime missing' >&2; exit 90; }; SH=\$(mktemp -d) || exit 91; chmod 700 \"\$SH\" || { rm -rf \"\$SH\"; exit 91; }; trap 'rm -rf \"\$SH\"' EXIT; env -i HOME=\"\$SH\" PATH=/usr/bin:/bin \"\$(printf '%s=%s' AUTOPHAGY_REPO_ROOT \"\$RR\")\" INTEROP_RUNTIME=\"\$IR\" AUTOPHAGY_SKILL_LIVE_ROOT=\"\$REAL_HOME/.hermes/skills\" AUTOPHAGY_DEMO_SECRET=\"DUMMY-w18-sandbox-\$(date +%s)\" bash \"\$REAL_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"")" \
   || sandbox_block "scenario failed under dummy secrets"
 grep -q "SCENARIO-PASS" <<<"$SCENARIO_OUT" || sandbox_block "scenario output missing SCENARIO-PASS marker"
 log "scenario: $(tail -n1 <<<"$SCENARIO_OUT")"
 
+if [[ "$PEER_RETIRED" != retired ]]; then
 run_as "$NODE_PEER_ACCOUNT" "if [ -r $NODE_AGENT_HOME/.env.secrets ]; then echo ISOLATION-FAIL; exit 1; else echo 'ISOLATION-OK peer cannot read agent secrets'; fi" \
   || sandbox_block "isolation probe failed: peer could read agent secrets"
+fi
 log "sandbox PASS (lint + discovery + dummy-secret scenario + isolation)"
 [[ "$SANDBOX_ONLY" == 1 ]] && { cleanup_peer_staging; exit 0; }
 
@@ -1013,6 +1032,7 @@ if [[ -z "$DEPLOY_APPROVALS_CHANNEL_ID" ]]; then
   BOUND_RECORD="$SKILL"; [[ "$RELEASE_APPROVAL" == 1 ]] && BOUND_RECORD="release"
   DEPLOY_APPROVALS_CHANNEL_ID="$(run_as "$NODE_AGENT_ACCOUNT" "python3 -c 'import json,pathlib; print(json.loads(pathlib.Path(\"~/.hermes/skill-gate/pending/$BOUND_RECORD.json\").expanduser().read_text()).get(\"channel_id\") or \"\")'" 2>/dev/null || true)"
 fi
+if [[ "$PEER_RETIRED" != retired ]]; then
 log "approval request posted; peer attestation required"
 PEER_ATTESTED=0
 PEER_ATTEST_BLOB="$(peer_attest "$SKILL" "$DIGEST" "$MESSAGE_ID" "$DEPLOY_NONCE" "$DEPLOY_APPROVALS_CHANNEL_ID")" || PEER_ATTESTED=$?
@@ -1027,6 +1047,9 @@ if [[ "$NODE_PEER_ATTEST_MODE" == "discord" ]]; then
   log "peer attestation PASS (posted by peer bot)"
 else
   log "peer attestation PASS (signed stdout record captured)"
+fi
+else
+  log "peer retired: attestation step removed; owner approval still required"
 fi
 [[ "$REQUEST_ONLY" == 1 ]] && { cleanup_peer_staging; cleanup_review_staging "$SKILL"; log "request-only mode: attested but not mounting"; echo "$MESSAGE_ID"; exit 0; }
 

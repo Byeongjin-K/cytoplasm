@@ -7,6 +7,7 @@
   "notes_dir": "/home/agent/notes",
   "meetings_dir": "/home/agent/notes/meetings",
   "hermes_db": "/home/agent/.hermes/state.db",
+  "index_hermes_conversations": false,
   "max_chunk_chars": 1500,
   "perspective": {
     "agent_id": "agent",
@@ -20,6 +21,7 @@
     "guild_id": "REPLACE-GUILD-ID",
     "team_channel": "team",
     "agents_log_channel": "agents-log",
+    "index_agents_log": false,
     "token_env": "DISCORD_BOT_TOKEN",
     "bootstrap_limit": 50
   },

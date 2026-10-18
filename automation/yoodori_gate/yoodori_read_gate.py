@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import re
@@ -10,6 +11,8 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +48,8 @@ CARD_COMMANDS = (
 )
 GMAIL_READ_COMMANDS = ("gmail-list", "gmail-get")
 _GMAIL_ID = re.compile(r"[0-9a-f]{8,32}")
+_RELEASE_TAG = re.compile(r"v[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}")
+RELEASE_NOTES_LIMIT = 1024 * 1024
 GMAIL_WRITE_WORDS = frozenset({
     "send", "drafts", "modify", "labels", "trash", "delete", "batchmodify",
     "insert", "import", "watch", "settings",
@@ -126,6 +131,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
          "Wiki reads: wiki-search <words...>, wiki-get <slug>.\n"
+         "Release reads: release-notes <vX.Y.Z>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
          "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
@@ -397,6 +403,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
     if not words:
         raise Refused("empty command")
     name, args = words[0], words[1:]
+    if name == "release-notes":
+        if len(args) != 1 or _RELEASE_TAG.fullmatch(args[0]) is None:
+            raise Refused("release-notes needs <vX.Y.Z>")
+        return name, args, HOME
     if name == "stage":
         if len(args) != 1:
             raise Refused("stage needs exactly one file name")
@@ -455,6 +465,40 @@ def _release_modules():
     from automation import auto_write, notice_bot
 
     return auto_write, notice_bot
+
+
+def _fetch_release_notes(tag: str) -> bytes:
+    """Read the public release API without a credential, with a bounded response."""
+    if str(RELEASE) not in sys.path:
+        sys.path.insert(1, str(RELEASE))
+    from automation.install.wizard_screens import DEFAULT_ORIGIN_URL
+
+    repo = DEFAULT_ORIGIN_URL.removeprefix("https://github.com/").removesuffix(".git")
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/releases/tags/{tag}",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "cytoplasm-yoodori"},
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read(RELEASE_NOTES_LIMIT + 1)
+
+
+def release_notes(tag: str, *, fetcher: Callable[[str], bytes] = _fetch_release_notes) -> str:
+    """Parse one bounded public release body; failure never exposes network diagnostics."""
+    if _RELEASE_TAG.fullmatch(tag) is None:
+        raise Refused("release-notes needs <vX.Y.Z>")
+    try:
+        raw = fetcher(tag)
+        if len(raw) > RELEASE_NOTES_LIMIT:
+            raise ValueError("response too large")
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("invalid release")
+        body = parsed.get("body")
+        if not isinstance(body, str) or not body.strip():
+            raise ValueError("empty release")
+        return body
+    except (OSError, ValueError, UnicodeError, http.client.HTTPException):
+        raise Refused("release notes unavailable") from None
 
 
 def _switched(kind: str) -> bool:
@@ -536,6 +580,9 @@ def main() -> int:
     try:
         if job is not None:
             rc = run_job(job)
+        elif name == "release-notes":
+            print(release_notes(argv[0]))
+            rc = 0
         elif name == "job":
             rc, text = yoodori_jobs.report(yoodori_jobs.job_dir(HOME, argv[0]))
             sys.stdout.write(text)

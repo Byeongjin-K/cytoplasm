@@ -68,6 +68,12 @@ probe_watcher_wrappers_current() {
     [[ -n "${row// /}" ]] || continue
     case "$row" in \#*) continue ;; esac
     IFS='|' read -r account source destination policy <<< "$row"
+    if cmp -s "${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/peer-retired" <(printf retired) \
+      && PYTHONPATH="$source_root" python3 -B -m automation.peer_retired \
+           --retired-destination "$account" "$destination" "$source"; then
+      watcher_drift_log "WATCHER-RETIRED: ${account}:${destination} 퇴역(기대)"
+      continue
+    fi
 
     # fail-closed: 안전하게 인용할 수 없는 행은 검사할 수 없는 행이다.
     if ! [[ "$account" =~ ^[a-z][a-z0-9_-]*$ ]] \

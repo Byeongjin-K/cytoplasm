@@ -435,6 +435,7 @@ class DiscordChannelDirectory:
 def _configured_approvals_channel() -> str | None:
     from automation.notice_bot import notice_channel
 
+    # release and supply-chain approval cards follow the sender-bot channel (owner Q236).
     return notice_channel() or _interop_config_string("personal_approvals_channel_id")
 
 

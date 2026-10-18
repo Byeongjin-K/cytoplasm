@@ -85,6 +85,8 @@ def pinned_channel_id(config: Path) -> str | None:
     """The operator's ``deploy_approvals_channel_id`` pin — supplied, never trusted blindly."""
     from automation.notice_bot import notice_channel
 
+    # release and supply-chain approval cards follow the sender-bot channel (owner Q236).
+    # Keep the old pin for draining stored cards; surface_for supplies the new-card pin.
     return (_config_value(config, _PINNED_CHANNEL_KEY)
             or (_config_value(config, "personal_approvals_channel_id") if notice_channel() else None))
 
@@ -145,6 +147,8 @@ class SupplyChainSurface:
         """Replay a record's own binding; a pre-schema record drains through the migrator."""
         from automation.notice_bot import notice_channel
 
+        # release and supply-chain approval cards follow the sender-bot channel (owner Q236).
+        # Already-posted cards still drain at their own stored coordinates.
         stamped, channel_id = record.get("policy_version", ""), record.get("channel_id", "")
         selected = notice_channel()
         pinned = selected if selected is not None and channel_id == selected else self.pinned
@@ -169,6 +173,7 @@ def surface_for(kind: ApprovalKind, identity: GateIdentity) -> SupplyChainSurfac
     """Bind one declared kind to this process's directory and the operator's channel pin."""
     from automation.notice_bot import notice_channel
 
+    # release and supply-chain approval cards follow the sender-bot channel (owner Q236).
     config = identity.interop_config
     return SupplyChainSurface(kind, owner_id(config), identity.directory(), pinned_channel_id(config),
                               notice_channel())

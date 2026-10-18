@@ -9,6 +9,18 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 근거 메시지가 형 본인의 24시간 안 글인지 확인한 뒤에만 돌고 성공한 쓰기를 그 링크와 함께 원장에 남긴다([소개](../docs/기능소개/유돌-형-명령-통로.md)).
 대부분 서브패키지는 `python3 -m automation.<pkg>` 또는 `<pkg>/*_cli.py`로 실행.
 
+Q4 `hermes-memory-off`는 릴리스 승인에 묶인 가역 스위치다. `legacy_services`가
+기존 relocation pending 판독과 워처 잠금 아래 미결이면 두 타이머 모두 무변경으로
+거부하고, 없을 때 agent curator·relocate 타이머만 disable·stop한다.
+파일 삭제+재배포로 복구하며 USER.md·MEMORY.md·백업·recall은 보존한다.
+기억 저장은 유돌 omo(소유자 선호·규칙은 `system/human.md`), 긴 기록은
+`obsidian-request`이며 옛 기억 라우팅 패키지는 은퇴했다.
+
+P5 제거는 `peer_retired` 승인 표면과 배포된 계정 표식으로 선택한다. `p5_remove`는
+계정별 백업을 검증한 다음 유산·일시정지 잡만 지운다. `deploy_all`은 그 모드에서 peer와
+Hermes 전용 선언을 수렴 대상에서 제외하고, 공급망은 owner 승인·리뷰를 유지한 채 peer
+증명 단계만 생략한다. root 계정 삭제·sudoers 변경은 실행하지 않는다([소개](../docs/기능소개/p5-제거.md)).
+
 ## 서브패키지 맵
 | 경로 | 역할 | wave |
 |------|------|------|
@@ -32,6 +44,7 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 | `plaud_sync/audio_archive.py` · `audio_manifest.py` | Drive 공용 파사드로 원본 오디오를 보관하고 검증된 SHA를 잠금 아래 비공개 원장에 기록한다. `DRIVE_PUBLISH_ENABLED=1`이면 검증·기록 전 로컬 원본 삭제 금지, 꺼져 있으면 기존 삭제 정책. 회의 Drive 워처도 같은 원장을 쓰고 전사 스냅샷을 평가 루트로 옮긴다. 외부효과는 기존 파사드·Plaud 노트 승인 경계 그대로 | transcript-accuracy |
 | `project_board/` | v2 메일 분석 → 소유자 승인 카드(kind `project-board`) → 승인 데이터(SQLite) → 루프백 전용 대시보드·진행 기록. 모델은 `llm.py` 한 인터페이스(기본 `codex_llm`, 로컬 OpenAI 호환은 설정만). cron `project-board-watch`(2분)·`project-board-analyze`(30분, opt-in), 사용자 유닛 `autophagy-project-board`, 배포 `deploy.sh`. 규약 `docs/guide/프로젝트-대시보드.md` | v2 |
 | `report_hub/` | `#agents-log` 콜렉터(SQLite) + 대시보드(tailnet + Basic auth, 인증 없으면 fail-closed 미기동, 읽기 전용) | W3-4 |
+| `legacy_services.py` · `legacy_services/` | `report-hub-off`·`hermes-dashboard-off` 호스트 스위치의 정지를 같은 HEAD의 릴리스 승인으로 수행하고 `legacy-service-v1` 선언으로 실제 유닛까지 재조회한다. 파일 삭제+재배포로 복구하며 CLI·설정·로그인·kanban.db는 보존한다. doctor는 유돌 발신 채널을 검사하고 RAG 설정은 대화·agents-log 수집만 기본 해제한다. [소개](../docs/기능소개/hermes-유산-정리.md) | legacy-1 |
 | `managed_skills/` | 관리형 스킬 발행 + 개인→그룹 제출. 제출은 personal HEAD tarball·`ManagedManifest` v1을 `approval_lifecycle`의 `skill-submit`으로 검토 요청할 뿐 자동 import하지 않으며, 관리자 `publish_cli --submission-*` 명시 실행만 기존 발행 게이트로 넘긴다 | W-F3, W-F4-B |
 | `reminder_poller/` | 이벤트/마일스톤 리마인더 cron+SQLite 멱등 | W3-2 |
 | `research_trends/` · `cost-report/` | 주간 arXiv / 일일 spend 리포트 (dedup 미구현 수용 대상). 주간 보고는 2026-09-21 부터 `#notifications` 에 **메시지 한 건** — `research_trends_core.report_summary` 의 요약 head + 보고 파일 `.md` 첨부(`owner_notice.notify_owner(attachments=)`). 24KB 본문이 2000자 청크 7건으로 잘려 나갔고 그 채널을 수신하던 peer 가 청크마다 스레드를 열었다. 파일 없는 레거시 호출은 전문을 보낸다. 회귀 `tests/unit/test_research_trends_report_attachment.py` | W5-2, W1-7 |
