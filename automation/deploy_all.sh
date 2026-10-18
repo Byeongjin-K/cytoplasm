@@ -110,7 +110,9 @@ retire_peer() {
   for role in agent peer; do
     acct="$NODE_AGENT_ACCOUNT"
     [[ "$role" != peer ]] || acct="$NODE_PEER_ACCOUNT"
-    if [[ "$role" == peer ]] && ssh "$host" "cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired) && ! getent passwd $acct >/dev/null" </dev/null; then
+    # The marker is ops 0600 under the 0700 private root, so only ops can read it (2026-10-19:
+    # read as the ssh login it always failed and v2.4.0 stopped at `sudo: unknown user peer`).
+    if [[ "$role" == peer ]] && ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)' && ! getent passwd $acct >/dev/null" </dev/null; then
       continue  # Owner root block removed the account after a completed non-root cleanup.
     fi
     ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.p5_remove --role $role --head $node_sha" </dev/null \
