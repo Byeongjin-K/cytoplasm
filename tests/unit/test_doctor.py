@@ -291,9 +291,9 @@ def test_the_alarm_speaks_only_when_the_problem_set_changes(tmp_path: Path) -> N
     healed = alarm.run_alarm("agent", fixed, home=tmp_path, now=_NOW, send=outbox)
 
     assert first.startswith("DOCTOR-ALARM-SENT new=1") and again == "DOCTOR-ALARM-UNCHANGED"
-    assert healed.startswith("DOCTOR-ALARM-SENT new=0 resolved=1")
-    assert len(outbox.sent) == 2
-    assert "라벨-primary-model" in outbox.sent[0] and "해결됨 1건" in outbox.sent[1]
+    assert healed == "DOCTOR-ALARM-RECOVERED resolved=1"
+    assert len(outbox.sent) == 1
+    assert "라벨-primary-model" in outbox.sent[0]
 
 
 def test_a_new_failing_job_under_an_already_broken_check_still_alarms(tmp_path: Path) -> None:
