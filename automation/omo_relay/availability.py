@@ -28,7 +28,7 @@ def notify(recovered: bool) -> bool:
 
 def record_result(home: Path, success: bool) -> None:
     """Best effort only: notice/state errors cannot hide a model error or answer."""
-    root = home / ".hermes/omo-relay"
+    root = home / ".config/autophagy/omo-relay"
     try:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         fd = os.open(root / "availability.lock", os.O_CREAT | os.O_RDWR, 0o600)

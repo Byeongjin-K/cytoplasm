@@ -17,7 +17,7 @@
 > 배치 모델 호출: 노드 → 이 PC omo(도구 없음), 파일 삭제 후 재배포로 Hermes 호출 복귀
 
 소유자 릴리스 승인 뒤 배포기가 노드 전용 ed25519 키(없을 때만, 0600)와
-`~/.hermes/omo-relay/{mode,node.toml}`을 준비한다. 개인키는 노드 밖으로 보내지 않고
+`~/.config/autophagy/omo-relay/{mode,node.toml}`을 준비한다. 개인키는 노드 밖으로 보내지 않고
 공개키 한 줄만 출력한다. v2 설정 선언은 모드·설정 지문·키 소유권/권한을 재조회한다.
 영수증 `omo_relay.route`가 기대 지문이고 설정 artifact가 일치해야 clean이다.
 스위치 삭제 후 재배포하면 모드·부분 설정만 제거하며 키는 보존한다.
@@ -35,7 +35,7 @@ command="<relay-script-absolute-path>",restrict,from="<node-source-address>" ssh
 
 노드는 처음 접속에서도 호스트 키를 추측하지 않는다. 릴리스 호스트가 곧 중계 대상이므로
 배포기가 릴리스 호스트의 `/etc/ssh/ssh_host_ed25519_key.pub`를 대상 호스트 이름과 함께
-한 줄로 만들어 승인 지문에 묶고, 노드에는 전용 `~/.hermes/omo-relay/known_hosts`(0600)로만 깐다.
+한 줄로 만들어 승인 지문에 묶고, 노드에는 전용 `~/.config/autophagy/omo-relay/known_hosts`(0600)로만 깐다.
 클라이언트는 `StrictHostKeyChecking=yes`·`UserKnownHostsFile=<그 파일>`·`GlobalKnownHostsFile=/dev/null`로
 그 한 줄만 믿는다. 승인되지 않은 키나 다른 호스트의 키는 설치 단계에서 거부되고,
 릴리스 호스트와 중계 대상이 다르면 접속이 실패한다(조용히 믿지 않음). 노드에서 따로 손댈 단계는 없다.

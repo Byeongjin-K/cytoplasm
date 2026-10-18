@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from automation.codex_llm import Served
 
 def argv(home: Path) -> list[str]:
-    config = load_node_config(home / ".hermes/omo-relay/node.toml")
-    known = home / ".hermes/omo-relay/known_hosts"
+    config = load_node_config(home / ".config/autophagy/omo-relay/node.toml")
+    known = home / ".config/autophagy/omo-relay/known_hosts"
     return ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
             "-o", f"UserKnownHostsFile={known}", "-o", "GlobalKnownHostsFile=/dev/null",
             "-i", str(config.omo_relay_key), config.omo_relay_target]

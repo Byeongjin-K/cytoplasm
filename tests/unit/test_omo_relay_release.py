@@ -180,7 +180,7 @@ def test_doctor_reports_relay_readiness_without_model_call(tmp_path, monkeypatch
     config = route(tmp_path)
     monkeypatch.setattr(facts, "_timers", lambda *a: ())
     monkeypatch.setattr(client, "load_node_config", lambda *_args: config)
-    root = tmp_path / ".hermes/omo-relay"
+    root = tmp_path / ".config/autophagy/omo-relay"
     root.mkdir(parents=True)
     (root / "mode").write_bytes(b"on")
     calls = []

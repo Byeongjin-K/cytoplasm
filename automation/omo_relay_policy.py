@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MODE = ".hermes/omo-relay/mode"
+MODE = ".config/autophagy/omo-relay/mode"
 SURFACE = "omo-relay"
 CARD_LINE = "배치 모델 호출: 노드 → 이 PC omo(도구 없음), 파일 삭제 후 재배포로 Hermes 호출 복귀"
 

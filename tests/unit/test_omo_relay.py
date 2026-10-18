@@ -17,7 +17,7 @@ from automation.node_config import default_node_config
 def relay_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> codex_llm.CodexClient:
     from automation.omo_relay import client
 
-    root = tmp_path / ".hermes/omo-relay"
+    root = tmp_path / ".config/autophagy/omo-relay"
     root.mkdir(parents=True)
     (root / "mode").write_bytes(b"on")
     config = replace(default_node_config(), omo_relay_target="relay-account@relay.invalid",
@@ -43,7 +43,7 @@ def test_enabled_client_uses_stdin_and_actual_served_route(tmp_path, monkeypatch
     assert answer == codex_llm.Served("5", "actual", "answerer")
     argv, kwargs = calls[0]
     assert argv == ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-                    "-o", f"UserKnownHostsFile={tmp_path / '.hermes/omo-relay/known_hosts'}",
+                    "-o", f"UserKnownHostsFile={tmp_path / '.config/autophagy/omo-relay/known_hosts'}",
                     "-o", "GlobalKnownHostsFile=/dev/null",
                     "-i", str(tmp_path / ".ssh/omo_relay"), "relay-account@relay.invalid"]
     assert kwargs["input"] == "private prompt"

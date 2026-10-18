@@ -1,1 +1,1 @@
-agent|automation/omo_relay_release.py|.hermes/omo-relay/node.toml|v2:config;algorithm=omo-relay-v1
+agent|automation/omo_relay_release.py|.config/autophagy/omo-relay/node.toml|v2:config;algorithm=omo-relay-v1

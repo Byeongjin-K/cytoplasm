@@ -17,8 +17,8 @@ from automation.omo_relay.client import MODE, enabled
 
 ALGORITHM = "omo-relay-v1"
 MARKER = "OMO-RELAY"
-NODE_CONFIG = ".hermes/omo-relay/node.toml"
-KNOWN_HOSTS = ".hermes/omo-relay/known_hosts"
+NODE_CONFIG = ".config/autophagy/omo-relay/node.toml"
+KNOWN_HOSTS = ".config/autophagy/omo-relay/known_hosts"
 HOST_KEY_SOURCE = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 
 
@@ -89,7 +89,7 @@ def install(home: Path, mode: str, text: str, host_key: str = "") -> None:
     raw = tomllib.loads(text)
     if set(raw) != {"omo_relay_target", "omo_relay_key"}:
         raise ValueError("invalid relay config")
-    root = home / ".hermes/omo-relay"
+    root = home / ".config/autophagy/omo-relay"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     # Validate through the shared node-config parser before creating keys or switching.
     temporary = root / "candidate.toml"
