@@ -94,7 +94,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
-    from automation.legacy_services import surface as legacy_surface
+    from automation.release_spec import legacy_service_surface as legacy_surface
 
     surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
     from automation.auto_write_policy import surface as auto_write_surface
@@ -276,9 +276,9 @@ def cmd_authorize_gateway_stop(args: argparse.Namespace) -> int:
     )
 
 def cmd_authorize_legacy_service(args: argparse.Namespace) -> int:
-    from automation.legacy_services import surface
+    from automation.release_spec import legacy_service_surface
 
-    name, digest = surface(args.name)
+    name, digest = legacy_service_surface(args.name)
     return skill_gate.cmd_release_authorize(
         argparse.Namespace(skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="")
     )

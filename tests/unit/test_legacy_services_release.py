@@ -7,6 +7,7 @@ import pytest
 
 from automation import deploy_all_observe, legacy_services as services, release_approval
 from automation.deploy_declarations import parse_declaration_file
+from automation.release_spec import LEGACY_SERVICE_LINES, legacy_service_surface
 from tests.unit import test_release_authorize as auth
 from tests.unit.test_healthcheck_registry import _emit, _rows
 from tests.unit.test_healthcheck_wrapper_release import _fake_plan, _plan_args, _spec
@@ -18,10 +19,10 @@ def test_plan_hash_and_card_cover_both_stops(monkeypatch, capsys):
     args.legacy_service_off = list(services.UNITS)
     assert release_approval.cmd_plan(args) == 0
     payload = json.loads(capsys.readouterr().out)
-    surfaces = [services.surface(name) for name in services.UNITS]
+    surfaces = [legacy_service_surface(name) for name in services.UNITS]
     assert all(list(item) in payload["surface_digests"] for item in surfaces)
     spec = _spec(*surfaces)
-    assert all(line in spec.render() for line in services.CARD_LINES.values())
+    assert all(line in spec.render() for line in LEGACY_SERVICE_LINES.values())
     assert spec.action_hash() != _spec().action_hash()
 
 
@@ -36,7 +37,7 @@ def test_existing_gate_requires_owner_head_and_exact_surface(
 ):
     base = auth._spec()
     spec = replace(base, surface_digests=(*base.surface_digests,
-                                        *([services.surface(name)] if covered else [])))
+                                        *([legacy_service_surface(name)] if covered else [])))
     monkeypatch.setattr(auth, "_spec", lambda: spec)
     owner = [{"id": auth._OWNER, "bot": False}]
     auth._env(tmp_path, monkeypatch, reactions={

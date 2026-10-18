@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import shlex
 import subprocess
@@ -14,10 +13,6 @@ from typing import Final
 UNITS: Final = {
     "report-hub": ("report-hub-collector.service", "report-hub-dashboard.service"),
     "hermes-dashboard": ("hermes-dashboard.service",),
-}
-CARD_LINES: Final = {
-    "report-hub": "report-hub 끄기: 옛 #agents-log 보고 대시보드 유닛 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)",
-    "hermes-dashboard": "Hermes 보드 화면 끄기: hermes-dashboard 유닛 정지(보드 데이터 kanban.db는 그대로, 파일 삭제 후 재배포로 다시 켬)",
 }
 ALGORITHM: Final = "legacy-service-v1"
 Run = Callable[[tuple[str, ...]], tuple[int, str]]
@@ -32,10 +27,6 @@ def release_mode(home: Path, name: str) -> str:
     if value != b"off":
         raise ValueError("LEGACY-SERVICE-REFUSED: expected literal off")
     return "off"
-
-
-def surface(name: str) -> tuple[str, str]:
-    return f"{name}:off", hashlib.sha256(b"off").hexdigest()
 
 
 def marker_path(home: Path, name: str) -> Path:

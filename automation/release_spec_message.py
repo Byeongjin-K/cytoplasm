@@ -197,11 +197,11 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     """
     from automation.release_spec import (
         DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
+        LEGACY_SERVICE_LINES as LEGACY_LINES, legacy_service_surface as legacy_surface,
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX, EnvelopeUnavailable,
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
-    from automation.legacy_services import CARD_LINES as LEGACY_LINES, surface as legacy_surface
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
