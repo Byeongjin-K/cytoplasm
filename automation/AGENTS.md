@@ -4,7 +4,9 @@
 Q231의 예외는 `auto_write`의 릴리스 승인된 Plaud 자동 쓰기뿐이다. 아래 Plaud의 건별 카드 설명은
 자동 모드가 꺼진 기본 경로이며, 켜면 동결 SHA를 확인해 같은 writer로 쓰고 공용 일일 요약에 남긴다.
 `auto_write.record(kind, Entry)`·`summarize(now)`·`release_kinds(home)`는 종류별로 공유한다.
-Q233의 다른 6종 연결은 후속이다([소개](../docs/기능소개/plaud-노트-자동-쓰기.md)).
+Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`obsidian`·`drive-save`·`project-board`, 종류마다 스위치 하나).
+두 번째 종류 `yoodori` 는 유돌 게이트의 형 명령 잡(위키·문서·특허·전사·회의록)이며, `yoodori_gate/yoodori_jobs.py` 가
+근거 메시지가 형 본인의 24시간 안 글인지 확인한 뒤에만 돌고 성공한 쓰기를 그 링크와 함께 원장에 남긴다([소개](../docs/기능소개/유돌-형-명령-통로.md)).
 대부분 서브패키지는 `python3 -m automation.<pkg>` 또는 `<pkg>/*_cli.py`로 실행.
 
 ## 서브패키지 맵

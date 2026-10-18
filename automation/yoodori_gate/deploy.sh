@@ -21,6 +21,7 @@ deploy_provenance_check "$repo_root" "$repo_root/automation/yoodori_gate" || exi
 
 push_file "$repo_root/automation/yoodori_gate/gmail_read.py" '.local/libexec/gmail_read.py'
 push_file "$repo_root/automation/yoodori_gate/yoodori_request_runtime.py" '.local/libexec/yoodori_request_runtime.py'
+push_file "$repo_root/automation/yoodori_gate/yoodori_jobs.py" '.local/libexec/yoodori_jobs.py'
 push_file "$repo_root/automation/yoodori_gate/yoodori_read_gate.py" '.local/libexec/yoodori-read-gate'
 run_agent 'chmod 0755 "$HOME/.local/libexec/yoodori-read-gate"
 test "$(stat -c %a "$HOME/.local/libexec/yoodori-read-gate")" = 755

@@ -39,18 +39,21 @@ MIXED_REF: Final = Ref(scope="resource", space="unknown", guild_id=None,
 OPEN_MESSAGE: Final = OwnerMessage(
     subject_key="cache", subject="헬스체크 관측", fact="신규 실패: cache; 회복: 없음",
     location=CACHE_REF, owner=Action("open", CACHE_REF, "원인 확인; 확인 전 재시작·설정변경·키 재발급 금지"),
-    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"))
+    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
+    render_version="owner-ko-v2")
 CLOSED_MESSAGE: Final = OwnerMessage(
     subject_key="cache", subject="헬스체크 관측", fact="신규 실패: 없음; 회복: cache",
     location=CACHE_REF, owner=Action("none", None, None),
-    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"))
+    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
+    render_version="owner-ko-v2")
 MIXED_MESSAGE: Final = OwnerMessage(
     subject_key="cache, db", subject="헬스체크 관측", fact="신규 실패: cache; 회복: db",
     location=MIXED_REF, owner=Action("open", MIXED_REF, "원인 확인; 확인 전 재시작·설정변경·키 재발급 금지"),
-    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"))
-OPEN_WIRE: Final = '대상: 헬스체크 관측 (cache)\n사실: 신규 실패: cache; 회복: 없음 (실행 완료)\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n인계: 소유자: 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지; 다음: 다음 스윕에서 상태 관측\n되돌리기: 해당 없음'
+    agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
+    render_version="owner-ko-v2")
+OPEN_WIRE: Final = '**✅ 헬스체크 관측**\n> 신규 실패: cache; 회복: 없음\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache`'
 CLOSED_WIRE: Final = '대상: 헬스체크 관측 (cache)\n사실: 신규 실패: 없음; 회복: cache (실행 완료)\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n인계: 소유자: 조치 없음; 다음: 다음 스윕에서 상태 관측\n되돌리기: 해당 없음'
-MIXED_WIRE: Final = '대상: 헬스체크 관측 (cache, db)\n사실: 신규 실패: cache; 회복: db (실행 완료)\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache, db\n인계: 소유자: 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지; 다음: 다음 스윕에서 상태 관측\n되돌리기: 해당 없음'
+MIXED_WIRE: Final = '**✅ 헬스체크 관측**\n> 신규 실패: cache; 회복: db\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache, db\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache, d`'
 TRANSITIONS: Final = {
     "open": ((), ("cache|http_200|node|ops|resource",), OPEN_MESSAGE, OPEN_WIRE),
     "closed": (("cache",), (), CLOSED_MESSAGE, CLOSED_WIRE),
@@ -90,10 +93,10 @@ def test_many_checks_failing_at_once_are_one_message() -> None:
     assert state.open_incidents == failing
 
 
-def test_recovery_is_reported_once_and_closes_the_incident() -> None:
+def test_recovery_is_silent_and_closes_the_incident() -> None:
     state, _ = plan_notice(NotifyState(), failing=("db",))
     state, notice = plan_notice(state, failing=())
-    assert notice is not None and "db" in notice
+    assert notice is None
     assert state.open_incidents == ()
     # 그리고 다시 조용해진다
     state, quiet = plan_notice(state, failing=())
@@ -149,17 +152,17 @@ def test_check_names_keeps_a_bare_name_and_drops_empties() -> None:
 
 
 @pytest.mark.parametrize(("prior", "failing", "expected"), [
-    ((), ("cache",), HEALTH_OPEN), (("db",), (), HEALTH_CLOSED),
+    ((), ("cache",), HEALTH_OPEN), (("db",), (), None),
     (("db",), ("cache",), HEALTH_MIXED),
 ])
 def test_legacy_bytes_when_sweep_changes(
-    prior: tuple[str, ...], failing: tuple[str, ...], expected: str,
+    prior: tuple[str, ...], failing: tuple[str, ...], expected: str | None,
 ) -> None:
     # Given: literal wire bytes captured from the base.
     state = NotifyState(prior)
     # When: a sweep changes the incident set.
     _, notice = plan_notice(state, failing=failing)
-    # Then: the legacy payload is byte-identical.
+    # Then: failure payloads remain byte-identical; recovery-only sweeps are silent.
     assert notice == expected
 
 
@@ -208,8 +211,8 @@ def test_envelope_when_cli_reports_a_transition(
     result = healthcheck.main(argv)
     # Then: every envelope field and the complete delivered copy match independent literals.
     assert result == 0
-    assert captured == [expected]
-    assert health_wire == [expected_wire]
+    assert captured == ([] if transition == "closed" else [expected])
+    assert health_wire == ([] if transition == "closed" else [expected_wire])
 
 
 def test_incident_state_when_envelope_transport_fails(

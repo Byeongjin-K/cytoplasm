@@ -1,4 +1,4 @@
-"""doctor 알람 — 문제 집합이 **바뀔 때만** 소유자에게 알린다(새 문제·해결됨).
+"""doctor 알람 — 새 문제가 있을 때만 소유자에게 알린다(해결만 있으면 상태만 갱신).
 
 매 점검마다 같은 문제를 다시 보내면 소유자는 곧 읽지 않게 된다(cry-wolf). 그래서 비통과 항목의
 서명(상태·키·대상)을 상태 파일에 두고 차이만 보낸다. 전송이 실패하면 상태를 전진시키지 않아
@@ -126,6 +126,9 @@ def _decide(account: str, findings: Sequence[Finding], *, path: Path, now: datet
     if change is None:
         _save(path, signatures(findings), now)
         return "DOCTOR-ALARM-UNCHANGED"
+    if not change.new:
+        _save(path, signatures(findings), now)
+        return f"DOCTOR-ALARM-RECOVERED resolved={len(change.resolved)}"
     body = content(account, change)
     if not send(body, envelope(account, body, checked_at or now, now)):
         return "DOCTOR-ALARM-NOTIFY-FAILED: 상태를 전진시키지 않았다 — 다음 점검이 다시 보낸다"

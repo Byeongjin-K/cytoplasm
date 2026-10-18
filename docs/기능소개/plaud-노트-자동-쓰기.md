@@ -51,8 +51,9 @@ Q233(2026-10-18 17:40 KST)의 추가 결정:
 > 6개 다 카드 없이 바로 + 하루 요약에 남기기
 
 개인 일정만의 calendar·todo·wiki·Obsidian 노트 요청·project board·
-`effect_request drive-save` 연결은 **다음 릴리스 후속**이다. 이번에는 Plaud만 연결하며
-다른 종류의 스위치는 거부한다. 공유·외부 초대·메일의 승인 규칙은 바꾸지 않는다.
+`effect_request drive-save` 는 다음 릴리스에서 종류별 스위치로 연결된다
+([유돌 형 명령 통로 · Q233 6종](유돌-형-명령-통로.md#q233-카드-없는-쓰기-6종)). 각 종류는 따로 켜고 끈다.
+공유·외부 초대·메일의 승인 규칙은 바꾸지 않는다.
 
 관련: `automation/auto_write.py`, `auto_write_summary.py`, `auto_write_release.py`,
 `auto_write_policy.py`(카드·승인 표면의 순수 정의, 스킬 게이트의 staged helper),

@@ -63,6 +63,7 @@ class NoteRequest:
     remote_ref: str = ""
     content_sha256: str = ""
     finished_at: str = ""
+    method: str = ""
 
 
 def state_root() -> Path:

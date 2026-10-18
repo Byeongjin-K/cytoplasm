@@ -1,6 +1,7 @@
 """Project-board operations shared by the CLI and the no-agent crons.
 
-Analysis never writes project data: it only creates a proposal and asks for its card.
+Analysis creates a frozen proposal and asks for its card, unless release-enabled
+automatic writing applies it through the same BoardStore method as the watcher.
 The first analysis tick sets the mail watermark to "now" instead of proposing from the
 whole mailbox history — the owner approves new mail, not years of backlog.
 """
@@ -15,6 +16,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
+
+from automation import auto_write
 
 from . import minutes
 from .analysis import analyze
@@ -122,6 +125,30 @@ def rebuild_dashboard(board: Board, *, today: date, now: datetime | None = None)
     return board.dashboard_path
 
 
+def _auto_apply(board: Board, record: ProposalRecord, *, now: datetime | None) -> bool:
+    """Apply and receipt a frozen proposal only when the node switch is readable and on."""
+    try:
+        enabled = auto_write.enabled("project-board")
+    except (OSError, ValueError):
+        enabled = False
+    if not enabled:
+        return False
+    stamp = utc_stamp(now)
+    proposal = board.proposals.frozen(record)
+    board.store.apply_proposal(record.request_id, proposal, message_id="", now=now)
+    auto_write.record("project-board", auto_write.Entry(
+        source_id=record.request_id,
+        path=f"{record.project} · 할 일 {record.todo_count}건",
+        revision=record.action_hash,
+        recorded_at=stamp,
+        written_at=stamp,
+    ))
+    board.proposals.update(replace(
+        record, status="applied", applied_todos=record.todo_count, finished_at=stamp, last_error="",
+    ))
+    return True
+
+
 def propose(
     board: Board,
     document: SourceDocument,
@@ -134,9 +161,13 @@ def propose(
     origin_message_id: str = "",
     now: datetime | None = None,
 ) -> tuple[ProposalRecord | None, str]:
-    """Analyse one source and (unless it is unrelated or already proposed) request its card."""
+    """Analyse one source and request its card, or apply it under the node auto-write switch."""
     existing = board.proposals.live_for_source(document.ref.kind, document.ref.source_id, document.ref.subject)
     if existing is not None:
+        # Retry only an auto-apply that crashed before its receipt; a carded proposal keeps its card.
+        if (existing.status == "proposed" and not existing.message_id and post is not None
+                and _auto_apply(board, existing, now=now)):
+            return board.proposals.get(existing.request_id) or existing, "proposed"
         return existing, f"already-proposed {existing.request_id} status={existing.status}"
     settings = config or BoardConfig(llm=LlmConfig())
     proposal = analyze(
@@ -154,7 +185,7 @@ def propose(
         origin_message_id=origin_message_id,
     )
     board.proposals.create(record, proposal)
-    if post is not None:
+    if post is not None and not _auto_apply(board, record, now=now):
         post(record)
     return board.proposals.get(record.request_id) or record, "proposed"
 
@@ -319,7 +350,7 @@ def revised_proposal(proposal: Proposal, change: Revision) -> Proposal:
 def revise(
     board: Board, request_id: str, change: Revision, *, post: Poster | None, now: datetime | None = None
 ) -> ProposalRecord:
-    """A new revision under the same key; the façade supersedes the old pending card."""
+    """A new revision under the same key; auto-write applies it, otherwise the façade posts its card."""
     current = board.proposals.get(request_id)
     if current is None:
         raise ProjectBoardError(f"no proposal {request_id}")
@@ -335,7 +366,7 @@ def revise(
     if record.action_hash == current.action_hash:
         raise ProjectBoardError("the revision changes nothing")
     board.proposals.create(record, proposal)
-    if post is not None:
+    if post is not None and not _auto_apply(board, record, now=now):
         post(record)
     return board.proposals.get(record.request_id) or record
 

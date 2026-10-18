@@ -8,8 +8,8 @@
 보내면 그 알림은 곧 무시되고, **무시되는 알림은 없는 알림과 같다.** 그래서 이 모듈이
 책임지는 것은 "보낸다"가 아니라 **"사건당 한 번만 보낸다"**이다.
 
-집계 단위는 스윕 1회당 메시지 1통이다. 새로 실패한 체크와 새로 회복한 체크를 한 통에
-담고, 새로운 것이 없으면 아무것도 보내지 않는다. SSH 전면 장애로 9개가 한꺼번에
+집계 단위는 스윕 1회당 메시지 1통이다. 새 실패가 있을 때만 회복한 체크도 한 통에
+담고, 회복만 있으면 상태만 갱신한다. SSH 전면 장애로 9개가 한꺼번에
 무너져도 9통이 아니라 1통이다.
 
 판정은 순수하다 — 전송·시각·저장은 가장자리에 있다. 그래야 "정확히 한 통"이 희망이
@@ -65,16 +65,16 @@ def _render(opened: Sequence[str], closed: Sequence[str]) -> str:
 def plan_notice(
     state: NotifyState, *, failing: Sequence[str]
 ) -> tuple[NotifyState, str | None]:
-    """이번 스윕의 (다음 상태, 보낼 통지). 새로운 것이 없으면 통지는 None.
+    """이번 스윕의 (다음 상태, 보낼 통지). 새 실패가 없으면 통지는 None.
 
     같은 체크가 계속 실패하는 것은 새 사건이 아니다 — 이미 알렸다. 반대로 사라진 체크는
-    회복이므로 한 번 알리고 닫는다.
+    회복이므로 통지 없이 닫는다.
     """
     current = tuple(sorted(set(failing)))
     opened = tuple(name for name in current if name not in state.open_incidents)
     closed = tuple(name for name in state.open_incidents if name not in current)
     following = NotifyState(open_incidents=current)
-    if not opened and not closed:
+    if not opened:
         return following, None
     return following, _render(opened, closed)
 
@@ -96,7 +96,7 @@ def notice_message(state: NotifyState, following: NotifyState) -> OwnerMessage |
         subject_key=key, subject="헬스체크 관측",
         fact=f"신규 실패: {', '.join(opened) or '없음'}; 회복: {', '.join(closed) or '없음'}",
         location=location, owner=owner, agent_next="다음 스윕에서 상태 관측",
-        recovery="not_applicable", detail=Result("executed"),
+        recovery="not_applicable", detail=Result("executed"), render_version="owner-ko-v2",
     )
 
 
@@ -155,7 +155,7 @@ def check_names(definitions: Sequence[str]) -> tuple[str, ...]:
 def main(argv: Sequence[str] | None = None) -> int:
     """이번 스윈의 실패 집합을 받아 필요한 만큼만 알린다.
 
-    **매 스윈 호출된다** — 실패한 스윈에서만 부르면 회복을 영영 알리지 못하고
+    **매 스윈 호출된다** — 실패한 스윈에서만 부르면 회복을 상태에 반영하지 못하고
     사건이 열린 채로 남는다."""
     from automation import owner_notice
     from automation.owner_notice import notify_owner

@@ -60,6 +60,13 @@ python3 /srv/autophagy-skills/live/patent-prep/scripts/patent_cli.py export-prep
 
 # (✅ 후 소유자가 직접 실행) age 암호화 + pre-flight ACL + 업로드; ⛔·무반응·만료 = 업로드 안 함
 python3 /srv/autophagy-skills/live/patent-prep/scripts/patent_cli.py export-execute --slug <kebab-slug>
+
+# 유돌 형 명령(2026-10-18 소유자 "5번도 카드 없이 해"): 유돌 게이트 `patent export` 가 부른다.
+# 같은 스냅샷·ACL 점검·age 암호화·감사(method=owner_command, 근거 메시지 좌표)로 카드 없이 올린다.
+python3 /srv/autophagy-skills/live/patent-prep/scripts/patent_cli.py export-now --slug <kebab-slug> \
+  --origin-channel-id <채널> --origin-message-id <형 메시지>
+# 올린 자료로 초안: 파일을 워크스페이스 brief.md 로 복사한 뒤 draft
+python3 /srv/autophagy-skills/live/patent-prep/scripts/patent_cli.py draft --slug <kebab-slug> --brief-import <파일>
 ```
 
 `scripts/scenario.sh` uses only a temporary workspace and a dummy secret. It never invokes an

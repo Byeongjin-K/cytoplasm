@@ -231,6 +231,12 @@ def _audit_record(draft: dict, approval: Approval, *, event_id: str, status: str
         json.dumps(draft["argv"], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     approval_field = {"channel": "dm", "method": approval.method, "ref": approval.ref}
+    if approval.method == "owner_command":
+        approval_field.update(
+            channel=str(draft["origin_channel_id"]),
+            origin_channel_id=str(draft["origin_channel_id"]),
+            origin_message_id=str(draft["origin_message_id"]),
+        )
     canonical = json.dumps(
         {
             "action": action,

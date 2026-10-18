@@ -1,4 +1,4 @@
-"""``python3 -m automation.obsidian_write request|status`` — the agent's note-write entry.
+"""``python3 -m automation.obsidian_write request|write-now|status`` — note-write entry.
 
 ``request`` freezes the body, checks its [[links]] against the read-only mirror,
 suggests related notes, and posts ONE standard approval card bound to the gate hash
@@ -134,16 +134,32 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0 if chosen else 1
 
 
+def cmd_write_now(args: argparse.Namespace) -> int:
+    """Write from an owner command already verified by the YooDori gate."""
+    from .write_now import write_now
+
+    plan = build_plan(validate_relpath(args.relpath), _read_body(args.body_file), args.title)
+    receipt = write_now(plan, args.origin_channel_id, args.origin_message_id)
+    print(f"OWNER-COMMAND-WRITTEN obsidian {receipt.relpath} {receipt.content_sha256[:12]}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 -m automation.obsidian_write")
     commands = parser.add_subparsers(dest="command", required=True)
-    request = commands.add_parser("request", help="post one Obsidian note approval card")
-    request.add_argument("--relpath", required=True, help="exact vault path, e.g. 000_PARA/Resource/<dir>/<name>.md")
-    request.add_argument("--body-file", required=True, help="Markdown body file, or - for stdin")
-    request.add_argument("--title", default=None, help="note title (default: the body's leading # H1, else the file stem)")
-    request.add_argument("--origin-channel-id", default="", help="channel id of the instruction message")
-    request.add_argument("--origin-message-id", default="", help="message id of the instruction message")
-    request.set_defaults(handler=cmd_request)
+    for command, help_text, handler in (
+        ("request", "post one Obsidian note approval card", cmd_request),
+        ("write-now", "write an owner-command note without an approval card", cmd_write_now),
+    ):
+        request = commands.add_parser(command, help=help_text)
+        request.add_argument("--relpath", required=True, help="exact vault path, e.g. 000_PARA/Resource/<dir>/<name>.md")
+        request.add_argument("--body-file", required=True, help="Markdown body file, or - for stdin")
+        request.add_argument("--title", default=None, help="note title (default: the body's leading # H1, else the file stem)")
+        request.add_argument("--origin-channel-id", default="", required=command == "write-now",
+                             help="channel id of the instruction message")
+        request.add_argument("--origin-message-id", default="", required=command == "write-now",
+                             help="message id of the instruction message")
+        request.set_defaults(handler=handler)
     status = commands.add_parser("status", help="show note requests and their receipts")
     status.add_argument("--request", default="")
     status.set_defaults(handler=cmd_status)

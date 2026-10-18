@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mail_attachment_archive as archive
+import mail_attachment_retry as retry
 import mail_runtime
 
 if TYPE_CHECKING:  # pragma: no cover - automation is resolved only for Drive calls
@@ -90,9 +91,10 @@ def sync(
     workers: int = 4,
 ) -> dict[str, Any]:
     """Execute a stable plan; failed items remain unrecorded for the next tick."""
-    items, bogus, missing = archive.discover()
     state = archive.state_connection()
     try:
+        download_failed = 0 if dry_run else retry.recover(state)
+        items, bogus, missing = archive.discover()
         pending, skipped, prior_ids = archive.plan(state, items, limit)
         if dry_run:
             return archive.report(
@@ -111,8 +113,9 @@ def sync(
             digest, file_id = archive_one(drive, item, parent_id, prior_ids.get(item.key))
             return item, digest, parent_id, file_id
 
-        uploaded = failed = 0
-        failure_code = ""
+        uploaded = 0
+        failed = download_failed
+        failure_code = "download_failed" if download_failed else ""
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = [pool.submit(upload, item) for item in pending]
             for future in concurrent.futures.as_completed(futures):
