@@ -205,6 +205,59 @@ def test_job_runs_detached_collects_outputs_and_records_the_link(tmp_path: Path,
         jobs.output_file(path, "../spec.json")
 
 
+def test_q233_card_requests_turn_into_cardless_jobs(staged: Path) -> None:
+    # Given: the same validated card requests YooDori sends today.
+    cases = {
+        "calendar-request": (["--text", "내일 3시 실험", "--summary", "실험"], "owner-create", "calendar"),
+        "todo-request": (["--title", "정리"], "write-now", "todo"),
+        "obsidian-request": (["--relpath", "000_PARA/Resource/n.md", "--body-file", str(staged)], "write-now", "obsidian"),
+        "drive-save": (["--file", str(staged), "--summary", "보고서"], "save-now", "drive-save"),
+    }
+    for name, (args, sub, kind) in cases.items():
+        _, argv, _ = gate.build([name, *args, *ORIGIN])
+        # When
+        job = gate.cardless_job(name, argv)
+        # Then: same flags, the producer's owner-command subcommand, its own switch and marker.
+        assert sub in job.argv and (job.kind, job.marker, job.write) == (kind, gate.WRITTEN, True)
+        assert job.argv[-4:] == ORIGIN and (job.channel_id, job.message_id) == ("123456789", "987654321")
+        assert not {"draft-create", "request"} & set(job.argv)
+    assert gate.cardless_job("drive-save", gate.build(["drive-save", "--file", str(staged), "--summary", "s", *ORIGIN])[1]).argv[:4] == [
+        PY, "-m", "automation.effect_request", "save-now"]
+
+
+def test_card_path_stays_when_the_switch_is_off(staged: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    # Given: the node has no auto-write-todo; the card producer is stubbed.
+    calls: list[list[str]] = []
+    monkeypatch.setattr(gate, "_switched", lambda kind: False)
+    monkeypatch.setattr(gate, "card_env", lambda *a: {})
+    monkeypatch.setattr(gate.subprocess, "run", lambda argv, **k: calls.append(argv) or subprocess.CompletedProcess(argv, 0))
+    monkeypatch.setattr(gate, "_log", lambda *a: None)
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", " ".join(["todo-request", "--title", "t", *ORIGIN]))
+    # When / Then: the old card command runs.
+    assert gate.main() == 0
+    assert calls and calls[0][2] == "request"
+    # And with the switch on the gate builds a write job instead (owner check stubbed).
+    jobs_seen: list[gate.Job] = []
+    monkeypatch.setattr(gate, "_switched", lambda kind: kind == "todo")
+    monkeypatch.setattr(gate, "run_job", lambda job: jobs_seen.append(job) or 0)
+    assert gate.main() == 0
+    assert jobs_seen[0].argv[2] == "write-now" and jobs_seen[0].kind == "todo"
+
+
+def test_marker_decides_whether_a_cardless_job_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ledger = tmp_path / "ledger"
+    monkeypatch.setattr(auto_write, "state_root", lambda home=None: ledger)
+    origin = {"channel_id": "1", "message_id": "2", "link": "https://discord.com/channels/9/1/2"}
+    for text, expected in (("CARD-POSTED draft=abc123", "no"), ("OWNER-COMMAND-WRITTEN todo t1", "yes")):
+        path = jobs.new_job(tmp_path / "home", {"name": "todo-request", "argv": [sys.executable, "-c", f"print({text!r})"],
+                                                "write": True, "label": "할 일 t", "timeout": 30, "kind": "todo",
+                                                "marker": "OWNER-COMMAND-WRITTEN", "origin": origin})
+        jobs.run(path, home=tmp_path / "home", release=REPO)
+        assert f"ledger={expected}" in jobs.report(path)[1]
+    rows = [json.loads(line) for line in (ledger / "ledger.jsonl").read_text().splitlines()]
+    assert [row["kind"] for row in rows] == ["todo"]
+
+
 def test_launch_detaches_and_finishes_without_the_caller(tmp_path: Path) -> None:
     home = tmp_path / "home"
     path = jobs.new_job(home, {"name": "doc", "argv": [sys.executable, "-c", "print('done')"],

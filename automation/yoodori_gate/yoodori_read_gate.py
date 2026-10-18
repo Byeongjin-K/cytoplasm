@@ -251,6 +251,35 @@ class Job:
     timeout: int
     channel_id: str
     message_id: str
+    kind: str = "yoodori"
+    marker: str = ""
+
+
+# Q233 (2026-10-18 17:40 KST "6개 다 카드 없이 바로 + 하루 요약에 남기기"): with that producer's
+# release switch on, an owner-message card request runs its cardless command instead.
+CARDLESS = {"calendar-request": "calendar", "todo-request": "todo",
+            "obsidian-request": "obsidian", "drive-save": "drive-save"}
+WRITTEN = "OWNER-COMMAND-WRITTEN"
+
+
+def cardless_job(name: str, argv: list[str]) -> Job:
+    """The same validated request, re-pointed at the producer's owner-command subcommand."""
+    first = next(i for i, word in enumerate(argv) if word.startswith("--"))
+    values = dict(zip(argv[first::2], argv[first + 1::2]))
+    channel, message = values["--origin-channel-id"], values["--origin-message-id"]
+    if name == "calendar-request":
+        argv = [*argv[:2], "owner-create", *argv[3:]]
+        label = "형 일정 1건"
+    elif name == "todo-request":
+        argv = [*argv[:2], "write-now", *argv[3:]]
+        label = f"할 일 {values.get('--title', '')}"
+    elif name == "obsidian-request":
+        argv = [*argv[:3], "write-now", *argv[4:]]
+        label = f"노트 {Path(values.get('--relpath', '')).name}"
+    else:
+        argv = [*argv[:3], "save-now", *argv[5:]]
+        label = f"Drive 저장 {values.get('--summary', '')}"
+    return Job(name, argv, True, label[:160], 600, channel, message, CARDLESS[name], WRITTEN)
 
 
 def _origin(args: list[str]) -> tuple[list[str], str, str]:
@@ -428,22 +457,31 @@ def _release_modules():
     return auto_write, notice_bot
 
 
+def _switched(kind: str) -> bool:
+    """Unreadable or malformed node settings keep the card path."""
+    try:
+        auto_write, _notice = _release_modules()
+        return bool(auto_write.enabled(kind))
+    except (ImportError, OSError, ValueError):
+        return False
+
+
 def run_job(job: Job) -> int:
     env = job_env(HOME, RELEASE, ENV)
     link = ""
     if job.write:
         auto_write, notice_bot = _release_modules()
         try:
-            switched_on = auto_write.enabled("yoodori")
+            switched_on = auto_write.enabled(job.kind)
         except ValueError:
             switched_on = False
         if not switched_on:
-            raise Refused("owner-command writes are off on this node (release switch auto-write-yoodori)")
+            raise Refused(f"owner-command writes are off on this node (release switch auto-write-{job.kind})")
         token = notice_bot.resolve_token(environ=env)
         link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
     path = yoodori_jobs.new_job(HOME, {
         "name": job.name, "argv": job.argv, "write": job.write, "label": job.label,
-        "timeout": job.timeout,
+        "timeout": job.timeout, "kind": job.kind, "marker": job.marker,
         "origin": {"channel_id": job.channel_id, "message_id": job.message_id, "link": link},
     })
     yoodori_jobs.launch(path, env)
@@ -487,6 +525,10 @@ def main() -> int:
             yoodori_jobs.job_dir(HOME, argv[0])
         else:
             name, argv, cwd = build(words)
+            if name in CARDLESS and _switched(CARDLESS[name]):
+                if name == "obsidian-request":
+                    argv = stage_body(argv, STAGING)
+                job = cardless_job(name, argv)
     except (Refused, yoodori_jobs.JobRefused) as exc:
         sys.stderr.write(f"YOODORI-GATE-REFUSED {exc}\n{USAGE}")
         _log("refused", 2, started)

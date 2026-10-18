@@ -168,7 +168,7 @@ def _record(spec: Mapping[str, object], path: Path, release: Path) -> None:
     now = datetime.now(UTC).isoformat()
     origin = spec["origin"]
     assert isinstance(origin, dict)
-    auto_write.record("yoodori", auto_write.Entry(
+    auto_write.record(str(spec.get("kind", "yoodori")), auto_write.Entry(
         source_id=f"discord:{origin['channel_id']}/{origin['message_id']}",
         path=f"{spec['label']} · {origin['link']}",
         revision=path.name, recorded_at=now, written_at=now,
@@ -191,7 +191,9 @@ def run(path: Path, *, home: Path | None = None, release: Path = Path("/srv/auto
     stdout = (path / "stdout").read_text(encoding="utf-8", errors="replace")
     _collect_outputs(path, home, started, stdout)
     recorded = "no"
-    if rc == 0 and spec.get("write"):
+    marker = spec.get("marker")
+    marked = not marker or any(line.startswith(f"{marker} ") for line in stdout.splitlines())
+    if rc == 0 and spec.get("write") and marked:
         try:
             _record(spec, path, release)
             recorded = "yes"
