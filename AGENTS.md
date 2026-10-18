@@ -12,6 +12,10 @@ P6 공개 설치 기본값은 도리다(`automation.install`·마법사·quickst
 P5 제거는 `peer-retired` 스위치가 같은 HEAD의 릴리스 승인에 묶인 경우에만 백업 뒤 실행한다.
 계정·/etc 삭제는 별도 소유자 블록이다. [메이저 소개](docs/기능소개/도리-기반-메이저.md) · [P5 제거](docs/기능소개/p5-제거.md).
 
+Q245 배치 예외: 릴리스 호스트의 `~/.hermes/release-flags/omo-relay`가 정확한 `on`이면
+`codex_llm` 배치는 노드 Hermes 대신 이 PC의 도구 없는 omo로 간다. 모델은 이 PC omo 설정만
+정하고, 파일 삭제 후 재배포하면 아래 레거시 Hermes 경로로 복귀한다.
+
 cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전트와 상호운용하며, 설치별 `<primary-node>` / `<rag-node>` 역할로 구동한다. Python 3.12 **stdlib 중심**. 모든 대화·배치 모델 호출은 계정 `~/.hermes/config.yaml` 이 정한 주 모델(현재 `openai-codex/gpt-6.1-sol`, reasoning effort `medium` — 2026-10-02)을 쓰고, 그것이 답하지 못하면(쿼터·인증·전송) 같은 파일의 `fallback_providers`(현재 `xai-oauth/grok-4.7`)로 넘어가며 — 모델은 그 파일 한 곳이 정하고 코드는 적지 않는다(2026-09-29 소유자 결정) — 체인 전체가 실패하면 fail-closed로 전파한다. **모든 외부효과는 소유자(cha) 승인 게이트 경유** — 이것이 아키텍처의 중심 불변식이다.
 
 ## STRUCTURE
@@ -62,6 +66,7 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 ## CODE MAP
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `omo_relay` | package | `automation/omo_relay/` · `automation/omo_relay_release.py` | Q245: 공용 `codex_llm` API·호출자 유지, SSH stdin → 빈 0700 cwd의 도구 없는 omo. 릴리스 스위치·설정 지문 바인딩, 노드 전용 키 자동 생성, v2 설정 관측·영수증, 재시도 1회·장애/회복 통지·doctor. [소개](docs/기능소개/노드-배치-omo-중계.md) |
 | `legacy_services` 메모리 정지 | module | `automation/legacy_services.py` | Q4: 호스트 `hermes-memory-off`의 정확한 `off`를 `hermes-memory:off` 승인 표면에 묶어 agent의 curator·relocate 타이머만 disable·stop한다. 기존 pending 판독+워처 잠금 아래 미결이면 어느 타이머도 끄지 않는다. 파일·백업·recall 보존, 파일 삭제+재배포로 복구, 실제 disabled·inactive를 릴리스·doctor가 검증한다. 짧은 사실·선호·규칙은 유돌 omo(소유자 규칙은 `system/human.md`), 문서·긴 기록은 `obsidian-request`다. [소개](docs/기능소개/hermes-유산-정리.md#메모리) |
 | `legacy_services` | module | `automation/legacy_services.py` · `automation/legacy_services/deploy-manifest.txt` | 호스트 `report-hub-off`·`hermes-dashboard-off`의 정확한 `off`를 릴리스 승인 해시에 바인딩한다. ops의 옛 보고 유닛 두 개와 agent 보드 화면만 정지하며 DB·유닛·CLI는 보존한다. v2 derived `legacy-service-v1`이 모드와 실제 유닛을 재조회한다. 파일 삭제+재배포는 이 배포기가 멈춘 유닛만 복구한다. report-hub 활성 헬스체크와 자격증명 교체는 정지 표식을 따르고, kanban 교체 대상은 제거한다. [소개](docs/기능소개/hermes-유산-정리.md) |
 | `peer_retired` · `p5_remove` | module | `automation/peer_retired.py` · `automation/p5_remove.py` | 정확한 `retired` 호스트 스위치와 같은 HEAD의 승인 표면으로 비루트 P5 제거를 인가한다. 계정별 비공개 tar·잡 원본·목록을 검증하고 agent 30개·peer 3개 정지 잡을 CLI로 삭제한다. 필수 CLI·config·auth·kanban은 보존하며 peer 증명 단계만 생략한다. 루트 작업은 `docs/guide/p5-root-block.sh` 소유자 실행이고 릴리스가 실행하지 않는다. [소개](docs/기능소개/p5-제거.md) |

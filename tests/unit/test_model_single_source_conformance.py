@@ -1,4 +1,4 @@
-"""Every model call follows the account's Hermes config; no code names a model.
+"""Each route follows its own account config; deployed code never names a model.
 
 Owner decision 2026-09-29: the main model and the fallback live in one place,
 ``~/.hermes/config.yaml`` (``model.provider``/``model.default`` and
@@ -59,3 +59,10 @@ def test_the_shared_client_lets_the_config_pick_the_model() -> None:
     argv = codex_llm.CodexClient(binary="hermes", home="/nonexistent").argv("prompt")
 
     assert argv == ["hermes", "-z", "prompt", "-t", "todo"]
+
+
+def test_the_relay_leaves_model_selection_to_workstation_config() -> None:
+    from automation.omo_relay.runner import ARGV
+
+    assert not {"--model", "-m", "--models", "--provider"} & set(ARGV)
+    assert {"--no-tools", "--no-extensions", "--no-context-files", "--no-session"} <= set(ARGV)

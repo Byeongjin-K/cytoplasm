@@ -212,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--fault-channel", default="off", help="승인된 고장 통지 채널 또는 off")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
+    parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-memory", choices=("on", "off"), default="on")
@@ -232,7 +233,8 @@ def main(argv: list[str] | None = None) -> int:
                                  report_hub=args.report_hub, hermes_dashboard=args.hermes_dashboard,
                                   hermes_memory=args.hermes_memory,
                                  agent_chat_channel=args.yoodori_channel,
-                                 peer_retired=args.peer_retired == "retired")
+                                 peer_retired=args.peer_retired == "retired",
+                                 omo_relay_mode=args.omo_relay)
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways,
                          retired=args.peer_retired == "retired")
@@ -311,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.fault_channel != "off":
             document["notice_bot"]["fault_channel_id"] = args.fault_channel
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
+        document["omo_relay"] = {"route": args.omo_relay}
         if args.peer_retired == "retired":
             document["peer_retired"] = "retired"
             document["p5_root_cleanup"] = "owner-block-not-executed-by-release"

@@ -44,6 +44,7 @@ from automation.release_completion_target import (
 )
 from .release_request_gate import ReleaseRequestGate
 from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
+from automation.omo_relay_policy import SURFACE as OMO_RELAY_SURFACE
 from automation.release_spec import (
     ReleaseSpec,
     ReleaseSpecError,
@@ -95,6 +96,12 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    relay_digest = getattr(args, "omo_relay", None)
+    if relay_digest is not None:
+        if _SHA256.fullmatch(relay_digest) is None:
+            print("RELEASE-PLAN-BLOCK: invalid omo-relay digest", file=sys.stderr)
+            return 4
+        surfaces.append((OMO_RELAY_SURFACE, relay_digest))
     from automation.release_spec import legacy_service_surface as legacy_surface
 
     surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
@@ -351,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--fault-channel", metavar="CHANNEL_ID", help="고장 알림을 유돌·리드 페어 채널로")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
+    plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
     plan.add_argument(
         "--healthcheck-wrapper",
@@ -441,6 +449,13 @@ def main(argv: list[str] | None = None) -> int:
     notice.add_argument("--head", required=True)
     notice.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
         argparse.Namespace(skill=None, surface=NOTICE_BOT_SURFACE, hash=args.hash,
+                           head=args.head, peer_attest_mode="")
+    ))
+    relay = commands.add_parser("authorize-omo-relay")
+    relay.add_argument("--hash", required=True)
+    relay.add_argument("--head", required=True)
+    relay.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=OMO_RELAY_SURFACE, hash=args.hash,
                            head=args.head, peer_attest_mode="")
     ))
     auto = commands.add_parser("authorize-auto-write")
