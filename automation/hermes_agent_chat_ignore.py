@@ -1,7 +1,7 @@
 """Account-local agent-chat cutover; edit only discord.ignored_channels.
 
-The release uses memory_provider.agent_config to compose this with the existing
-memory profile. --remove is a manual rollback, not a release algorithm.
+The release host alone reads the opt-in switch. The node receives an explicit
+mode through memory_provider.agent_config, alongside the existing memory profile.
 """
 from __future__ import annotations
 
@@ -27,6 +27,17 @@ _KEY: Final = re.compile(r"""^( *)([A-Za-z_][A-Za-z0-9_-]*|'[A-Za-z_]+'|"[A-Za-z
 _ATOM: Final = r"""(?:[1-9][0-9]*|'[1-9][0-9]*'|"[1-9][0-9]*")"""
 _CSV: Final = re.compile(rf"{_ATOM}(?: *, *{_ATOM})*")
 _ITEM: Final = re.compile(rf"^( *)- +({_ATOM}) *$")
+
+
+def release_switch(home: Path) -> str | None:
+    """Absent means off; malformed or unreadable never grants a cutover."""
+    try:
+        value = (home / ".hermes/release-flags/dori-agent-chat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    if re.fullmatch(r"[0-9]+", value) is None:
+        raise ConfigShapeError("DORI-SWITCH-REFUSED: expected a decimal bot id only")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,9 +207,16 @@ def write_config(path: Path, text: str) -> Path:
 def main(argv: Sequence[str] | None = None, *, home: Path | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m automation.hermes_agent_chat_ignore")
     mode = parser.add_mutually_exclusive_group(required=True)
-    for name in ("show", "check", "apply", "remove"):
+    for name in ("show", "check", "apply", "remove", "release-switch"):
         mode.add_argument(f"--{name}", action="store_true")
     args = parser.parse_args(argv)
+    if args.release_switch:
+        try:
+            print(release_switch(home or Path.home()) or "")
+        except (OSError, UnicodeError, ValueError) as error:
+            print(f"DORI-SWITCH-REFUSED reason={error.__class__.__name__}", file=sys.stderr)
+            return 3
+        return 0
     root = (home or Path.home()) / ".hermes"
     path = root / "config.yaml"
     try:

@@ -15,6 +15,37 @@ CHANNEL = "123456789012345678"
 REST = "# retain\nmodel:\n  provider: synthetic\ntimezone: Asia/Seoul"
 
 
+def test_release_switch_is_absent_or_decimal_only(tmp_path: Path) -> None:
+    # Given
+    path = tmp_path / ".hermes/release-flags/dori-agent-chat"
+    path.parent.mkdir(parents=True)
+    assert ignore.release_switch(tmp_path) is None
+    path.write_text(CHANNEL)
+    # When / Then
+    assert ignore.release_switch(tmp_path) == CHANNEL
+
+
+@pytest.mark.parametrize("raw", ["", " ", "123\n", " 123", "-123", "123;echo x", "１２３", "abc"])
+def test_invalid_switch_refuses_instead_of_turning_on(tmp_path: Path, raw: str) -> None:
+    # Given
+    path = tmp_path / ".hermes/release-flags/dori-agent-chat"
+    path.parent.mkdir(parents=True)
+    path.write_text(raw)
+    # When / Then
+    with pytest.raises(ConfigShapeError, match="DORI-SWITCH-REFUSED"):
+        ignore.release_switch(tmp_path)
+    assert ignore.main(["--release-switch"], home=tmp_path) == 3
+
+
+def test_unreadable_switch_is_not_absent(tmp_path: Path) -> None:
+    # Given
+    (tmp_path / ".hermes/release-flags/dori-agent-chat").mkdir(parents=True)
+    # When / Then
+    with pytest.raises(OSError):
+        ignore.release_switch(tmp_path)
+    assert ignore.main(["--release-switch"], home=tmp_path) == 3
+
+
 @pytest.mark.parametrize("value", [
     "", "''", '""', "[]", "'11,44'", '"11,44"', "11,44",
     "[11, '44']", "\n    - '11'\n    # keep\n    - 44",

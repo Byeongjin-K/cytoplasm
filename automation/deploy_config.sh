@@ -26,10 +26,21 @@ _converge_config_module() { # _converge_config_module <algorithm> → "<module> 
   esac
 }
 
-converge_config() { # converge_config <account> <destination-relative-to-HOME> <algorithm>
+converge_config() { # converge_config <account> <destination-relative-to-HOME> <algorithm> [--dori-agent-chat on|off]
   local -
   set +e
-  local account="$1" destination="$2" algorithm="$3" module target runtime rc out
+  if (( $# != 3 && $# != 5 )); then
+    printf 'DEPLOY-BLOCK: converge_config refuses unexpected arguments.\n' >&2
+    return 2
+  fi
+  local account="$1" destination="$2" algorithm="$3" module target runtime rc out extra=""
+  if (( $# == 5 )); then
+    if [[ "$algorithm" != hermes-agent-profile-v1 || "$4" != --dori-agent-chat || ! "$5" =~ ^(on|off)$ ]]; then
+      printf 'DEPLOY-BLOCK: converge_config only accepts --dori-agent-chat on|off for the agent profile.\n' >&2
+      return 2
+    fi
+    extra=" --dori-agent-chat $5"
+  fi
   runtime="${NODE_RELEASE_CURRENT:-/srv/autophagy-agent-current}"
   if [[ ! "$account" =~ $_CONVERGE_CONFIG_SAFE || ! "$runtime" =~ $_CONVERGE_CONFIG_SAFE ]]; then
     printf 'DEPLOY-BLOCK: converge_config refuses unsafe account or runtime path.\n' >&2
@@ -44,7 +55,7 @@ converge_config() { # converge_config <account> <destination-relative-to-HOME> <
     printf 'DEPLOY-BLOCK: algorithm %q writes %s, not %q.\n' "$algorithm" "${target#* }" "$destination" >&2
     return 2
   fi
-  out="$(run_account "$account" "PYTHONPATH=$(printf '%q' "$runtime") python3 -B -m $module --apply" </dev/null 2>&1)"
+  out="$(run_account "$account" "PYTHONPATH=$(printf '%q' "$runtime") python3 -B -m $module --apply$extra" </dev/null 2>&1)"
   rc=$?
   printf '%s\n' "$out"
   if [[ $rc -eq 7 ]]; then
@@ -55,7 +66,7 @@ converge_config() { # converge_config <account> <destination-relative-to-HOME> <
     printf 'DEPLOY-BLOCK: %s %s apply failed (rc %s).\n' "$account" "$destination" "$rc" >&2
     return 5
   fi
-  out="$(run_account "$account" "PYTHONPATH=$(printf '%q' "$runtime") python3 -B -m $module --check" </dev/null 2>&1)"
+  out="$(run_account "$account" "PYTHONPATH=$(printf '%q' "$runtime") python3 -B -m $module --check$extra" </dev/null 2>&1)"
   rc=$?
   printf '%s\n' "$out"
   if [[ $rc -ne 0 ]]; then

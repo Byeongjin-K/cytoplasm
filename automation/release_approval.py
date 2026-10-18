@@ -47,6 +47,7 @@ from automation.release_spec import (
     ReleaseSpecError,
     RAG_MCP_SURFACE,
     spec_from_record,
+    dori_surface,
     wrapper_surface,
 )
 from automation.release_released import ReleasedTagsError, parse_released
@@ -90,6 +91,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    bot_id = getattr(args, "dori_agent_chat", None)
+    if bot_id is not None:
+        try:
+            surfaces.append(dori_surface(bot_id))
+        except ReleaseSpecError as error:
+            print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+            return 4
     for item in args.healthcheck_wrapper or ():
         node, _, digest = item.partition("=")
         if _WRAPPER_NODE.fullmatch(node) is None or _SHA256.fullmatch(digest) is None:
@@ -218,6 +226,18 @@ def cmd_authorize_wrapper(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_authorize_dori(args: argparse.Namespace) -> int:
+    try:
+        surface, digest = dori_surface(args.bot_id)
+    except ReleaseSpecError as error:
+        print(error, file=sys.stderr)
+        return 4
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=surface, hash=digest,
+                           head=args.head, peer_attest_mode="")
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="release-approval")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -227,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--head", required=True)
     plan.add_argument("--version", required=True)
     plan.add_argument("--bump", choices=("major", "minor", "patch"), default="patch")
+    plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -272,6 +293,10 @@ def main(argv: list[str] | None = None) -> int:
     authorize.add_argument("--hash", required=True)
     authorize.add_argument("--head", required=True)
     authorize.set_defaults(run=cmd_authorize_wrapper)
+    dori = commands.add_parser("authorize-dori-agent-chat", help="이 릴리스 ✅ 가 도리 전환을 덮는가")
+    dori.add_argument("--bot-id", required=True)
+    dori.add_argument("--head", required=True)
+    dori.set_defaults(run=cmd_authorize_dori)
     rag = commands.add_parser("authorize-rag-mcp", help="authorize the release-bound MCP-only rebuild")
     rag.add_argument("--hash", required=True)
     rag.add_argument("--head", required=True)

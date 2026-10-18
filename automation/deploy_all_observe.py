@@ -58,7 +58,7 @@ case "$1" in
   derived) d="$HOME/$3"; [[ -e "$d" ]] || gone "$d"; . "$2" || exit 44
     if [[ -d "$d/mailon" ]]; then mailon_vendor_digest "$d/mailon" || exit 44; else echo -; fi
     [[ ! -e "$d/runtime-manifest.json" ]] || cat -- "$d/runtime-manifest.json" || exit 44 ;;
-  config) PYTHONPATH="$2" python3 -B -m "$3" --show ;;
+  config) PYTHONPATH="$2" python3 -B -m "$3" --show "${@:4}" ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
   timer) PATH="$HOME/.local/bin:$PATH" PYTHONPATH="$2" python3 -B -m automation.cron_timer check-declared --role "$3" --name "$4" ;;

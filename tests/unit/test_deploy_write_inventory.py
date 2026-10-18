@@ -316,6 +316,17 @@ def test_undeclared_tree_destination_is_rejected(tmp_path: Path) -> None:
     assert {(p.rule, p.target) for p in problems} == {("R3", ".hermes/undeclared_runtime")}
 
 
+def test_config_mode_argument_does_not_hide_its_declared_destination(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {"deploy.sh": (
+        'converge_config agent .hermes/config.yaml hermes-agent-profile-v1 --dori-agent-chat "$dori_mode"\n'
+    )})
+    manifest = root / "automation/pkg/deploy-manifest.txt"
+    manifest.write_text(
+        "agent|automation/pkg/config.py|.hermes/config.yaml|v2:config;algorithm=hermes-agent-profile-v1\n"
+    )
+    assert check(root, "") == ()
+
+
 def test_raw_tar_extract_without_exemption_is_rejected(tmp_path: Path) -> None:
     root = _tree(tmp_path, {"deploy.sh": (
         "tar -C x --exclude=y -czf - w.py \\\n"

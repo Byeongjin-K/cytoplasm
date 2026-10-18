@@ -206,7 +206,7 @@ def _free_response(f: Facts) -> Verdict:
     if channel in ignored:
         return _ok("agent-chat 채널은 유돌이 맡는다(이 게이트웨이는 무시)")
     if channel in free:
-        return _ok("agent-chat 채널 은 @ 없이도 답한다")
+        return _ok("도리 전환 꺼짐 — agent-chat 채널은 @ 없이도 답한다")
     return _fail("agent-chat 채널 이 discord.free_response_channels 에 없다 — @ 를 달아야만 답한다",
                  ("free_response_channels",))
 

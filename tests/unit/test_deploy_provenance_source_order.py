@@ -61,6 +61,10 @@ _REMOTE_CLEANUP: Final = ("appends the fixed cleanup command `rm -rf -- \"$stagi
                           "no shell name or source target is spelled")
 _LOCK_FD: Final = "closes the execution lock descriptor this script opened (frozen deploy-skill.sh)"
 _ALLOWED: Final[dict[tuple[str, str], str]] = {
+    ("automation/memory_curator/deploy.sh",
+     'if ! "$repo_root/automation/release_approval_remote.sh" authorize-dori-agent-chat \\'):
+        "fixed release approval transport, included explicitly in this deployer's provenance check; "
+        "the existing surface gate verifies the same HEAD and bot before any node config write",
     **{(f"{package}/deploy.sh", _NODE_ENV_LINE): _NODE_ENV for package in _NODE_ENV_DEPLOYERS},
     **{(f"automation/hermes_compat/{name}", _NODE_ENV_LINE): _NODE_ENV
        for name in ("deploy.sh", "deploy-owner-dm.sh", "deploy-public-message-policy.sh")},
