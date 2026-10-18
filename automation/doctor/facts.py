@@ -99,6 +99,7 @@ class Facts:
     cooldowns: Mapping[str, float | None] | None = None
     timers: tuple[TimerJob, ...] = ()
     gateway_stopped_by_release: bool = False
+    hermes_retired: bool = False
     channel_override: bool = False
     notice_bot_override: bool = False
     legacy_services: tuple[tuple[str, str], ...] = ()
@@ -393,6 +394,7 @@ def gather(
         except Exception as error:  # noqa: BLE001 - a probe failure is a verdict, never a crash
             discord = type(error).__name__
     from automation.interop.approval_directory import channel_override
+    from automation import peer_retired
     from automation.legacy_services import UNITS, check, marker_path
 
     legacy_states = tuple(
@@ -407,6 +409,7 @@ def gather(
         hermes=(home / ".local" / "bin" / "hermes").is_file(),
         gateway=_gateway(gateway_unit, run, os.getuid() if uid is None else uid),
         gateway_stopped_by_release=stopped_by_release(home),
+        hermes_retired=peer_retired.retired(home),
         auth=_auth(hermes_dir / "auth.json"),
         cooldowns=_cooldowns(hermes_dir / "auth.json", time.time() if now is None else now),
         model_provider=provider,

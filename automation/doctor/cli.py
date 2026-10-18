@@ -96,8 +96,22 @@ def _unreachable(account: str, root: Path, code: int, stderr: str) -> str:
     ))
 
 
+def _peer_retired(config: NodeConfig | None) -> bool:
+    """P5 writes this ops-owned marker only after the release removed the peer's Hermes."""
+    if config is None:
+        return False
+    try:
+        return (config.private_root / "peer-retired").read_bytes() == b"retired"
+    except OSError:
+        return False
+
+
 def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) -> int:
-    accounts = args.account or ([config.agent_account, config.peer_account] if config else ["agent", "peer"])
+    retired = _peer_retired(config)
+    defaults = [config.agent_account, config.peer_account] if config else ["agent", "peer"]
+    if retired:
+        defaults = defaults[:1]
+    accounts = args.account or defaults
     root = _code_root(config)
     worst, payloads = 0, []
     for account in accounts:
@@ -118,7 +132,8 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
         payloads.append(report.to_json(account, role, findings))
         if not args.json:
             print(report.render_text(account, role, findings) + "\n")
-    parity = _model_parity(config, root, run_child)
+    parity = ("[PASS] model-parity · peer 는 P5로 퇴역했다 — 비교하지 않는다(정상)" if retired
+              else _model_parity(config, root, run_child))
     payloads.append({"check": "model-parity", "line": parity})
     from automation.interop.approval_directory import CHANNEL_OVERRIDE_NOTICE, channel_override
 
