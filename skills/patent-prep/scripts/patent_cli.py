@@ -48,7 +48,8 @@ def _draft(args: argparse.Namespace) -> int:
         progress = write_draft(paths, args.slug, content)
         output = workspace(paths, args.slug) / "draft.md"
     else:
-        drafted = patent_core.draft_disclosure(paths, args.slug, Path(args.brief_file))
+        brief = Path(args.brief_file) if args.brief_file else _import_brief(paths, args.slug, Path(args.brief_import))
+        drafted = patent_core.draft_disclosure(paths, args.slug, brief)
         call = drafted.response.call
         progress = drafted.progress
         output = drafted.path
@@ -58,6 +59,13 @@ def _draft(args: argparse.Namespace) -> int:
         f"percent={progress.percent_complete}"
     )
     return 0
+
+
+def _import_brief(paths: PatentPaths, slug: str, source: Path) -> Path:
+    target = workspace(paths, slug) / "brief.md"
+    target.write_bytes(source.read_bytes())
+    target.chmod(0o600)
+    return target
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -103,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     source = draft.add_mutually_exclusive_group(required=True)
     source.add_argument("--brief-file")
     source.add_argument("--response-file")
+    source.add_argument("--brief-import", help="copy this file into the private workspace as brief.md, then draft")
     draft.set_defaults(func=_draft)
     status = commands.add_parser("status")
     status.add_argument("--slug", required=True)
