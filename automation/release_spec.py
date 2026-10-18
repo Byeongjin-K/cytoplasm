@@ -254,7 +254,7 @@ class ReleaseSpec:
             for name, _digest in self.surface_digests
             if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX,
                                     YOODORI_CHANNEL_PREFIX))
-            and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE, NOTICE_BOT_SURFACE)
+            and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE, NOTICE_BOT_SURFACE, "ledger:on")
             and not name.startswith("auto-write:")
         )
         return " · ".join(summary) or "변경 없음"

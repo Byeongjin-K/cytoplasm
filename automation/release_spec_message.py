@@ -201,6 +201,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -225,6 +226,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     facts = [
         f"배포 기준: `{spec.head_sha}`",
         f"배포 묶음: {bundle_summary}",
+        *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests

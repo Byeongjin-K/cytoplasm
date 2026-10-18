@@ -203,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
+    parser.add_argument("--ledger", choices=("on", "off"), default="off")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -223,6 +224,19 @@ def main(argv: list[str] | None = None) -> int:
         from automation import auto_write
         from automation.node_config import load_node_config
 
+        ledger_clean = args.ledger == "off"
+        if (args.runtime_root / "automation/ledger/release.py").is_file():
+            result = subprocess.run(
+                ("sudo", "-n", "-u", load_node_config().agent_account, "-H", "env",
+                 f"PYTHONPATH={args.runtime_root}", "python3", "-B", "-m",
+                 "automation.ledger.release", "check", "--mode", args.ledger),
+                capture_output=True, check=False, timeout=30,
+            )
+            if result.returncode not in (0, 1):
+                raise deploy_all.ObservationError("ledger state unreadable")
+            ledger_clean = result.returncode == 0
+        elif args.ledger == "on":
+            raise deploy_all.ObservationError("ledger runtime is missing")
         auto_kinds = () if args.auto_write == "off" else tuple(args.auto_write.split(","))
         if set(auto_kinds) - auto_write.KINDS.keys():
             raise deploy_all.ObservationError("unknown auto-write kind")
@@ -252,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean or not notice_clean or not auto_clean:
+        if not plan.clean or not notice_clean or not auto_clean or not ledger_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -282,6 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         document = json.loads(receipt)
         document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
+        document["ledger"] = {"mode": args.ledger, "verified": ledger_clean}
         print(json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2))
         return 0
     if args.format == "actions":
@@ -292,13 +307,17 @@ def main(argv: list[str] | None = None) -> int:
             print("ACT|notice-bot|converge")
         if not auto_clean:
             print("ACT|auto-write|converge")
-        return 0 if plan.clean and notice_clean and auto_clean else 1
+        if not ledger_clean:
+            print("ACT|ledger|converge")
+        return 0 if plan.clean and notice_clean and auto_clean and ledger_clean else 1
     print(deploy_all.render_plan(plan))
     if not notice_clean:
         print("NOTICE-BOT-DRIFT: account overrides differ from the release")
     if not auto_clean:
         print("AUTO-WRITE-DRIFT: node modes differ from the release")
-    return 0 if plan.clean and notice_clean and auto_clean else 1
+    if not ledger_clean:
+        print("LEDGER-DRIFT: account routing differs from the release")
+    return 0 if plan.clean and notice_clean and auto_clean and ledger_clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

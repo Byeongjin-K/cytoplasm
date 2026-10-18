@@ -94,6 +94,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    if getattr(args, "ledger", None) == "on":
+        from automation.ledger_policy import surface
+
+        surfaces.append(surface())
     from automation.auto_write_policy import surface as auto_write_surface
 
     try:
@@ -299,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
+    plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -383,6 +388,16 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     auto.set_defaults(run=authorize_auto)
+    ledger = commands.add_parser("authorize-ledger")
+    ledger.add_argument("--head", required=True)
+    def authorize_ledger(args: argparse.Namespace) -> int:
+        from automation.ledger_policy import surface
+
+        name, digest = surface()
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    ledger.set_defaults(run=authorize_ledger)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

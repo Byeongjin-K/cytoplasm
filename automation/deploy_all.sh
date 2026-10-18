@@ -64,6 +64,7 @@ chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel
 chat_channel="${chat_channel:-off}"
 notice_digest="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release digest)" || exit 4
 auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
+ledger_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release switch)" || exit 4
 if [[ "$notice_digest" != off && ( "$gateway_mode" != stopped || "$chat_channel" == off ) ]]; then
   echo "NOTICE-BOT-REFUSED: stopped gateways and yoodori channel required" >&2
   exit 4
@@ -78,7 +79,12 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+converge_ledger() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release apply \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" --mode "$ledger_mode"
 }
 
 converge_auto_write() {
@@ -300,6 +306,7 @@ case "$mode" in
       else
         log "already fully deployed"
       fi
+      # The account's routing transaction is already checked by the probe.
       refresh_wrappers
       refresh_rag_mcp
       write_receipt
@@ -308,6 +315,7 @@ case "$mode" in
     restart_needed=0
     gateway_change=""
     failures=()
+    ledger_change=0
     # actions 는 fd 9 로 읽는다 — 배포기 내부의 ssh 가 fd 0 을 삼키므로, stdin 에
     # 실으면 첫 action 뒤의 줄이 전부 사라진다(2026-08-31 실측: 매 실행 1건만 배포).
     while IFS='|' read -r -u 9 tag kind arg; do
@@ -327,6 +335,10 @@ case "$mode" in
           ;;
         auto-write)
           converge_auto_write || failures+=("auto-write")
+          ;;
+        ledger)
+          # Migrate only after every skill mount has the shared routing lock.
+          ledger_change=1
           ;;
         restart-gateway)
           restart_needed=1
@@ -372,6 +384,9 @@ case "$mode" in
     if ((${#failures[@]})); then
       log "incomplete: ${failures[*]}"
       exit 1
+    fi
+    if (( ledger_change )) || [[ "$ledger_mode" == on ]]; then
+      converge_ledger || exit 4
     fi
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then
