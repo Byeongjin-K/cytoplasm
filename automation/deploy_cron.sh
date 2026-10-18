@@ -56,6 +56,7 @@ _converge_cron_jobs() { # _converge_cron_jobs <timeout seconds>
       flush(); id = $1; st = substr($2, 2, length($2) - 2); jobs++; ended = 0; next
     }
     index($0, "  ⚠  Gateway is not running") == 1 { next }
+    index($0, "  ⚠  Scheduler is not ready") == 1 { next }
     /^  [^ ]/ { bad = 1; next }
     /^    [A-Z][A-Za-z ]*:/ {
       if (id == "") { bad = 1; next }
