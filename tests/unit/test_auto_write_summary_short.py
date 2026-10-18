@@ -8,8 +8,9 @@ from automation import auto_write
 
 def test_daily_post_is_bounded_counts_all_kinds_and_hides_links(tmp_path):
     # Given: many receipts including origin links in their private evidence fields.
-    for index in range(21):
-        kind = tuple(auto_write.KINDS)[index % 7]
+    kinds = tuple(auto_write.KINDS)
+    for index in range(3 * len(kinds)):
+        kind = kinds[index % len(kinds)]
         auto_write.record(kind, auto_write.Entry(
             str(index), f"제목 {index}\nhttps://discord.com/channels/1/2/3",
             "https://discord.com/channels/1/2/3", "2026-10-18T09:00:00+09:00",
@@ -22,7 +23,7 @@ def test_daily_post_is_bounded_counts_all_kinds_and_hides_links(tmp_path):
     # Then: one short post counts every kind, with at most five title lines.
     lines = sent[0].splitlines()
     assert len(lines) <= 8
-    assert "2026-10-18" in lines[0] and "21" in lines[0]
+    assert "2026-10-18" in lines[0] and f"총 {3 * len(kinds)}건" in lines[0]
     assert all(f"{label} 3" in lines[1] for label in auto_write.KINDS.values())
     assert "discord.com" not in sent[0]
     assert "https://" in (tmp_path / "ledger.jsonl").read_text()
