@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Final
 from urllib.error import HTTPError
 
+from automation import auto_write
 from automation.interop import origin_notice
 from automation.interop.approval_directory import DiscordChannelDirectory
 from automation.interop.approval_lease import FileKeyLease, PostingJournal
@@ -115,6 +116,7 @@ def build_effects(
     journal = PostingJournal(state_dir / "posting-journal")
     write_config = load_config()
     push_approval_log = state_dir / "push-approvals.jsonl"
+    automatic = auto_write.enabled("plaud")
 
     def live_requests(key: str) -> tuple[PlaudSyncRecord, ...]:
         try:
@@ -197,8 +199,26 @@ def build_effects(
 
     def write(record: PlaudSyncRecord) -> tuple[str, str] | None:
         plan = note_plan_for(state_dir, record)
-        if plan is None or record.message_id is None:
+        auto = automatic and record.status == "planned" and record.message_id is None
+        if plan is None or (not auto and (record.message_id is None or record.status != "approved")):
             return None
+        if auto:
+            try:
+                receipt = write_note(
+                    plan, write_config,
+                    authorize_push=lambda candidate: (
+                        auto_write.enabled("plaud")
+                        and candidate == note_plan_for(state_dir, record)
+                    ),
+                )
+                auto_write.record("plaud", auto_write.Entry(
+                    record.recording_id, record.note_relpath, receipt.commit_sha,
+                    record.recorded_at, now.isoformat(),
+                ))
+            except _EFFECT_ERRORS as error:
+                record_write_failure(store, record, error)
+                return None
+            return receipt.remote_ref, receipt.content_sha256
         context = ApprovalContext(
             approval_log=push_approval_log, owner_id=owner_id, e2e_test_mode=False
         )
@@ -228,6 +248,8 @@ def build_effects(
         an exit code, a receipt or the store, so a total failure ends as a NOTIFY-FAIL
         marker on stderr rather than as an exception the tick dies on.
         """
+        if automatic and record.message_id is None:
+            return
         channel = record.approval_thread_id or record.channel_id
         if not channel:
             return
@@ -266,4 +288,4 @@ def build_effects(
                 file=sys.stderr,
             )
 
-    return ResolveEffects(post, probe, write, notify, now)
+    return ResolveEffects(post, probe, write, notify, now, auto_write=automatic)

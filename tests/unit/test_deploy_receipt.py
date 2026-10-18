@@ -17,7 +17,7 @@ from typing import Final
 
 import pytest
 
-from automation import deploy_all, deploy_all_observe, deploy_all_probe, deploy_receipt
+from automation import deploy_all, deploy_all_observe, deploy_all_probe, deploy_receipt, notice_bot_release
 from automation.deploy_all import parse_observations
 from automation.deploy_all_kinds import ObservationError
 
@@ -233,10 +233,14 @@ def test_the_receipt_command_records_the_declared_reason_of_a_held_row(
     monkeypatch.setattr(
         deploy_all_probe, "inspect_mounts", lambda _r, _l: SimpleNamespace(stale=(), unmounted=(), orphaned=())
     )
-    monkeypatch.setattr(deploy_all_probe, "_read_home", lambda _a, _d: legacy_sha)
+    monkeypatch.setattr(deploy_all_probe, "_read_home",
+                        lambda _a, path: "" if path.endswith(".mode") else legacy_sha)
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda _a: (".hermes/scripts/d.py",))
     monkeypatch.setattr(deploy_all_observe, "observe_node",
                         lambda root, **kw: deploy_all_observe.collect(root, runner, "ops", **kw))
+    # This fixture replaces node I/O; include the new account readback seam too.
+    monkeypatch.setattr(notice_bot_release, "observe",
+                        lambda *_: {"agent": "ok", "peer": "ok", "ops": "ok"})
 
     rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running",
                                 "--runtime-root", str(runtime), "--live-root", str(tmp_path / "live"), "--format", "receipt"]
@@ -244,6 +248,9 @@ def test_the_receipt_command_records_the_declared_reason_of_a_held_row(
 
     assert rc == 0
     receipt = json.loads(capsys.readouterr().out)
+    assert receipt["notice_bot"] == {
+        "digest": "off", "accounts": {"agent": "ok", "peer": "ok", "ops": "ok"},
+    }
     assert receipt["held"] == [
         {"account": "agent", "destination": ".hermes/held/h.py", "reason": "owner-migrates-legacy-state-first"}
     ]

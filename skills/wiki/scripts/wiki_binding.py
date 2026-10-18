@@ -69,7 +69,10 @@ def _surface() -> ModuleType:
 
 
 def _bot_token() -> str | None:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    _repo_module("approval_directory")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     return token or None
 
 

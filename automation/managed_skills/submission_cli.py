@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,8 +98,10 @@ def _submitter(roster: Roster, local_owner_id: str) -> str:
 
 
 def _identity(token_file: Path | None) -> GateIdentity:
+    from automation.notice_bot import resolve_token
+
     if token_file is None:
-        token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+        token = resolve_token().strip()
     else:
         try:
             token = token_file.read_text(encoding="utf-8").strip()

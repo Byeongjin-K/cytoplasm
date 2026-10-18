@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
@@ -34,6 +35,7 @@ from automation.deploy_update_channel import (
     read_roster_update_channel,
     save_update_channel_binding as _save_update_channel_binding,
 )
+from automation.hermes_gateways import stopped_in_receipt
 from automation.node_config import load_node_config
 from automation.node_config_state import unconfigured_reason
 from automation.owner_notice import notify_owner
@@ -185,9 +187,17 @@ def run_release_update(
     command: Sequence[str] | None = None,
 ) -> int:
     """Run the fixed converger and its mandatory post-transition transaction."""
+    try:
+        stopped = stopped_in_receipt(
+            _NODE_CONFIG.private_root / "deploy-all" / "receipt.json",
+            (_NODE_CONFIG.agent_account, _NODE_CONFIG.peer_account),
+        )
+    except (OSError, ValueError) as error:
+        print(f"[deploy-reconcile] GATEWAY-RECEIPT-BLOCK {type(error).__name__}", file=sys.stderr)
+        return 1
     return apply_release_update(
         ReleaseTransition(prior_sha=prior_sha, target_sha=origin_sha),
-        _RELEASE_RUNTIME,
+        replace(_RELEASE_RUNTIME, gateways_stopped=stopped),
         ReleaseEffects(
             converge=lambda: run_converge(command),
             run=_run_release_command,

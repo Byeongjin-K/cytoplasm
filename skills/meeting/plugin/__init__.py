@@ -217,7 +217,20 @@ def _launch(trigger: Trigger, python_bin: str) -> None:
 
 
 def _discord_post(path: str, payload: dict) -> object:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    try:
+        from automation.notice_bot import resolve_token
+    except ImportError:
+        # The standalone legacy plugin has no automation package. It may retain
+        # its old sender only before cutover; an override must never be bypassed.
+        try:
+            (Path.home() / ".hermes/notice-bot.json").lstat()
+        except FileNotFoundError:
+            token = os.environ.get("DISCORD_BOT_TOKEN", "")
+        else:
+            print("NOTICE-BOT-UNAVAILABLE", file=sys.stderr)
+            return None
+    else:
+        token = resolve_token()
     if not token:
         return None
     request = Request(

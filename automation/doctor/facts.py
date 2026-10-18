@@ -100,6 +100,7 @@ class Facts:
     timers: tuple[TimerJob, ...] = ()
     gateway_stopped_by_release: bool = False
     channel_override: bool = False
+    notice_bot_override: bool = False
 
 
 def mask(text: str) -> str:
@@ -347,7 +348,12 @@ def gather(
     gws_binary = str(gws_local) if gws_local.is_file() else shutil.which("gws")
     gws_files = frozenset(name for name in GWS_FILES if (home / ".config" / "gws" / name).is_file())
     interop_path = hermes_dir / "interop" / "config.json"
-    token = (secrets or {}).get(TOKEN_KEY, "")
+    from automation.notice_bot import read_override, resolve_token
+
+    notice_override = read_override(home) is not None
+    token = resolve_token(home=home, environ=secrets or {})
+    if notice_override:
+        names = frozenset({*(names or ()), TOKEN_KEY})
     provider, custom, fallback, default, fallback_models = _hermes_models(hermes_dir / "config.yaml")
     cron = _cron(hermes_dir / "cron" / "jobs.json")
     timers = _timers(repo, role, home, run, os.getuid() if uid is None else uid)
@@ -381,6 +387,7 @@ def gather(
         cron=cron,
         timers=timers,
         channel_override=channel_override(home) is not None,
+        notice_bot_override=notice_override,
         discord=discord,
         model_default=default,
         fallback_models=fallback_models,

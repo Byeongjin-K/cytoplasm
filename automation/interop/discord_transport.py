@@ -35,11 +35,13 @@ class DiscordTransport:
         return tuple(self._send_chunk(chunk) for chunk in chunk_message(body))
 
     def _send_chunk(self, chunk: str) -> SentMessage:
+        from automation.notice_bot import resolve_token
+
         request = Request(
             f"{DISCORD_API}/channels/{self.channel_id}/messages",
             data=json.dumps({"content": chunk}).encode("utf-8"),
             headers={
-                "Authorization": f"Bot {self.token}",
+                "Authorization": f"Bot {resolve_token(self.token)}",
                 "Content-Type": "application/json",
                 "User-Agent": "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)",
             },

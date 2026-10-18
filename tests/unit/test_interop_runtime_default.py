@@ -119,12 +119,15 @@ _PARAMS: Final = tuple((p, f, a) for p, calls in _CALLS.items() for f, a in call
 _OTHER_INSERTS: Final = {
     "skills/meeting/scripts/meeting_cli.py": {
         ("<module>", "str(Path(__file__).resolve().parent)"), ("_publish_note", "root"),
-        ("_correct_terms", "root"),
+        ("_correct_terms", "root"), ("_discord_api", "str(_interop_runtime())"),
     },
     "skills/coordination/scripts/coordinate_io.py": {("calendar_scripts", "str(path)")},
 }
 _STUBS: Final = {
     "__init__.py": "",
+    "notice_bot.py": (_REPO / "automation/notice_bot.py").read_text(),
+    "node_config.py": (_REPO / "automation/node_config.py").read_text(),
+    "node.example.toml": (_REPO / "configs/node.example.toml").read_text(),
     "owner_notice.py": "def notify_owner(content):\n    return True\n",
     "interop/__init__.py": "",
     "interop/origin_notice.py": "",

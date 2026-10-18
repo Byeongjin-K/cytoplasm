@@ -134,6 +134,7 @@ def test_strict_undeclared_flag_escalates_warning_to_drift(
         "OBS|end",
     ]
     monkeypatch.setattr(deploy_all_probe, "observations", lambda *_args: lines)
+    monkeypatch.setattr(deploy_all_probe, "_read_home", lambda *_args: "")
 
     assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running"]) == 0
     assert deploy_all_probe.main(["--dori-agent-chat", "off", "--hermes-gateways", "running", "--strict-undeclared"]) == 1

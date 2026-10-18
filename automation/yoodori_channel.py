@@ -175,16 +175,16 @@ def _check_guild(text: str, target: str, home: Path, role: str) -> None:
                   if raw.get(key)), None)
     if guild is None:
         return
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token(home=home)
     if not token:
         paths = [home / ".env.secrets"]
         if role == "ops":
             paths.append(Path("/etc/autophagy/repair-approval.env"))
         for path in paths:
             try:
-                for line in path.read_text(encoding="utf-8").splitlines():
-                    if line.startswith("DISCORD_BOT_TOKEN="):
-                        token = line.partition("=")[2].strip().strip("'\"")
+                token = file_token(path, shell=True)
             except FileNotFoundError:
                 continue
             if token:

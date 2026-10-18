@@ -39,7 +39,7 @@ if [[ -z "${HEALTHCHECK_PROBES_LOADED:-}" ]]; then
     valid_account "$account" && valid_unit "$unit" || return 1
     if [[ "$unit" == "${NODE_AGENT_GATEWAY_UNIT:-hermes-gateway.service}" && "$account" == "${NODE_AGENT_ACCOUNT:-agent}" ||
           "$unit" == "${NODE_PEER_GATEWAY_UNIT:-hermes-gateway.service}" && "$account" == "${NODE_PEER_ACCOUNT:-peer}" ]]; then
-      status="$(capture_on_node "$node" "sudo -n -u ${account} -H bash -c 'export XDG_RUNTIME_DIR=/run/user/\$(id -u); state=\$(systemctl --user is-active ${unit}); if [[ \"\$state\" == inactive ]] && cmp -s \"\$HOME/.hermes/gateway-stopped-by-release\" <(printf stopped); then printf stopped-by-release; elif [[ \"\$state\" == active ]]; then printf active; else exit 1; fi'")" || return 1
+      status="$(capture_on_node "$node" "sudo -n -u ${account} -H bash -c 'export XDG_RUNTIME_DIR=/run/user/\$(id -u); state=\$(systemctl --user is-active ${unit}); if [[ \"\$state\" == inactive || \"\$state\" == failed ]] && cmp -s \"\$HOME/.hermes/gateway-stopped-by-release\" <(printf stopped); then printf stopped-by-release; elif [[ \"\$state\" == active ]]; then printf active; else exit 1; fi'")" || return 1
       if [[ "$status" == stopped-by-release ]]; then
         log "PASS $account $unit: 릴리스로 정지됨(정상, stopped by release — expected)"
         return 0

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 import uuid
@@ -27,8 +26,10 @@ API = "https://discord.com/api/v10"
 
 
 def req(path: str, data: dict[str, str] | None = None):
+    from automation.notice_bot import resolve_token
+
     headers = {
-        "Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}",
+        "Authorization": f"Bot {resolve_token(required=True)}",
         "Content-Type": "application/json",
         "User-Agent": "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)",
     }
@@ -62,9 +63,11 @@ def _result_notice_target(token: str) -> str:
 
 
 def main() -> None:
+    from automation.notice_bot import resolve_token
+
     role, phase, round_id = sys.argv[1:4]
     c = config()
-    token = os.environ["DISCORD_BOT_TOKEN"]
+    token = resolve_token(required=True)
 
     if phase == "a":
         thread = channel("team")

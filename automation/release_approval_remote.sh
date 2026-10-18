@@ -18,7 +18,7 @@ agent_home="${RELEASE_APPROVAL_HOME:-$NODE_AGENT_HOME}"
 head="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 stage="$agent_home/.hermes/release-approval-runtime/$head"
 archive_sha="$(
-  git -C "$REPO_ROOT" archive "$head" automation | sha256sum | cut -d' ' -f1
+  git -C "$REPO_ROOT" archive "$head" automation configs/node.example.toml | sha256sum | cut -d' ' -f1
 )"
 
 remote() { # remote <script>; stdin is deliberately forwarded
@@ -35,7 +35,7 @@ marker="$stage/.archive-sha256"
 if ! remote "test -f '$marker' && test \"\$(cat '$marker')\" = '$archive_sha'" </dev/null
 then
   incoming="${stage}.incoming.$$"
-  git -C "$REPO_ROOT" archive "$head" automation \
+  git -C "$REPO_ROOT" archive "$head" automation configs/node.example.toml \
     | remote "set -eu; umask 077; rm -rf '$incoming'; mkdir -p '$incoming'; tar -xf - -C '$incoming'; printf '%s\n' '$archive_sha' > '$incoming/.archive-sha256'; rm -rf '$stage'; mv '$incoming' '$stage'"
 fi
 

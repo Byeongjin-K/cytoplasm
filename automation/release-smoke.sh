@@ -35,6 +35,12 @@ IFS=' ' read -r -a SUDO <<< "${RELEASE_SMOKE_SUDO-sudo -n}"
 log() { printf '[release-smoke] %s\n' "$*" >&2; }
 fail() { log "RELEASE-SMOKE-FAIL: $1"; exit 1; }
 
+stopped=0
+if (( $# )); then
+  [[ $# == 1 && "$1" == --gateways-stopped ]] || fail "unknown smoke arguments"
+  stopped=1
+fi
+
 resolved="$(readlink -e -- "$CURRENT")" || fail "release pointer does not resolve: $CURRENT"
 [[ -d "$resolved" ]] || fail "release pointer is not a directory: $resolved"
 sha="$(basename -- "$resolved")"
@@ -70,7 +76,12 @@ if not list(root.rglob("*.py")):
     raise SystemExit(1)
 ' "$resolved" || fail "the release tree is not intact — every cron watcher would be dead"
 
-# 3. The pair actually came back. `restart` returning 0 only means systemctl accepted it.
+# 3. A previously applied stop must not be undone just to satisfy the health check.
+# Live stopped-service verification remains deploy_all's responsibility.
+if (( stopped )); then
+  log "RELEASE-SMOKE-PASS: $sha (store agrees, tree parses, gateway stop policy retained)"
+  exit 0
+fi
 "${SUDO[@]}" "$GATEWAY_HELPER" health >/dev/null 2>&1 \
   || fail "the gateway pair is not healthy after the restart"
 

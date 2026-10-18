@@ -62,13 +62,13 @@ def _tree_helper_closure() -> tuple[str, ...]:
 
 
 _INFRA: Final = tuple(dict.fromkeys((
-    "automation/node_config.py", "automation/node_config_sh.py",
+    "automation/node_config.py", "automation/node_config_sh.py", "automation/notice_bot.py",
     "automation/deploy_provenance.sh", *_tree_helper_closure(), "automation/deploy_push.sh", TIMER_HELPER,
     _DEPLOYER, "automation/repair/deploy-manifest.txt", _WRAPPER_SOURCE,
     "configs/runtime-package-manifest.txt", "configs/node.example.toml",
 )))
 _CRON: Final = declared_cron("automation/repair")
-_STEPS: Final = ("prepare", "switch", "verify", "push", "readback",
+_STEPS: Final = ("prepare", "switch", "verify", "push", "readback", "push", "readback",
                  f"timer:{_CRON.destination}", f"timer-check:{_CRON.destination}")
 
 _SUDO: Final = r'''#!/bin/bash
@@ -341,7 +341,10 @@ def test_repair_deployer_ships_the_declared_closure(rig: Rig) -> None:
     assert os.readlink(rig.link).startswith(".current.d/")
     generation = rig.link.resolve()
     assert generation.parent == rig.home / f"{_LINK}.d"
-    assert _tree(generation) == shipped
+    real = {f"automation/{name}": (rig.repo / "automation" / name).read_bytes()
+            for name in ("node_config.py", "notice_bot.py")}
+    real["automation/node.example.toml"] = (rig.repo / "configs/node.example.toml").read_bytes()
+    assert _tree(generation) == shipped | real
     assert (rig.home / _WRAPPER).read_bytes() == (_REPO / _WRAPPER_SOURCE).read_bytes()
     assert all(p.stat().st_mode & 0o777 == 0o600 for p in generation.rglob("*.py"))
     assert all(p.stat().st_mode & 0o777 == 0o700 for p in generation.rglob("*") if p.is_dir())
@@ -363,12 +366,13 @@ def test_a_watcher_started_at_any_point_of_a_deploy_sees_one_whole_generation(
     _ = rig.commit("B")
     assert _generation(rig.watch()) == before
     flipped = "root" if first else "B"
-    expected = {"prepare": before, "switch": flipped, "verify": flipped, "push": "B",
-                "readback": "B", **dict.fromkeys(_STEPS[-2:], "B")}
+    # The config push precedes the wrapper push, so the old wrapper still reads the old copy until then.
+    expected = (before, flipped, flipped, flipped, flipped, "B", "B", "B", "B")
+    assert len(expected) == len(_STEPS)
     with rig.paused_deploy() as (process, arrived, release):
-        for step in _STEPS:
+        for step, want in zip(_STEPS, expected, strict=True):
             assert _line(arrived) == f"{step}\n".encode()
-            assert _generation(rig.watch()) == expected[step], step
+            assert _generation(rig.watch()) == want, step
             _ = os.write(release, b"go\n")
         _stdout, stderr = process.communicate(timeout=60)
         assert process.returncode == 0, stderr
@@ -426,7 +430,10 @@ def test_a_failure_mid_transfer_leaves_a_whole_runtime(rig: Rig, first: bool, fa
     generations = rig.home / f"{_LINK}.d"
     names = sorted(p.name for p in generations.iterdir()) if generations.exists() else []
     if fault == "push":
-        assert rig.link.is_symlink() and _tree(rig.link.resolve()) == shipped
+        # The first push is the config file, so the swapped tree holds only the shipped Python sources.
+        real = {f"automation/{name}": (rig.repo / "automation" / name).read_bytes()
+                for name in ("node_config.py", "notice_bot.py")}
+        assert rig.link.is_symlink() and _tree(rig.link.resolve()) == shipped | real
     elif first:
         assert not rig.link.is_symlink() and not rig.link.exists()
         assert names == []

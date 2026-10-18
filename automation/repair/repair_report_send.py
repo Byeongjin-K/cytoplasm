@@ -77,14 +77,19 @@ def load_config() -> dict[str, str]:
         if not isinstance(value, str) or not value:
             raise InteropConfigError(field)
         result[field] = value
+    from automation.notice_bot import notice_channel
+
+    result["agents_log_channel_id"] = notice_channel() or result["agents_log_channel_id"]
     return result
 
 
 def _fetch(path: str) -> JsonValue:
+    from automation.notice_bot import resolve_token
+
     request = Request(
         DISCORD_API + path,
         headers={
-            "Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}",
+            "Authorization": f"Bot {resolve_token(required=True)}",
             "User-Agent": "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)",
         },
     )
@@ -129,8 +134,10 @@ def channel_watermark(*, fetcher: Fetcher | None = None) -> str:
 
 
 def _send_direct(body: str, *, budget: Budget | None) -> tuple[SentMessage, ...]:
+    from automation.notice_bot import resolve_token
+
     config = load_config()
-    token = os.environ["DISCORD_BOT_TOKEN"]
+    token = resolve_token(required=True)
     sent: list[SentMessage] = []
     for chunk in chunk_message(body):
         request = Request(

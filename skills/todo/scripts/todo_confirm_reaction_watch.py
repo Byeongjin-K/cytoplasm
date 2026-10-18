@@ -249,9 +249,12 @@ def _load_env_secrets(path: Path = _ENV_SECRETS) -> None:
 
 
 def main() -> int:
+    _repo_module("approval_directory")
+    from automation.notice_bot import resolve_token
+
     try:
         _load_env_secrets()
-        token = os.environ.get("DISCORD_BOT_TOKEN", "")
+        token = resolve_token()
         if not token:
             raise TodoWatchError("todo Discord identity is unavailable")
         todo = __import__("todo_cli")

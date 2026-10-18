@@ -83,7 +83,10 @@ def _config_value(config: Path, key: str) -> str | None:
 
 def pinned_channel_id(config: Path) -> str | None:
     """The operator's ``deploy_approvals_channel_id`` pin — supplied, never trusted blindly."""
-    return _config_value(config, _PINNED_CHANNEL_KEY)
+    from automation.notice_bot import notice_channel
+
+    return (_config_value(config, _PINNED_CHANNEL_KEY)
+            or (_config_value(config, "personal_approvals_channel_id") if notice_channel() else None))
 
 
 def owner_id(config: Path) -> str:
@@ -132,19 +135,24 @@ class SupplyChainSurface:
     owner: str
     directory: ChannelDirectory
     pinned: str | None = None
+    new_pinned: str | None = None
 
     def new(self) -> ApprovalBinding:
         """Decide, once, where a brand-new supply-chain approval must be posted."""
-        return resolve_new_binding(self.kind, self.directory, self.owner, self.pinned)
+        return resolve_new_binding(self.kind, self.directory, self.owner, self.new_pinned or self.pinned)
 
     def stored(self, record: Mapping[str, str]) -> ApprovalBinding:
         """Replay a record's own binding; a pre-schema record drains through the migrator."""
+        from automation.notice_bot import notice_channel
+
         stamped, channel_id = record.get("policy_version", ""), record.get("channel_id", "")
+        selected = notice_channel()
+        pinned = selected if selected is not None and channel_id == selected else self.pinned
         surface, kind = record.get("surface", ""), record.get("kind", "")
         if not stamped.isdigit() or not channel_id or not surface:
             return legacy_binding(
                 self.kind, channel_id or None, self.directory, self.owner,
-                skill_channel_id=self.pinned,
+                skill_channel_id=pinned,
             )
         if kind != self.kind.value:
             raise ApprovalSurfaceError(f"stored kind {kind!r} contradicts {self.kind.value!r}")
@@ -153,14 +161,17 @@ class SupplyChainSurface:
         except ValueError as error:
             raise ApprovalSurfaceError(f"stored surface is unknown: {surface!r}") from error
         return validate_stored_binding(
-            binding, self.directory, self.owner, skill_channel_id=self.pinned,
+            binding, self.directory, self.owner, skill_channel_id=pinned,
         )
 
 
 def surface_for(kind: ApprovalKind, identity: GateIdentity) -> SupplyChainSurface:
     """Bind one declared kind to this process's directory and the operator's channel pin."""
+    from automation.notice_bot import notice_channel
+
     config = identity.interop_config
-    return SupplyChainSurface(kind, owner_id(config), identity.directory(), pinned_channel_id(config))
+    return SupplyChainSurface(kind, owner_id(config), identity.directory(), pinned_channel_id(config),
+                              notice_channel())
 
 
 def binding_of_post(kind: ApprovalKind, channel_id: str) -> ApprovalBinding:

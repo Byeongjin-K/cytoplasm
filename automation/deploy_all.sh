@@ -62,6 +62,12 @@ if ! gateway_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_gat
 fi
 chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel --release-switch)" || exit 4
 chat_channel="${chat_channel:-off}"
+notice_digest="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release digest)" || exit 4
+auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
+if [[ "$notice_digest" != off && ( "$gateway_mode" != stopped || "$chat_channel" == off ) ]]; then
+  echo "NOTICE-BOT-REFUSED: stopped gateways and yoodori channel required" >&2
+  exit 4
+fi
 
 readonly RUNTIME_ROOT="${DEPLOY_ALL_RUNTIME_ROOT:-/srv/autophagy-agent-current}"
 readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-all}"
@@ -72,7 +78,19 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+converge_auto_write() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release apply \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" \
+    --kinds "$auto_kinds"
+}
+
+converge_notice_bot() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release apply \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" \
+    --digest "$notice_digest" --channel "$chat_channel"
 }
 
 #: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다
@@ -138,7 +156,7 @@ change_gateways() { # Reversible release effect: attempt both accounts, includin
   local verb="$1" acct script failed=0
   for acct in agent peer; do
     if [[ "$verb" == stop ]]; then
-      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
+      script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && systemctl --user reset-failed hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
     else
       script='export XDG_RUNTIME_DIR=/run/user/$(id -u); rm -f -- "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user start hermes-gateway.service && systemctl --user is-active hermes-gateway.service'
     fi
@@ -259,6 +277,14 @@ case "$mode" in
         exit 4
       fi
     fi
+    if [[ "$auto_kinds" != off ]]; then
+      converge_auto_write || exit 4
+    fi
+    if [[ "$notice_digest" != off ]]; then
+      "$repo_root/automation/release_approval_remote.sh" authorize-yoodori-channel \
+        --channel-id "$chat_channel" --head "$node_sha" || exit 4
+      converge_notice_bot || exit 4
+    fi
     actions="$(probe actions)"
     rc=$?
     if (( rc == 4 )); then
@@ -295,6 +321,12 @@ case "$mode" in
         run-deployer)
           log "running deployer: $arg"
           "$repo_root/$arg" || failures+=("$arg")
+          ;;
+        notice-bot)
+          converge_notice_bot || failures+=("notice-bot")
+          ;;
+        auto-write)
+          converge_auto_write || failures+=("auto-write")
           ;;
         restart-gateway)
           restart_needed=1

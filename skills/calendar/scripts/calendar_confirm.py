@@ -13,7 +13,6 @@ import json
 import os
 import sys
 import time
-from contextlib import suppress
 from datetime import datetime
 from importlib import import_module
 from pathlib import Path
@@ -81,13 +80,21 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    if token := os.environ.get("DISCORD_BOT_TOKEN", "").strip():
+    try:
+        from automation.notice_bot import file_token, resolve_token
+    except ImportError:
+        calendar_binding._repo_module("approval_directory")
+        from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token().strip()
+    if token:
         return token
-    with suppress(FileNotFoundError):
-        for line in (Path.home() / ".env.secrets").read_text(encoding="utf-8").splitlines():
-            key, delimiter, value = line.strip().partition("=")
-            if key.strip() == "DISCORD_BOT_TOKEN" and delimiter and (token := value.strip().strip("'\"").strip()):
-                return token
+    try:
+        token = file_token(Path.home() / ".env.secrets", shell=True)
+    except FileNotFoundError:
+        token = ""
+    if token:
+        return token
     raise GateError("DISCORD_BOT_TOKEN 누락 — 프로덕션 확인 경로 사용 불가", 3)
 
 

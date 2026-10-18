@@ -210,6 +210,8 @@ def kanban_task_blocked(**kwargs) -> None:
 
 
 def _send_kanban_report(*, status: ReportStatus, **kwargs) -> None:
+    from automation.notice_bot import resolve_token
+
     LOGGER.warning("interop kanban report entered status=%s", status.value)
     config = _config()
     task_id = str(kwargs.get("task_id", "kanban-unknown"))
@@ -223,7 +225,7 @@ def _send_kanban_report(*, status: ReportStatus, **kwargs) -> None:
         timestamp=datetime.now(KST),
     )
     sent = DiscordTransport(
-        token=os.environ["DISCORD_BOT_TOKEN"],
+        token=resolve_token(required=True),
         channel_id=config["agents_log_channel_id"],
     ).send(format_report(report))
     LOGGER.info("interop kanban report status=%s chunks=%d", status.value, len(sent))
@@ -249,7 +251,9 @@ def _send_direct_result(
 
 
 def _transport(channel_id: str) -> DiscordTransport:
-    return DiscordTransport(token=os.environ["DISCORD_BOT_TOKEN"], channel_id=channel_id)
+    from automation.notice_bot import resolve_token
+
+    return DiscordTransport(token=resolve_token(required=True), channel_id=channel_id)
 
 
 def _signed_text_and_actor(event) -> tuple[str, str, bool]:

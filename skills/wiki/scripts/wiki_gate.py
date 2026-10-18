@@ -151,7 +151,12 @@ def _send(request: Request) -> Any:
 
 
 def _api(method: str, path: str, payload: dict | None = None) -> Any:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    import wiki_binding
+
+    wiki_binding._repo_module("approval_directory")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise GateError("DISCORD_BOT_TOKEN 누락 — 프로덕션 확인 경로 사용 불가", 3)
     request = Request(

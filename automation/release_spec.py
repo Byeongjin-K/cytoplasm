@@ -20,6 +20,7 @@ from .release_spec_message import (
     render_v6,
     split_messages,
 )
+from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
 from automation.interop.approval_surface import ApprovalBinding
 from automation.skill_gate_specs import (
     _APPROVAL_LINE,
@@ -253,7 +254,8 @@ class ReleaseSpec:
             for name, _digest in self.surface_digests
             if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX,
                                     YOODORI_CHANNEL_PREFIX))
-            and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE)
+            and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE, NOTICE_BOT_SURFACE)
+            and not name.startswith("auto-write:")
         )
         return " · ".join(summary) or "변경 없음"
 

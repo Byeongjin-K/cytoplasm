@@ -1,7 +1,7 @@
 ---
 name: plaud
 description: "Plaud 녹음·라이프로그 동기화 상태나 전사본 위치를 물을 때 사용. Plaud 라이프로그 동기화(plaud-sync 워처)의 상태를 읽기 전용으로 보고한다 — 로컬 전사 대기·승인 대기·저장 대기 건수와 로컬 전사본(.md) 경로. 트리거: 'plaud 상태', '라이프로그 동기화 상태', 'plaud 승인 대기 몇 건', 'plaud 마지막 폴', 'plaud 전사본 어디', 'plaud 녹음 회의록으로'. READ-only — Plaud·Discord·vault 어디에도 쓰지 않는다. 승인 카드(✅/⛔)는 이 스킬이 아니라 #agent-chat 요청별 스레드에 있다."
-version: 1.3.1
+version: 1.3.2
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -17,8 +17,12 @@ prerequisites:
 ## 무엇을
 
 `plaud-sync` 워처(no-agent cron, 10분 틱)가 Plaud 녹음을 발견해 **오디오를 내려받아 노드에서
-직접 전사**(whisper.cpp + 화자 분리)하고, 그 전사본으로 노트를 동결한 뒤 소유자 승인 뒤
-Obsidian vault 에 밀어 넣는다. 이 스킬은 그 워처의 **상태 파일**을 읽어 한눈에 보고한다:
+직접 전사**(whisper.cpp + 화자 분리)하고, 그 전사본으로 노트를 동결한 뒤
+Obsidian vault 에 밀어 넣는다. 기본은 소유자 승인 카드 경로다. Q231의 릴리스 스위치
+`auto-write-plaud`가 켜지면 동결 SHA를 확인해 카드 없이 같은 writer로 저장하고 매일
+21:30 KST의 「오늘 자동으로 쓴 것」 요약에 남긴다. 스위치 삭제+재배포는 카드 경로 복구다.
+상태가 `planned`여도 자동 모드이면 승인 대기가 아니라 쓰기·재시도 대기일 수 있으므로
+카드를 찾으라고 안내하기 전에 모드를 구별한다. 이 스킬은 **상태 파일**을 읽어 한눈에 보고한다:
 
 - 마지막 Plaud 폴 시각(UTC + KST)
 - 레코드 수와 status 별 건수 — `transcribing`(발견·오디오 로컬 전사 대기) · `planned`(전사 완료·미게시) ·
@@ -66,7 +70,7 @@ URL을 만든다. 길드가 없는 옛 레코드나 불완전한 좌표는 `thre
 - `PLAUD_SYNC_MIN_DURATION_MS`(기본 5000) 미만은 발견 시 건너뛰어 레코드·노트·카드를 만들지 않는다.
   이미 전사 대기 중이면 원본 길이를 확인하는 다음 처리에서 폐기한다.
 - Plaud 요약이 없으면 기존 필드 추출과 같은 LLM 호출에서 얻은 한국어 요약을 노트에 쓴다.
-  Plaud 요약이 있으면 그것이 우선하며, 내용 분류 없이 추출하며 소유자 ✅는 그대로다.
+  Plaud 요약이 있으면 그것이 우선하며 내용 분류 없이 추출한다. 건별 ✅는 기본 모드에서만 받는다.
 
 ## 폴더 이동 별칭과 클라우드 재확인 오류
 
@@ -123,6 +127,11 @@ python3 /srv/autophagy-skills/live/meeting/scripts/meeting_cli.py ingest \
 다만 위 보관 옵트인을 켰다면 원음의 owner-only Drive 사본이 있을 수 있다.
 
 ## 워처의 결과 통지
+
+자동 모드에서 새로 쓴 노트는 개별 승인 스레드를 만들지 않는다.
+비공개 공용 원장 `~/.hermes/auto-write/ledger.jsonl`에 저장 영수증만 남기고,
+기존 owner notice 경로의 21:30 일일 요약에 녹음 시각·노트 경로를 모은다.
+이하 스레드 통지는 기존 승인 카드를 가진 레코드와 기본 모드에 적용된다.
 
 저장 완료(`written`)·취소(`abandoned`) 결과는 워처가 `origin_notice.deliver(message=)`의
 소유자 메시지 봉투로 **승인 카드를 올린 같은 스레드**에 보낸다. 스레드 전송 실패 시에도

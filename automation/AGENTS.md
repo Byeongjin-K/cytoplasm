@@ -1,6 +1,10 @@
 # automation/ — 오케스트레이션·게이트·워처·배치 코어
 
 에이전트 실시간 로직 밖의 모든 자동화. 순수 로직은 stdlib 전용, 외부효과는 승인 게이트 경유.
+Q231의 예외는 `auto_write`의 릴리스 승인된 Plaud 자동 쓰기뿐이다. 아래 Plaud의 건별 카드 설명은
+자동 모드가 꺼진 기본 경로이며, 켜면 동결 SHA를 확인해 같은 writer로 쓰고 공용 일일 요약에 남긴다.
+`auto_write.record(kind, Entry)`·`summarize(now)`·`release_kinds(home)`는 종류별로 공유한다.
+Q233의 다른 6종 연결은 후속이다([소개](../docs/기능소개/plaud-노트-자동-쓰기.md)).
 대부분 서브패키지는 `python3 -m automation.<pkg>` 또는 `<pkg>/*_cli.py`로 실행.
 
 ## 서브패키지 맵
@@ -34,6 +38,7 @@
 | `final/` | F-웨이브 감사 스크립트(f1_audit/f2_quality/f4_scope) — 계획 문서 대조 검증 | F1-F4 |
 | `hermes_compat/` | 벤더 Hermes 게이트웨이 호환 패치 캐리어(추적·멱등·되돌리기 가능, exact-preimage+백업+compile-gate). `manifest.json`에 5패치: (1) `patch_busy_dispatch.py`—`pre_gateway_dispatch`를 busy 진입 시 1회 발화(skill_generation 관측·meeting-gate veto 우회 수정, W6-4/W2-3). (2) `patch_busy_fifo.py`—queue 모드 owner DM 텍스트를 관련성-FIFO로 세그멘트(비관련→별도 순차 턴, 관련=마지막 물리 DM 기준 ≤1.0s 버스트 또는 reply-to-tail→tail 병합, 긴 작업 무중단), over-cap(>32)→❌+안내, depth-cap→prepend, **FIFO 드레인 후속 턴마다 자기 결과로 물리별 영수증 종결**(프레임 예외/취소 시 부모 finally가 ❌), 시작 시 크래시 미해결 영수증 reconcile. (3) `patch_discord_receipts.py`—모든 물리 DM에 👀 + 턴 완료 시 물리별 ✅/❌(공유 `receipt_apply.resolve_receipts` 멱등 경계, ledger-first) + content-free SQLite 원장(`~/.hermes/owner-dm-receipts/`). (4) `patch_public_message_policy.py`—Discord 길드 채널·스레드의 turn telemetry를 fail-closed allowlist로 최종 결과·승인 요청·질문·실패 요약·완료 통지만 보이게 한다. (5) `patch_discord_public_approval.py`—길드 채널·스레드의 실행 승인에서 명령·사유를 불투명한 보호 작업 설명으로 바꾼다. 순수로직은 `owner_dm_*`·`receipt_*` 모듈(host-tested), 주입 코드는 `hermes_compat_boot.py`(automation.__path__ 병합, interop shadow 무력화)를 거쳐 absolute import. 배포=`deploy-owner-dm.sh`(트랜잭셔널·owner-gated): preflight(복사본)→fail-closed 원장기반 drain-guard(`owner-dm-drain-check.py`)→스냅샷(소스+런타임+bytecode 캐시)+활성화+적용(`owner-dm-txn.sh`)→실패 시 모든 파일 byte-exact 롤백(`owner-dm-restore.sh`, present/absent 매니페스트)→agent+peer 독립 재시동+복구. `hermes update` 시 전 패치 재적용 필요 | W6-4/W2-3 + owner-DM |
 ## 루트 스크립트/모듈
+- `notice_bot.py` / `notice_bot_release.py` — 노드 발신 자격증명 단일 해석·읽기 전용 신원 확인과 릴리스 호스트의 지문 바인딩·stdin 배포. ops override는 `ProtectHome` 밖 `private_root/notice-bot.json`이며 원문을 argv·계획·카드·로그에 넣지 않는다. 새 발신자는 직접 `DISCORD_BOT_TOKEN`을 읽지 않는다. [소개](../docs/기능소개/발신-봇-유돌.md).
 - `deploy-skill.sh` — 스킬 배포 4단계 게이트 (SANDBOX→REVIEW→owner ✅→MOUNT). `peer_attest_mode=discord|signed`를 명시적으로 전달하고 signed 모드에서는 peer stdout의 단일 SSH 서명 레코드를 gate stdin으로 운반한다(공유 상태 없음, unset=거부). owner 결정은 시간 비만료, peer 증명만 TTL 만료 시 같은 바인딩 자동 재검증. 스킬별 실행 lease가 refresh→consume을 직렬화한다. 배포 판정=live 심링크 해시.
   - `autophagy-supply-chain-watch`의 같은 2분 틱이 미응답 `skill-deploy`를 `approval_lifecycle.remind_owner_approval`로 넘긴다. `automation/supply_chain_remind.py`는 메시지 snowflake에서 실제 게시 시각을 복원하고 `ReminderJournal`로 due 시간 구간을 claim한 뒤, 실제 전송 edge에서만 레코드의 channel을 `skill_gate_surface.surface_for(...).stored(record)`로 재검증해 원 `#approvals` 메시지의 guild 점프 링크를 전송한다(disabled/not-due/terminal은 channel·guild 조회 0). 별도 cron·승인 메시지·resolver를 만들지 않으며 전송 실패는 배포 재개 판정을 바꾸지 않는다.
   - **자가 스킬 이름 충돌 차단(SS-1)**: 배포가 계정의 자가 저작물을 덮어쓰지 못하게 `SELF-SKILL-COLLISION-BLOCK`(exit 4)으로 멈춘다. agent 쪽은 `assert_agent_root_has_no_self_skill`이 `mountpoint`로 두 토폴로지를 구분한다 — 레거시 read-only bind가 남아 있으면 governed 전건이 그 루트에 보이므로 판정을 유보하고(`governed-mount`), 반전된 뒤에는 그 루트가 자가 저작 공간뿐이라 깊이 2까지(Hermes는 자가 스킬을 카테고리 디렉터리 아래에 둔다) 동명 디렉터리를 찾으면 차단한다. peer 쪽은 `peer_skill_root_state`가 같은 루트를 샌드박스 staging과 함께 쓰므로 3분류다 — `.usage.json`이 agent-created라고 말하거나 frontmatter에 `author: autophagy-agents`가 없으면(`foreign`) 차단하고, 우리 자신의 잔여 사본만(`staging-residue`) 덮어쓴다. **읽지 못하거나 분류가 모호해도 같은 코드로 멈춘다**(fail-closed). 가드는 순수 로컬 검증 뒤·stage 1 앞에 놓여 ops 동기화·실행 lease·peer staging 어느 것도 그 전에 일어나지 않고, `--remove`는 대상이 아니다(충돌에서 **빠져나오는** 길이다). 반대 방향(자가 스킬이 배포 이름을 선점)은 Hermes `skill_manage(create)`가 어느 루트든 동명이 있으면 거부해 막는다.

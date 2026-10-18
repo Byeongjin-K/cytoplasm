@@ -112,7 +112,10 @@ def send_review(file: Path, note: str) -> str:
 
 
 def _token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    _facade()
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise ReviewError("DISCORD_BOT_TOKEN 누락 — 검토 DM 전송 불가")
     return token

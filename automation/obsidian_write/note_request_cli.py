@@ -97,9 +97,11 @@ def _print_thread_line(record: NoteRequest) -> None:
 
 
 def cmd_request(args: argparse.Namespace) -> int:
+    from automation.notice_bot import resolve_token
+
     store = NoteRequestStore()
     record = _new_record(args, store)
-    runtime = discord_runtime(os.environ.get("DISCORD_BOT_TOKEN", ""), owner_id_from_config(), store)
+    runtime = discord_runtime(resolve_token(), owner_id_from_config(), store)
     verdict = request_approval(record, store, runtime)
     if verdict.outcome not in {Outcome.POSTED, Outcome.PENDING}:
         reason = "unknown" if verdict.reason is None else verdict.reason.value

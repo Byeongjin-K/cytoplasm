@@ -7,7 +7,6 @@ posted (reason printed), 4 the model or a source was unavailable (retry later).
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import tempfile
 import threading
@@ -64,7 +63,9 @@ def _print_thread_line(record: ProposalRecord) -> None:
 
 def post_card(board: Board, record: ProposalRecord) -> ProposalRecord:
     """Post (or keep pending) the one approval card of this proposal revision."""
-    runtime = discord_runtime(os.environ.get("DISCORD_BOT_TOKEN", ""), owner_id_from_config(), board.proposals)
+    from automation.notice_bot import resolve_token
+
+    runtime = discord_runtime(resolve_token(), owner_id_from_config(), board.proposals)
     verdict = request_approval(record, board.proposals, runtime)
     if verdict.outcome not in {Outcome.POSTED, Outcome.PENDING}:
         reason = "unknown" if verdict.reason is None else verdict.reason.value

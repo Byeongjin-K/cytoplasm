@@ -81,7 +81,7 @@ def _hermes(f: Facts) -> Verdict:
 
 
 def _gateway(f: Facts) -> Verdict:
-    if f.gateway == "inactive" and f.gateway_stopped_by_release:
+    if f.gateway in {"inactive", "failed"} and f.gateway_stopped_by_release:
         return _ok(f"{f.gateway_unit} 릴리스로 정지됨(정상, stopped by release — expected)")
     if f.gateway == "active":
         return _ok(f"{f.gateway_unit} 실행 중")
@@ -352,4 +352,8 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
 
         findings.append(Finding("channel-override", "채널 덮어쓰기", Status.PASS,
                                 CHANNEL_OVERRIDE_NOTICE, "대화·알림 목적지", ()))
+    if facts.notice_bot_override:
+        from automation.notice_bot import NOTICE
+
+        findings.append(Finding("notice-bot", "발신 봇", Status.PASS, NOTICE, "알림·승인 카드", ()))
     return tuple(findings)

@@ -48,6 +48,8 @@ def _load_env_secrets(path: Path = ENV_SECRETS) -> None:
 
 def main() -> int:
     """Quiet unless a proposal was applied, cancelled or failed this tick."""
+    from automation.notice_bot import resolve_token
+
     try:
         _load_env_secrets()
         board = Board.default()
@@ -60,7 +62,7 @@ def main() -> int:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
                 return 0
-            token = os.environ.get("DISCORD_BOT_TOKEN", "")
+            token = resolve_token()
             runtime = discord_runtime(token, owner_id_from_config(), proposals)
             today = datetime.now(ZoneInfo("Asia/Seoul")).date()
             result = run_tick(

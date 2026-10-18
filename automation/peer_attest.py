@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -242,8 +241,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not _is_trusted_attestor_root(REPO_ROOT):
         print("FATAL: peer attestor must run from the release runtime or /srv/autophagy-agents", file=sys.stderr)
         return 2
+    from automation.notice_bot import resolve_token
+
     request = _parse_request(sys.argv[1:] if argv is None else argv)
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    token = resolve_token()
     if request is None:
         print("FATAL: invalid attestation arguments", file=sys.stderr)
         return 2

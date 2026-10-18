@@ -199,6 +199,8 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX, EnvelopeUnavailable,
     )
+    from automation.notice_bot import CARD_LINE, SURFACE
+    from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -223,6 +225,10 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     facts = [
         f"배포 기준: `{spec.head_sha}`",
         f"배포 묶음: {bundle_summary}",
+        *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
+        *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
+          for name, _digest in spec.surface_digests
+          if name.startswith(SURFACE_PREFIX)],
         *(
             [f"헬스체크 허용 목록도 갱신: {', '.join(wrapper_hosts)}"]
             if wrapper_hosts

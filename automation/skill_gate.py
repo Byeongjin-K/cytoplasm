@@ -68,7 +68,9 @@ provenance_lines = skill_gate_specs.provenance_lines  # deploy 요청 CLI 표면
 
 
 def _token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         print("FATAL: DISCORD_BOT_TOKEN missing", file=sys.stderr)
         raise SystemExit(2)

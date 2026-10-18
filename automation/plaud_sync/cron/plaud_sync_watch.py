@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""No-agent cron: discover Plaud recordings and drive owner-gated lifelog notes.
+"""No-agent cron: discover Plaud recordings and drive lifelog notes.
 
 Watcher contract: only Discord REACTIONS are polled (규약 a) — the Plaud cloud
-poll is a proposal source like the relocate classifier, and every proposal still
-needs cha's ✅ before a byte is pushed. `~/.env.secrets` is self-loaded (b), the
+poll is a proposal source like the relocate classifier. By default each note needs
+an owner card; a release-authorized Plaud auto-write policy replaces that card.
+`~/.env.secrets` is self-loaded (b), the
 repo import goes through the runtime-root resolver (c), the deployed file name
 is skill-unique (e), and records advance only after the effect succeeded (f).
 """
@@ -145,7 +146,9 @@ def _merge_effect_bindings(
 
 
 def run_once(now: datetime) -> ResolveResult:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise WatchError("Discord token is unavailable")
     from automation.plaud_sync.effects_live import build_effects
@@ -185,7 +188,9 @@ def _summary(result: ResolveResult) -> str | None:
 
 
 def _repost_posted() -> tuple[str, ...]:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise WatchError("Discord token is unavailable")
     from automation.plaud_sync.reaction_transport import DiscordTransport

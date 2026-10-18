@@ -23,13 +23,15 @@
    배포 HEAD의 소유자 승인에 이 표면이 없으면 `GATEWAY-STOP-UNAUTHORIZED`로 멈춘다.
    파일이 없으면 기존 카드 바이트·해시는 바뀌지 않는다.
 2. **실행:** 승인 뒤 배포기가 두 계정에서 `systemctl --user stop hermes-gateway.service`를
-   실행하고 `is-active`가 `inactive`인지 다시 확인한다. 한 계정이 실패해도 다른 계정은 시도하며,
+   실행한 뒤 `systemctl --user reset-failed hermes-gateway.service`로 SIGTERM의 종료코드 1이
+   남긴 failed 상태를 지우고 `is-active`가 `inactive`인지 확인한다. start·disable은 하지 않는다.
+   한 계정이 실패해도 다른 계정은 시도하며,
    실패·미상 상태에는 전량 반영 영수증을 발급하지 않는다.
    정지 중에는 플러그인 세대 검사·agent+peer 재시동·세대 대기를 하지 않는다.
 3. **상시 점검:** 같은 단계에서 계정별 `~/.hermes/gateway-stopped-by-release`에
-   `stopped`를 기록한다. 헬스체크·doctor는 정확한 표식이 있고 서비스가 inactive일 때
+   `stopped`를 기록한다. 헬스체크·doctor는 정확한 표식이 있고 서비스가 inactive 또는 failed일 때
    `PASS`와 “릴리스로 정지됨(정상, stopped by release — expected)” 안내를 낸다.
-   표식 없이 inactive이거나 표식이 깨졌으면 기존처럼 고장이다.
+   표식 없이 inactive·failed이거나 표식이 깨졌으면 기존처럼 고장이다.
    독립 세대 검사도 표식이 있으면 `stopped-by-release`로 정상 판정한다.
 4. **복구:** 호스트의 스위치 파일을 삭제하고 다시 배포한다.
    배포기가 두 계정의 노드 표식만 지우고 `systemctl --user start hermes-gateway.service`를
@@ -44,7 +46,7 @@
 
 ## 헬스체크 허용 목록
 
-게이트웨이 생존 프로브의 원격 명령에 표식 조회가 추가되므로 `--probe-hashes`와
+게이트웨이 생존 프로브의 원격 명령에 표식 조회와 failed 판정이 들어가므로 `--probe-hashes`와
 래퍼 입력 지문이 바뀐다. 기존 `healthcheck-wrapper:<node>` 승인 표면·카드·자동 갱신 경로가
 새 명령을 함께 승인하고 설치한다. `LIVE_CHECKS` 순서·이름과 수리 명령 매니페스트는 유지한다.
 

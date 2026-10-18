@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 import unicodedata
 from collections.abc import Sequence
@@ -127,6 +126,8 @@ def _print_thread_line(record: EffectRequest) -> None:
 
 
 def cmd_request(args: argparse.Namespace) -> int:
+    from automation.notice_bot import resolve_token
+
     if args.effect == COMMAND:
         refused = refusal(args.summary + "\n" + args.target, tuple(str(item) for item in args.argv))
         if refused is not None:
@@ -134,7 +135,7 @@ def cmd_request(args: argparse.Namespace) -> int:
             return EXIT_REFUSED
     store = EffectRequestStore()
     record = _new_record(args, store)
-    runtime = discord_runtime(os.environ.get("DISCORD_BOT_TOKEN", ""), owner_id_from_config(), store)
+    runtime = discord_runtime(resolve_token(), owner_id_from_config(), store)
     verdict = request_approval(record, store, runtime)
     if verdict.outcome not in {Outcome.POSTED, Outcome.PENDING}:
         reason = "unknown" if verdict.reason is None else verdict.reason.value

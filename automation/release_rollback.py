@@ -67,6 +67,7 @@ class ReleaseRuntime:
     release_helper: Path
     gateway_helper: Path
     smoke_script: Path
+    gateways_stopped: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,9 +201,12 @@ def _rollback(failed: FailedRelease, runtime: ReleaseRuntime, effects: ReleaseEf
         ) == 0
     gateways_recovered = False
     if pointer_restored:
-        restarted = effects.run(_gateway_command(runtime, "restart"), _GATEWAY_TIMEOUT) == 0
-        healthy = effects.run(_gateway_command(runtime, "health"), _GATEWAY_TIMEOUT) == 0
-        gateways_recovered = restarted and healthy
+        if runtime.gateways_stopped:
+            gateways_recovered = True  # No gateway action was taken; retain the stopped policy.
+        else:
+            restarted = effects.run(_gateway_command(runtime, "restart"), _GATEWAY_TIMEOUT) == 0
+            healthy = effects.run(_gateway_command(runtime, "health"), _GATEWAY_TIMEOUT) == 0
+            gateways_recovered = restarted and healthy
     recovery_complete = pointer_restored and gateways_recovered
     updated = replace(
         failed,
@@ -269,10 +273,16 @@ def apply_release_update(
         return converge_rc
     if _current_sha(runtime.current) != transition.target_sha:
         return 1
-    restart_rc = effects.run(_gateway_command(runtime, "restart"), _GATEWAY_TIMEOUT)
+    restart_rc = (
+        0 if runtime.gateways_stopped
+        else effects.run(_gateway_command(runtime, "restart"), _GATEWAY_TIMEOUT)
+    )
     reason = "gateway-restart"
     if restart_rc == 0:
-        smoke_rc = effects.run(("/usr/bin/bash", str(runtime.smoke_script)), _SMOKE_TIMEOUT)
+        smoke = ("/usr/bin/bash", str(runtime.smoke_script))
+        if runtime.gateways_stopped:
+            smoke += ("--gateways-stopped",)
+        smoke_rc = effects.run(smoke, _SMOKE_TIMEOUT)
         if smoke_rc == 0:
             runtime.failed_state.unlink(missing_ok=True)
             return 0

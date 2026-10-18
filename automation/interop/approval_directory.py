@@ -119,6 +119,8 @@ def _unbound_api(
 
 
 def _stdlib_api(token: str) -> DiscordApi:
+    from automation.notice_bot import resolve_token
+
     def call(
         method: str,
         path: str,
@@ -128,7 +130,7 @@ def _stdlib_api(token: str) -> DiscordApi:
             f"{_DISCORD_API}{path}",
             data=None if payload is None else json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": f"Bot {token}",
+                "Authorization": f"Bot {resolve_token(token)}",
                 "Content-Type": "application/json",
                 "User-Agent": _USER_AGENT,
             },
@@ -431,10 +433,17 @@ class DiscordChannelDirectory:
 
 
 def _configured_approvals_channel() -> str | None:
-    return _interop_config_string("personal_approvals_channel_id")
+    from automation.notice_bot import notice_channel
+
+    return notice_channel() or _interop_config_string("personal_approvals_channel_id")
 
 
 def _configured_agent_chat_channel() -> str | None:
+    from automation.notice_bot import notice_channel
+
+    selected = notice_channel()
+    if selected is not None:
+        return selected
     override = channel_override()
     if override is not None:
         return override["agent_chat_channel_id"]

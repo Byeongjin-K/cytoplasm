@@ -42,6 +42,7 @@ from automation.release_completion_target import (
     approval_decision,
 )
 from .release_request_gate import ReleaseRequestGate
+from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
 from automation.release_spec import (
     ReleaseSpec,
     ReleaseSpecError,
@@ -93,6 +94,21 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    from automation.auto_write_policy import surface as auto_write_surface
+
+    try:
+        surfaces.extend(auto_write_surface(kind) for kind in getattr(args, "auto_write", None) or ())
+    except ValueError as error:
+        print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+        return 4
+    notice_digest = getattr(args, "notice_bot", None)
+    if notice_digest is not None:
+        if (_SHA256.fullmatch(notice_digest) is None
+                or getattr(args, "hermes_gateways", None) != "stopped"
+                or not getattr(args, "yoodori_channel", None)):
+            print("RELEASE-PLAN-BLOCK: notice-bot requires digest, stopped gateways and channel", file=sys.stderr)
+            return 4
+        surfaces.append((NOTICE_BOT_SURFACE, notice_digest))
     if getattr(args, "hermes_gateways", None) == "stopped":
         surfaces.append(gateway_stop_surface())
     channel_id = getattr(args, "yoodori_channel", None)
@@ -281,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
+    plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
+    plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -344,6 +362,27 @@ def main(argv: list[str] | None = None) -> int:
         argparse.Namespace(skill=None, surface=RAG_MCP_SURFACE, hash=args.hash,
                            head=args.head, peer_attest_mode="")
     ))
+    notice = commands.add_parser("authorize-notice-bot")
+    notice.add_argument("--hash", required=True)
+    notice.add_argument("--head", required=True)
+    notice.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=NOTICE_BOT_SURFACE, hash=args.hash,
+                           head=args.head, peer_attest_mode="")
+    ))
+    auto = commands.add_parser("authorize-auto-write")
+    auto.add_argument("--kind", required=True)
+    auto.add_argument("--head", required=True)
+    def authorize_auto(args: argparse.Namespace) -> int:
+        from automation.auto_write_policy import surface
+
+        try:
+            name, digest = surface(args.kind)
+        except ValueError:
+            return 4
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    auto.set_defaults(run=authorize_auto)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

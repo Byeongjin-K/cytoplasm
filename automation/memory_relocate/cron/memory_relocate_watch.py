@@ -216,7 +216,9 @@ def _merge_effect_bindings(
 
 def run_once(now: datetime) -> ResolveResult:
     """Run one state-machine tick and persist its resulting immutable snapshot."""
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise WatchError("Discord token is unavailable")
     state = load_state(STATE_PATH)

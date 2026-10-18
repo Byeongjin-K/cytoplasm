@@ -186,6 +186,11 @@ def _announce_under_lease(
 
 def resolve_announce_channel_id() -> str | None:
     """Prefer the roster's group channel; fall back to the environment unchanged."""
+    from automation.notice_bot import notice_channel
+
+    selected = notice_channel()
+    if selected is not None:
+        return selected
     try:
         # Lazy: the roster parser needs PyYAML, which must not break config-free surfaces.
         from automation.group_roster.parser import load_roster, roster_path
@@ -201,8 +206,10 @@ def resolve_announce_channel_id() -> str | None:
 
 
 def announce_release_from_environment(manifest: ManagedManifest, tag: str) -> AnnounceResult:
+    from automation.notice_bot import resolve_token
+
     channel_id = resolve_announce_channel_id()
-    token = os.environ.get("MANAGED_ANNOUNCE_BOT_TOKEN")
+    token = resolve_token(os.environ.get("MANAGED_ANNOUNCE_BOT_TOKEN", ""))
     if not channel_id or not token:
         return AnnounceResult(sent=False)
     try:

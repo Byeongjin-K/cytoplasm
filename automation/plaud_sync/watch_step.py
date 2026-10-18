@@ -25,6 +25,7 @@ class ResolveEffects:
     write_obsidian: Callable[[PlaudSyncRecord], tuple[str, str] | None]
     notify_result: Callable[[PlaudSyncRecord, str], None]
     now: datetime
+    auto_write: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,9 @@ def resolve_tick(
         record = records[key]
         match record.status:
             case "planned":
+                if effects.auto_write and record.message_id is None:
+                    _write_approved(records, key, effects, written, transition_time)
+                    continue
                 if len(posted) >= max_posts:
                     continue
                 receipt = effects.post_approval(record)
