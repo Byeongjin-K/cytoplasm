@@ -1,31 +1,8 @@
 #!/usr/bin/env python3
-"""Mail triage watcher (W4-2) — Hermes cron job, no_agent script mode, every 10 min.
+"""Run the governed mail watcher and expose failures to the timer runner.
 
-Thin wrapper: runs the mounted mail skill CLI `watch` subcommand (reposts
-unposted pending drafts, resolves owner ✅/⛔ reactions, sends approved
-drafts — no auto-drafting: drafts are owner-initiated via the `draft`
-subcommand). no_agent semantics: empty stdout + exit 0 on success (silent tick);
-an expected child failure is recorded in the failure streak and also exits 0 —
-under ``--deliver discord`` the scheduler posts its own failure banner for ANY
-non-zero exit regardless of stdout (2026-08-24 budget-watch measurement), and a
-stuck ``*/2`` job exiting 1 would be 720 banners a day, the exact flood the
-streak model exists to prevent. Only a failure the streak could NOT record
-(helper missing/broken) keeps exit 1 so the banner stays as the last line of
-defence. Deployed copy lives at ~/.hermes/scripts/mail_triage_watch.py (Hermes
-cron sandbox rule); the skill CLI stays the single implementation in the
-immutable governed live store at /srv/autophagy-skills/live/mail/scripts/ — no
-import of it here, subprocess only (avoids the W3-2 cron-sandbox PYTHONPATH
-package-shadowing trap).
-
-``--digest-card <message id>`` (2026-10-17): the gateway's interop plugin runs this
-wrapper the moment the owner presses 📄/✍️ on a digest card, so the press is handled
-in seconds instead of on the next */2 tick. Same secrets and runtime root as the tick;
-it is not a tick, so it never touches the failure streak — the exit code and a masked
-stderr line go back to the plugin, which logs them.
-
-``--digest-reactions-only`` runs the bounded reaction scan alone. The
-``mail-digest-reactions`` user timer runs it through a fixed entry script every 20s.
-"""
+Success is silent. Failures retain a masked diagnostic and nonzero exit so
+doctor can read the timer result; no watch-failure incident is recorded."""
 from __future__ import annotations
 
 import os
@@ -95,21 +72,10 @@ def _redact(text: str) -> str:
 
 
 def _announce(*, ok: bool, detail: str = "") -> bool:
-    """Speak only when a failure streak opens or closes — see watch_failure_streak.
-
-    Returns True when the streak recorded the tick — only then may a failing
-    tick exit 0 (silence is earned by a recorded failure, never by breakage).
-    """
-    if watch_failure_streak is None:
-        if not ok:
-            print(f"{WATCH_NAME} error: {detail}"[:300])
-        return False
-    notice = watch_failure_streak.record(
-        WATCH_NAME, ok=ok, detail=detail, threshold=FAILURE_NOTICE_THRESHOLD
-    )
-    if notice is not None:
-        print(notice[:300])
-    return True
+    """The timer runner owns failure counting; report the actual failing exit."""
+    if not ok:
+        print(_redact(f"{WATCH_NAME} error: {detail}")[:300])
+    return False
 
 
 def digest_card(message_id: str, emoji: str = "", *, scan: bool = False) -> int:

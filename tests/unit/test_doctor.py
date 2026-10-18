@@ -92,7 +92,7 @@ def test_a_fully_connected_agent_passes_every_check(tmp_path: Path) -> None:
     findings = evaluate(_facts(_connected_home(tmp_path)))
 
     assert {f.key: str(f.status) for f in findings if f.status is not Status.PASS} == {}
-    assert len(findings) == 13
+    assert len(findings) == 10
     assert all(f.steps == () for f in findings)
 
 
@@ -100,10 +100,7 @@ def test_agent_chat_missing_from_free_response_is_broken(tmp_path: Path) -> None
     home = _connected_home(tmp_path)
     _ = _write(home / ".hermes" / "config.yaml", "discord:\n  require_mention: true\n  free_response_channels: '44'\n")
 
-    found = _by_key(evaluate(_facts(home)))["agent-chat-free-response"]
-
-    assert found.status is Status.FAIL and found.subjects == ("free_response_channels",)
-    assert found.steps
+    assert "agent-chat-free-response" not in _by_key(evaluate(_facts(home)))
 
 
 @pytest.mark.parametrize("free", ["44", "11"])
@@ -112,10 +109,7 @@ def test_agent_chat_in_ignored_channels_is_intended_even_when_free(tmp_path: Pat
     _ = _write(home / ".hermes" / "config.yaml",
                f"discord:\n  ignored_channels: '11,44'\n  free_response_channels: '{free}'\n")
 
-    found = _by_key(evaluate(_facts(home)))["agent-chat-free-response"]
-
-    assert found.status is Status.PASS and found.subjects == ()
-    assert found.steps == ()
+    assert "agent-chat-free-response" not in _by_key(evaluate(_facts(home)))
 
 
 def test_a_repeatedly_failing_job_is_broken_and_named(tmp_path: Path) -> None:
@@ -169,11 +163,11 @@ def test_an_empty_home_names_every_missing_connection_without_crashing(tmp_path:
 
     found = _by_key(evaluate(_facts(tmp_path, run=run)))
 
-    for key in ("hermes-cli", "primary-model", "discord-bot", "approval-surface"):
+    for key in ("primary-model", "discord-bot", "approval-surface"):
         assert found[key].status is Status.FAIL, key
     for key in ("google-workspace", "drive-publish", "institutional-mail", "speech-to-text", "scheduled-jobs"):
         assert found[key].status is Status.WARN, key
-    assert found["hermes-gateway"].status is Status.WARN
+    assert "hermes-gateway" not in found and "hermes-cli" not in found
     assert all(f.steps[-1].startswith("자세한 절차") for f in found.values() if f.status is not Status.PASS)
 
 
@@ -259,7 +253,7 @@ def test_offline_skips_the_network_but_still_reads_local_state(tmp_path: Path) -
     facts = _facts(_connected_home(tmp_path), run=run, discord_probe=forbidden, online=False)
 
     assert facts.gws is None and facts.discord is None
-    assert calls == [("systemctl", "--user", "is-active", "hermes-gateway.service")]
+    assert calls == []
     assert all(f.status is Status.PASS for f in evaluate(facts))
 
 
@@ -363,12 +357,12 @@ def test_operator_mode_collects_each_account_and_names_the_one_it_could_not_reac
     assert code == 1
     doctor_calls = [argv for argv in seen if "automation.doctor" in argv]
     assert [argv[:5] for argv in doctor_calls] == [
-        ("sudo", "-n", "-u", "agent", "-H"), ("sudo", "-n", "-u", "peer", "-H")
+        ("sudo", "-n", "-u", "agent", "-H")
     ]
     assert all("--offline" in argv and "--json" in argv for argv in doctor_calls)
-    assert "model-parity" in out
+    assert "model-parity" not in out
     assert "[FAIL] primary-model" in out
-    assert "[WARN] doctor-run · peer" in out and "sudo: a password is required" in out
+    assert "doctor-run · peer" not in out
 
 
 def test_notify_is_refused_outside_a_service_account(

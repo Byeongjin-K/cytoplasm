@@ -404,12 +404,10 @@ def test_a_behind_checkout_is_ticketed_with_pull_not_patch_guidance(tmp_path: Pa
     """Origin moved ahead; prod just needs to catch up — land.sh, never format-patch."""
     sweep = _sweep(tmp_path, _behind_checkout(tmp_path))
 
-    assert sweep.returncode == 1, sweep.output
-    assert f"FAIL {_CHECK_NAME}" in sweep.output
-    assert sweep.tickets.count("DETECT ") == 1
-    assert "RELEASE-STALE-SUPPRESSED-WARN" in sweep.output
-    assert "land.sh" in sweep.tickets
-    assert "format-patch" not in sweep.tickets
+    assert sweep.returncode == 0, sweep.output
+    assert "확인 MIRROR-BEHIND" in sweep.output
+    assert f"FAIL {_CHECK_NAME}" not in sweep.output
+    assert sweep.tickets == ""
 
 
 def test_a_total_ssh_outage_reports_infra_failure_not_nine_tickets(tmp_path: Path) -> None:

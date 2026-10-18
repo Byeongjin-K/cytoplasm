@@ -22,7 +22,7 @@ from typing import Final, Literal, TypeAlias
 from automation.deploy_declarations import all_declarations
 from automation.doctor.cron_env import Gap
 from automation.doctor.cron_env import observe as observe_cron_env
-from automation.install.checks import CheckResult
+from automation.install.checks import CheckResult, Status
 from automation.watcher_manifest import ManifestError
 from automation.interop import free_response
 
@@ -61,6 +61,13 @@ class TimerJob:
     last_status: str
     failure_streak: int
     last_error: str
+
+
+@dataclass(frozen=True, slots=True)
+class JobCheck:
+    name: str
+    status: Status
+    detail: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +111,7 @@ class Facts:
     notice_bot_override: bool = False
     omo_relay: str = ""
     legacy_services: tuple[tuple[str, str], ...] = ()
+    job_checks: tuple[JobCheck, ...] = ()
 
 
 def mask(text: str) -> str:
@@ -425,7 +433,7 @@ def gather(
     return Facts(
         account=account, role=role, home=home, gateway_unit=gateway_unit,
         hermes=(home / ".local" / "bin" / "hermes").is_file(),
-        gateway=_gateway(gateway_unit, run, os.getuid() if uid is None else uid),
+        gateway="unknown",
         gateway_stopped_by_release=stopped_by_release(home),
         hermes_retired=peer_retired.retired(home),
         auth=_auth(hermes_dir / "auth.json"),
@@ -453,7 +461,14 @@ def gather(
         discord_channels=_discord_channels(hermes_dir / "config.yaml"),
         cron_env=observe_cron_env(repo=repo, role=role, registered=registered,
                                   hermes_env=read_env_file(hermes_dir / ".env"), environ=os.environ),
+        job_checks=_scheduled_checks(home, repo, run, now) if role == "agent" else (),
     )
+
+
+def _scheduled_checks(home: Path, repo: Path, run: Run, now: float | None) -> tuple[JobCheck, ...]:
+    from automation.doctor.scheduled import observe
+
+    return observe(home, repo, run, datetime.fromtimestamp(time.time() if now is None else now).astimezone())
 
 
 def _relay_ready(text: str) -> bool:

@@ -64,6 +64,16 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 | 에이전트 자가 스킬 루트·감사 원장 | `<계정 홈>/.hermes/skills`(계정 소유 0700, 1차 루트), `automation/selfskill_audit/`, `~/.hermes/selfskill-audit/{state.json,ledger.jsonl}` | 자가 저작은 **승인 없이 착륙**하고 사후 감사한다(소유자 결정 2026-08-15 옵션 B). 관리자 배포 스킬은 `/srv/autophagy-skills/live`에 남아 Hermes `skills.external_dirs`로 읽기 전용 발견된다. 회수는 `hermes curator archive/pin`. 상세: [소개](docs/기능소개/에이전트-자가-스킬.md) |
 
 ## CODE MAP
+
+감시 최소화(Q250·Q251, 2026-10-18): 헬스체크는 서비스·배포, doctor는 agent의 로그인·작업 결과만 본다.
+Hermes 실행 파일·게이트웨이·무멘션 응답 및 운영자 peer 진단은 doctor 목록에서 제거했다.
+헬스체크의 게이트웨이 둘·peer 채널 무시·자가 스킬 루트·report-hub 셋도 카탈로그에서 제거했다.
+미러 지연·허용 목록·워처 래퍼 드리프트는 `확인`(사건·수리 없음), dirty·ahead는 기존 FAIL이다.
+현재 릴리스 카드의 동일 HEAD·지문 갱신 표면을 읽었을 때만 `갱신 대기`로 표시한다.
+평일 메일 수집 0건·mailon 런타임 드리프트와 공급망 리마인더 실패는 doctor `scheduled-jobs`가 읽는다.
+런타임 래퍼는 옛 `watch-failure` 장부를 쓰거나 읽지 않는다(과거 증적 재생용 모듈·기존 파일은 보존).
+새 프로브는 계속 카탈로그 끝에만 붙인다. 통지 경로 변경(Q252)은 별도 PR이다.
+
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
 | `omo_relay` | package | `automation/omo_relay/` · `automation/omo_relay_release.py` | Q245: 공용 `codex_llm` API·호출자 유지, SSH stdin → 빈 0700 cwd의 도구 없는 omo. 릴리스 스위치·설정 지문 바인딩, 노드 전용 키 자동 생성, v2 설정 관측·영수증, 재시도 1회·장애/회복 통지·doctor. [소개](docs/기능소개/노드-배치-omo-중계.md) |

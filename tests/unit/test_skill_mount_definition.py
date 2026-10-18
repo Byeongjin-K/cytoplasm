@@ -201,14 +201,10 @@ def test_watcher_when_neither_path_exists_then_reports_not_mounted(
     # When: cron 틱이 돈다.
     result = _run_wrapper(relative, home, tmp_path / "absent")
 
-    # Then: fail-closed — 미마운트로 기록되고(스케줄러 배너 대신 스트릭), 자식은 안 돈다.
-    assert result.returncode == 0, result.stderr
-    assert _streak_state(home, watch_name) == {
-        "consecutive_failures": 1,
-        "incident_open": incident_open,
-    }
-
-
+    # Then: the timer sees the failure; the retired ledger remains absent.
+    assert result.returncode == 1, result.stderr
+    assert "not mounted" in result.stdout
+    assert not (home / ".hermes/watch-failure" / f"{watch_name}.json").exists()
 @pytest.mark.parametrize(
     ("relative", "symbol", "missing_module"),
     (

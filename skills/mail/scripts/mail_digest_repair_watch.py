@@ -8,7 +8,7 @@
    `classification_failed` 와 요약 `(요약 실패)` 개수.
 2. 다이제스트 워처 출력의 `DIGEST-FAIL stage=… code=…` 표식 — Hermes 가 남긴 잡 출력 파일
    (`~/.hermes/cron/output/<잡 id>/`)에서 지난번 이후 것만.
-3. 트리아지 워처 실패 상태 `~/.hermes/watch-failure/mail-triage-watch.json` — 지난번 이후 실패.
+3. 타이머 결과 `~/.hermes/cron-timers/mail-triage-watch.json` — 지난번 이후 최근 실패.
 
 실패 종류마다 `repair_cli.py manual "!repair …"` 를 한 번 부른다. 문구에는 종류와 안전한 코드만 넣고 날짜·
 개수·메일 내용·주소는 넣지 않는다 — 같은 종류가 다시 나면 수리 쪽 서명이 같은 카드의 재발로 센다.
@@ -98,15 +98,14 @@ def digest_markers(home: Path, since: datetime) -> dict[str, int]:
 
 
 def triage_watch_failure(home: Path, since: datetime) -> dict[str, int]:
-    root = Path(os.environ.get("WATCH_FAILURE_ROOT") or home / ".hermes" / "watch-failure")
+    root = home / ".hermes" / "cron-timers"
     try:
         raw = json.loads((root / f"{TRIAGE_WATCH}.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    last = raw.get("last_failure") if isinstance(raw, dict) else None
-    when = _parse_time(str(last.get("last_failed_at", ""))) if isinstance(last, dict) else None
-    if isinstance(raw, dict) and (raw.get("incident_open") or (when is not None and when > since)):
-        return {"triage_watch_failure": int(raw.get("consecutive_failures") or (last or {}).get("count") or 1)}
+    when = _parse_time(str(raw.get("last_run_at", ""))) if isinstance(raw, dict) else None
+    if isinstance(raw, dict) and raw.get("last_status") == "error" and when is not None and when > since:
+        return {"triage_watch_failure": int(raw.get("failure_streak") or 1)}
     return {}
 
 

@@ -58,10 +58,10 @@ def test_each_failure_kind_files_one_ticket_without_mail_content(home: Path) -> 
     out = home / ".hermes" / "cron" / "output" / "d1"
     out.mkdir(parents=True)
     (out / "run.md").write_text("DIGEST-FAIL stage=deliver retry_safe=false code=discord_post detail=x\n")
-    (home / "wf").mkdir()
-    (home / "wf" / "mail-triage-watch.json").write_text(json.dumps(
-        {"consecutive_failures": 2, "incident_open": False,
-         "last_failure": {"last_failed_at": (NOW - timedelta(hours=3)).isoformat(), "count": 2}}))
+    (home / ".hermes/cron-timers").mkdir()
+    (home / ".hermes/cron-timers/mail-triage-watch.json").write_text(json.dumps(
+        {"failure_streak": 2, "last_status": "error",
+         "last_run_at": (NOW - timedelta(hours=3)).isoformat()}))
     sent, file_ticket = _tickets()
 
     rc, line = watch.run(home, NOW, file_ticket)

@@ -1,5 +1,5 @@
 """`python3 -m automation.doctor` — 서비스 계정(agent·peer)에서는 자기 상태를, 그 밖의
-계정(운영자·root)에서는 `sudo -n -u <계정>` 으로 각 계정의 진단을 돌려 모아 보여준다.
+계정(운영자·root)에서는 `sudo -n -u <agent>` 로 agent만 진단한다. peer 비교는 하지 않는다.
 
 종료코드: 0 고장 없음 · 1 고장 있음 · 2 사용법 오류. 확인(WARN)은 종료코드를 바꾸지 않는다.
 """
@@ -44,7 +44,7 @@ def _parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--notify", action="store_true", help="바뀐 문제만 소유자에게 알린다(서비스 계정 전용)")
     _ = parser.add_argument("--role", choices=("agent", "peer"), default=None, help="이 계정의 역할을 명시한다")
     _ = parser.add_argument("--account", action="append", default=[], metavar="NAME",
-                            help="운영자 모드에서 점검할 계정(반복 가능, 기본: agent·peer)")
+                            help="운영자 모드에서 점검할 계정(반복 가능, 기본: agent, peer 제외)")
     return parser
 
 
@@ -107,11 +107,9 @@ def _peer_retired(config: NodeConfig | None) -> bool:
 
 
 def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) -> int:
-    retired = _peer_retired(config)
-    defaults = [config.agent_account, config.peer_account] if config else ["agent", "peer"]
-    if retired:
-        defaults = defaults[:1]
-    accounts = args.account or defaults
+    peer = config.peer_account if config else "peer"
+    accounts = [account for account in (args.account or [config.agent_account if config else "agent"])
+                if account != peer]
     root = _code_root(config)
     worst, payloads = 0, []
     for account in accounts:
@@ -132,9 +130,6 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
         payloads.append(report.to_json(account, role, findings))
         if not args.json:
             print(report.render_text(account, role, findings) + "\n")
-    parity = ("[PASS] model-parity · peer 는 P5로 퇴역했다 — 비교하지 않는다(정상)" if retired
-              else _model_parity(config, root, run_child))
-    payloads.append({"check": "model-parity", "line": parity})
     from automation.interop.approval_directory import CHANNEL_OVERRIDE_NOTICE, channel_override
 
     overridden = channel_override() is not None
@@ -148,7 +143,6 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
     if args.json:
         print(json.dumps(payloads, ensure_ascii=False, indent=2))
     else:
-        print(parity)
         if overridden:
             print(f"[PASS] {CHANNEL_OVERRIDE_NOTICE}")
         if notice_override:

@@ -1,23 +1,8 @@
 #!/usr/bin/env python3
-"""Budget watcher (W4-3) — Hermes cron job, no_agent script mode, every 30 min.
+"""Run the governed budget watcher; the timer runner owns repeated failures.
 
-Thin wrapper: runs the governed live budget skill CLI `watch` subcommand (approved
-pending drafts are sent through the owner-approval gate, then the balance tab is
-snapshotted/diffed). no_agent semantics: success is empty stdout + exit 0;
-an expected child failure is RECORDED in the streak and also exits 0 — under
-``--deliver discord`` the scheduler posts its own "⚠️ Cron … failed" banner for ANY
-non-zero exit regardless of stdout (vendor cron/scheduler.py), so exit 1 is itself
-a delivery channel and empty stdout buys no silence (2026-08-24 measured: two
-transient ticks, 18:30/20:30 KST, each woke the owner). The streak speaks one
-notice when the incident opens and one when it closes; a failure that could NOT
-be recorded (helper missing or broken) keeps exit 1 so the scheduler banner stays
-as the last line of defence. An exceptional wrapper crash emits one immediate
-masked line and exits 1. The 2026-08-23 23:30 Sheets 503 healed on the next tick
-and must not wake anybody, but 1.5h of consecutive failures must. Deployed copy lives at ~/.hermes/scripts/budget_watch.py
-(Hermes cron sandbox rule); the skill CLI stays the single implementation in the
-governed live store — no import of it here, subprocess only
-(avoids the W3-2 cron-sandbox PYTHONPATH package-shadowing trap).
-"""
+Success is silent. A failed child returns a failed tick with masked detail,
+without reading or writing the retired watch-failure ledger."""
 from __future__ import annotations
 
 import importlib
@@ -101,30 +86,10 @@ def _load_env_secrets(path: Path = _ENV_SECRETS) -> None:
 
 
 def _announce(*, ok: bool, detail: str = "") -> bool:
-    """Speak only when a failure streak opens or closes — see watch_failure_streak.
-
-    Returns True when the streak RECORDED the tick: only then may a failing tick
-    exit 0 (silence must be earned by a recorded failure, never by breakage).
-    A broken notice path (unwritable state root, half-deployed helper, closed
-    stdout) must never change a successful tick's verdict — same rule as
-    budget_cli's ``NOTIFY-FAIL``.
-    """
-    try:
-        if watch_failure_streak is None:
-            if not ok:
-                print(f"{WATCH_NAME} error: {detail}"[:300])
-            return False
-        notice = watch_failure_streak.record(
-            WATCH_NAME, ok=ok, detail=detail, threshold=FAILURE_NOTICE_THRESHOLD
-        )
-    except Exception:  # noqa: BLE001 — notification must never break the tick
-        return False
-    try:
-        if notice is not None:
-            print(_redact(notice)[:300])
-    except Exception:  # noqa: BLE001 — a closed sink loses the line, not the record
-        pass
-    return True
+    """The timer runner owns failure counting; report the actual failing exit."""
+    if not ok:
+        print(_redact(f"{WATCH_NAME} error: {detail}")[:300])
+    return False
 
 
 def _expire_pending_requests() -> None:

@@ -37,7 +37,7 @@ def _digest_with_recorded_unit_command(
     """원격 명령을 기록만 하도록 활성 단위 프로브 하나를 대체한다(ssh 없음)."""
     script = f'''source "{_GENERATOR}"
 source "{_HEALTHCHECK}"
-probe_user_unit_active() {{
+probe_owner_notice_credentials() {{
   : {shlex.quote(unrelated_marker)}
   capture_on_node "$1" "$RECORDED_UNIT_COMMAND"
 }}

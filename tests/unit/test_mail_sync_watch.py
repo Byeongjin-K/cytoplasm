@@ -50,6 +50,7 @@ _FALLBACK = (0, json.dumps({"status": "ok", "sync": {"exit_code": 3,
 
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("WATCH_FAILURE_ROOT", str(tmp_path / "watch-failure"))
     cli = tmp_path / "mail_wrapper.py"
     _ = cli.write_text("", encoding="utf-8")
@@ -74,8 +75,9 @@ def _script(monkeypatch: pytest.MonkeyPatch, outcomes: list[tuple[int, str]]) ->
 def _ticks(monkeypatch, capsys, outcomes) -> list[str]:
     _script(monkeypatch, outcomes)
     printed = []
-    for _ in outcomes:
-        assert watch.main() == 0
+    for rc, payload in outcomes:
+        success = rc == 0 and json.loads(payload).get("sync", {}).get("exit_code") == 0
+        assert watch.main() == (0 if success else 1)
         printed.append(capsys.readouterr().out.strip())
     return printed
 
@@ -88,23 +90,20 @@ def test_tick_runs_the_existing_sync_path(monkeypatch, capsys) -> None:
     assert capsys.readouterr().out == ""
 
 
-def test_owner_is_told_once_when_collection_keeps_failing(monkeypatch, capsys) -> None:
-    printed = _ticks(monkeypatch, capsys, [_DNS, _DNS, _DNS, _DNS])
-    assert printed[:2] == ["", ""]
-    assert printed[2].startswith("mail-sync-watch failed 3 ticks in a row")
-    assert "ERR_NAME_NOT_RESOLVED" in printed[2]
-    assert printed[3] == ""
+def test_failed_collection_is_visible_to_timer_every_tick(monkeypatch, capsys) -> None:
+    printed = _ticks(monkeypatch, capsys, [_DNS] * 4)
+    assert len(printed) == 4 and all("ERR_NAME_NOT_RESOLVED" in line for line in printed)
 
 
 def test_recovery_is_announced_once(monkeypatch, capsys) -> None:
     printed = _ticks(monkeypatch, capsys, [_DNS, _DNS, _DNS, _ok(5), _ok(1)])
-    assert printed[3].startswith("mail-sync-watch recovered after 3 consecutive failures")
+    assert printed[3] == ""
     assert printed[4] == ""
 
 
 def test_local_fallback_is_not_a_successful_collection(monkeypatch, capsys) -> None:
     printed = _ticks(monkeypatch, capsys, [_FALLBACK, _FALLBACK, _FALLBACK])
-    assert printed[2].startswith("mail-sync-watch failed 3 ticks in a row")
+    assert "fallback=local-state-db" in printed[2]
 
 
 def test_successful_but_empty_collection_is_told_after_the_quiet_threshold(
@@ -112,16 +111,15 @@ def test_successful_but_empty_collection_is_told_after_the_quiet_threshold(
 ) -> None:
     monkeypatch.setenv(watch.QUIET_AFTER_ENV, "2")
     printed = _ticks(monkeypatch, capsys, [_ok(0), _ok(0), _ok(0), _ok(3)])
-    assert printed[0] == ""
-    assert printed[1].startswith("mail-sync-quiet failed 2 ticks in a row")
-    assert printed[2] == ""
-    assert printed[3].startswith("mail-sync-quiet recovered")
+    assert printed == ["", "", "", ""]
+    state = json.loads((Path.home() / ".hermes/mail-sync/collection.json").read_text())
+    assert state["new_mails"] == 3 and state["zero_weekday_streak"] == 0
 
 
 def test_alert_threshold_is_configurable(monkeypatch, capsys) -> None:
     monkeypatch.setenv(watch.ALERT_AFTER_ENV, "1")
     printed = _ticks(monkeypatch, capsys, [_DNS])
-    assert printed[0].startswith("mail-sync-watch failed 1 ticks in a row")
+    assert printed[0].startswith("mail-sync-watch error:")
 
 
 def test_unmounted_skill_counts_as_a_failed_collection(
@@ -129,7 +127,7 @@ def test_unmounted_skill_counts_as_a_failed_collection(
 ) -> None:
     monkeypatch.setenv(watch.CLI_ENV, str(tmp_path / "absent.py"))
     monkeypatch.setenv(watch.ALERT_AFTER_ENV, "1")
-    assert watch.main() == 0
+    assert watch.main() == 1
     assert "not mounted" in capsys.readouterr().out
 
 
@@ -140,7 +138,7 @@ def test_child_timeout_is_a_failed_tick_not_a_crash(monkeypatch, capsys) -> None
         raise subprocess.TimeoutExpired(argv, kwargs.get("timeout", 0))
 
     monkeypatch.setattr(watch.subprocess, "run", slow)
-    assert watch.main() == 0
+    assert watch.main() == 1
     assert "TimeoutExpired" in capsys.readouterr().out
 
 

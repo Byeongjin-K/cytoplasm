@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -111,17 +110,12 @@ def test_two_consecutive_failures_emit_exactly_one_real_helper_notice(tmp_path: 
         _run_wrapper(tmp_path / "home", scripts, state, streak),
     ]
 
-    # 기록된 실패 틱은 exit 0 — rc≠0 이면 스케줄러가 자체 실패 배너를 게시한다(2026-08-24).
-    assert [result.returncode for result in outcomes] == [0, 0]
+    assert [result.returncode for result in outcomes] == [1, 1]
     notices = [line for result in outcomes for line in result.stdout.splitlines() if line]
-    assert notices == [
-        "notes-weekly-organize failed 1 ticks in a row: "
-        "rc=3: private [MASKED-EMAIL] [MASKED-NUM]"
-    ]
+    assert len(notices) == 2
+    assert all("[MASKED-EMAIL]" in line and "[MASKED-NUM]" in line for line in notices)
     assert not (state / "delivered-week").exists()
-    stored = json.loads((streak / "notes-weekly-organize.json").read_text(encoding="utf-8"))
-    assert stored["consecutive_failures"] == 2
-    assert stored["incident_open"] is True
+    assert not streak.exists()
 
 
 def test_success_after_failure_emits_one_real_helper_recovery_notice(tmp_path: Path) -> None:
@@ -130,19 +124,15 @@ def test_success_after_failure_emits_one_real_helper_recovery_notice(tmp_path: P
     streak = tmp_path / "streak"
     _plant_cli(scripts, "raise SystemExit(1)\n")
     failed = _run_wrapper(tmp_path / "home", scripts, state, streak)
-    assert failed.returncode == 0
+    assert failed.returncode == 1
     _plant_cli(scripts)
 
     recovered = _run_wrapper(tmp_path / "home", scripts, state, streak)
 
     assert recovered.returncode == 0
-    assert recovered.stdout.startswith(
-        "notes-weekly-organize recovered after 1 consecutive failures ("
-    )
-    assert " UTC) — last failure: rc=1\n" in recovered.stdout
-    stored = json.loads((streak / "notes-weekly-organize.json").read_text(encoding="utf-8"))
-    assert stored["consecutive_failures"] == 0
-    assert stored["incident_open"] is False
+    assert recovered.stdout == ""
+    assert not streak.exists()
+    assert (state / "delivered-week").exists()
 
 
 def test_helper_missing_failure_emits_exactly_one_masked_fallback(
@@ -175,7 +165,7 @@ def test_broken_notice_path_is_silent_and_preserves_failure_verdict(
     monkeypatch.setattr(notes_organize, "watch_failure_streak", broken)
 
     assert notes_organize.main() == 1
-    assert capsys.readouterr().out == ""
+    assert capsys.readouterr().out == "notes-organize error rc=3\n"
 
 
 def test_unpersisted_failure_streak_keeps_the_failure_exit_visible(
@@ -192,7 +182,7 @@ def test_unpersisted_failure_streak_keeps_the_failure_exit_visible(
     monkeypatch.setattr(notes_organize, "watch_failure_streak", helper)
 
     assert notes_organize.main() == 1
-    assert capsys.readouterr().out == f"{marker}\n"
+    assert capsys.readouterr().out == "notes-organize error rc=3\n"
 
 
 def test_broken_notice_output_is_silent_and_preserves_recovery_verdict(

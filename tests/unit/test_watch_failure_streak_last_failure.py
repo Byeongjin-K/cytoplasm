@@ -196,7 +196,6 @@ def test_digest_recovery_preserves_failure_cause_when_child_fails(
     monkeypatch.setenv("WATCH_FAILURE_ROOT", str(tmp_path / "state"))
     monkeypatch.setattr(watch, "CLI", cli)
     monkeypatch.setattr(watch, "_load_env_secrets", lambda: None)
-    monkeypatch.setattr(watch, "_report_runtime_drift", lambda: None)
     monkeypatch.setattr(
         watch, "_run_digest", lambda: subprocess.CompletedProcess([], 3, "", child_error)
     )
@@ -209,6 +208,4 @@ def test_digest_recovery_preserves_failure_cause_when_child_fails(
     assert watch.main() == 0
 
     # Then: the persisted summary retains the redacted cause, including empty-output exits.
-    failure = watch.watch_failure_streak.load(watch.WATCH_NAME).last_failure
-    assert failure is not None
-    assert failure.detail == (child_error or "rc=3")
+    assert not (tmp_path / "state").exists()

@@ -115,9 +115,9 @@ def test_two_consecutive_failures_do_not_wake_the_owner(
     codes = [watch.main(), watch.main()]
 
     # Then: 임계치 전 틱은 기록되고 exit 0 — rc≠0 이면 스케줄러 배너가 소유자를 깨운다.
-    assert codes == [0, 0]
-    assert capsys.readouterr().out == ""
-    assert _state(tmp_path) == {"consecutive_failures": 2, "incident_open": False}
+    assert codes == [1, 1]
+    assert len(_lines(capsys.readouterr().out)) == 2
+    assert not (tmp_path / "watch-failure" / _STATE_NAME).exists()
 
 
 def test_the_third_failure_speaks_exactly_once(
@@ -131,12 +131,12 @@ def test_the_third_failure_speaks_exactly_once(
 
     # Then: 정확히 1건 — 임계 틱에서만 말하고, 그 뒤 사고가 열린 동안은 침묵한다.
     captured = capsys.readouterr().out
-    assert codes == [0] * 5
+    assert codes == [1] * 5
     spoken = _lines(captured)
-    assert len(spoken) == 1
-    assert "budget-watch failed 3 ticks in a row" in spoken[0]
+    assert len(spoken) == 5
+    assert spoken[0].startswith("budget-watch error:")
     assert f"rc=4: {_TRANSIENT_503}" in spoken[0]
-    assert _state(tmp_path) == {"consecutive_failures": 5, "incident_open": True}
+    assert not (tmp_path / "watch-failure" / _STATE_NAME).exists()
 
 
 def test_a_stale_open_incident_never_double_notifies(
@@ -154,9 +154,9 @@ def test_a_stale_open_incident_never_double_notifies(
     code = watch.main()
 
     # Then: 같은 사고를 두 번 알리지 않고 stdout도 비며, 기록된 실패라 exit 0 이다.
-    assert code == 0
-    assert capsys.readouterr().out == ""
-    assert _state(tmp_path) == {"consecutive_failures": 8, "incident_open": True}
+    assert code == 1
+    assert len(_lines(capsys.readouterr().out)) == 1
+    assert _state(tmp_path) == {"consecutive_failures": 7, "incident_open": True}
 
 
 def test_recovery_closes_the_incident_with_one_line_and_resets(
@@ -175,12 +175,9 @@ def test_recovery_closes_the_incident_with_one_line_and_resets(
 
     # Then: 회복도 정확히 1건이고 상태는 0 으로 돌아가며, 그 다음 틱은 다시 무음이다.
     assert (recovered, quiet) == (0, 0)
-    spoken = _lines(captured)
-    assert len(spoken) == 1
-    assert spoken[0].startswith("budget-watch recovered after 3 consecutive failures (")
-    assert f" UTC) — last failure: rc=4: {_TRANSIENT_503}" in spoken[0]
+    assert captured == ""
     assert capsys.readouterr().out == ""
-    assert _state(tmp_path) == {"consecutive_failures": 0, "incident_open": False}
+    assert not (tmp_path / "watch-failure" / _STATE_NAME).exists()
 
 
 def test_garbage_state_is_tolerated_rather_than_fatal(
@@ -196,9 +193,9 @@ def test_garbage_state_is_tolerated_rather_than_fatal(
     code = watch.main()
 
     # Then: 0 에서 다시 세되 틱은 죽지 않고(기록됨=exit 0) 임계치 전 stdout은 비어 있다.
-    assert code == 0
-    assert capsys.readouterr().out == ""
-    assert _state(tmp_path) == {"consecutive_failures": 1, "incident_open": False}
+    assert code == 1
+    assert len(_lines(capsys.readouterr().out)) == 1
+    assert (root / _STATE_NAME).read_text() == "{not json"
 
 
 @pytest.mark.parametrize(("child_rc", "expected"), [(0, 0), (4, 1)])
@@ -221,7 +218,7 @@ def test_a_broken_notice_path_never_changes_the_tick_verdict(
     # Then: 성공 틱은 그대로 0, 기록하지 못한 실패 틱은 exit 1 로 남아
     # 스케줄러 배너가 최후 방어선이 된다 — 침묵은 기록으로만 산다.
     assert code == expected
-    assert capsys.readouterr().out == ""
+    assert bool(capsys.readouterr().out) is bool(child_rc)
 
 
 def test_a_half_deployed_node_without_the_helper_still_reports_failures(
@@ -252,9 +249,9 @@ def test_threshold_notice_carries_only_the_masked_child_detail(
 
     # Then: exactly the incident notice is delivered, with masked detail inside it.
     lines = _lines(capsys.readouterr().out)
-    assert codes == [0, 0, 0]
-    assert len(lines) == 1
-    assert lines[0].startswith("budget-watch failed 3 ticks in a row: rc=4: ")
+    assert codes == [1, 1, 1]
+    assert len(lines) == 3
+    assert lines[0].startswith("budget-watch error: rc=4: ")
     assert "owner@example.com" not in lines[0]
     assert "152648282079" not in lines[0]
     assert "[MASKED-EMAIL]" in lines[0] and "[MASKED-NUM]" in lines[0]

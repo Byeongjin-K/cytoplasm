@@ -11,11 +11,11 @@
 - **doctor:** 유돌 발신 override가 있으면 실제 유돌 채널과 그 채널에 있는
   릴리스·공급망 승인만 점검한다. 옛 `agents-log`·interop 채널 접근 실패를
   봇 고장으로 알리거나 멈춘 Hermes 게이트웨이의 재시동을 안내하지 않는다.
-  override가 없는 레거시 설치의 검사는 유지한다.
+  Hermes 실행 파일·게이트웨이·무멘션 응답 검사는 제거하고 운영자 모드도 agent만 읽는다.
 - **report-hub:** ops의 `report-hub-collector.service`와
   `report-hub-dashboard.service`를 릴리스가 정지하고 실제 정지를 재조회한다.
-  정지 표식이 있는 동안 활성 헬스체크 목록에서 세 report-hub 검사를 뺀다.
-  복구를 위해 전체 카탈로그·SSH 허용 목록·유닛·DB·인증 파일은 남긴다.
+  세 report-hub 검사는 헬스체크 카탈로그와 파생 SSH 허용 목록에서 제거한다.
+  유닛·DB·인증 파일은 복구를 위해 남긴다.
 - **Hermes 보드 화면:** agent의 `hermes-dashboard.service`만 같은 방식으로 정지한다.
   자격증명 교체 대상 `kanban`은 제거한다. report-hub 교체 구현은 복구용으로 남기되
   실행 시 릴리스 정지 표식을 확인해 꺼진 유닛의 재시작을 거부한다.
@@ -48,7 +48,7 @@ doctor도 자기 계정의 정지 표식과 유닛이 일치하면 정상으로 
 
 다시 켜려면 **해당 호스트 파일만 삭제하고 재배포**한다.
 이 배포기가 정지시킨 유닛만 다시 시작하고 정지 표식을 걷는다.
-report-hub의 세 헬스체크와 자격증명 교체도 다시 유효해진다.
+자격증명 교체도 다시 유효해진다. report-hub 헬스체크는 복구와 무관하게 제거된 상태다.
 처음부터 스위치·정지 표식이 없는 설치에는 유닛을 새로 만들거나 시작하지 않는다.
 
 RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에서
@@ -101,3 +101,33 @@ RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에�
 `tests/unit/test_legacy_services*.py`, `tests/unit/test_rag_legacy_sources.py`,
 `tests/unit/test_doctor_yoodori_channels.py`, `tests/unit/test_q236_approval_channel.py`,
 `tests/unit/test_hermes_memory_off.py`, `dori/roles/yoodori/AGENTS.md.tmpl`.
+
+## 최소 감시(Q250·Q251)
+
+헬스체크는 서비스·배포를, doctor는 로그인·작업 결과를 본다.
+Hermes 게이트웨이 둘·peer 채널 무시·자가 스킬 루트·report-hub 셋은 감시 목록에서 뺐다.
+알림 목적지 전환(Q252)은 별도 변경이며 아래 표는 현재 통지 경로다.
+
+| 무엇을 감시하나 | 어디서 | 누구에게 알리나 |
+|---|---|---|
+| RAG 서비스·이미지, 업데이트 신뢰, root 도우미, 스킬 마운트, 런타임 패키지, 저장소 용량, 전량 반영 영수증, 통지 자격증명 | 5분 헬스체크 | 기존 소유자 통지 + FAIL 수리 티켓 |
+| 관측 미러 지연·허용 목록·워처 래퍼 드리프트 | 헬스체크의 **확인** | 로컬 로그만, 사건·수리 티켓 없음 |
+| 미러 dirty·ahead | 헬스체크 | 기존 FAIL·수리 티켓 유지 |
+| 주 모델·폴백, Discord 봇·승인 표면, Google·Drive·기관메일, 로컬 전사·필수 설정·발신 봇 | 매시 doctor(agent) | 문제 집합이 바뀔 때 기존 소유자 통지 |
+| 타이머 결과, 평일 수집 0건 6회 이상, mailon 런타임 드리프트, 공급망 리마인더 실패 | doctor의 정기 작업 | 같은 doctor 통지 |
+| 승인 실행·수리 승인·릴리스 수렴 | 기존 시스템 타이머 | 기존 카드 결과·수렴 통지 |
+
+예: 평일 메일 수집이 6회 성공했는데 새 메일이 계속 0건이면
+`~/.hermes/mail-sync/collection.json` 결과를 읽은 doctor가 확인한다. 주말 0건은 세지 않는다.
+실행 실패는 성공으로 숨기지 않고 타이머 러너에 넘긴다.
+옛 `watch-failure` 장부는 읽거나 갱신하지 않으며 기존 파일은 지우지 않는다.
+과거 순수 장부 모듈은 이전 증적 재생용일 뿐 현재 래퍼는 호출하지 않는다.
+
+허용 목록은 같은 HEAD·기대 지문의 갱신이 현재 릴리스 카드에 포함된 것을 읽을 수 있을 때만
+**갱신 대기**로 표시한다. 카드를 읽지 못하면 갱신을 추측하지 않고 **확인**으로 남긴다.
+이번 카탈로그 축소는 래퍼 지문을 바꾸며 다음 릴리스의 기존 갱신 절차가 반영한다.
+
+공급망 리마인더는 릴리스 카드까지 `skill-deploy`로 검증하던 종류 오류를 고쳤다.
+저장된 종류·채널을 그대로 검증하고, 실패는 `supply-chain-watch/tick.json`에 누적한다.
+2회 이상 실패하면 doctor의 정기 작업 실패로 보이며, 실제 전송 성공 뒤에만 누적을 걷는다.
+새 승인 표면이나 별도 워처는 만들지 않는다.

@@ -17,15 +17,14 @@ def test_a_retired_account_reads_the_removed_gateway_and_empty_jobs_as_expected(
     (home / ".hermes/cron/jobs.json").unlink(missing_ok=True)
     (home / ".hermes/peer-retired").write_bytes(b"retired")
     findings = _by_key(evaluate(_facts(home, run=_run(gateway="inactive"))))
-    assert findings["hermes-gateway"].status is Status.PASS
-    assert "퇴역" in findings["hermes-gateway"].detail
+    assert "hermes-gateway" not in findings
     assert findings["scheduled-jobs"].status is Status.PASS
 
 
 def test_without_the_marker_a_stopped_gateway_is_still_a_fault(tmp_path: Path) -> None:
     home = _connected_home(tmp_path)
     findings = _by_key(evaluate(_facts(home, run=_run(gateway="inactive"))))
-    assert findings["hermes-gateway"].status is Status.FAIL
+    assert "hermes-gateway" not in findings
 
 
 def test_operator_mode_skips_the_retired_peer_and_the_parity_check(
@@ -53,4 +52,4 @@ def test_operator_mode_skips_the_retired_peer_and_the_parity_check(
     cli.main(["--offline"], run_child=run_child)
     out = capsys.readouterr().out
     assert [argv[3] for argv in seen if "automation.doctor" in argv] == [config.agent_account]
-    assert "peer 는 P5로 퇴역" in out
+    assert "model-parity" not in out
