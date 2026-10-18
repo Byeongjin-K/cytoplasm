@@ -204,6 +204,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     )
     from automation.notice_bot import CARD_LINE, SURFACE, FAULT_CARD_LINE, FAULT_PREFIX
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
     from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
@@ -214,6 +215,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     ]
 
     return [
+        *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),
         *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
         *([*RETIRE_LINES, ROOT_NOTE]
           if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),

@@ -70,6 +70,7 @@ if [[ "$fault_channel" != off && "$notice_digest" == off ]]; then
   exit 4
 fi
 auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
+ledger_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release switch)" || exit 4
 relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release switch)" || exit 4
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
@@ -92,7 +93,12 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+converge_ledger() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release apply \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" --mode "$ledger_mode"
 }
 
 retire_peer() {
@@ -104,7 +110,9 @@ retire_peer() {
   for role in agent peer; do
     acct="$NODE_AGENT_ACCOUNT"
     [[ "$role" != peer ]] || acct="$NODE_PEER_ACCOUNT"
-    if [[ "$role" == peer ]] && ssh "$host" "cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired) && ! getent passwd $acct >/dev/null" </dev/null; then
+    # The marker is ops 0600 under the 0700 private root, so only ops can read it (2026-10-19:
+    # read as the ssh login it always failed and v2.4.0 stopped at `sudo: unknown user peer`).
+    if [[ "$role" == peer ]] && ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)' && ! getent passwd $acct >/dev/null" </dev/null; then
       continue  # Owner root block removed the account after a completed non-root cleanup.
     fi
     ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.p5_remove --role $role --head $node_sha" </dev/null \
@@ -339,6 +347,7 @@ case "$mode" in
       else
         log "already fully deployed"
       fi
+      # The account's routing transaction is already checked by the probe.
       refresh_wrappers
       refresh_rag_mcp
       write_receipt
@@ -347,6 +356,7 @@ case "$mode" in
     restart_needed=0
     gateway_change=""
     failures=()
+    ledger_change=0
     # actions 는 fd 9 로 읽는다 — 배포기 내부의 ssh 가 fd 0 을 삼키므로, stdin 에
     # 실으면 첫 action 뒤의 줄이 전부 사라진다(2026-08-31 실측: 매 실행 1건만 배포).
     while IFS='|' read -r -u 9 tag kind arg; do
@@ -366,6 +376,10 @@ case "$mode" in
           ;;
         auto-write)
           converge_auto_write || failures+=("auto-write")
+          ;;
+        ledger)
+          # Migrate only after every skill mount has the shared routing lock.
+          ledger_change=1
           ;;
         restart-gateway)
           restart_needed=1
@@ -415,6 +429,9 @@ case "$mode" in
     if ((${#failures[@]})); then
       log "incomplete: ${failures[*]}"
       exit 1
+    fi
+    if (( ledger_change )) || [[ "$ledger_mode" == on ]]; then
+      converge_ledger || exit 4
     fi
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then

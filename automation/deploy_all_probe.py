@@ -212,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--fault-channel", default="off", help="승인된 고장 통지 채널 또는 off")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
+    parser.add_argument("--ledger", choices=("on", "off"), default="off")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
@@ -242,6 +243,19 @@ def main(argv: list[str] | None = None) -> int:
         from automation import auto_write
         from automation.node_config import load_node_config
 
+        ledger_clean = args.ledger == "off"
+        if (args.runtime_root / "automation/ledger/release.py").is_file():
+            result = subprocess.run(
+                ("sudo", "-n", "-u", load_node_config().agent_account, "-H", "env",
+                 f"PYTHONPATH={args.runtime_root}", "python3", "-B", "-m",
+                 "automation.ledger.release", "check", "--mode", args.ledger),
+                capture_output=True, check=False, timeout=30,
+            )
+            if result.returncode not in (0, 1):
+                raise deploy_all.ObservationError("ledger state unreadable")
+            ledger_clean = result.returncode == 0
+        elif args.ledger == "on":
+            raise deploy_all.ObservationError("ledger runtime is missing")
         retirement_clean = True
         if args.peer_retired == "retired":
             config = load_node_config()
@@ -281,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean or not notice_clean or not auto_clean or not retirement_clean:
+        if not plan.clean or not notice_clean or not auto_clean or not retirement_clean or not ledger_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -313,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.fault_channel != "off":
             document["notice_bot"]["fault_channel_id"] = args.fault_channel
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
+        document["ledger"] = {"mode": args.ledger, "verified": ledger_clean}
         document["omo_relay"] = {"route": args.omo_relay}
         if args.peer_retired == "retired":
             document["peer_retired"] = "retired"
@@ -327,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             print("ACT|notice-bot|converge")
         if not auto_clean:
             print("ACT|auto-write|converge")
-        if not retirement_clean:
+        if not retirement_clean or not ledger_clean:
             print("ACT|peer-retire|converge")
         return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
     print(deploy_all.render_plan(plan))
@@ -335,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         print("NOTICE-BOT-DRIFT: account overrides differ from the release")
     if not auto_clean:
         print("AUTO-WRITE-DRIFT: node modes differ from the release")
-    if not retirement_clean:
+    if not retirement_clean or not ledger_clean:
         print("PEER-RETIRED-PENDING: account cleanup completion is not verified")
     return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
 

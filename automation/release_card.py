@@ -52,9 +52,9 @@ def preflight_new_request(spec: ReleaseSpec) -> tuple[ReleaseSpec | None, str]:
         LEGACY_PLAIN_VERSION,
     ):
         if version != NEW_RENDER_VERSION and any(
-            name in (RAG_MCP_SURFACE, "peer-retired:retired") for name, _digest in spec.surface_digests
+            name in (RAG_MCP_SURFACE, "peer-retired:retired", "ledger:on") for name, _digest in spec.surface_digests
         ):
-            break  # Never approve a rebuild on a fallback card that omits its outage notice.
+            break  # Never approve an effect on a fallback card that omits its notice.
         candidate = replace(spec, render_version=version)
         probe = candidate
         if version == 6 and not candidate.detail_message_ids:

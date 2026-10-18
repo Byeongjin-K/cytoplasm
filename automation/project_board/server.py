@@ -40,6 +40,7 @@ from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard, stamp_etag
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError
 from .sessions import SessionsState
+from .ledger_view import load_ledger
 
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 MIN_TOKEN: Final = 32
@@ -157,7 +158,7 @@ class _Handler(BaseHTTPRequestHandler):
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
         etag, page = stamp_etag(render_dashboard(
             snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
-            sessions=self.sessions()))
+            sessions=self.sessions(), ledger=load_ledger()))
         offered = {tag.strip().removeprefix("W/") for tag in (self.headers.get("If-None-Match") or "").split(",")}
         if etag in offered:  # the open page's 2-minute check: nothing it shows has changed
             self.send_response(304)

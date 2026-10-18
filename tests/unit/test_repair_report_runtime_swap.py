@@ -63,6 +63,8 @@ def _tree_helper_closure() -> tuple[str, ...]:
 
 _INFRA: Final = tuple(dict.fromkeys((
     "automation/node_config.py", "automation/node_config_sh.py", "automation/notice_bot.py",
+    "automation/ledger_policy.py", "automation/ledger/__init__.py", "automation/ledger/__main__.py",
+    "automation/ledger/store.py", "automation/ledger/switch.py",
     "automation/deploy_provenance.sh", *_tree_helper_closure(), "automation/deploy_push.sh", TIMER_HELPER,
     _DEPLOYER, "automation/repair/deploy-manifest.txt", _WRAPPER_SOURCE,
     "configs/runtime-package-manifest.txt", "configs/node.example.toml",
@@ -342,7 +344,8 @@ def test_repair_deployer_ships_the_declared_closure(rig: Rig) -> None:
     generation = rig.link.resolve()
     assert generation.parent == rig.home / f"{_LINK}.d"
     real = {f"automation/{name}": (rig.repo / "automation" / name).read_bytes()
-            for name in ("node_config.py", "notice_bot.py")}
+            for name in ("node_config.py", "notice_bot.py", "ledger_policy.py", "ledger/__init__.py",
+                         "ledger/__main__.py", "ledger/store.py", "ledger/switch.py")}
     real["automation/node.example.toml"] = (rig.repo / "configs/node.example.toml").read_bytes()
     assert _tree(generation) == shipped | real
     assert (rig.home / _WRAPPER).read_bytes() == (_REPO / _WRAPPER_SOURCE).read_bytes()
@@ -432,7 +435,8 @@ def test_a_failure_mid_transfer_leaves_a_whole_runtime(rig: Rig, first: bool, fa
     if fault == "push":
         # The first push is the config file, so the swapped tree holds only the shipped Python sources.
         real = {f"automation/{name}": (rig.repo / "automation" / name).read_bytes()
-                for name in ("node_config.py", "notice_bot.py")}
+                for name in ("node_config.py", "notice_bot.py", "ledger_policy.py", "ledger/__init__.py",
+                         "ledger/__main__.py", "ledger/store.py", "ledger/switch.py")}
         assert rig.link.is_symlink() and _tree(rig.link.resolve()) == shipped | real
     elif first:
         assert not rig.link.is_symlink() and not rig.link.exists()

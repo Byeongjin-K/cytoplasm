@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .proposal_knowledge import module
+
 
 _CARD_ID = re.compile(r"\bt_[a-zA-Z0-9]+\b")
 
@@ -29,16 +31,18 @@ class KanbanClient:
 
     def _run(self, command: tuple[str, ...]) -> str:
         environment = {**os.environ, "PATH": f"{Path.home() / '.local/bin'}:{os.environ.get('PATH', '')}"}
+        routing = module("automation.ledger.switch")
         try:
-            completed = subprocess.run(
-                command,
-                cwd=Path.home(),
-                env=environment,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
+            with routing.command_lock():
+                completed = subprocess.run(
+                    (*routing.command_prefix(), *command[2:]),
+                    cwd=Path.home(),
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise KanbanError(error.__class__.__name__) from error
         if completed.returncode != 0:
@@ -49,7 +53,10 @@ class KanbanClient:
         """Create the isolated board once, accepting an already-created board."""
         command = ("hermes", "kanban", "boards", "create", self.board, "--name", self.board.replace("-", " ").title())
         environment = {**os.environ, "PATH": f"{Path.home() / '.local/bin'}:{os.environ.get('PATH', '')}"}
-        completed = subprocess.run(command, cwd=Path.home(), env=environment, capture_output=True, text=True, check=False)
+        routing = module("automation.ledger.switch")
+        with routing.command_lock():
+            completed = subprocess.run((*routing.command_prefix(), *command[2:]), cwd=Path.home(),
+                                       env=environment, capture_output=True, text=True, check=False)
         if completed.returncode == 0:
             return
         boards = self._run(("hermes", "kanban", "boards", "list", "--json"))

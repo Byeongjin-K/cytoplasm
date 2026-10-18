@@ -283,3 +283,12 @@ def test_retired_home_backs_up_and_removes_paused_jobs_a_deployer_recreated(
     assert set(json.loads((late / "job-ids.json").read_text())) == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}
     assert "mail-daily-digest" in (late / "cron-list.txt").read_text()
     assert all((late / name).stat().st_mode & 0o777 == 0o600 for name in ("cron-list.txt", "job-ids.json", "jobs.json"))
+
+
+def test_removed_peer_skip_reads_the_ops_only_marker_as_ops() -> None:
+    # Given: the retired marker is ops 0600 under the 0700 private root.
+    deploy = (REPO / "automation/deploy_all.sh").read_text(encoding="utf-8")
+    skip = next(line for line in deploy.splitlines()
+                if '"$role" == peer' in line and "peer-retired" in line and "getent passwd" in line)
+    # Then: the skip reads it as ops, otherwise it never fires and P5 sudoes a deleted account.
+    assert "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'cmp -s $NODE_PRIVATE_ROOT/peer-retired" in skip

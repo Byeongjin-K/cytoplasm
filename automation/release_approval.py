@@ -96,6 +96,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    if getattr(args, "ledger", None) == "on":
+        from automation.ledger_policy import surface as ledger_surface
+        surfaces.append(ledger_surface())
     relay_digest = getattr(args, "omo_relay", None)
     if relay_digest is not None:
         if _SHA256.fullmatch(relay_digest) is None:
@@ -362,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument("--fault-channel", metavar="CHANNEL_ID", help="고장 알림을 유돌·리드 페어 채널로")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
+    plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
     plan.add_argument(
@@ -476,6 +480,16 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     auto.set_defaults(run=authorize_auto)
+    ledger = commands.add_parser("authorize-ledger")
+    ledger.add_argument("--head", required=True)
+    def authorize_ledger(args: argparse.Namespace) -> int:
+        from automation.ledger_policy import surface
+
+        name, digest = surface()
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    ledger.set_defaults(run=authorize_ledger)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from automation.ledger.switch import command_prefix, serialized
+
 import fcntl
 import hashlib
 import json
@@ -496,9 +498,10 @@ def _discord_fetch(path: str) -> JsonValue:
     return payload
 
 
+@serialized
 def _run_kanban(*arguments: str) -> None:
     _ = subprocess.run(
-        ["hermes", "kanban", *arguments],
+        [*command_prefix(), *arguments],
         check=True,
         capture_output=True,
         text=True,
@@ -507,9 +510,10 @@ def _run_kanban(*arguments: str) -> None:
     )
 
 
+@serialized
 def card_state(ticket_id: str) -> CardState:
     completed = subprocess.run(
-        ["hermes", "kanban", "show", ticket_id, "--json"],
+        [*command_prefix(), "show", ticket_id, "--json"],
         check=True,
         capture_output=True,
         text=True,

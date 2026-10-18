@@ -219,13 +219,17 @@ def _notify(
 
 
 def _hermes_kanban(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(  # noqa: S603 - fixed hermes executable, agent-owned arguments
-        ["hermes", *argv],
-        capture_output=True,
-        timeout=120,
-        cwd=os.path.expanduser("~"),
-        check=False,
-    )
+    sys.path.insert(0, str(runtime_root()))
+    from automation.ledger.switch import command_lock, command_prefix
+
+    with command_lock():
+        return subprocess.run(  # noqa: S603 - fixed executable, agent-owned arguments
+            [*command_prefix(), *argv[1:]],
+            capture_output=True,
+            timeout=120,
+            cwd=os.path.expanduser("~"),
+            check=False,
+        )
 
 
 def _kanban_failure(step: str, completed: subprocess.CompletedProcess[bytes]) -> RuntimeError:
