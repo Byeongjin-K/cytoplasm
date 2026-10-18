@@ -282,7 +282,8 @@ def _cron(f: Facts) -> Verdict:
     moved = {timer.name for timer in f.timers}
     running = [timer for timer in f.timers if timer.timer == "active"]
     paused = {job.name for job in cron if job.paused}
-    orphaned = [timer.name for timer in f.timers if timer.timer != "active" and timer.name in paused]
+    orphaned = [timer.name for timer in f.timers
+                if timer.timer not in ("active", "released-off") and timer.name in paused]
     timer_jobs = [CronJob(t.name, "", True, False, t.last_status, t.failure_streak, t.last_error) for t in running]
     failing = [job for job in (*active, *timer_jobs) if job.last_status == "error"]
     broken = [job for job in failing if job.failure_streak >= STREAK_FAIL or DRIFT_SKIP in job.last_error]

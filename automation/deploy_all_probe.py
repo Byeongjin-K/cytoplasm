@@ -213,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
+    parser.add_argument("--hermes-memory", choices=("on", "off"), default="on")
     parser.add_argument("--peer-retired", choices=("active", "retired"), default="active")
     from automation.yoodori_channel import channel_value
 
@@ -228,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat,
                                  hermes_gateways=args.hermes_gateways,
                                  report_hub=args.report_hub, hermes_dashboard=args.hermes_dashboard,
+                                  hermes_memory=args.hermes_memory,
                                  agent_chat_channel=args.yoodori_channel,
                                  peer_retired=args.peer_retired == "retired")
     if args.format == "gateways":

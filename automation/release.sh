@@ -59,7 +59,7 @@ gateway_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.hermes_gate
 gateway_args=()
 [[ "$gateway_mode" != stopped ]] || gateway_args+=(--hermes-gateways stopped)
 legacy_args=()
-for service in report-hub hermes-dashboard; do
+for service in report-hub hermes-dashboard hermes-memory; do
   legacy_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.legacy_services switch --name "$service")" \
     || die "LEGACY-SERVICE-REFUSED: invalid release-host switch" 4
   [[ "$legacy_mode" != off ]] || legacy_args+=(--legacy-service-off "$service")

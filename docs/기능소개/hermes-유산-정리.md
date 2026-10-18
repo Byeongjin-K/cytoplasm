@@ -1,10 +1,10 @@
-# Hermes 유산 1차 정리: 화면·죽은 입력만 끄고 업무 데이터는 보존
+# Hermes 유산 정리: 화면·메모리 타이머를 끄고 업무 데이터는 보존
 
 소유자 지시(2026-10-18):
 > 헤르메스 시절의 유산 중 불필요한것 모두 없애줘. 그리고 헤르메스 메모리 시스템도 omo메모리로 하게 해줘 recall은 유지
 
-첫 묶음은 아래 범위만 처리한다. Hermes 메모리의 omo 이관과 저장소 전반의
-코드·문서 제거는 이 묶음에 포함하지 않는다.
+첫 묶음의 화면·입력 정리에 Q4 메모리 저장 경로 전환과 타이머 정지를 더한다.
+기존 Hermes 메모리 파일과 백업은 삭제하거나 덮어쓰지 않는다.
 
 ## 무엇이 달라지나
 
@@ -62,8 +62,42 @@ RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에�
 배치 모델 호출은 기존 CLI 경로를 쓰고, 수리 티켓과 회의 action item은
 계속 `hermes kanban`을 사용한다. 화면 정지는 데이터 제거가 아니다.
 
+## 메모리
+
+짧은 사실·선호·규칙의 저장 경로는 **유돌 omo 메모리**다.
+소유자 선호·규칙은 매 세션에 실리는 `system/human.md`에 두고,
+문서·긴 기록은 `obsidian-request`로 보낸다. 역할 템플릿이 이 구분을 안내하며
+호출자가 없는 옛 기억 분류·위키 정본·MEMORY.md 병기 패키지는 은퇴한다.
+기존 파일의 omo 시드는 이 배포기가 수행하지 않는다.
+
+릴리스 호스트 `~/.hermes/release-flags/hermes-memory-off`에 **줄바꿈 없는 `off`**를
+두면 승인 표면 `hermes-memory:off`와 아래 카드 한 줄에 묶인다.
+
+> Hermes 메모리 타이머 끄기: memory-curator·memory-relocate 정지(형 기억은 유돌 omo 메모리, 파일 삭제 후 재배포로 다시 켬)
+
+승인 뒤 agent의 `autophagy-cron-memory-curator-watch.timer`(30분)와
+`autophagy-cron-memory-relocate-watch.timer`(2분)만 disable·stop한다.
+서비스·USER.md·MEMORY.md·백업은 지우지 않는다. 정지 전에 기존 relocation pending
+판독기로 미결을 확인하며, 하나라도 남으면 `MEMORY-OFF-REFUSED: 미결 메모리 선택 …`과
+비정상 종료로 **두 타이머 모두 그대로** 둔다. 선택을 이미 했어도 실행·정산이
+끝나지 않은 `approved`·`written`·`ingested`는 미결이다. 상태가 깨졌거나 워처가
+실행 중이어도 정지하지 않는다. 워처와 같은 잠금을 잡은 동안 판독과 정지를 이어
+새 카드가 끼어드는 것을 막는다.
+
+예: “짧은 한국어 답변을 선호한다고 기억해”는 유돌 omo의 `system/human.md`에,
+“회의 결정 기록을 노트로 저장해”는 `obsidian-request`로 간다.
+미결 메모리 카드가 있는 릴리스는 먼저 그 카드가 종결돼야 정지를 완료할 수 있다.
+
+파일 삭제 후 재배포하면 이 배포기가 정지시킨 두 타이머만 enable·start하고
+표식을 걷는다. 스위치·표식이 없는 설치는 기존대로다. 릴리스 관측은 정지 모드에서
+타이머 활성 대신 disabled·inactive를 재조회하고, doctor도 그 표식과 실제 상태를
+함께 확인한다. 따라서 기대 정지는 고장이 아니며, 다시 켜진 타이머는 드리프트다.
+헬스체크의 전량 반영 영수증 검사는 이 관측을 통과한 릴리스를 계속 확인한다.
+**recall·RAG·기존 색인과 검색 경로는 유지한다.**
+
 관련: `automation/legacy_services.py`, `automation/legacy_services/deploy-manifest.txt`,
 `automation/{release.sh,release_approval.py,deploy_all_observe.py,healthcheck_registry.sh}`,
 `automation/doctor/`, `automation/rag_ingest/`, `automation/credential_rotation/`,
 `tests/unit/test_legacy_services*.py`, `tests/unit/test_rag_legacy_sources.py`,
-`tests/unit/test_doctor_yoodori_channels.py`, `tests/unit/test_q236_approval_channel.py`.
+`tests/unit/test_doctor_yoodori_channels.py`, `tests/unit/test_q236_approval_channel.py`,
+`tests/unit/test_hermes_memory_off.py`, `dori/roles/yoodori/AGENTS.md.tmpl`.

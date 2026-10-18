@@ -308,6 +308,7 @@ def collect(
     agent_chat_channel: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
+    hermes_memory: str = "on",
     peer_retired: bool = False,
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
@@ -330,10 +331,14 @@ def collect(
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
     cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
-    cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard})
+    cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard, "hermes-memory": hermes_memory})
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
+        if (hermes_memory == "off" and decl.kind == "cron" and decl.account == "agent"
+                and decl.destination in ("memory-curator-watch", "memory-relocate-watch")):
+            # The derived declaration verifies both disabled timers instead of re-enabling them.
+            continue
         seen = _OBSERVERS[decl.kind](decl, runtime_root, call, cache)
         # 계정의 사유는 그 계정 자신의 검증 결과다. 통과한 계정은 다른 계정 때문에 보류됐다고만 적는다 —
         # 실패한 계정의 사유를 물려받으면 영수증이 멀쩡한 계정의 행까지 init-local 대상으로 센다.
@@ -368,6 +373,7 @@ def observe_node(
     agent_chat_channel: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
+    hermes_memory: str = "on",
     peer_retired: bool = False,
 ) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
@@ -378,4 +384,5 @@ def observe_node(
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
+                    hermes_memory=hermes_memory,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired)

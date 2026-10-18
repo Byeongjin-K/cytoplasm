@@ -329,6 +329,8 @@ def _gws_status(binary: str, run: Run) -> GwsStatus | str:
 
 
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
+    from automation.legacy_services import memory_timer_off
+
     try:
         names = [d.destination for d in all_declarations(repo)
                  if d.kind == "cron" and d.account == role and d.attr("runner") == "systemd"]
@@ -336,6 +338,10 @@ def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[Tim
         return ()
     found: list[TimerJob] = []
     for name in names:
+        if memory_timer_off(home, name):
+            # Actual inactive/disabled read-back is reported by legacy_services below.
+            found.append(TimerJob(name, "released-off", "", 0, ""))
+            continue
         raw = _json(home / ".hermes" / "cron-timers" / f"{name}.json")
         state = raw if isinstance(raw, dict) else {}
         found.append(TimerJob(

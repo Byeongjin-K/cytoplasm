@@ -9,6 +9,13 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 근거 메시지가 형 본인의 24시간 안 글인지 확인한 뒤에만 돌고 성공한 쓰기를 그 링크와 함께 원장에 남긴다([소개](../docs/기능소개/유돌-형-명령-통로.md)).
 대부분 서브패키지는 `python3 -m automation.<pkg>` 또는 `<pkg>/*_cli.py`로 실행.
 
+Q4 `hermes-memory-off`는 릴리스 승인에 묶인 가역 스위치다. `legacy_services`가
+기존 relocation pending 판독과 워처 잠금 아래 미결이면 두 타이머 모두 무변경으로
+거부하고, 없을 때 agent curator·relocate 타이머만 disable·stop한다.
+파일 삭제+재배포로 복구하며 USER.md·MEMORY.md·백업·recall은 보존한다.
+기억 저장은 유돌 omo(소유자 선호·규칙은 `system/human.md`), 긴 기록은
+`obsidian-request`이며 옛 기억 라우팅 패키지는 은퇴했다.
+
 P5 제거는 `peer_retired` 승인 표면과 배포된 계정 표식으로 선택한다. `p5_remove`는
 계정별 백업을 검증한 다음 유산·일시정지 잡만 지운다. `deploy_all`은 그 모드에서 peer와
 Hermes 전용 선언을 수렴 대상에서 제외하고, 공급망은 owner 승인·리뷰를 유지한 채 peer
