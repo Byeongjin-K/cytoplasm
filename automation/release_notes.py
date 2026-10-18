@@ -1,14 +1,17 @@
 """릴리스 변경 상세: 경로→배포 번들 판정과 커밋 귀속.
 
 승인 카드(`release_spec`)는 무엇을 승인하는지(버전·기준·번들·바인딩)만 싣는다. 어떤
-커밋이 어느 번들을 바꾸는지는 이 모듈이 계산해 별도 메시지로 나른다. 경로 판정 규칙은
+커밋이 어느 번들을 바꾸는지는 이 모듈이 계산해 로컬 상세 문서로 보존한다. 경로 판정 규칙은
 여기 한 벌뿐이며 `release_plan.build_plan` 의 표면 분류가 같은 규칙을 부른다 — 사본이
 생기면 카드의 번들 목록과 커밋 귀속이 서로 다른 답을 말하게 된다.
 """
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
@@ -119,8 +122,28 @@ def detail_body(plan: ReleasePlan) -> str:
     )
 
 
+def save_detail(
+    directory: Path, head: str, surfaces: tuple[tuple[str, str], ...], body: str,
+) -> Path:
+    """Keep the full approval detail beside the host's draft before any card is posted."""
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = directory / f"{head}.details.md"
+    bundles = "\n".join(f"- `{name}`" for name, _digest in surfaces) or "- 변경 없음"
+    content = f"## 변경 상세\n### 배포 묶음 전체\n{bundles}\n{body}\n"
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return path
+
+
 def render_detail_messages(plan: ReleasePlan) -> tuple[str, ...]:
-    """계획 하나가 만드는 상세 메시지 전부 — 게시 순서 그대로."""
+    """구판 계획이 만드는 상세 메시지 전부 — 재생 순서 그대로."""
     return split_messages(version=plan.version, head_sha=plan.head, body=detail_body(plan))
 
 

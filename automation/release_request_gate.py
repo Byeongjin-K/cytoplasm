@@ -1,4 +1,4 @@
-"""Release-only posting transaction: details first, linked card second."""
+"""Release posting transaction: v7 card only; older versions retain detail-first replay."""
 from __future__ import annotations
 
 import sys
@@ -110,7 +110,7 @@ class ReleaseRequestGate:
         except _POST_ERRORS as error:
             self._delete_details(intent.channel_id, detail_ids)
             raise ApprovalSurfaceError(type(error).__name__) from error
-        if self.spec.render_version >= 6:
+        if self.spec.render_version == 6:
             self._backlink_details(
                 intent.channel_id, guild_id, card_id, messages, detail_ids
             )

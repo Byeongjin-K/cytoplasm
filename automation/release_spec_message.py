@@ -189,15 +189,11 @@ def render_v5(spec: ReleaseView, *, bundle_names: str) -> str:
         raise EnvelopeUnavailable("release owner envelope cannot render") from error
 
 
-def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
-    """Compact card with a replayable link to the first posted detail message.
-
-    A ``healthcheck-wrapper:<node>`` surface adds one line naming those hosts. Without such
-    surfaces the bytes are unchanged, so every stored v6 card still replays exactly.
-    """
+def approval_surface_lines(spec: ReleaseView) -> list[str]:
+    """Approval-relevant switch notices shared by frozen v6 and new v7 cards."""
     from automation.release_spec import (
         DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
-        WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX, EnvelopeUnavailable,
+        WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX,
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
@@ -208,23 +204,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         if name.startswith(WRAPPER_SURFACE_PREFIX)
     ]
 
-    try:
-        from automation.interop.owner_message import (
-            Action,
-            Approval,
-            LinkStatus,
-            OwnerMessage,
-            OwnerMessageError,
-            Ref,
-            discord_link,
-            render,
-        )
-    except ImportError as error:
-        raise EnvelopeUnavailable("release owner envelope is unavailable") from error
-    here = Ref(scope="self")
-    facts = [
-        f"배포 기준: `{spec.head_sha}`",
-        f"배포 묶음: {bundle_summary}",
+    return [
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests
@@ -249,6 +229,25 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         *(["검색 잠깐 끊김(~1분)·되돌림 있음"] if any(
             name == RAG_MCP_SURFACE for name, _digest in spec.surface_digests
         ) else []),
+    ]
+
+
+def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
+    """Replay the frozen v6 card and its first-detail pointer."""
+    from automation.release_spec import EnvelopeUnavailable
+
+    try:
+        from automation.interop.owner_message import (
+            Action, Approval, LinkStatus, OwnerMessage, OwnerMessageError,
+            Ref, discord_link, render,
+        )
+    except ImportError as error:
+        raise EnvelopeUnavailable("release owner envelope is unavailable") from error
+    here = Ref(scope="self")
+    facts = [
+        f"배포 기준: `{spec.head_sha}`",
+        f"배포 묶음: {bundle_summary}",
+        *approval_surface_lines(spec),
         f"승인 식별값: `{spec.action_hash()}`",
         f"변경 상세: {len(spec.detail_messages())}개 메시지",
     ]
@@ -295,3 +294,38 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         f"{body}\n-# 참조: 변경 상세 → {reference}"
         f" · {spec.version} · {spec.head_sha[:12]}"
     )
+
+
+def render_v7(spec: ReleaseView) -> str:
+    """At most twelve lines; all switch notices remain visible, without detail posts."""
+    from automation.release_spec import EnvelopeUnavailable
+
+    try:
+        from automation.interop.owner_message import (
+            Action, Approval, OwnerMessage, OwnerMessageError, Ref, render,
+        )
+    except ImportError as error:
+        raise EnvelopeUnavailable("release owner envelope is unavailable") from error
+    here = Ref(scope="self")
+    # Commit titles are a compact preview, never the retained source of detail.
+    titles = [line.removeprefix("- ") for line in spec.patch_notes.splitlines()
+              if line.startswith("- ")]
+    summary = " · ".join(title[:100] for title in titles[:2]) or "릴리스 변경 적용"
+    facts = [summary, f"배포 기준: `{spec.head_sha[:12]}`"]
+    switches = approval_surface_lines(spec)
+    if switches:
+        facts.append(" · ".join(switches))
+    if spec.major_note:
+        facts.append(spec.major_note)
+    facts.append(f"승인 식별값: `{spec.action_hash()}`")
+    facts.append("자세한 건 유돌에게 물어보면 올려요")
+    try:
+        return render(OwnerMessage(
+            subject_key=spec.version, subject=f"릴리스 {spec.version} 배포 승인",
+            fact="\n".join(facts), location=here,
+            owner=Action("react", here, "✅ 승인 또는 ⛔ 취소 (소유자 전용 — 봇/타인 리액션은 거부됨)"),
+            agent_next="승인된 릴리스만 태그·배포", recovery="not_applicable",
+            detail=Approval(None, "배포 미실행, 요청 폐기"), render_version="owner-ko-v2",
+        ), destination=here)
+    except OwnerMessageError as error:
+        raise EnvelopeUnavailable("release owner envelope cannot render") from error

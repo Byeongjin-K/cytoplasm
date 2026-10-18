@@ -232,8 +232,8 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 | `release_applied_notice` | module | `automation/release_applied_notice.py` | 릴리스 **적용 완료** 통지의 단일 구현(2026-09-05, t_0ec472d8·t_710c7d8b) — ✅ 는 허락이지 적용이 아니므로 완료를 셋의 교집합으로만 판정한다: 완결기 성공 마커 `completed/<sha>` · 노드 활성 포인터(`readlink <release_current>`) · 전량 재판정 영수증(RC-4)의 `release_sha`. 순수 `decide(ReleaseFacts)` 가 `Applied/Skip/Retry` 를 내고 순서가 곧 정책이다(SUPERSEDED → NO-TAG → VERSION-AMBIGUOUS → POINTER-UNREADABLE → POINTER-BEHIND → RECEIPT-MISSING → RECEIPT-STALE). **번호는 추정하지 않는다** — 그 sha 의 `v<major>.<minor>.<patch>` 태그 하나가 유일한 출처이고 둘이면 영구 보류다. 활성 포인터의 조상은 `SUPERSEDED` 로 기록만 한다(v1.2.3 사례). 워크스테이션 `sweep` 은 완결 단축회로 **앞**에서 매 틱 돌고 대상이 없으면 노드를 찌르지 않으며, 예외는 `RELEASE-APPLIED-SWEEP-FAIL` 한 줄로 끝나 완결 종료코드를 바꾸지 않는다. 발신은 `release_approval_remote.sh` 에 `RELEASE_APPROVAL_MODULE` 로 실려 노드 agent 자격으로 돌고, 거기서 포인터를 한 번 더 확인한 뒤(`APPLIED-POINTER-MISMATCH` exit 4) `owner_notice.notify_owner` 에 넘긴다 — **2026-09-10 소유자 지시로 DM 전용(`notify_owner_dm`)에서 옮겼다**: 통지 채널(`owner_notice_channel_id`)이 있으면 `#notifications`, 없는 설치는 종전대로 소유자 DM 이다(ON-1). 멱등은 `notified/<sha>`·`notify-skipped/<sha>`, 전송 실패는 마커 없이 다음 틱 재시도(상한 없음)(소개) |
 | `release_completion_target` | module | `automation/release_completion_target.py` | 완결기가 **어느 릴리스를 완결할 것인가**의 단일 판정(2026-09-09) — 승인은 sha 에 묶이는데 `release_complete.sh` 는 매 틱 origin/main HEAD 하나만 들고 물어, 태그 직후 새 커밋이 머지되면 이미 인가된 릴리스가 영영 완결되지 못했다(v1.6.3 실측: 전량 반영 미재개 + 적용 완료 DM 유실). 태그 후 경로의 대상은 **origin/main 에서 도달 가능한 가장 가까운 릴리스 태그의 커밋**이고 순수 `decide` 의 순서가 곧 정책이다(NO-RELEASE-TAG → TIP-IS-RELEASE → VERSION-AMBIGUOUS → ALREADY-COMPLETED → Reconcile). 이 태그 후 판정은 git 만 읽어 노드 I/O 가 0 이고, 릴리스 번호의 정의는 `release_applied_notice.release_tags` 를 import 해 사본을 만들지 않는다. 배선은 `release_complete.sh` 의 `reconcile_authorized_release` 뿐이며 `release.sh` 를 부르지 않아 태그를 자르지 않는다. **2026-09-10**: 같은 git 사실을 한 번 더 판다 — `tagged_release`/`--print-tagged` 가 **완결 여부와 무관하게** 도달 가능한 릴리스 커밋을 내주고, 완결기가 그것을 `release_approval decision --tagged` 로 실어 **이미 실행된 릴리스**를 낡은 승인으로 오인한 거짓 ⛔ 를 막는다(v1.6.7 실측: 적용 완료 통지와 「자동 완결할 수 없습니다」가 나란히 도착했다). `decide` 와 판정이 다른 이유는 묻는 것이 달라서다 — 저기는 \"무엇을 완결했다고 적을까\"라 번호가 정확히 하나여야 하고, 여기는 \"이미 잘렸는가\"뿐이라 한 커밋에 번호가 둘이어도 답이 흔들리지 않는다([소개](docs/기능소개/릴리스-완결-리컨실.md) · [소개](docs/기능소개/실행된-릴리스는-낡은-승인이-아니다.md)) **2026-09-19**: 태그 전에는 `approval_decision`이 검증된 소유자 승인 SHA·버전을 rc 3 후보로 반환한다. 워크스테이션이 origin/main 조상 여부를 확인하고 그 SHA만 검증·태그·배포한다. 비조상은 요청별 통지 한 번이며 원 승인을 새 tip 인가로 바꾸지 않는다. |
 | `notify_owner_dm` | fn | `automation/owner_notice.py` | 소유자가 **DM 을 명시한** 통지 전용(2026-09-05) — `notify_owner` 와 달리 소유자 통지 채널이 설정돼 있어도 그리로 새지 않고 항상 소유자 DM 으로 간다. 첫 소비자였던 릴리스 적용 완료는 **2026-09-10 소유자 지시로 `notify_owner`(#notifications)로 옮겨가** 지금은 소비자가 없다 — 그래도 남긴다: 파사드가 인정하는 **유일한** DM 전용 경로이고, 없애면 다음에 \"이건 DM 으로\" 요구가 왔을 때 파사드 밖에 DM 오픈이 다시 생긴다(ON-2/ON-3 이 막으려는 바로 그 모양). DM 오픈은 여전히 이 파사드 안에서만 일어나고(ON-2/ON-3), 미설정은 `NOTIFY-UNCONFIGURED`, 실패는 `NOTIFY-FAILED: <type>` 를 남기며 **예외는 절대 던지지 않는다** |
-| `release_notes` | module | `automation/release_notes.py` | 릴리스 변경 상세 — 경로→배포 번들 판정(`BundleMap`, `build_plan` 의 표면 분류와 **같은 한 벌**), `git log --name-only` 파싱(`parse_commits`), 번들별 절(`### <번들>`·`### 여러 번들`·`### 공통·기타`)로 묶은 본문을 소유한다. 원문 항목은 절대 줄이지 않고 `release_spec_message.split_messages`가 줄 경계로 나눈다. 실제 게시·부분 실패 정리는 v6부터 `release_request_gate`가 lifecycle 저널 뒤에서 맡는다(소개) |
-| `ReleaseSpec.render` v6 | fn | `automation/release_spec.py` | 신규 승인 카드 v6: 저널 예약 뒤 상세를 먼저 게시해 실제 guild/channel/message 좌표를 레코드에 저장하고, 카드 꼬리표가 첫 상세로 이동한다. 44개 번들 이름은 `스킬 N · 홈 패키지 N · repo · runtime`으로 요약하고 전체 목록은 상세의 `### 배포 묶음 전체`에 둔다. 카드→상세는 native reply-reference, 상세→카드는 URL이며 guild 미상은 버전·HEAD 검색 안내로 저하한다(`@me` 추측 없음). `release_request_gate`가 상세→최종 카드→단일 commit을 소유하고 부분 상세 실패는 정리 후 fail-closed한다. `preflight_new_request`는 첫 효과 전에 최악 링크 길이까지 1900자 예산을 검사한다. 저장된 판본 1~5는 byte-frozen이고 좌표 필드는 선택적이며 `action_hash` 밖이다. 원격 결정은 `release_approval_remote.sh`가 해당 커밋의 automation 트리를 실어 v6를 재생한다 |
+| `release_notes` | module | `automation/release_notes.py` | 경로→배포 번들 판정과 번들별 커밋 본문의 단일 정의. 호스트의 `plan`이 승인 전에 `<sha>.details.md`에 전체 번들·커밋을 원자 저장하고 `ensure_release_note`가 GitHub Release 본문에 합친다. 상세 분할·게시 코드는 저장된 구판 재생에만 남는다. |
+| `ReleaseSpec.render` v7 | fn | `automation/release_spec.py` | 신규 카드는 최대 12줄·1900자: 버전·짧은 HEAD·요약·승인 표면/스위치·운영자 경보·전체 action_hash·소유자 결정·유돌 조회 안내. v7 상세 메시지는 0개이고 기존 lifecycle로 카드만 게시한다. 전체 상세는 로컬 초안 옆과 GitHub Release에 보존하고 유돌 `release-notes <version>`으로 요청할 때만 읽는다. 저장된 v1~v6 바이트·해시·nonce·표면 바인딩은 불변이다. [소개](docs/기능소개/릴리스-짧은-승인과-상세-조회.md) |
 | `public_gate` | module | `automation/public_gate.py` | 공개 저장소 개발의 **누출 게이트**(2026-10-07) — 금지 경로(`.omo`·`docs/qa`, `add -f` 포함)·설치 토폴로지(`public_export_redaction._TOPOLOGY_RULES` 재사용)·비공개 금칙어(ops 저장소 `leak/denylist.txt`, **추가된 줄·커밋 메시지·PR 본문에만** 대조)를 `staged`/`message`/`range` 로 검사한다. 찾은 값은 출력하지 않는다(공개 Actions 로그). 금칙어가 설정됐는데 못 읽으면 exit 3(fail-closed). 옛 비공개 원본 체크아웃 분기(반출 매니페스트)는 2026-10-10 롤백 기간 종료와 함께 지웠다 — 모든 체크아웃에서 경로·메시지를 같이 검사한다. 훅(`hooks/public-gate-pre-commit`·`public-gate-commit-msg`·`pre-push` 의 `autophagy.publicGate=enforce` 분기)은 `automation/ops_link.sh` 가 공개 체크아웃에만 설치하고, `local_ci.sh` `public-gate` 단계·CI `leak-guard` 잡·수리 push 직전(`RepairWorkClone._refuse_leaks`)이 같은 검사를 돈다. [소개](docs/기능소개/공개-누출-게이트.md) |
 | `ops_link.sh` | script | `automation/ops_link.sh` | 공개 개발 체크아웃에 비공개 ops 저장소를 잇는다 — `.omo`→`<ops>/omo`, `docs/qa`→`<ops>/qa` 심볼릭 링크, `info/exclude` 에 `/.omo`·`/docs/qa`(끝 슬래시 없이: 링크는 git 에게 파일이다), 경로는 추적 파일이 아니라 `git config autophagy.opsRepo`. `worktree.sh start` 가 그 설정이 있으면 새 워크트리마다 다시 건다 |
 | `local_ci` | script | `automation/local_ci.sh` | PR 전 검증 단일 진입점 — 워크플로와 같은 세트(lint · `pytest tests/unit` · 빈 `python:3.12-slim` 컨테이너의 설치기 dry-run)를 돌리고 **전 단계 통과 시에만** tree 키 영수증(`~/.hermes/local-ci/<tree>.json`, 0700/0600)을 발급한다. `verify <sha>` 는 `automation/hooks/pre-push` 가 부르며 영수증 없는 브랜치 push 는 거부된다 — 브랜치 보호가 403 이라 push 가 유일하게 구속력 있는 길목이다 |
@@ -402,19 +402,19 @@ python3 -m automation.rag_ingest      # 개인 RAG 인제스트
 - `release.sh`는 직전 릴리스 이후의 커밋 제목을 패치노트 원문으로 쓴다. 따라서 logical
   commit 제목 자체가 위 기준을 만족해야 한다. 릴리스 직전에 이해 불가능한 제목을
   발견하면 승인 메시지를 억지로 줄이지 말고 해당 변경 설명을 보강한 뒤 다시 계획한다.
-- 승인 본문에는 version·HEAD, **변경 표면 요약**, 사람이 읽는 변경 설명, 전체
-  `action_hash`를 싣는다. 변경 표면 이름의 전체 목록과 커밋 원문은 링크된 변경 상세가
-  빠짐없이 싣는다. `release_nonce`와 표면별 64자 digest는 기계 바인딩 레코드에만
-  보관한다 — 원시 해시가 설명 공간을 밀어내면 승인자가 내용을 검토할 수 없다.
-- **Discord 한도를 넘는 변경 설명은 줄이지 않고 나눈다**(2026-09-05 개정, 이전 규칙인
-  "완전한 줄 단위로 줄이고 생략 줄 수를 명시한다"는 폐기). 신규 승인 카드(`render_version=6`)는
-  버전·배포 기준·번들 요약·`action_hash`·실제 상세 메시지 링크만 싣고, 전체 번들 이름과 커밋 원문은
-  번들별 절(`### <번들>`)로 묶은 **「변경 상세」 메시지들**이 싣는다
-  (`automation/release_notes.py`). 상세 메시지는 저마다 같은 릴리스 번호와 배포 기준을
-  머리글로 달아 어느 승인에 속하는지 스스로 말하고, 승인 문구는 카드에만 한 번 나온다.
-  렌더러는 `+N건`·`omitted`·말줄임표를 만들지 않으며 한 줄이 한도보다 길면
-  버리는 대신 이어 붙일 수 있게 나눈다 — 중요 변경이 생략 구간에 숨는 경로 자체가
-  없다. 그래도 카드 본문이 1900자를 넘으면 게시하지 않고 막는다.
+- **소유자 결정(2026-10-18 20:50 KST)**: "유돌이 릴리즈노트 간단하게 하고 나머지 내용은 어디 문서로 저장해놨다가 내가 물어볼 때만 올리도록 하고 지금처럼 길게 다 릴리즈노트 적게 하지마".
+- 신규 승인 카드(`render_version=7`)는 **최대 12줄·1900자**로 버전·짧은 HEAD·한두 변경 요약과
+  승인에 필요한 표면/스위치·운영자 경보·전체 `action_hash`·결정 방법만 싣는다.
+  스위치가 여러 개면 같은 줄에서 구분하고 내용을 빠뜨리지 않는다. 끝에는
+  "자세한 건 유돌에게 물어보면 올려요"를 적으며 상세 메시지를 자동 게시하지 않는다.
+  1900자 초과는 승인 대상 줄을 줄이는 대신 게시를 거부한다.
+- 전체 번들·커밋 원문은 호스트 `plan`이 승인 전에
+  `${RELEASE_NOTES_DIR:-~/.hermes/release-notes}/<sha>.details.md`에 원자 저장한다(0600).
+  기존 `<sha>.md` 초안 옆의 이 파일을 `ensure_release_note`가 GitHub Release 본문에 합친다.
+  게시 실패에도 로컬 파일은 남고 재실행이 같은 문서를 쓴다. 유돌은 형이 물을 때만
+  `release-notes <vX.Y.Z>`로 공개 Release 노트를 읽어 올린다(토큰·쓰기 없음).
+- 저장된 v1~v6 카드와 v6 상세 메시지는 바이트 동결이다. `action_hash`·표면·nonce의
+  바인딩은 바꾸지 않으며 승인 단일성·재사용·해시 검증은 기존 lifecycle을 그대로 쓴다.
 - ✅ 이후 별도 수동 재개를 요구하지 않는다. 워크스테이션의 `release.sh`는 기본적으로
   결정을 계속 기다리고, 소유자 ✅를 감지하면 곧바로 서명 태그를 자른다. deadline은
   테스트·의도적 제한 운영에서만 명시한다.

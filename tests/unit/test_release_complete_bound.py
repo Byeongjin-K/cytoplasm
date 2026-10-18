@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def scenario(tmp_path: Path) -> Scenario:
     return Scenario(tmp_path, source, state, bound, {
         "PATH": f"{binary}:{os.environ['PATH']}",
         "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
-        "RELEASE_APPROVAL_CMD": f"python3 {driver}",
+        "RELEASE_APPROVAL_CMD": f"{sys.executable} {driver}",
         "RELEASE_LOCAL_CI": str(ci),
         "UPDATE_TRUST_SIGNING_KEY": str(key),
         "GATE_DIR": str(gate), "NOTICES": str(tmp_path / "notices"),
