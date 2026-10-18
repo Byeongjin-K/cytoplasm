@@ -95,6 +95,10 @@ def _custom_name(provider: str) -> str | None:
 
 
 def _primary(f: Facts) -> Verdict:
+    if f.omo_relay:
+        if f.omo_relay == "unchecked":
+            return _warn("이 PC 대신 호출: 온라인 검사 생략")
+        return _ok("이 PC 대신 호출: 닿음") if f.omo_relay == "up" else _fail("이 PC 대신 호출: 안 닿음")
     provider = f.model_provider or CODEX
     custom = _custom_name(provider)
     if custom is not None:
@@ -140,6 +144,8 @@ def _cooldown(f: Facts, provider: str, named: str) -> Verdict:
 
 
 def _fallback(f: Facts) -> Verdict:
+    if f.omo_relay:
+        return _ok("이 PC omo 설정이 폴백을 결정함(노드 Hermes 로그인은 사용하지 않음)")
     if not f.fallback:
         return _warn("폴백 모델이 없다 — 주 모델이 막히면 곧바로 실패한다")
     missing = tuple(provider for provider in f.fallback

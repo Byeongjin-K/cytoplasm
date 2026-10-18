@@ -22,6 +22,7 @@ _FIELD_NAMES: Final = frozenset({
     "release_store", "private_root", "skill_store", "repair_work",
     "repair_report_queue", "repair_report_ack", "repair_capability", "libexec_dir",
     "agent_home", "peer_home", "ops_home", "agent_gateway_unit", "peer_gateway_unit",
+    "omo_relay_target", "omo_relay_key",
 })
 
 
@@ -82,6 +83,8 @@ class NodeConfig:
     ops_home: Path
     agent_gateway_unit: str
     peer_gateway_unit: str
+    omo_relay_target: str = "relay-account@relay.invalid"
+    omo_relay_key: Path = Path("/home/agent/.ssh/omo_relay")
 
 
 def default_node_config() -> NodeConfig:
@@ -192,6 +195,8 @@ def _from_values(
         ops_home=path("ops_home", None if base is None else base.ops_home),
         agent_gateway_unit=text("agent_gateway_unit", "" if base is None else base.agent_gateway_unit),
         peer_gateway_unit=text("peer_gateway_unit", "" if base is None else base.peer_gateway_unit),
+        omo_relay_target=text("omo_relay_target", "relay-account@relay.invalid" if base is None else base.omo_relay_target),
+        omo_relay_key=path("omo_relay_key", Path("/home/agent/.ssh/omo_relay") if base is None else base.omo_relay_key),
     )
 
 
@@ -217,6 +222,10 @@ def _reject_unprintable(config: NodeConfig) -> None:
 
 def _validate(config: NodeConfig) -> NodeConfig:
     _reject_unprintable(config)
+    if re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*", config.omo_relay_target) is None:
+        raise NodeConfigError("omo_relay_target must be a safe SSH target")
+    if not config.omo_relay_key.is_absolute():
+        raise NodeConfigError("omo_relay_key must be absolute")
     if not config.origin_url:
         raise NodeConfigError("origin_url must not be empty")
     if config.deploy_ssh_host.startswith("-"):
@@ -294,4 +303,6 @@ def node_config_values(config: NodeConfig) -> Mapping[str, str]:
         "ops_home": str(config.ops_home),
         "agent_gateway_unit": config.agent_gateway_unit,
         "peer_gateway_unit": config.peer_gateway_unit,
+        "omo_relay_target": config.omo_relay_target,
+        "omo_relay_key": str(config.omo_relay_key),
     }

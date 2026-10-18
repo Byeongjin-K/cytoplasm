@@ -203,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
+    parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -216,7 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat,
                                  hermes_gateways=args.hermes_gateways,
-                                 agent_chat_channel=args.yoodori_channel)
+                                 agent_chat_channel=args.yoodori_channel,
+                                 omo_relay_mode=args.omo_relay)
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
     try:
@@ -282,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         document = json.loads(receipt)
         document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
+        document["omo_relay"] = {"route": args.omo_relay}
         print(json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2))
         return 0
     if args.format == "actions":

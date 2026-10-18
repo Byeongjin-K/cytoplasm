@@ -1,5 +1,20 @@
 # Hermes model routing policy
 
+## Q245: reversible workstation batch relay (2026-10-18)
+
+The release-host file `~/.hermes/release-flags/omo-relay`, exact bytes `on`, selects
+tool-free workstation omo for `automation.codex_llm` batch calls. In this mode the
+workstation's omo account configuration alone chooses the model and fallback;
+neither the node nor SSH argv selects a model. Actual provider/model come from omo
+JSON, with missing values recorded as `unknown`. Transport/overload gets one retry
+after 30 seconds; empty text is a request error, not success.
+
+The release binds the `omo_relay_target` and `omo_relay_key` node-config fields to its
+approval, provisions a dedicated node key, and installs an approved partial node-config
+override. Removing the host flag and redeploying removes this override and returns
+to the unchanged legacy behavior described below. Interactive gateway calls are not
+changed by card A. See [relay usage](../docs/기능소개/노드-배치-omo-중계.md).
+
 ## Policy
 
 1. **One place picks the model (owner decision 2026-09-29).** Every interactive and

@@ -247,6 +247,7 @@ def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, objec
     return _Seen(*deploy_all_config.observe_config(
         decl, root, call, dori_mode=mode if isinstance(mode, str) else None,
         chat_channel=channel if isinstance(channel, str) else "off",
+        omo_relay_mode=str(_cache.get("omo_relay_mode", "off")),
     ))
 
 
@@ -292,6 +293,7 @@ def collect(
     dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    omo_relay_mode: str = "off",
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
 
@@ -307,7 +309,8 @@ def collect(
     roster_rc = {a: call(a, ("roster", str(runtime_root)))[0] for a in {d.account for d in gated}}
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
-    cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
+    cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel,
+                                "omo_relay_mode": omo_relay_mode}
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
@@ -343,6 +346,7 @@ def observe_node(
     runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    omo_relay_mode: str = "off",
 ) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
     try:
@@ -351,4 +355,4 @@ def observe_node(
         ops_account = ""
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
-                   agent_chat_channel=agent_chat_channel)
+                   agent_chat_channel=agent_chat_channel, omo_relay_mode=omo_relay_mode)

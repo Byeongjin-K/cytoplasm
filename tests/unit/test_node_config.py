@@ -64,7 +64,7 @@ def test_runtime_file_replaces_every_default(tmp_path: Path) -> None:
             "service_root", "deploy_checkout", "release_current", "release_store",
             "private_root", "skill_store", "repair_work", "repair_report_queue",
             "repair_report_ack", "repair_capability", "libexec_dir", "agent_home",
-            "peer_home", "ops_home",
+            "peer_home", "ops_home", "omo_relay_key",
         }
     }
     for field in seed.__dataclass_fields__:

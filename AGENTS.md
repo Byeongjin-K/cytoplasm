@@ -11,6 +11,10 @@ P6 공개 설치 기본값은 도리다(`automation.install`·마법사·quickst
 적용된다. 기존 노드는 서명 릴리스로 업데이트하며 멈춘 잡·peer·유닛을 삭제하지 않는다.
 P5 제거는 별도 소유자 결정이다. [메이저 소개](docs/기능소개/도리-기반-메이저.md).
 
+Q245 배치 예외: 릴리스 호스트의 `~/.hermes/release-flags/omo-relay`가 정확한 `on`이면
+`codex_llm` 배치는 노드 Hermes 대신 이 PC의 도구 없는 omo로 간다. 모델은 이 PC omo 설정만
+정하고, 파일 삭제 후 재배포하면 아래 레거시 Hermes 경로로 복귀한다.
+
 cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전트와 상호운용하며, 설치별 `<primary-node>` / `<rag-node>` 역할로 구동한다. Python 3.12 **stdlib 중심**. 모든 대화·배치 모델 호출은 계정 `~/.hermes/config.yaml` 이 정한 주 모델(현재 `openai-codex/gpt-6.1-sol`, reasoning effort `medium` — 2026-10-02)을 쓰고, 그것이 답하지 못하면(쿼터·인증·전송) 같은 파일의 `fallback_providers`(현재 `xai-oauth/grok-4.7`)로 넘어가며 — 모델은 그 파일 한 곳이 정하고 코드는 적지 않는다(2026-09-29 소유자 결정) — 체인 전체가 실패하면 fail-closed로 전파한다. **모든 외부효과는 소유자(cha) 승인 게이트 경유** — 이것이 아키텍처의 중심 불변식이다.
 
 ## STRUCTURE
@@ -61,6 +65,7 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 ## CODE MAP
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `omo_relay` | package | `automation/omo_relay/` · `automation/omo_relay_release.py` | Q245: 공용 `codex_llm` API·호출자 유지, SSH stdin → 빈 0700 cwd의 도구 없는 omo. 릴리스 스위치·설정 지문 바인딩, 노드 전용 키 자동 생성, v2 설정 관측·영수증, 재시도 1회·장애/회복 통지·doctor. [소개](docs/기능소개/노드-배치-omo-중계.md) |
 | `plaud_sync` 자동 쓰기 · `auto_write` | module | `automation/auto_write.py` · `automation/plaud_sync/effects_live.py` | Q231(2026-10-18): 호스트 `release-flags/auto-write-plaud`의 정확한 `on`을 릴리스 승인 표면에 묶고 node `auto-write/plaud.mode`를 배치하면 `planned` 노트를 카드 없이 기존 writer로 쓴다. 동결 SHA·클론 잠금·원격 재조회·재시도 불변. 기본 꺼짐·파일 삭제+재배포=카드 복구. 종류별 공용 `auto_write.record(kind, Entry)` 원장(0600, 본문 없음)과 `auto-write-daily-summary`(`30 21 * * *`, 계정 KST, systemd)가 「오늘 자동으로 쓴 것」을 한 번 보낸다(실패=워터마크 불변, 빈 날 침묵). 기존 아래 plaud 행의 건별 승인 설명은 꺼짐일 때의 경로다. Q233의 나머지 6종은 종류별 스위치 `auto-write-<kind>`(`yoodori`=유돌 위키·문서·특허·전사·회의록, `calendar`=형 혼자 일정, `todo`, `obsidian`, `drive-save`, `project-board`)로 같은 원장·요약을 쓰며 각각 따로 켜고 끈다([소개](docs/기능소개/유돌-형-명령-통로.md#q233-카드-없는-쓰기-6종)). [소개](docs/기능소개/plaud-노트-자동-쓰기.md) |
 | `notice_bot` · `notice_bot_release` | module | `automation/notice_bot.py` · `automation/notice_bot_release.py` | 릴리스 호스트 `notice-bot`의 정확한 `yoodori`가 발신 전환이다. 토큰 SHA-256만 승인 표면에 바인딩하고 기존 호스트 계정 래퍼가 읽은 비밀은 SSH stdin으로만 배치한다. agent·peer 홈과 ops `private_root`의 0600 override를 모든 노드 발신자가 단일 해석기로 우선 읽는다. 정지·채널 전환이 함께 있어야 켜며, 파일 삭제+재배포는 기존 토큰을 복구한다. `check --expected-id`는 GET만 하며 봇 ID·일치 여부만 출력한다. [소개](docs/기능소개/발신-봇-유돌.md) |
 | `install.entrypoint` | module | `automation/install/entrypoint.py` | P6 공개 설치 분기. 생략=`profiles.DEFAULT_PROFILE`(도리), 명시한 레거시 프로필만 기존 노드 설치기. 기본값 변경은 `release_plan.major_signals`가 메이저를 요구하고 신규 카드에 P5 삭제 미포함·보존을 표시한다. |

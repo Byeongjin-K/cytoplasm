@@ -45,7 +45,7 @@ _NODE_ENV_LINE: Final = 'eval "$(python3 "$repo_root/automation/node_config_sh.p
 _NODE_ENV_DEPLOYERS: Final = (
     "automation/cost-report", "automation/doctor", "automation/effect_request", "automation/interop", "automation/managed_sync",
     "automation/memory_curator", "automation/memory_provider", "automation/memory_relocate",
-    "automation/notes_organize", "automation/obsidian_write",
+    "automation/notes_organize", "automation/obsidian_write", "automation/omo_relay",
     "automation/plaud_sync", "automation/project_board",
     "automation/rag_ingest", "automation/rag_stack", "automation/regression_bank", "automation/reminder_poller",
     "automation/repair", "automation/research_trends", "automation/selfskill_audit", "automation/skill_generation",

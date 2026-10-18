@@ -349,7 +349,7 @@ def test_the_gateway_probe_reports_only_gateway_lines_and_fails_while_stale(
 
         def fake(root: Path, *, gateway_only: bool = False, _case: str = case,
                  dori_agent_chat: str = "off", hermes_gateways: str = "running",
-                 agent_chat_channel: str = "off") -> list[str]:
+                 agent_chat_channel: str = "off", omo_relay_mode: str = "off") -> list[str]:
             calls.append(gateway_only)
             return answers[_case]
 

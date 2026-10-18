@@ -10,6 +10,7 @@ from automation import hermes_memory_config, hermes_soul_recall, yoodori_channel
 from automation.deploy_declarations import Declaration
 from automation.memory_provider import agent_config as agent_profile
 from automation.memory_provider import config as memory_profile
+from automation import omo_relay_release
 
 if TYPE_CHECKING:
     from automation.deploy_all_observe import Runner
@@ -20,6 +21,7 @@ CONFIG_MODULES: Final = {
     memory_profile.ALGORITHM: memory_profile,
     agent_profile.ALGORITHM: agent_profile,
     yoodori_channel.ALGORITHM: yoodori_channel,
+    omo_relay_release.ALGORITHM: omo_relay_release,
 }
 _PAIRS: Final = r"([a-z_]+=[a-z0-9_-]+(?:,[a-z_]+=[a-z0-9_-]+)*)"
 ConfigFacts: TypeAlias = tuple[str, str, str, tuple[tuple[str, str], ...]]
@@ -28,13 +30,16 @@ ConfigFacts: TypeAlias = tuple[str, str, str, tuple[tuple[str, str], ...]]
 def observe_config(
     decl: Declaration, root: Path, call: Runner, *, dori_mode: str | None = None,
     chat_channel: str = "off",
+    omo_relay_mode: str = "off",
 ) -> ConfigFacts:
     """`dori_mode` is the release host's switch as handed to the node probe; None reads it here (host only)."""
     module = CONFIG_MODULES.get(decl.attr("algorithm"))
     if module is None:
         return "?", "?", "unknown", (("unsupported-algorithm", "-"),)
     try:
-        if module is yoodori_channel:
+        if module is omo_relay_release:
+            wanted = module.wanted_identity(omo_relay_mode=omo_relay_mode)
+        elif module is yoodori_channel:
             wanted = module.wanted_identity(yoodori_channel=chat_channel)
         elif module is agent_profile:
             wanted = module.wanted_identity(dori_agent_chat=None if dori_mode is None else dori_mode == "on",
