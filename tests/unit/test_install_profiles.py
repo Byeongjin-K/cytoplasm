@@ -143,10 +143,11 @@ def test_an_explicit_environment_value_wins_over_the_file(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     rows = [line for line in result.stdout.splitlines() if line]
-    assert [row for row in rows if "report-hub" in row]
+    assert not [row for row in rows if "report-hub" in row]
+    assert [row for row in rows if "qdrant" in row.lower() or "embedding" in row.lower()]
 
 
-def test_the_dashboard_url_comes_from_the_declaration_file_when_the_environment_is_silent(
+def test_a_declared_dashboard_url_does_not_restore_retired_report_probes(
     tmp_path: Path,
 ) -> None:
     env_file = tmp_path / "healthcheck.env"
@@ -159,12 +160,15 @@ def test_the_dashboard_url_comes_from_the_declaration_file_when_the_environment_
 
     assert result.returncode == 0, result.stderr
     auth = [line for line in result.stdout.splitlines() if "dashboard auth" in line]
-    assert len(auth) == 1 and auth[0].endswith("|http://192.0.2.7:8800/")
+    assert auth == []
+    assert "report-hub" not in result.stdout
+    assert "http://192.0.2.7:8800/" not in result.stdout
 
 
-def test_a_missing_file_keeps_every_probe() -> None:
+def test_a_missing_file_keeps_all_remaining_service_probes() -> None:
     result = _live_checks(None, services=None)
 
     assert result.returncode == 0, result.stderr
     rows = [line for line in result.stdout.splitlines() if line]
-    assert [row for row in rows if "report-hub" in row]
+    assert not [row for row in rows if "report-hub" in row]
+    assert [row for row in rows if "qdrant" in row.lower() or "embedding" in row.lower()]

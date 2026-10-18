@@ -84,14 +84,14 @@ def test_declared_observation_checks_desired_mode_and_actual_units(tmp_path, nam
     assert calls == [(account, ("legacy-service", str(tmp_path), name, "off"))]
 
 
-def test_released_off_drops_report_probes_but_preserves_catalog_and_other_checks(tmp_path):
+def test_report_probes_stay_retired_regardless_of_release_stop_marker(tmp_path):
     marker = services.marker_path(tmp_path, "report-hub")
     marker.parent.mkdir(parents=True)
     before = _rows(_emit(prelude=f'NODE_OPS_HOME="{tmp_path}"'))
     marker.write_bytes(b"off")
     after = _rows(_emit(prelude=f'NODE_OPS_HOME="{tmp_path}"'))
-    assert any("report-hub" in row for row in before)
-    assert list(after) == [row for row in before if "report-hub" not in row]
+    assert before and not any("report-hub" in row for row in before)
+    assert after == before
 
 
 def test_registry_cannot_rotate_kanban_or_restart_released_off_report(tmp_path, monkeypatch):
