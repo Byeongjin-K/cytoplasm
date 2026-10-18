@@ -32,6 +32,7 @@ def _rig(
     (automation / "deploy_provenance.sh").write_text("deploy_provenance_check() { :; }\n")
     (automation / "deploy_push.sh").write_text('push_file() { echo push >> "$CALLS"; }\n')
     (automation / "deploy_cron.sh").write_text('converge_cron() { echo cron >> "$CALLS"; }\n')
+    (automation / "deploy_timer.sh").write_text('converge_timer() { echo timer >> "$CALLS"; }\n')
     authorize = automation / "release_approval_remote.sh"
     authorize.write_text(
         '#!/usr/bin/env bash\nprintf "authorize %s\\n" "$*" >> "$CALLS"\n'
