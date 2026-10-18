@@ -796,3 +796,27 @@ def test_stored_release_card_in_a_thread_needs_the_pinned_parent(parent: str | N
     else:
         with pytest.raises(ApprovalSurfaceError):
             validate_stored_binding(binding, directory, OWNER_ID, skill_channel_id="123")
+
+
+@pytest.mark.parametrize(("channel", "parent", "accepted"), [
+    ("777", "456", True),   # a release thread under the sender-bot channel
+    ("777", "999", False),  # a thread under some other channel
+    ("456", None, True),    # the sender-bot channel itself, as before
+])
+def test_supply_chain_replays_a_release_thread_under_the_sender_bot_channel(
+    monkeypatch: pytest.MonkeyPatch, channel: str, parent: str | None, accepted: bool,
+) -> None:
+    # Given: release cards follow the sender-bot channel (Q236) and open their own thread.
+    monkeypatch.setattr("automation.notice_bot.notice_channel", lambda: "456")
+    directory = FakeDirectory()
+    directory.facts["456"] = ChannelFacts(0, "yoodori", ())
+    directory.facts["777"] = ChannelFacts(11, "🏷️ 릴리스 v1.2.3", (), parent)
+    surface = SupplyChainSurface(ApprovalKind.RELEASE, OWNER_ID, directory, "123")
+    record = {"channel_id": channel, "kind": ApprovalKind.RELEASE.value,
+              "surface": ApprovalSurface.SKILL_APPROVALS.value, "policy_version": str(POLICY_VERSION)}
+    # When / Then: the stored record replays to its own thread, and only under that channel.
+    if accepted:
+        assert surface.stored(record).channel_id == channel
+    else:
+        with pytest.raises(ApprovalSurfaceError):
+            surface.stored(record)
