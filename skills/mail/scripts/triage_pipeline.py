@@ -73,6 +73,9 @@ def compose_and_post(
     if post:
         _post_draft_for_approval(draft, notice=notice)
         draft = triage_gate.load_draft(draft["id"])
+        import triage_supersede
+
+        triage_supersede.supersede_older(draft)
     else:
         print(
             triage_core.render_approvals_message(

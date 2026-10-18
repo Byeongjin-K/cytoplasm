@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""no_agent wrapper for Hermes cron `mail-sync-watch` — workday hourly MailOn collection.
+"""no_agent wrapper for `mail-sync-watch` — MailOn collection every 10 minutes, 07:00-24:00 KST.
+
+2026-10-19 (owner 00:04 KST asked for every minute; one run takes a median 61 s with a fresh
+login, so the lead chose 10 minutes): ticks never overlap a running collection (a busy lock
+skips the tick), and ``--now`` is YooDori's on-request collection that waits for a running one.
 
 Until 2026-10-13 the only scheduled collection was the sync inside the 08:00 KST digest.
 That morning a DNS outage failed it, two ad-hoc syncs in the afternoon were killed by
@@ -15,8 +19,9 @@ up by the normal incremental walk. Two failure streaks decide when to speak:
   (default 3 = about three workday hours with nothing stored). A local state.db
   fallback (wrapper sync exit 3) is a failed collection, not a success.
 * ``mail-sync-quiet`` — collection succeeded but stored no new mail
-  ``MAIL_SYNC_QUIET_AFTER`` ticks in a row (default 6), which on a workday usually
-  means the webmail list rendered empty rather than that no mail arrived.
+  ``MAIL_SYNC_QUIET_AFTER`` workday ticks in a row (default 36 = six workday hours at 10
+  minutes; only weekday 09:00-19:59 KST ticks count, so evenings and weekends never open it),
+  which on a workday usually means the webmail list rendered empty.
 
 Each streak speaks once when it opens and once when it recovers (watch_failure_streak);
 the line goes to stdout, which Hermes ``--deliver discord`` delivers to the owner. A
@@ -25,11 +30,14 @@ only a failure the streak could not record exits 1.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Final
 
@@ -51,6 +59,10 @@ SYNC_LIMIT: Final = 50
 #: SIGTERM grace, so the wrapper — not this tick — ends a slow sync.
 TICK_TIMEOUT_SECONDS: Final = 1200
 _ENV_SECRETS: Final = Path.home() / ".env.secrets"
+LOCK_ENV: Final = "MAIL_SYNC_LOCK"
+#: --now waits at most this long for a running collection before giving up.
+NOW_WAIT_SECONDS: Final = 1500
+KST: Final = timezone(timedelta(hours=9))
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _LONG_DIGITS = re.compile(r"\d{5,}")
 
@@ -121,9 +133,56 @@ def _collect() -> tuple[bool, int | None, str]:
     return False, None, _redact(" ".join(parts))[:200]
 
 
+def _now() -> datetime:
+    return datetime.now(KST)
+
+
+def _workday(moment: datetime) -> bool:
+    return moment.weekday() < 5 and 9 <= moment.hour < 20
+
+
+def _lock(wait_seconds: float):
+    """The one collection at a time: return the held lock file, or None when still busy."""
+    # Outside ~/.hermes on purpose: that tree is being retired on the node (no new paths there).
+    path = Path(os.environ.get(LOCK_ENV, "")
+                or Path.home() / ".local/state/autophagy/mail-sync.lock").expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a")
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                handle.close()
+                return None
+            time.sleep(2)
+
+
+def now() -> int:
+    """YooDori's on-request collection: wait for a running one, then collect once."""
+    _load_env_secrets()
+    held = _lock(NOW_WAIT_SECONDS)
+    if held is None:
+        print("MAIL-SYNC-NOW busy: a collection is still running; try again shortly")
+        return 1
+    with held:
+        collected, new, detail = _collect()
+    if collected:
+        print(f"MAIL-SYNC-NOW ok new={new if new is not None else '?'}")
+        return 0
+    print(f"MAIL-SYNC-NOW failed {detail}"[:300])
+    return 1
+
+
 def main() -> int:
     _load_env_secrets()
-    collected, new, detail = _collect()
+    held = _lock(0)
+    if held is None:
+        return 0  # a collection (an on-request one) is running; the next tick follows it
+    with held:
+        collected, new, detail = _collect()
     if watch_failure_streak is None:
         if collected:
             return 0
@@ -131,14 +190,14 @@ def main() -> int:
         return 1
     notices = [watch_failure_streak.record(
         WATCH_NAME, ok=collected,
-        detail=f"기관메일 수집 실패(매시 동기화) — {detail}",
+        detail=f"기관메일 수집 실패(10분 동기화) — {detail}",
         threshold=_threshold(ALERT_AFTER_ENV, 3),
     )]
-    if collected:
+    if collected and (new is None or new > 0 or _workday(_now())):
         notices.append(watch_failure_streak.record(
             QUIET_NAME, ok=new is None or new > 0,
-            detail="기관메일 수집은 성공했지만 새로 저장된 메일 0건 — 웹메일 목록이 비어 보였는지 확인",
-            threshold=_threshold(QUIET_AFTER_ENV, 6),
+            detail="기관메일 수집은 성공했지만 업무시간 동안 새로 저장된 메일 0건 — 웹메일 목록이 비어 보였는지 확인",
+            threshold=_threshold(QUIET_AFTER_ENV, 36),
         ))
     for notice in notices:
         if notice is not None:
@@ -148,7 +207,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(now() if sys.argv[1:] == ["--now"] else main())
     except Exception as error:  # noqa: BLE001 — cron alert path: one masked line
         print(f"{WATCH_NAME} error: {_redact(str(error))[:300]}")
         sys.exit(1)

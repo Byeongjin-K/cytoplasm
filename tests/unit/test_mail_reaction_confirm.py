@@ -233,7 +233,7 @@ def test_new_reply_draft_posts_to_the_agent_chat_thread(
     assert channel_path == f"/channels/{AGENT_CHAT_THREAD}/messages"
     assert payload is not None
     assert "민감 회신 전문" in str(payload["content"])
-    assert draft["sha256"] in str(payload["content"])
+    assert draft["sha256"] not in str(payload["content"])
     assert [item[:2] for item in requests if item[0] == "PUT"] == [
         ("PUT", f"/channels/{AGENT_CHAT_THREAD}/messages/{MESSAGE_ID}/reactions/%E2%9C%85/@me"),
         ("PUT", f"/channels/{AGENT_CHAT_THREAD}/messages/{MESSAGE_ID}/reactions/%E2%9B%94/@me"),

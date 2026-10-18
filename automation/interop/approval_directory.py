@@ -244,6 +244,10 @@ class DiscordChannelDirectory:
         channel_id = self.agent_chat()
         name = request_thread_name(kind, request)
         on_instruction = bool(request.origin_message_id and request.origin_channel_id == channel_id)
+        if request.origin_message_id and request.origin_channel_id and not on_instruction:
+            existing = self._owner_thread(request.origin_channel_id, channel_id)
+            if existing:
+                return existing
         anchor = (
             request.origin_message_id if on_instruction
             else self._announce_request(channel_id, kind, request)
@@ -265,6 +269,22 @@ class DiscordChannelDirectory:
         if on_instruction:
             self._post_title(thread_id, kind, request)
         return thread_id
+
+    def _owner_thread(self, origin_channel_id: str, channel_id: str) -> str | None:
+        """The thread the owner's request was written in, when it hangs under agent-chat.
+
+        The owner asked that every request stay in one thread (2026-10-18 23:00 KST): a
+        card for a message already inside that conversation joins it instead of opening
+        a second one. Anything that is not such a thread keeps the announcement path.
+        """
+        try:
+            facts = self.describe(origin_channel_id)
+        except ApprovalSurfaceError:
+            return None
+        if facts.channel_type not in (11, 12) or facts.parent_id != channel_id:
+            return None
+        object.__setattr__(self, "_approval_guild_id", self._cached_guild())
+        return origin_channel_id
 
     def _post_title(self, thread_id: str, kind: ApprovalKind, request: RequestThread) -> None:
         """Open a thread hung on the owner's own message with the big title line.

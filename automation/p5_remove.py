@@ -58,9 +58,26 @@ def remove(home: Path, role: str, head: str, hermes: str, systemctl: str) -> Pat
     listing, current = jobs(hermes)
     if retired(home):
         completed = sorted((home / ".hermes/retired/p5").glob("*/complete"))
-        if current or not completed:
-            raise ValueError("P5-REMOVE-REFUSED: retired marker without completed backup or new jobs")
+        if not completed:
+            raise ValueError("P5-REMOVE-REFUSED: retired marker without completed backup")
         previous = completed[-1].parent
+        if current:
+            # A deployer re-registered paused Hermes jobs after retirement (2026-10-18: the mail
+            # deployer's legacy cron lines). jobs() already refused anything not paused; back up
+            # the listing and jobs file before removing, exactly like the first pass.
+            late = home / ".hermes/retired/p5" / f"{head}-late"
+            late.mkdir(parents=True, mode=0o700, exist_ok=True)
+            jobs_file = home / ".hermes/cron/jobs.json"
+            for name, data in (("cron-list.txt", listing.encode()), ("job-ids.json", json.dumps(current).encode()),
+                               ("jobs.json", jobs_file.read_bytes() if jobs_file.exists() else b"")):
+                (late / name).write_bytes(data)
+                (late / name).chmod(0o600)
+                with (late / name).open("rb") as stream:
+                    os.fsync(stream.fileno())
+            for job_id in sorted(current):
+                call((hermes, "cron", "remove", job_id))
+            if jobs(hermes)[1]:
+                raise ValueError("P5-REMOVE-FAIL: cron jobs remain")
         backup(home, previous, ())
         return previous
     folder = home / ".hermes/retired/p5" / head
