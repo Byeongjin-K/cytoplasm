@@ -42,7 +42,7 @@ def test_release_v6_record_accepts_exact_bytes_without_renderer(
     assert replay.render_version == 6
     assert replay.bound(spec.posted_text, record)
     assert not replay.bound(spec.posted_text + "!", record)
-    assert not replay.bound(spec.posted_text, {**record, "render_version": "8"})
+    assert not replay.bound(spec.posted_text, {**record, "render_version": "9"})
     assert not replay.bound(spec.posted_text, {k: v for k, v in record.items() if k != "content_sha256"})
     assert replay.action_hash() == replace(spec, render_version=1).action_hash()
 
@@ -106,7 +106,7 @@ def _unavailable(message: owner_message.OwnerMessage, *, destination: owner_mess
 def test_new_release_selects_v7_and_owner_v2() -> None:
     selected, error = release_card.card_for_new_request(_spec())
     assert not error and selected is not None
-    assert selected.render_version == 7
+    assert selected.render_version == 8
 
 
 def test_new_submission_v3_roundtrips_without_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +135,7 @@ def test_new_submission_v3_roundtrips_without_renderer(monkeypatch: pytest.Monke
 
 def test_release_keeps_unknown_version_rejection() -> None:
     with pytest.raises(ReleaseSpecError):
-        _ = replace(_spec(), render_version=8)
+        _ = replace(_spec(), render_version=9)
 
 
 def test_new_repair_v4_renders_owner_v2() -> None:

@@ -34,6 +34,9 @@ def spec_from_plan(payload: Mapping[str, PlanValue], release_nonce: str) -> Rele
         surface_digests=tuple((str(row[0]), str(row[1])) for row in surfaces),
         patch_notes=str(payload.get("patch_notes", "")),
         major_note=str(payload.get("major_note", "")),
+        card_summary=str(payload.get("card_summary", "")),
+        previous_surfaces=(None if not isinstance(payload.get("previous_surfaces"), list)
+                           else tuple((str(row[0]), str(row[1])) for row in payload["previous_surfaces"])),
     )
 
 

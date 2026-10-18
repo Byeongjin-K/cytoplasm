@@ -110,7 +110,7 @@ def test_new_cards_version_the_url_safe_detail_contract() -> None:
     spec = ReleaseSpec(_VERSION, _HEAD, "f" * 32, (), body, render_version=6)
     # Then: the new policy is explicit and each emitted part satisfies its budget.
     assert spec.render_version == 6
-    assert NEW_RENDER_VERSION == 7
+    assert NEW_RENDER_VERSION == 8
     messages = spec.detail_messages()
     assert len(messages) == 4
     assert sum(_URL in message for message in messages) == 1

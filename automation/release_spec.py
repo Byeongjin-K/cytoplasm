@@ -19,6 +19,7 @@ from .release_spec_message import (
     render_v5,
     render_v6,
     render_v7,
+    render_v8,
     split_messages,
 )
 from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
@@ -33,7 +34,7 @@ from automation.skill_gate_specs import (
 
 RELEASE_ACTION: Final = "release.deploy"
 #: 신규 카드가 쓰는 판본. 1~6 은 이미 게시된 카드의 재생 전용이며 문구가 동결이다.
-NEW_RENDER_VERSION: Final = 7
+NEW_RENDER_VERSION: Final = 8
 #: 헬스체크 강제명령 래퍼(허용 목록) 갱신을 릴리스 ✅ 에 묶는 표면 이름의 머리. 값은 새 릴리스가
 #: 그 노드에 기대하는 `# wrapper-inputs:` 지문이고, 승인 해시에 다른 표면과 똑같이 들어간다.
 #: 이 표면이 없는 레코드(지금까지의 모든 카드)는 해시도 카드 바이트도 그대로다.
@@ -125,7 +126,19 @@ def spec_from_record(record: Mapping[str, str]) -> ReleaseSpec:
         detail_message_ids=detail_ids,
         detail_channel_id=record.get("detail_channel_id", ""),
         detail_guild_id=record.get("detail_guild_id", ""),
+        **(_v8_fields(record) if render_version >= 8 else {}),
     )
+
+
+def _v8_fields(record: Mapping[str, str]) -> dict[str, object]:
+    try:
+        rows = json.loads(record.get("previous_surfaces", "null"))
+    except json.JSONDecodeError as error:
+        raise ReleaseSpecError("stored previous surfaces are malformed") from error
+    if rows is not None and not isinstance(rows, list):
+        raise ReleaseSpecError("stored previous surfaces are malformed")
+    return {"card_summary": record.get("card_summary", ""),
+            "previous_surfaces": None if rows is None else tuple((str(r[0]), str(r[1])) for r in rows)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +156,11 @@ class ReleaseSpec:
     detail_message_ids: tuple[str, ...] = ()
     detail_channel_id: str = ""
     detail_guild_id: str = ""
+    # v8 (owner 2026-10-18 20:50 KST short cards): the note draft's first line, and the
+    # surfaces the previous release carried (None: unknown, every switch is shown). Both
+    # stay outside the action hash; the record replays them byte for byte.
+    card_summary: str = ""
+    previous_surfaces: tuple[tuple[str, str], ...] | None = None
 
     def __post_init__(self) -> None:
         if _RELEASE_VERSION.fullmatch(self.version) is None:
@@ -164,8 +182,10 @@ class ReleaseSpec:
             raise ReleaseSpecError("surface names and sha256 digests must be canonical")
         if not isinstance(self.patch_notes, str) or not self.patch_notes.strip():
             raise ReleaseSpecError("release patch notes must not be empty")
-        if self.render_version not in (1, 2, 3, 4, 5, 6, 7):
-            raise ReleaseSpecError("release render version must be 1, 2, 3, 4, 5, 6 or 7")
+        if self.render_version not in (1, 2, 3, 4, 5, 6, 7, 8):
+            raise ReleaseSpecError("release render version must be 1 through 8")
+        if "\n" in self.card_summary:
+            raise ReleaseSpecError("the card summary must stay on one line")
         if "\n" in self.major_note:
             raise ReleaseSpecError("the operator note must stay on one card line")
         coordinates = (
@@ -203,7 +223,7 @@ class ReleaseSpec:
 
     def detail_messages(self) -> tuple[str, ...]:
         """카드가 가리키는 변경 상세 메시지 전부 — 레코드의 원문에서 그대로 재생된다."""
-        if self.render_version == 7:
+        if self.render_version >= 7:
             return ()
         body = self.patch_notes
         new_card = self.render_version >= 6
@@ -244,6 +264,7 @@ class ReleaseSpec:
                 self, bundle_summary=self._bundle_summary()
             ),
             7: lambda: render_v7(self),
+            8: lambda: render_v8(self),
         }
         content = renderers[self.render_version]()
         if len(content) > 1900:
@@ -307,6 +328,9 @@ class ReleaseSpec:
             "approval_action": RELEASE_ACTION,
             "approval_destination": f"release:{self.version}",
             **detail_fields,
+            **({"card_summary": self.card_summary,
+                "previous_surfaces": json.dumps(self.previous_surfaces, separators=(",", ":"))}
+               if self.render_version >= 8 else {}),
             **binding_fields(binding),
         }
 
