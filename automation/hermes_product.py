@@ -137,8 +137,13 @@ def remove(home: Path, head: str, *, runtime: Path | None = None,
     kanban = home / ".hermes/kanban.db"
     targets = [home / name for name in TARGETS]
     if kanban.exists():
-        if verify_migration() and not any(Path(str(kanban) + suffix).exists() for suffix in ("-wal", "-shm")):
-            targets.append(kanban)
+        # Reading kanban for the migration check itself leaves -shm and an empty -wal behind
+        # (node 2026-10-19). A WAL with no bytes holds no frames, so all data is in kanban.db;
+        # those leftovers go with it, and the live check below still covers all three paths.
+        wal = Path(str(kanban) + "-wal")
+        idle = not wal.exists() or (not wal.is_symlink() and wal.stat().st_size == 0)
+        if verify_migration() and idle:
+            targets.extend(Path(str(kanban) + suffix) for suffix in ("", "-wal", "-shm"))
         else:
             print("HERMES-PRODUCT-KEPT: kanban.db 장부 이관 검증 불충분 또는 SQLite 보조 파일 존재")
     selected = [path for path in targets if path.exists() or path.is_symlink()]

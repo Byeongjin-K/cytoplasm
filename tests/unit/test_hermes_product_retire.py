@@ -371,3 +371,54 @@ def test_cli_invalid_switch_reports_one_safe_line(tmp_path: Path) -> None:
     assert len(result.stderr.splitlines()) == 1
     assert "HERMES-PRODUCT-REFUSED" in result.stderr
     assert "private-invalid-switch" not in result.stderr
+
+
+def _proc_entry(proc: Path, pid: str, argv: bytes, *, readable: bool, target: Path) -> None:
+    entry = proc / pid
+    (entry / "fd").mkdir(parents=True)
+    (entry / "cmdline").write_bytes(argv)
+    (entry / "cwd").symlink_to(target)
+    if not readable:
+        (entry / "fd").chmod(0)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 directory")
+@pytest.mark.parametrize("argv", [
+    b"/usr/lib/systemd/systemd\0--user\0", b"(sd-pam)\0", b"/usr/bin/gpg-agent\0--supervised\0",
+    b"sshd: agent@notty\0", b"ssh\0-i\0key\0",
+])
+def test_non_dumpable_system_helper_is_skipped_but_readable_users_still_count(
+    tmp_path: Path, argv: bytes,
+) -> None:
+    proc, target = tmp_path / "proc", tmp_path / "home/.hermes/sessions"
+    _proc_entry(proc, "10", argv, readable=False, target=target)
+    _proc_entry(proc, "11", b"python3\0hermes\0", readable=True, target=target)
+    try:
+        assert live.process_paths(proc) == (target,)
+    finally:
+        (proc / "10/fd").chmod(0o700)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-0 directory")
+def test_unreadable_process_that_is_not_a_known_helper_still_refuses(tmp_path: Path) -> None:
+    proc = tmp_path / "proc"
+    _proc_entry(proc, "12", b"python3\0hermes\0", readable=False, target=tmp_path / "x")
+    try:
+        with pytest.raises(PermissionError):
+            live.process_paths(proc)
+    finally:
+        (proc / "12/fd").chmod(0o700)
+
+
+@pytest.mark.parametrize(("wal", "removed"), [(b"", True), (b"frame", False)])
+def test_kanban_sidecars_from_the_migration_read_go_with_it_only_when_the_wal_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wal: bytes, removed: bool,
+) -> None:
+    home, runtime = _home(tmp_path)
+    _migrated(home, monkeypatch)
+    kanban = home / ".hermes/kanban.db"
+    Path(f"{kanban}-wal").write_bytes(wal)
+    Path(f"{kanban}-shm").write_bytes(b"index")
+    product.remove(home, HEAD, runtime=runtime, proc_reader=lambda: ())
+    for path in (kanban, Path(f"{kanban}-wal"), Path(f"{kanban}-shm")):
+        assert path.exists() is not removed
