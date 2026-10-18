@@ -55,6 +55,7 @@ Q233(2026-10-18 17:40 KST)의 추가 결정:
 다른 종류의 스위치는 거부한다. 공유·외부 초대·메일의 승인 규칙은 바꾸지 않는다.
 
 관련: `automation/auto_write.py`, `auto_write_summary.py`, `auto_write_release.py`,
+`auto_write_policy.py`(카드·승인 표면의 순수 정의, 스킬 게이트의 staged helper),
 `automation/plaud_sync/{effects_live.py,watch_step.py,deploy-manifest.txt}`,
 `automation/obsidian_write/writer.py`, `tests/unit/test_auto_write*.py`,
 `tests/unit/test_plaud_auto_write.py`.

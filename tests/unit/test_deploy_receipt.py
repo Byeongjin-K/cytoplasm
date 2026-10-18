@@ -233,7 +233,8 @@ def test_the_receipt_command_records_the_declared_reason_of_a_held_row(
     monkeypatch.setattr(
         deploy_all_probe, "inspect_mounts", lambda _r, _l: SimpleNamespace(stale=(), unmounted=(), orphaned=())
     )
-    monkeypatch.setattr(deploy_all_probe, "_read_home", lambda _a, _d: legacy_sha)
+    monkeypatch.setattr(deploy_all_probe, "_read_home",
+                        lambda _a, path: "" if path.endswith(".mode") else legacy_sha)
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda _a: (".hermes/scripts/d.py",))
     monkeypatch.setattr(deploy_all_observe, "observe_node",
                         lambda root, **kw: deploy_all_observe.collect(root, runner, "ops", **kw))

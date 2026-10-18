@@ -17,7 +17,7 @@ def main() -> int:
     from automation import auto_write
     from automation.plaud_sync.watch_runtime import load_env_secrets
 
-    load_env_secrets()
+    load_env_secrets(Path.home() / ".env.secrets")
     try:
         auto_write.summarize(datetime.now(UTC))
     except (OSError, ValueError) as error:

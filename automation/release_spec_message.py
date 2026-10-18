@@ -200,7 +200,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX, EnvelopeUnavailable,
     )
     from automation.notice_bot import CARD_LINE, SURFACE
-    from automation.auto_write import CARD_LINES, SURFACE_PREFIX
+    from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)

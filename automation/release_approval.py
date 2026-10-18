@@ -94,7 +94,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
-    from automation.auto_write import surface as auto_write_surface
+    from automation.auto_write_policy import surface as auto_write_surface
 
     try:
         surfaces.extend(auto_write_surface(kind) for kind in getattr(args, "auto_write", None) or ())
@@ -373,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
     auto.add_argument("--kind", required=True)
     auto.add_argument("--head", required=True)
     def authorize_auto(args: argparse.Namespace) -> int:
-        from automation.auto_write import surface
+        from automation.auto_write_policy import surface
 
         try:
             name, digest = surface(args.kind)

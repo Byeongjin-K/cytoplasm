@@ -47,6 +47,7 @@ def _probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pin_text: str | None
              "OBS|home|agent|.hermes/scripts/d.py|automation/pkg/d.py|required|aaa|aaa",
              "OBS|artifacts|0", "OBS|end"]
     monkeypatch.setattr(deploy_all_probe, "observations", lambda *_a, **_k: lines)
+    monkeypatch.setattr(deploy_all_probe, "_read_home", lambda *_a: "")
     monkeypatch.setattr(deploy_all_probe, "all_declarations", lambda _root: ())
     return runtime
 

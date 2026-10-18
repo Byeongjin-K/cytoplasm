@@ -735,7 +735,7 @@ push_skill peer "$SRC_DIR" "$SKILL"
 # fails closed, including the deploy that would ship the fix. automation/ and
 # automation/interop/ resolve as PEP 420 namespace packages on the node, so no
 # __init__.py needs staging.
-GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py
+GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py auto_write_policy.py
               typing_compat.py git_tag_signature.py peer_attestation.py peer_signed_attestation.py peer_attest_runtime.py skill_gate_e2e.py
               skill_gate_specs.py stored_content.py release_spec.py release_spec_message.py skill_gate_approval.py skill_gate_request.py
               skill_gate_retire.py skill_gate_surface.py)
