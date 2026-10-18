@@ -48,6 +48,14 @@ if [[ -z "$host" ]]; then
   echo "DEPLOY-BLOCK: DEPLOY_SSH_HOST is unset. Export it (or configure ~/.hermes/node.toml)." >&2
   exit 3
 fi
+# 도리 전환은 릴리스 호스트의 파일이다. 판정 프로브는 노드에서 돌므로 여기서 읽어 매 호출에 넘긴다 —
+# 노드 홈에는 그 파일이 없어서, 프로브가 스스로 읽으면 늘 off 로 보고 승인된 켬을 「일치」로 건너뛴다(v1.50.0).
+if ! dori_bot_id="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_agent_chat_ignore --release-switch)"; then
+  echo "DORI-SWITCH-REFUSED: invalid release-host switch ~/.hermes/release-flags/dori-agent-chat" >&2
+  exit 4
+fi
+dori_mode=off
+[[ -z "$dori_bot_id" ]] || dori_mode=on
 
 readonly RUNTIME_ROOT="${DEPLOY_ALL_RUNTIME_ROOT:-/srv/autophagy-agent-current}"
 readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-all}"
@@ -58,7 +66,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --dori-agent-chat $dori_mode --format $format$extra" < /dev/null
 }
 
 #: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다

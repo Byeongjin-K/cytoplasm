@@ -24,12 +24,14 @@ _PAIRS: Final = r"([a-z_]+=[a-z0-9_-]+(?:,[a-z_]+=[a-z0-9_-]+)*)"
 ConfigFacts: TypeAlias = tuple[str, str, str, tuple[tuple[str, str], ...]]
 
 
-def observe_config(decl: Declaration, root: Path, call: Runner) -> ConfigFacts:
+def observe_config(decl: Declaration, root: Path, call: Runner, *, dori_mode: str | None = None) -> ConfigFacts:
+    """`dori_mode` is the release host's switch as handed to the node probe; None reads it here (host only)."""
     module = CONFIG_MODULES.get(decl.attr("algorithm"))
     if module is None:
         return "?", "?", "unknown", (("unsupported-algorithm", "-"),)
     try:
-        wanted = module.wanted_identity()
+        wanted = (module.wanted_identity(dori_agent_chat=dori_mode == "on")
+                  if module is agent_profile and dori_mode in ("on", "off") else module.wanted_identity())
     except (OSError, UnicodeError, ValueError):
         return "?", "?", "unknown", (("invalid-release-switch", "-"),)
     want_sha = hashlib.sha256(wanted.encode()).hexdigest()[:16]

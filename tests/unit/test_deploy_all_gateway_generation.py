@@ -352,7 +352,7 @@ def test_the_gateway_probe_reports_only_gateway_lines_and_fails_while_stale(
             return answers[_case]
 
         monkeypatch.setattr(deploy_all_observe, "observe_node", fake)
-        rc = deploy_all_probe.main(["--runtime-root", str(tmp_path), "--format", "gateways"])
+        rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--runtime-root", str(tmp_path), "--format", "gateways"])
         out = capsys.readouterr().out
         assert (case, rc) == (case, want_rc)
         assert calls == [True]

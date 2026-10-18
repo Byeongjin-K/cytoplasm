@@ -238,7 +238,8 @@ _CONFIG_MODULES: Final = deploy_all_config.CONFIG_MODULES
 
 def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
     """계정 설정 파일의 저장소가 정한 값 — 원하는 값은 이 릴리스 트리의 알고리즘 모듈이 말한다."""
-    return _Seen(*deploy_all_config.observe_config(decl, root, call))
+    mode = _cache.get("dori_agent_chat")
+    return _Seen(*deploy_all_config.observe_config(decl, root, call, dori_mode=mode if isinstance(mode, str) else None))
 
 
 _OBSERVERS: Final = {"file": _file, "tree": _tree, "derived": _derived, "cron": _cron, "config": _config}
@@ -278,7 +279,10 @@ def _delegated(root: Path, call: Runner, ops_account: str) -> list[str]:
     return lines if end == checks and all(_safe(*line.split("|")[2:4]) for line in lines) else [UNAVAILABLE]
 
 
-def collect(runtime_root: Path, runner: Runner, ops_account: str, *, gateway_only: bool = False) -> list[str]:
+def collect(
+    runtime_root: Path, runner: Runner, ops_account: str, *, gateway_only: bool = False,
+    dori_agent_chat: str | None = None,
+) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
 
     `gateway_only` 는 재시동 뒤 대기용이다 — 드롭인 묶음만 관측해 `OBS|gateway|…` 줄만 돌려준다."""
@@ -293,7 +297,7 @@ def collect(runtime_root: Path, runner: Runner, ops_account: str, *, gateway_onl
     roster_rc = {a: call(a, ("roster", str(runtime_root)))[0] for a in {d.account for d in gated}}
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
-    cache: dict[str, object] = {}
+    cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat}
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
@@ -319,10 +323,11 @@ def v2_file_destinations(runtime_root: Path) -> frozenset[tuple[str, str]]:
     return frozenset((d.account, d.destination) for d in all_declarations(runtime_root) if not d.legacy and d.kind == "file")
 
 
-def observe_node(runtime_root: Path, *, gateway_only: bool = False) -> list[str]:
+def observe_node(runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
     try:
         ops_account = load_node_config().ops_account
     except (NodeConfigError, OSError):
         ops_account = ""
-    return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only)
+    return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
+                   dori_agent_chat=dori_agent_chat)
