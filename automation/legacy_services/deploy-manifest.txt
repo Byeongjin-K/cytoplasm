@@ -1,0 +1,4 @@
+# Runtime-derived state includes the released mode and actual unit state, not just a marker.
+ops|automation/legacy_services|.hermes/legacy-services/report-hub.mode|v2:derived;algorithm=legacy-service-v1
+agent|automation/legacy_services|.hermes/legacy-services/hermes-dashboard.mode|v2:derived;algorithm=legacy-service-v1
+agent|automation/legacy_services|.hermes/legacy-services/hermes-memory.mode|v2:derived;algorithm=legacy-service-v1
