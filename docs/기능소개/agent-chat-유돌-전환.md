@@ -169,6 +169,15 @@ legacy 중앙 표를 변경할 필요가 없다. `authorized_keys`·접속 PC·�
 릴리스 렌더러는 게이트를 import하지 않는다. 카운트 상수의 일치만 테스트에서 대조하므로
 `deploy-skill.sh`의 `GATE_HELPERS`나 `interop_runtime`에 게이트 파일을 더하지 않는다.
 
+## 판정은 노드에서 돈다(v1.50.1)
+
+v1.50.0 은 `도리 전환 켬` 카드가 승인되고도 아무것도 바꾸지 않았다. `deploy_all.sh` 의 판정 프로브는
+노드에서 돌고, 그 프로브가 전환 파일을 노드 계정 홈에서 찾았기 때문이다(그 파일은 릴리스 호스트에만 있다).
+늘 꺼짐을 원했고 이미 꺼짐이라 「일치」로 보고 배포기를 부르지 않았다. 이제 `deploy_all.sh` 가 시작할 때
+호스트의 파일을 읽어 모든 프로브 호출에 `--dori-agent-chat on|off` 를 넘기고, 프로브는 그 인자 없이는
+판정하지 않는다(사용법 오류). 파일이 깨졌으면 노드에 묻기 전에 `DORI-SWITCH-REFUSED`(exit 4)로 멈춘다.
+회귀: `tests/unit/test_dori_switch_node_probe.py`(빈 노드 홈 + 호스트가 넘긴 값).
+
 ## 되돌리기
 
 릴리스 호스트의 `~/.hermes/release-flags/dori-agent-chat`를 **삭제하고 재배포**한다.

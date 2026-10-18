@@ -12,6 +12,7 @@ exit: 0 clean · 1 drift · 4 관측 불가(fail-closed — 보지 못한 것은
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import subprocess
 import sys
@@ -189,11 +190,16 @@ def main(argv: list[str] | None = None) -> int:
         help="선언 밖 홈 파일도 drift 로 판정",
     )
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
+    parser.add_argument(
+        "--dori-agent-chat", choices=("on", "off"), required=True,
+        help="릴리스 호스트가 읽은 도리 전환(노드는 그 파일을 갖지 않는다)",
+    )
     args = parser.parse_args(argv)
+    observer = functools.partial(deploy_all_observe.observe_node, dori_agent_chat=args.dori_agent_chat)
     if args.format == "gateways":
         return _gateways(args.runtime_root)
     try:
-        lines = observations(args.runtime_root, args.live_root, _read_home, _list_home)
+        lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer)
         plan = deploy_all.parse_observations(
             lines, strict_undeclared=args.strict_undeclared
         )

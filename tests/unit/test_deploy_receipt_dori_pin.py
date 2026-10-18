@@ -56,7 +56,7 @@ def test_the_node_probe_reads_the_pin_from_the_release_tree(
 ) -> None:
     runtime = _probe(tmp_path, monkeypatch, (_REPO / "dori" / "pin.toml").read_text(encoding="utf-8"))
 
-    assert deploy_all_probe.main(("--runtime-root", str(runtime), "--format", "receipt")) == 0
+    assert deploy_all_probe.main(("--dori-agent-chat", "off", "--runtime-root", str(runtime), "--format", "receipt")) == 0
 
     assert json.loads(capsys.readouterr().out)["dori_pin"] == load_pin().as_receipt()
 
@@ -66,7 +66,7 @@ def test_a_broken_pin_in_the_release_tree_writes_no_receipt(
 ) -> None:
     runtime = _probe(tmp_path, monkeypatch, 'schema = 1\nrepo = "https://x/y.git"\ncommit = "short"\n')
 
-    assert deploy_all_probe.main(("--runtime-root", str(runtime), "--format", "receipt")) == 4
+    assert deploy_all_probe.main(("--dori-agent-chat", "off", "--runtime-root", str(runtime), "--format", "receipt")) == 4
 
     captured = capsys.readouterr()
     assert captured.out == "" and "DORI-PIN-INVALID" in captured.err

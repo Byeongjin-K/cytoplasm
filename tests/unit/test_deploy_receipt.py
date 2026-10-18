@@ -235,10 +235,10 @@ def test_the_receipt_command_records_the_declared_reason_of_a_held_row(
     )
     monkeypatch.setattr(deploy_all_probe, "_read_home", lambda _a, _d: legacy_sha)
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda _a: (".hermes/scripts/d.py",))
-    monkeypatch.setattr(deploy_all_observe, "observe_node", lambda root: deploy_all_observe.collect(root, runner, "ops"))
+    monkeypatch.setattr(deploy_all_observe, "observe_node",
+                        lambda root, **kw: deploy_all_observe.collect(root, runner, "ops", **kw))
 
-    rc = deploy_all_probe.main(
-        ["--runtime-root", str(runtime), "--live-root", str(tmp_path / "live"), "--format", "receipt"]
+    rc = deploy_all_probe.main(["--dori-agent-chat", "off", "--runtime-root", str(runtime), "--live-root", str(tmp_path / "live"), "--format", "receipt"]
     )
 
     assert rc == 0
