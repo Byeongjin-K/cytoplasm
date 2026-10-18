@@ -121,7 +121,7 @@ class CodexClient:
         home = (source.get("HOME") or "").strip()
         if not home:
             raise CodexUnavailableError("HOME is unset; Codex OAuth credentials cannot be located")
-        from automation.omo_relay.client import enabled
+        from automation.omo_relay_policy import enabled
 
         try:
             relay = enabled(Path(home))

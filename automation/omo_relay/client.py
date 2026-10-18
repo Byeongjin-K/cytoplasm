@@ -10,24 +10,15 @@ from typing import TYPE_CHECKING
 
 from automation.node_config import NodeConfigError, load_node_config
 from automation.omo_relay.availability import record_result
+from automation.omo_relay_policy import (
+    CARD_LINE,  # noqa: F401 - public relay metadata re-export
+    MODE,  # noqa: F401 - public relay metadata re-export
+    SURFACE,  # noqa: F401 - public relay metadata re-export
+    enabled,  # noqa: F401 - public route selector re-export
+)
 
 if TYPE_CHECKING:
     from automation.codex_llm import Served
-
-MODE = ".hermes/omo-relay/mode"
-SURFACE = "omo-relay"
-CARD_LINE = "배치 모델 호출: 노드 → 이 PC omo(도구 없음), 파일 삭제 후 재배포로 Hermes 호출 복귀"
-
-
-def enabled(home: Path) -> bool:
-    try:
-        value = (home / MODE).read_bytes()
-    except FileNotFoundError:
-        return False
-    if value != b"on":
-        raise ValueError("invalid installed omo-relay mode")
-    return True
-
 
 def argv(home: Path) -> list[str]:
     config = load_node_config(home / ".hermes/omo-relay/node.toml")

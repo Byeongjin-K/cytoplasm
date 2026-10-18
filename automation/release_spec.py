@@ -21,7 +21,7 @@ from .release_spec_message import (
     split_messages,
 )
 from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
-from automation.omo_relay.client import SURFACE as OMO_RELAY_SURFACE
+from automation.omo_relay_policy import SURFACE as OMO_RELAY_SURFACE
 from automation.interop.approval_surface import ApprovalBinding
 from automation.skill_gate_specs import (
     _APPROVAL_LINE,

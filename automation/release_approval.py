@@ -43,7 +43,7 @@ from automation.release_completion_target import (
 )
 from .release_request_gate import ReleaseRequestGate
 from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
-from automation.omo_relay.client import SURFACE as OMO_RELAY_SURFACE
+from automation.omo_relay_policy import SURFACE as OMO_RELAY_SURFACE
 from automation.release_spec import (
     ReleaseSpec,
     ReleaseSpecError,

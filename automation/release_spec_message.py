@@ -201,7 +201,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
-    from automation.omo_relay.client import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
+    from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
