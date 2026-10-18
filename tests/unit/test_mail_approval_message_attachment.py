@@ -124,8 +124,9 @@ def test_long_draft_posts_one_attachment_when_card_exceeds_limit(attachment_wire
     assert stored["approval_format"] == "attachment-v1"
     assert stored["sha256"] == draft["sha256"] == mail.triage_approval.triage_core.draft_sha256(stored)
     assert len(fake.contents[message_id]) <= 2000
-    assert draft["sha256"] in fake.contents[message_id]
-    assert hashlib.sha256(expected).hexdigest() in fake.contents[message_id]
+    assert draft["sha256"] not in fake.contents[message_id]
+    assert hashlib.sha256(expected).hexdigest() not in fake.contents[message_id]
+    assert stored["card_sha256"] == hashlib.sha256(fake.contents[message_id].strip().encode()).hexdigest()
 
 
 @pytest.mark.parametrize("defect", ["missing", "filename", "size", "sha", "record", "url", "malformed-url"])

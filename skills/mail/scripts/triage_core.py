@@ -286,6 +286,10 @@ def render_approvals_message(
     version = draft.get("render_version", "1")
     if version == "1":
         return _render_v1(draft, destination=destination, instruction=instruction)
+    if version == "4":
+        import mail_card_compact
+
+        return mail_card_compact.render(_render_v1(draft, destination=destination), instruction)
     from automation.interop.approval_card import CardRenderError
     if version not in ("2", "3"):
         raise CardRenderError("unknown mail card render version")
