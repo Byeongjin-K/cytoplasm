@@ -9,9 +9,9 @@ neither the node nor SSH argv selects a model. Actual provider/model come from o
 JSON, with missing values recorded as `unknown`. Transport/overload gets one retry
 after 30 seconds; empty text is a request error, not success.
 
-The release binds the `omo_relay_target` and `omo_relay_key` node-config fields to its
-approval, provisions a dedicated node key, and installs an approved partial node-config
-override. Removing the host flag and redeploying removes this override and returns
+The release binds the `omo_relay_target` and `omo_relay_key` values from the release
+host's own relay file (not the node config, whose root helper copy must stay unchanged) to its
+approval, provisions a dedicated node key, and installs the approved relay settings. Removing the host flag and redeploying removes this override and returns
 to the unchanged legacy behavior described below. Interactive gateway calls are not
 changed by card A. See [relay usage](../docs/기능소개/노드-배치-omo-중계.md).
 

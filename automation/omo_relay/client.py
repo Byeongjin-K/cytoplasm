@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from automation.node_config import NodeConfigError, load_node_config
+from automation.omo_relay.config import RelayConfigError, load as load_relay
 from automation.omo_relay.availability import record_result
 from automation.omo_relay_policy import (
     CARD_LINE,  # noqa: F401 - public relay metadata re-export
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from automation.codex_llm import Served
 
 def argv(home: Path) -> list[str]:
-    config = load_node_config(home / ".config/autophagy/omo-relay/node.toml")
+    config = load_relay(home / ".config/autophagy/omo-relay/node.toml")
     known = home / ".config/autophagy/omo-relay/known_hosts"
     return ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
             "-o", f"UserKnownHostsFile={known}", "-o", "GlobalKnownHostsFile=/dev/null",
@@ -34,7 +34,7 @@ def complete(home: str, prompt: str, timeout: float) -> Served:
 
     try:
         command = argv(Path(home))
-    except (OSError, NodeConfigError):
+    except (OSError, RelayConfigError):
         raise CodexUnavailableError("omo relay node configuration unavailable") from None
     for attempt in range(2):
         try:

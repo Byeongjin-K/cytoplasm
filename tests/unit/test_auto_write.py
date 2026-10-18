@@ -48,10 +48,10 @@ def test_summary_once_daily_and_carries_late_writes(tmp_path: Path) -> None:
                                 root=tmp_path, send=send)
     # Then: one message per day, grouped by kind, no lost late note.
     assert len(sent) == 2
-    assert sent[0].startswith("## 📝 오늘 자동으로 쓴 것\n\n### Plaud 노트\n")
-    assert "09:00" in sent[0] and "Lifelog/회의.md" in sent[0]
-    assert "Lifelog/늦은녹음.md" in sent[1]
-    assert "Lifelog/회의.md" not in sent[1]
+    assert "2026-10-18" in sent[0] and "Plaud 노트 1" in sent[0]
+    assert "- 회의" in sent[0]
+    assert "- 늦은녹음" in sent[1]
+    assert "- 회의" not in sent[1]
 
 
 def test_summary_silent_when_empty_and_retries_send_failure(tmp_path: Path) -> None:
@@ -87,7 +87,7 @@ def test_release_switch_is_exact_and_node_setting_is_separate(tmp_path: Path) ->
         auto_write.release_kinds(tmp_path)
 
 
-def test_long_summary_stays_one_post_with_complete_private_attachment(tmp_path, monkeypatch):
+def test_long_summary_stays_one_short_post_without_attachment(tmp_path, monkeypatch):
     # Given: enough note paths to overflow one Discord message.
     for index in range(35):
         auto_write.record("plaud", auto_write.Entry(
@@ -96,14 +96,14 @@ def test_long_summary_stays_one_post_with_complete_private_attachment(tmp_path, 
         ), root=tmp_path)
     calls = []
     def send(content, *, attachments=()):
-        attachment, = attachments
-        assert attachment.stat().st_mode & 0o777 == 0o600
-        calls.append((content, attachment.read_text()))
+        assert attachments == ()
+        calls.append(content)
         return True
     monkeypatch.setattr("automation.owner_notice.notify_owner", send)
     # When: the actual facade boundary sends the summary.
     assert auto_write.summarize(datetime.fromisoformat("2026-10-18T21:30:00+09:00"), root=tmp_path)
-    # Then: no split-message partial success, no dropped note lines.
+    # Then: one bounded post; the full list remains in the ledger.
     assert len(calls) == 1
-    assert len(calls[0][0]) < 2000
-    assert calls[0][1].count("\n- ") == 35
+    assert len(calls[0]) < 2000
+    assert calls[0].count("\n- ") == 5
+    assert len((tmp_path / "ledger.jsonl").read_text().splitlines()) == 35

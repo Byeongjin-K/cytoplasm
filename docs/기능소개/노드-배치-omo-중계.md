@@ -8,9 +8,11 @@
 
 ## 켜기와 되돌리기
 
-릴리스 호스트의 노드 설정(`~/.hermes/node.toml`)에 `omo_relay_target`(SSH 대상)과
-`omo_relay_key`(노드 agent 홈의 `.ssh/omo_relay` 절대 경로)를 적는다.
-추적 예시는 `configs/node.example.toml`이며 실제 주소·계정은 커밋하지 않는다.
+릴리스 호스트의 `~/.hermes/omo-relay.toml`에 `omo_relay_target`(SSH 대상)과
+`omo_relay_key`(노드 agent 홈의 `.ssh/omo_relay` 절대 경로) 두 줄만 적는다. 노드 설정(`node.toml`,
+`automation/node_config.py`)에는 넣지 않는다 — 노드 root 수렴 도우미가 `node_config.py`의 정적 사본을 들고 있어서,
+거기에 칸을 더하면 릴리스마다 형의 root 단계가 필요해진다(2026-10-18 실측: HELPER-DRIFT).
+실제 주소·계정은 커밋하지 않는다.
 `~/.hermes/release-flags/omo-relay`의 내용이 개행 없는 `on`이면 릴리스 카드에
 다음 줄과 설정의 SHA-256 지문이 묶인다.
 
@@ -30,8 +32,10 @@
 `<relay-script-absolute-path>`는 이 PC의 실행 가능한 스크립트 경로다.
 
 ```text
-command="<relay-script-absolute-path>",restrict,from="<node-source-address>" ssh-ed25519 <node-public-key-base64>
+command="env PATH=<omo-bin-dir>:/usr/bin:/bin <relay-script-absolute-path>",restrict,from="<node-source-address>" ssh-ed25519 <node-public-key-base64>
 ```
+
+강제명령은 로그인 셸 없이 최소 PATH(`/usr/bin:/bin`)로 돌기 때문에, `omo`가 설치된 디렉터리(예: bun 전역 bin)를 위처럼 `env PATH=…`로 앞에 둔다. 빠지면 노드의 모든 호출이 `omo` 를 찾지 못해 실패한다(2026-10-18 실측).
 
 노드는 처음 접속에서도 호스트 키를 추측하지 않는다. 릴리스 호스트가 곧 중계 대상이므로
 배포기가 릴리스 호스트의 `/etc/ssh/ssh_host_ed25519_key.pub`를 대상 호스트 이름과 함께

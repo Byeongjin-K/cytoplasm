@@ -7,7 +7,8 @@ Hermes 가 하던 것(노드 `cron/scheduler.py::_run_job_script`)을 그대로 
 
 `--deliver discord` 면 Hermes 의 `deliver=discord` 와 같이 비어 있지 않은 stdout 을 Hermes 홈 채널
 (`~/.hermes/.env` 의 `DISCORD_HOME_CHANNEL_THREAD_ID` → `DISCORD_HOME_CHANNEL`)로 보내고, 실패하면 실패 한 줄을
-보낸다. 침묵 표식(`[SILENT]` 등)은 보내지 않는다. 비어 있지 않은 stdout 은 `~/.hermes/cron-timers/output/<이름>/` 에
+보낸다. 실패는 `notice_bot.fault_channel`이 있으면 페어 채널로 보낸다.
+침묵 표식(`[SILENT]` 등)은 보내지 않는다. 비어 있지 않은 stdout 은 `~/.hermes/cron-timers/output/<이름>/` 에
 최근 20개까지 남는다(Hermes 의 잡 출력 폴더 자리 — N1 이 다이제스트 실패 표식을 거기서 읽는다).
 
 두 번 실행 방지: 같은 이름의 Hermes 잡이 active 면 돌지 않고 `CRON-TIMER-SKIP` 만 남긴다(0). 잡별
@@ -109,11 +110,13 @@ def deliver(home: Path, job: Job, rc: int, text: str, send: Send | None = None) 
         return ""
     names = ("DISCORD_BOT_TOKEN", "DISCORD_HOME_CHANNEL", "DISCORD_HOME_CHANNEL_THREAD_ID")
     found = {**_env_file(home / ".env.secrets", names), **_env_file(home / ".hermes" / ".env", names)}
-    from automation.notice_bot import notice_channel, resolve_token
+    from automation.notice_bot import fault_channel, notice_channel, resolve_token
 
     token = resolve_token(home=home, environ={**found, **{key: value for key, value in os.environ.items() if value}})
     target = found.get("DISCORD_HOME_CHANNEL_THREAD_ID") or found.get("DISCORD_HOME_CHANNEL", "")
     target = notice_channel(home) or target
+    if rc != 0:
+        target = fault_channel(home) or target
     if not token or not target.isdigit():
         raise TimerError(4, "no Discord token or home channel for deliver=discord")
     (send or _discord_send)(token, target, body)

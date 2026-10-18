@@ -202,9 +202,9 @@ def test_envelope_when_cli_reports_a_transition(
     captured: list[OwnerMessage | None] = []
     original = owner_notice.notify_owner
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         captured.append(message)
-        return original(content, message=message)
+        return original(content, message=message, fault=fault)
 
     monkeypatch.setattr(owner_notice, "notify_owner", capture)
     # When: the CLI handles the sweep.
