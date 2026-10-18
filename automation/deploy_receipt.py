@@ -211,6 +211,8 @@ def _held_lines(document: Mapping[str, object]) -> list[str]:
     for item in _records(document, "held"):
         reason = item.get("reason")
         key = reason if isinstance(reason, str) and reason else "held"
+        if key == "retired" or key.endswith("-retired"):
+            continue  # Retirement is intentional; the receipt keeps it, the owner has no action.
         counts[key] = counts.get(key, 0) + 1
     lines: list[str] = []
     for reason, count in counts.items():

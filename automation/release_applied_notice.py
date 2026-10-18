@@ -34,13 +34,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from automation import deploy_receipt, owner_notice, release_applied_state, release_models
+from automation import deploy_receipt, owner_notice, release_applied_state
 from automation.interop.chunker import chunk_lines
 
 _RELEASE_TAG: Final = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 _DEFAULT_RELEASE_CURRENT: Final = "/srv/autophagy-agent-current"
 _MODULE: Final = "automation.release_applied_notice"
-#: 남은 소유자 조치 한 조각의 글자 예산. 봉투(약 160자)·적용 문장과 모델 줄·v2 인용 접두사(줄마다
+#: 남은 소유자 조치 한 조각의 글자 예산. 봉투(약 160자)·적용 문장·v2 인용 접두사(줄마다
 #: 2자)를 더해도 Discord 한 메시지(2000자)에 들어가도록 잡았다 — 조치 줄 하나는 1000자 미만이다.
 _PENDING_PIECE: Final = 1200
 
@@ -194,6 +194,7 @@ def _pending_facts(encoded: str) -> tuple[str, ...]:
 
 def send(version: str, head: str, models: str = "", pending: str = "") -> int:
     """노드에서 도는 절반 — 포인터를 다시 확인하고 목적지는 파사드에 맡긴다."""
+    del models  # Older workstation senders may still pass the retired Hermes summary.
     current = os.environ.get("NODE_RELEASE_CURRENT", "").strip() or _DEFAULT_RELEASE_CURRENT
     try:
         pointer = os.path.basename(os.readlink(current))
@@ -208,7 +209,7 @@ def send(version: str, head: str, models: str = "", pending: str = "") -> int:
         return 4
     from automation.release_applied_message import applied_message
 
-    content = f"릴리스 {version} 가 적용되었습니다. (HEAD {head[:12]})\n{release_models.render(models)}"
+    content = f"릴리스 {version} 가 적용되었습니다. (HEAD {head[:12]})"
     pieces = _pending_facts(pending)
     facts = (f"{content}\n{pieces[0]}", *pieces[1:]) if pieces else (content,)
     for fact in facts:
@@ -231,7 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sender = commands.add_parser("send", help="소유자 DM 으로 적용 완료를 알린다")
     _ = sender.add_argument("--version", required=True)
     _ = sender.add_argument("--head", required=True)
-    _ = sender.add_argument("--models", default="", help="워크스테이션이 읽은 agent·peer 모델 요약(JSON)")
+    _ = sender.add_argument("--models", default="", help=argparse.SUPPRESS)
     _ = sender.add_argument("--pending", default="", help="영수증의 남은 소유자 조치 줄(JSON 목록)")
     arguments = parser.parse_args(argv)
     if arguments.command == "send":

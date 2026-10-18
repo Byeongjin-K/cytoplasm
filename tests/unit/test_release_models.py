@@ -1,9 +1,4 @@
-"""The release-applied notice names the models every account runs on.
-
-Owner instruction 2026-09-29: the model pair should be visible on every release in
-#notifications, not only when the owner runs a command. Missing facts still let the notice go
-out, saying so; they never block it.
-"""
+"""Legacy Hermes summary helpers remain readable; applied notices no longer show them."""
 
 from __future__ import annotations
 
@@ -48,7 +43,7 @@ def test_matching_accounts_render_one_line_and_drift_names_the_fix() -> None:
     assert release_models.render("not json").startswith("모델: 확인 못 함")
 
 
-def test_the_node_send_carries_the_model_line(
+def test_the_node_send_ignores_the_legacy_model_argument(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pointer = tmp_path / "current"
@@ -65,4 +60,4 @@ def test_the_node_send_carries_the_model_line(
     )
 
     assert code == 0
-    assert sent[0].splitlines()[1].startswith("모델: 주 openai-codex/gpt-6-sol")
+    assert sent == [f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_HEAD[:12]})"]

@@ -284,7 +284,7 @@ class TestSweep:
         output = capsys.readouterr().out
         assert f"RELEASE-APPLIED-NOTIFIED v1.2.4 {head[:12]}" in output
         assert _lines(Path(os.environ["SEND_CALLS"])) == [
-            f"automation.release_applied_notice|send --version v1.2.4 --head {head} --models {_MODELS_JSON}"
+            f"automation.release_applied_notice|send --version v1.2.4 --head {head}"
         ]
         marker = sweep_env / "notified" / head
         assert marker.read_text(encoding="utf-8").startswith("v1.2.4 ")
@@ -725,8 +725,7 @@ class TestSendAtTheNode:
         # Then: 번호는 인자 그대로 쓰고 목적지는 파사드가 정한다
         assert exit_code == 0
         assert sent == [
-            f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})\n"
-            "모델: 확인 못 함 — 노드의 Hermes 설정을 읽지 못했다"
+            f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})"
         ]
 
     def test_a2_the_notice_lands_in_the_configured_notice_channel(
@@ -764,7 +763,7 @@ class TestSendAtTheNode:
         from automation.release_applied_message import applied_message
         from automation.interop.owner_message import Ref, render
         message = applied_message(
-            "v1.2.4", _SHA, f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})\n모델: 확인 못 함 — 노드의 Hermes 설정을 읽지 못했다"
+            "v1.2.4", _SHA, f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})"
         )
         assert message is not None
         assert body == render(message, destination=Ref(scope="channel", channel_id=channel))
