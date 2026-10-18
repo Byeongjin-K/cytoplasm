@@ -573,7 +573,7 @@ def test_record_persists_every_authorizing_field_and_surface_binding() -> None:
     assert record["surface"] == "skill-approvals"
     assert record["channel_id"] == binding.channel_id
     assert record["policy_version"] == str(POLICY_VERSION)
-    assert record["render_version"] == "7"
+    assert record["render_version"] == "8"
     assert spec.bound(spec.render(), record)
 
 
@@ -928,7 +928,7 @@ def test_the_render_version_never_enters_the_action_hash() -> None:
 
 def test_an_unknown_stored_render_version_is_refused_and_never_binds() -> None:
     """모르는 판본은 오늘과 똑같이 거절된다 — 넓히는 것은 6 하나뿐이다."""
-    record = {**_spec().new_record(_MESSAGE_ID, _binding()), "render_version": "8"}
+    record = {**_spec().new_record(_MESSAGE_ID, _binding()), "render_version": "9"}
 
     with pytest.raises(ReleaseSpecError):
         _ = spec_from_record(record)
@@ -1199,13 +1199,13 @@ def test_card_finalization_pins_the_posted_bytes_before_recording_their_digest(
         calls.append(spec.render_version)
         return "posted-release-v7"
 
-    monkeypatch.setattr(release_spec, "render_v7", observed)
+    monkeypatch.setattr(release_spec, "render_v8", observed)
     card, refusal = card_for_new_request(_spec())
     assert card is not None and refusal == ""
     assert card.render() == "posted-release-v7"
     record = card.new_record(_MESSAGE_ID, _binding())
     assert record["content_sha256"] == sha256(b"posted-release-v7").hexdigest()
-    assert calls and all(version == 7 for version in calls)
+    assert calls and all(version == 8 for version in calls)
 
     def forbidden(spec: ReleaseSpec) -> str:
         del spec

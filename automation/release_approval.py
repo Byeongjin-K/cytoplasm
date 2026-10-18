@@ -166,7 +166,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print("RELEASE-PLAN-BLOCK: bad --rag-mcp digest", file=sys.stderr)
             return 4
         surfaces.append((RAG_MCP_SURFACE, rag_digest))
+    notes_dir = Path(os.environ.get("RELEASE_NOTES_DIR") or Path.home() / ".hermes/release-notes")
+    previous = release_notes.previous_surfaces(notes_dir, plan.base)
     payload = {
+        "card_summary": release_notes.card_summary(notes_dir, plan.head),
+        **({"previous_surfaces": previous} if previous is not None else {}),
         "base": plan.base,
         "head": plan.head,
         "major_note": (release_notes.major_note(plan, p5_retired=True)
@@ -178,9 +182,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
     }
     try:
         release_notes.save_detail(
-            Path(os.environ.get("RELEASE_NOTES_DIR") or Path.home() / ".hermes/release-notes"),
-            plan.head, tuple(sorted(surfaces)), release_notes.detail_body(plan),
+            notes_dir, plan.head, tuple(sorted(surfaces)), release_notes.detail_body(plan),
         )
+        release_notes.save_surfaces(notes_dir, plan.head, tuple(sorted(surfaces)))
     except OSError as error:
         print(f"RELEASE-PLAN-BLOCK: cannot save release detail: {type(error).__name__}", file=sys.stderr)
         return 4

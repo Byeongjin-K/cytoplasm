@@ -230,6 +230,7 @@ def test_rag_stack_preflight_never_drops_outage_notice_on_fallback(monkeypatch: 
         raise release_spec.EnvelopeUnavailable("unavailable")
     monkeypatch.setattr(release_spec, "render_v6", unavailable)
     monkeypatch.setattr(release_spec, "render_v7", unavailable)
+    monkeypatch.setattr(release_spec, "render_v8", unavailable)
 
     candidate, refusal = release_card.preflight_new_request(spec)
 
