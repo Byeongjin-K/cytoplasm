@@ -130,7 +130,9 @@ WIKI_FLAGS = {"--title": "short", "--tags": "short", "--links": "short", "--slug
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
-         "Wiki reads: wiki-search <words...>, wiki-get <slug>.\n"
+         "Wiki reads: wiki-search <words...>, wiki-get <slug>. Obsidian read: note-get <PARA path>.\n"
+         "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
+         "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
@@ -259,6 +261,7 @@ class Job:
     message_id: str
     kind: str = "yoodori"
     marker: str = ""
+    needs_origin: bool = True
 
 
 # Q233 (2026-10-18 17:40 KST "6개 다 카드 없이 바로 + 하루 요약에 남기기"): with that producer's
@@ -266,6 +269,53 @@ class Job:
 CARDLESS = {"calendar-request": "calendar", "todo-request": "todo",
             "obsidian-request": "obsidian", "drive-save": "drive-save"}
 WRITTEN = "OWNER-COMMAND-WRITTEN"
+# Owner Q241 (2026-10-18 20:55 KST): YooDori's omo memory is the source of truth and gets one
+# automatic Obsidian copy a day, so recall and node skills see it. Fixed path, no origin message.
+MEMORY_COPY_RELPATH = "000_PARA/Resource/유돌 기억 자동 사본.md"
+MIRROR = HOME / ".hermes/obsidian-mirror"
+MAX_NOTE = 512 * 1024
+
+
+def memory_copy_job(body: Path) -> Job:
+    argv = ["/usr/bin/python3", "-m", "automation.obsidian_write", "write-now",
+            "--relpath", MEMORY_COPY_RELPATH, "--body-file", str(body),
+            "--title", "유돌 기억 자동 사본",
+            "--origin-channel-id", "owner-policy", "--origin-message-id", "Q241-daily-memory-copy"]
+    return Job("memory-copy", argv, True, "유돌 기억 자동 사본", 600, "owner-policy",
+               "Q241-daily-memory-copy", "yoodori-memory", WRITTEN, False)
+
+
+# Owner Q244 (2026-10-18 21:03 KST): one daily note of the owner's #yoodori conversation
+# (decisions, todos, facts) so recall indexes it. Same switch and summary path as Q241.
+DAY_SUMMARY_DIR = "000_PARA/Resource/유돌 대화 요약"
+_DAY = re.compile(r"20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])")
+# Outside people's contacts must not reach the vault: an address or phone number refuses the note.
+_CONTACT = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+|\b0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}\b")
+
+
+def day_summary_job(day: str, body: Path) -> Job:
+    if _CONTACT.search(body.read_text(encoding="utf-8")):
+        raise Refused("summary contains an e-mail address or phone number")
+    relpath = f"{DAY_SUMMARY_DIR}/{day}.md"
+    argv = ["/usr/bin/python3", "-m", "automation.obsidian_write", "write-now",
+            "--relpath", relpath, "--body-file", str(body), "--title", f"유돌 대화 요약 {day}",
+            "--origin-channel-id", "owner-policy", "--origin-message-id", "Q244-daily-conversation-summary"]
+    return Job("day-summary", argv, True, f"유돌 대화 요약 {day}", 600, "owner-policy",
+               "Q244-daily-conversation-summary", "yoodori-memory", WRITTEN, False)
+
+
+def note_path(relpath: str) -> Path:
+    """A vault-relative note read from the node's read-only mirror, never outside it."""
+    _value(relpath, "relpath")
+    path = MIRROR / relpath
+    try:
+        real = path.resolve()
+        if (not real.is_relative_to(MIRROR.resolve()) or path.is_symlink() or not real.is_file()
+                or real.stat().st_size > MAX_NOTE):
+            raise Refused("no such note in the mirror")
+    except OSError:
+        raise Refused("note unreadable") from None
+    return real
 
 
 def cardless_job(name: str, argv: list[str]) -> Job:
@@ -444,6 +494,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if not args or len(args) > 2 or not _UID.fullmatch(args[0]) or (len(args) == 2 and args[1] != "--body"):
             raise Refused("mail-get needs <uid> [--body]")
         return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "get", *args], HOME
+    if name == "note-get":
+        if len(args) != 1:
+            raise Refused("note-get needs exactly one PARA-relative path")
+        return name, ["/usr/bin/cat", "--", str(note_path(args[0]))], HOME
     if name == "wiki-search":
         return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "query", _text(args, 200)], HOME
     if name == "wiki-get":
@@ -521,8 +575,9 @@ def run_job(job: Job) -> int:
             switched_on = False
         if not switched_on:
             raise Refused(f"owner-command writes are off on this node (release switch auto-write-{job.kind})")
-        token = notice_bot.resolve_token(environ=env)
-        link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
+        if job.needs_origin:
+            token = notice_bot.resolve_token(environ=env)
+            link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
     path = yoodori_jobs.new_job(HOME, {
         "name": job.name, "argv": job.argv, "write": job.write, "label": job.label,
         "timeout": job.timeout, "kind": job.kind, "marker": job.marker,
@@ -562,6 +617,12 @@ def main() -> int:
         job = build_job(words) if words and words[0] in JOB_COMMANDS else None
         if job is not None:
             name, argv, cwd = job.name, job.argv, HOME
+        elif words == ["memory-copy"]:
+            name, argv, cwd = "memory-copy", [], HOME
+        elif words and words[0] == "day-summary":
+            if len(words) != 2 or not _DAY.fullmatch(words[1]):
+                raise Refused("day-summary <YYYY-MM-DD>")
+            name, argv, cwd = "day-summary", [words[1]], HOME
         elif words and words[0] in {"job", "job-file"}:
             if len(words) != (2 if words[0] == "job" else 3):
                 raise Refused("job <id> | job-file <id> <name>")
@@ -578,7 +639,13 @@ def main() -> int:
         _log("refused", 2, started)
         return 2
     try:
-        if job is not None:
+        if name == "memory-copy":
+            path, _digest, _size = stage_file(STAGING, "memory-copy.md", sys.stdin.buffer)
+            rc = run_job(memory_copy_job(path))
+        elif name == "day-summary":
+            path, _digest, _size = stage_file(STAGING, f"day-summary-{argv[0]}.md", sys.stdin.buffer)
+            rc = run_job(day_summary_job(argv[0], path))
+        elif job is not None:
             rc = run_job(job)
         elif name == "release-notes":
             print(release_notes(argv[0]))

@@ -44,7 +44,7 @@ def _source_db(path: Path) -> sqlite3.Connection:
         );
         CREATE TABLE attachments (
           uid TEXT NOT NULL, filename TEXT NOT NULL, local_path TEXT,
-          first_seen TEXT, status TEXT NOT NULL
+          first_seen TEXT, status TEXT NOT NULL, attempts INTEGER DEFAULT 0
         );
         """
     )
@@ -168,7 +168,7 @@ def test_discover_excludes_ui_controls_and_uses_runtime_fallback(
     db = _source_db(source_db)
     db.execute("INSERT INTO messages VALUES ('u1','inbox','2026-08-01T01:02:03')")
     db.executemany(
-        "INSERT INTO attachments VALUES (?,?,?,?,?)",
+        "INSERT INTO attachments (uid,filename,local_path,first_seen,status) VALUES (?,?,?,?,?)",
         [
             ("u1", "report.pdf", "/missing/report.pdf", "", "ok"),
             ("u1", "Save", "/missing/Save", "", "ok"),

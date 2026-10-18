@@ -110,7 +110,7 @@ def observations(
     home_reader: HomeReader,
     home_lister: HomeLister,
     observer: Observer | None = None,
-    notice_mode: tuple[str, str] | None = None,
+    notice_mode: tuple[str, str] | tuple[str, str, str] | None = None,
     peer_retired: bool = False,
 ) -> list[str]:
     """관측 줄을 만든다. 목록을 못 보면 선언 밖 파일 부재를 증명할 수 없어 실패한다."""
@@ -210,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
+    parser.add_argument("--fault-channel", default="off", help="승인된 고장 통지 채널 또는 off")
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
@@ -263,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             auto_states[kind] = "ok" if observed == expected else "drift"
         auto_clean = all(state == "ok" for state in auto_states.values())
         lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer,
-                             (args.notice_bot, args.yoodori_channel),
+                             (args.notice_bot, args.yoodori_channel, args.fault_channel),
                              peer_retired=args.peer_retired == "retired")
         notice_states = {parts[2]: parts[3] for line in lines
                          if (parts := line.split("|"))[:2] == ["OBS", "notice-bot"]}
@@ -309,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
 
         document = json.loads(receipt)
         document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
+        if args.fault_channel != "off":
+            document["notice_bot"]["fault_channel_id"] = args.fault_channel
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
         document["omo_relay"] = {"route": args.omo_relay}
         if args.peer_retired == "retired":
