@@ -454,6 +454,7 @@ def dispatch_owner_approval_reminders(
     calls: Iterable[ReminderCall],
     *,
     on_error: Callable[[ApprovalRequest, Exception], None] | None = None,
+    on_sent: Callable[[ApprovalRequest], None] | None = None,
 ) -> tuple[ReminderVerdict, ...]:
     """Claim each card under its existing lease, then send once per destination.
 
@@ -499,6 +500,8 @@ def dispatch_owner_approval_reminders(
             for call, verdict, now, _, index in group:
                 try:
                     _mark_sent(call.request, verdict, call.context.journal, call.context.config, now)
+                    if on_sent is not None:
+                        on_sent(call.request)
                 except Exception as error:
                     if on_error is None:
                         raise

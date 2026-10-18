@@ -72,9 +72,10 @@ class _DecisionWatcher:
 class _StoredChannel:
     record: Mapping[str, str]
     channel_of: ChannelOf
+    verified: str | None = None
 
     def __call__(self, _request: ApprovalRequest) -> str:
-        return self.channel_of(self.record)
+        return self.verified if self.verified is not None else self.channel_of(self.record)
 
 
 def _field(record: Mapping[str, str], name: str, *, required: bool = True) -> str:
@@ -111,6 +112,9 @@ def _request(
         for key, value in decoded.items()
         if isinstance(value, str)
     }
+    record.setdefault("kind", result.request.kind)
+    if record["kind"] != result.request.kind:
+        raise ReminderRecordError("pending record kind contradicts its request")
     message_id = _field(record, "message_id")
     return (
         ApprovalRequest(
@@ -155,6 +159,7 @@ def remind_unanswered(
     config: ApprovalReminderConfig,
     clock: Clock,
     on_error: ReportError,
+    on_sent: Callable[[str], None] | None = None,
 ) -> tuple[ReminderVerdict, ...]:
     """Send due pointers only for records this tick proved are still unanswered."""
     reminders: list[ReminderCall] = []
@@ -171,14 +176,21 @@ def remind_unanswered(
             continue
         try:
             request, record = _request(gate_dir, result)
+            # Validate the record's own kind/channel before claiming a delivery slot.
+            # Invalid bindings must remain visible on subsequent ticks, not disappear
+            # behind an uncertain-delivery claim.
+            cadence = _config_for(kind, config)
+            due = clock() >= datetime.fromisoformat(request.created_at.replace("Z", "+00:00")) + cadence.initial_delay
+            channel_id = (channel_of(record) if config.enabled and due
+                          and decision_of(request.message_id) == "absent" else None)
             context = ReminderContext(
-                config=_config_for(kind, config),
+                config=cadence,
                 journal=ReminderJournal(gate_dir / "reminder-journal"),
                 request_type=kind,
                 deliver=deliver,
                 clock=clock,
                 guild_id_for=guild_of,
-                source_channel_id_for=_StoredChannel(record, channel_of),
+                source_channel_id_for=_StoredChannel(record, channel_of, channel_id),
             )
             reminders.append(ReminderCall(request, _DecisionWatcher(decision_of), lease, context))
         except (
@@ -197,4 +209,7 @@ def remind_unanswered(
             raise error
         on_error(request.key, type(error).__name__)
 
-    return dispatch_owner_approval_reminders(reminders, on_error=reminder_failed)
+    return dispatch_owner_approval_reminders(
+        reminders, on_error=reminder_failed,
+        on_sent=(lambda request: on_sent(request.key)) if on_sent is not None else None,
+    )
