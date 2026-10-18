@@ -202,6 +202,7 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -227,6 +228,8 @@ def render_v6(spec: ReleaseView, *, bundle_summary: str) -> str:
         f"배포 기준: `{spec.head_sha}`",
         f"배포 묶음: {bundle_summary}",
         *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
+        *([*RETIRE_LINES, ROOT_NOTE]
+          if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests

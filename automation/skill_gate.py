@@ -542,6 +542,9 @@ def _owner_approval_present(args: argparse.Namespace, owner_id: str, channel_id:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
+    from automation.peer_retired import retired
+
+    peer_is_retired = retired(Path.home())
     mode = _peer_attest_mode(args)
     if mode is None:
         print("FATAL: peer_attest_mode must be explicitly set to discord or signed", file=sys.stderr)
@@ -554,15 +557,17 @@ def cmd_check(args: argparse.Namespace) -> int:
     )
     execution = _approval_execution(gate, args)
     channel_id = execution.request.channel_id
-    try:
-        evidence = _peer_attestation_evidence(args, channel_id, mode)
-    except _PeerTrustRootUnavailable:
-        print(f"FATAL: Discord peer trust root unavailable: {OPS_PEERS_CONFIG}", file=sys.stderr)
-        return 2
-    if evidence is None:
-        print("REJECTED: valid peer attestation absent", file=sys.stderr)
-        return 1
-    if mode == "signed" and not {"render_version", "content_sha256"}.intersection(gate.stored() or {}):
+    evidence = None
+    if not peer_is_retired:
+        try:
+            evidence = _peer_attestation_evidence(args, channel_id, mode)
+        except _PeerTrustRootUnavailable:
+            print(f"FATAL: Discord peer trust root unavailable: {OPS_PEERS_CONFIG}", file=sys.stderr)
+            return 2
+        if evidence is None:
+            print("REJECTED: valid peer attestation absent", file=sys.stderr)
+            return 1
+    if evidence is not None and mode == "signed" and not {"render_version", "content_sha256"}.intersection(gate.stored() or {}):
         # 판본 없는 승격 카드만 재생한다. digest가 있는 fallback v1도 저장 본문으로 검증한다.
         peer_status = f"- peer verdict: PASS (key fp {evidence.key_fingerprint})"
         verified_gate = _deploy_gate(args, peer_status=peer_status, peer_mode=mode)
@@ -720,8 +725,10 @@ def cmd_release_authorize(args: argparse.Namespace) -> int:
     except (ApprovalRecordsError, LifecycleSurfaceError):
         decision = None
     if decision is Probe.APPROVED:
+        from automation.peer_retired import retired
+
         mode = _peer_attest_mode(args)
-        if mode is not None:
+        if mode is not None and not retired(Path.home()):
             try:
                 attested = _release_attestation_present(
                     args,

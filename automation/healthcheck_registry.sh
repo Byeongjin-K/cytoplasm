@@ -218,6 +218,16 @@ run_check() {
   local check_name probe_type node account target
 
   IFS='|' read -r check_name probe_type node account target <<< "$definition"
+  # A release completion marker is outside protected/removed homes. Never sudo to
+  # the deleted peer just to establish that its former probes are no longer relevant.
+  if [[ "$probe_type" == peer_ignored_channels || "$probe_type" == agent_selfskill_root_topology ||
+        "$probe_type" == user_unit_active &&
+        ( "$target" == "$NODE_AGENT_GATEWAY_UNIT" || "$target" == "$NODE_PEER_GATEWAY_UNIT" ) ]]; then
+    if cmp -s "$NODE_PRIVATE_ROOT/peer-retired" <(printf retired); then
+      log "PASS $check_name: 퇴역(기대)"
+      return 0
+    fi
+  fi
   case "$probe_type" in
     http_200) probe_http_200 "$node" "$account" "$target" ;;
     user_unit_active) probe_user_unit_active "$node" "$account" "$target" ;;
