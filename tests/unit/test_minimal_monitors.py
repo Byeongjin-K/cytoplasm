@@ -86,8 +86,8 @@ def test_semantic_checks_are_part_of_scheduled_jobs(tmp_path, monkeypatch) -> No
     from automation.doctor import scheduled
 
     home = _connected_home(tmp_path)
-    folder = home / ".hermes/mail-sync"
-    folder.mkdir()
+    folder = home / ".local/state/autophagy/mail-sync"
+    folder.mkdir(parents=True)
     (folder / "collection.json").write_text(json.dumps({
         "zero_weekday_streak": 36, "last_status": "ok",
         "last_run_at": "2026-10-19T08:00:00+09:00",
@@ -106,7 +106,7 @@ def test_semantic_checks_are_part_of_scheduled_jobs(tmp_path, monkeypatch) -> No
 def test_weekend_quiet_is_not_a_failure(tmp_path) -> None:
     from automation.doctor import scheduled
 
-    folder = tmp_path / ".hermes/mail-sync"
+    folder = tmp_path / ".local/state/autophagy/mail-sync"
     folder.mkdir(parents=True)
     (folder / "collection.json").write_text(json.dumps({
         "zero_weekday_streak": 36, "last_status": "ok",
@@ -137,10 +137,10 @@ def test_collection_result_retains_weekday_zeroes_without_old_ledger(tmp_path) -
     monday = datetime(2026, 10, 19, 1, tzinfo=UTC)
     for _ in range(6):
         sync._record_collection(tmp_path, True, 0, monday)
-    state = json.loads((tmp_path / ".hermes/mail-sync/collection.json").read_text())
+    state = json.loads((tmp_path / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["zero_weekday_streak"] == 6
     sync._record_collection(tmp_path, True, 0, datetime(2026, 10, 24, 1, tzinfo=UTC))
-    state = json.loads((tmp_path / ".hermes/mail-sync/collection.json").read_text())
+    state = json.loads((tmp_path / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["zero_weekday_streak"] == 0
     assert not (tmp_path / ".hermes/watch-failure").exists()
 

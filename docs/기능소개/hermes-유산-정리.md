@@ -118,7 +118,7 @@ Hermes 게이트웨이 둘·peer 채널 무시·자가 스킬 루트·report-hub
 | 승인 실행·수리 승인·릴리스 수렴 | 기존 시스템 타이머 | 기존 카드 결과·수렴 통지 |
 
 예: 평일 메일 수집이 6회 성공했는데 새 메일이 계속 0건이면
-`~/.hermes/mail-sync/collection.json` 결과를 읽은 doctor가 확인한다. 주말 0건은 세지 않는다.
+`~/.local/state/autophagy/mail-sync/collection.json` 결과를 읽은 doctor가 확인한다. 주말 0건은 세지 않는다.
 실행 실패는 성공으로 숨기지 않고 타이머 러너에 넘긴다.
 옛 `watch-failure` 장부는 읽거나 갱신하지 않으며 기존 파일은 지우지 않는다.
 과거 순수 장부 모듈은 이전 증적 재생용일 뿐 현재 래퍼는 호출하지 않는다.

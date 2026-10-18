@@ -6,7 +6,7 @@ skips the tick), and ``--now`` is YooDori's on-request collection that waits for
 
 Every tick returns the real collection result (a failure prints one masked line and exits 1;
 the timer runner owns failure counting). Successful zero-new-mail results are kept privately
-in ``~/.hermes/mail-sync/collection.json`` for doctor scheduled-jobs; only weekday 09:00-19:59
+in ``~/.local/state/autophagy/mail-sync/collection.json`` for doctor scheduled-jobs; only weekday 09:00-19:59
 KST ticks advance that quiet count, so evenings and weekends never raise it. The retired
 watch-failure ledger is neither read nor updated.
 """
@@ -169,7 +169,7 @@ def main() -> int:
 
 def _record_collection(home: Path, collected: bool, new: int | None, now: datetime) -> None:
     """Keep the result doctor's meaning check needs, not another failure incident."""
-    path = home / ".hermes/mail-sync/collection.json"
+    path = home / ".local/state/autophagy/mail-sync/collection.json"
     try:
         previous = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):

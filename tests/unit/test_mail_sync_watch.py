@@ -114,7 +114,7 @@ def test_successful_but_empty_collection_is_told_after_the_quiet_threshold(
     monkeypatch.setenv(watch.QUIET_AFTER_ENV, "2")
     printed = _ticks(monkeypatch, capsys, [_ok(0), _ok(0), _ok(0), _ok(3)])
     assert printed == ["", "", "", ""]
-    state = json.loads((Path.home() / ".hermes/mail-sync/collection.json").read_text())
+    state = json.loads((Path.home() / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["new_mails"] == 3 and state["zero_weekday_streak"] == 0
 
 
