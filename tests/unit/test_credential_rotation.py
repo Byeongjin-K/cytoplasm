@@ -13,7 +13,10 @@ import pytest
 from automation.credential_rotation import effects
 from automation.credential_rotation.effects import RotationSeams
 from automation.credential_rotation.files import atomic_write
-from automation.credential_rotation.registry import HttpProbe, ROTATION_TARGETS, RotationTarget
+from automation.credential_rotation.registry import (
+    HttpProbe, ProviderContext, ROTATION_TARGETS, RotationTarget,
+    hash_with_dashboard_provider, make_password_login_probe,
+)
 from automation.credential_rotation.rotate import main
 
 NEW_PASSWORD = "NewFixturePasswordValue2"
@@ -23,7 +26,16 @@ FIXED_NOW = datetime(2026, 7, 27, 4, 5, tzinfo=UTC)
 
 
 def _target(tmp_path: Path, target_name: str) -> RotationTarget:
-    base = ROTATION_TARGETS[target_name]
+    # Kanban is no longer shipped as a rotation target. Keep testing the generic
+    # provider/session-secret behavior with an explicit synthetic target.
+    base = (RotationTarget(
+        account="agent", verifier_path=tmp_path / "unused.env", note_path=tmp_path / "unused.txt",
+        username_key="FIXTURE_USERNAME", password_hash_key="FIXTURE_PASSWORD_HASH",
+        session_secret_key="FIXTURE_SESSION_SECRET", password_hasher=hash_with_dashboard_provider,
+        provider=ProviderContext(tmp_path / "python", tmp_path), unit_name="fixture.service",
+        probe_url="http://fixture.invalid/auth/password-login", probe_builder=make_password_login_probe,
+        probe_success_status=200,
+    ) if target_name == "kanban" else ROTATION_TARGETS[target_name])
     target = replace(
         base,
         verifier_path=tmp_path / f"{target_name}.env",

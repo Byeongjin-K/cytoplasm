@@ -56,6 +56,7 @@ if ! dori_bot_id="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_agen
 fi
 dori_mode=off
 [[ -z "$dori_bot_id" ]] || dori_mode=on
+peer_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.peer_retired --release-switch)" || exit 4
 if ! gateway_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_gateways --release-switch)"; then
   echo "GATEWAY-STOP-REFUSED: invalid release-host switch ~/.hermes/release-flags/hermes-gateways-stopped" >&2
   exit 4
@@ -64,6 +65,13 @@ chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel
 chat_channel="${chat_channel:-off}"
 notice_digest="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release digest)" || exit 4
 auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
+report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
+dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
+memory_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-memory)" || exit 4
+if [[ "$peer_mode" == retired && "$gateway_mode" != stopped ]]; then
+  echo "PEER-RETIRED-REFUSED: stopped gateways required before removal" >&2
+  exit 4
+fi
 if [[ "$notice_digest" != off && ( "$gateway_mode" != stopped || "$chat_channel" == off ) ]]; then
   echo "NOTICE-BOT-REFUSED: stopped gateways and yoodori channel required" >&2
   exit 4
@@ -78,7 +86,25 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+retire_peer() {
+  local acct role
+  "$repo_root/automation/release_approval_remote.sh" authorize-peer-retired --head "$node_sha" \
+    || { log "PEER-RETIRED-UNAUTHORIZED: approved HEAD does not cover P5"; return 4; }
+  # The private marker is deliberately written only after both account cleanups.
+  # It does not delete the peer account or grant any new privilege.
+  for role in agent peer; do
+    acct="$NODE_AGENT_ACCOUNT"
+    [[ "$role" != peer ]] || acct="$NODE_PEER_ACCOUNT"
+    if [[ "$role" == peer ]] && ssh "$host" "cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired) && ! getent passwd $acct >/dev/null" </dev/null; then
+      continue  # Owner root block removed the account after a completed non-root cleanup.
+    fi
+    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.p5_remove --role $role --head $node_sha" </dev/null \
+      || return 4
+  done
+  ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'umask 077; printf retired > $NODE_PRIVATE_ROOT/peer-retired; cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)'" </dev/null
 }
 
 converge_auto_write() {
@@ -88,9 +114,11 @@ converge_auto_write() {
 }
 
 converge_notice_bot() {
+  local -a retired_args=()
+  [[ "$peer_mode" != retired ]] || retired_args=(--peer-retired)
   PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release apply \
     --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" \
-    --digest "$notice_digest" --channel "$chat_channel"
+    --digest "$notice_digest" --channel "$chat_channel" "${retired_args[@]}"
 }
 
 #: 헬스체크 허용 목록 래퍼 — 릴리스 카드가 갱신을 실었고 소유자가 ✅ 한 노드만 설치한다
@@ -277,6 +305,11 @@ case "$mode" in
         exit 4
       fi
     fi
+    if [[ "$peer_mode" == retired ]]; then
+      # No non-root cleanup can run until the deployed release card authorizes it.
+      # Execute the node's signed runtime, never copy workstation code for removal.
+      retire_peer || exit 4
+    fi
     if [[ "$auto_kinds" != off ]]; then
       converge_auto_write || exit 4
     fi
@@ -350,6 +383,10 @@ case "$mode" in
       # A bundle deployer may have started a gateway itself; reassert the approved
       # stop after every apply, even when its initial service observation was clean.
       gateway_change=stop
+    fi
+    if [[ "$peer_mode" == retired ]]; then
+      restart_needed=0
+      gateway_change=""
     fi
     if [[ -n "$gateway_change" ]] && { [[ "$gateway_change" == stop ]] || ((${#failures[@]} == 0)); }; then
       if ! change_gateways "$gateway_change"; then

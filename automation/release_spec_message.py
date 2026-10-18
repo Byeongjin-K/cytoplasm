@@ -193,10 +193,12 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     """Approval-relevant switch notices shared by frozen v6 and new v7 cards."""
     from automation.release_spec import (
         DORI_SURFACE_PREFIX, GATEWAY_STOP_SURFACE, RAG_MCP_SURFACE,
+        LEGACY_SERVICE_LINES as LEGACY_LINES, legacy_service_surface as legacy_surface,
         WRAPPER_SURFACE_PREFIX, YOODORI_CHANNEL_PREFIX,
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -205,6 +207,9 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     ]
 
     return [
+        *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
+        *([*RETIRE_LINES, ROOT_NOTE]
+          if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),
         *[CARD_LINES[name.removeprefix(SURFACE_PREFIX)]
           for name, _digest in spec.surface_digests

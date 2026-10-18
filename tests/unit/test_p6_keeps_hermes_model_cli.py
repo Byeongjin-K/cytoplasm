@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-_KEPT = re.compile(r"\.local/bin/hermes|\.hermes/config\.yaml|\.hermes/auth\.json")
+_KEPT = re.compile(r"\.local/bin/hermes|\.hermes/config\.yaml|\.hermes/auth\.json|\.hermes/kanban\.db")
 _REMOVAL = re.compile(r"\brm\b|unlink|rmtree|shutil\.move|os\.remove|uninstall")
 
 
@@ -34,6 +34,11 @@ def test_no_shipped_code_removes_the_hermes_model_cli_config_or_login() -> None:
 def test_batch_model_calls_still_resolve_the_account_hermes_binary() -> None:
     source = (REPO / "automation" / "codex_llm.py").read_text(encoding="utf-8")
     assert 'shutil.which("hermes"' in source
+
+
+def test_keep_guard_recognizes_kanban_removal() -> None:
+    line = 'rm -f "$HOME/.hermes/kanban.db"'
+    assert _KEPT.search(line) and _REMOVAL.search(line)
 
 
 def test_the_major_notes_state_that_the_cli_config_and_login_stay() -> None:

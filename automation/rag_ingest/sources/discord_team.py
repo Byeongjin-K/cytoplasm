@@ -67,7 +67,7 @@ def _resolve_channels(
     cache: dict[str, str],
     network_log: list[str],
 ) -> dict[str, str]:
-    wanted = {discord_config.team_channel, discord_config.agents_log_channel}
+    wanted = {name for name in (discord_config.team_channel, discord_config.agents_log_channel) if name}
     if wanted.issubset(cache.keys()):
         return cache
     channels = _request(f"/guilds/{discord_config.guild_id}/channels", token, network_log)
@@ -238,6 +238,8 @@ def scan_discord(
         (discord_config.agents_log_channel, "reports"),
         (discord_config.team_channel, "team"),
     ):
+        if not channel_name:
+            continue
         channel_id = channels[channel_name]
         cursor_key = f"discord:{channel_name}"
         messages = _fetch_new_messages(

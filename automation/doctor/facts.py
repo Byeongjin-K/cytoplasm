@@ -99,8 +99,10 @@ class Facts:
     cooldowns: Mapping[str, float | None] | None = None
     timers: tuple[TimerJob, ...] = ()
     gateway_stopped_by_release: bool = False
+    hermes_retired: bool = False
     channel_override: bool = False
     notice_bot_override: bool = False
+    legacy_services: tuple[tuple[str, str], ...] = ()
 
 
 def mask(text: str) -> str:
@@ -123,6 +125,28 @@ def _discord_probe(token: str, config: Path | None) -> tuple[CheckResult, ...]:
     from automation.install.discord_check import probe
 
     return probe(token, config)
+
+def _yoodori_probe(token: str, config: Path | None, channel: str) -> tuple[CheckResult, ...]:
+    """Use the deployed sender's channel, not the retired Hermes channel list."""
+    from automation.install import discord_check as checks
+    from automation.install.checks import Status
+
+    fetch = checks._urllib_fetch(token)
+    result = checks.evaluate_token(fetch("/users/@me"))
+    if result.status is Status.FAIL:
+        return (result,)
+    # Q236: release and supply-chain cards follow this same sender-bot channel.
+    results = [result, checks.evaluate_intents(fetch("/applications/@me"))]
+    for role, key, value in (
+        ("yoodori", "agent_chat_channel_id", channel),
+        ("approvals", "personal_approvals_channel_id", channel),
+    ):
+        requirement = checks.ChannelRequirement(role, role, key, "유돌 대화·통지 또는 릴리스 승인")
+        channel_id = value if isinstance(value, str) and value else None
+        response = fetch(f"/channels/{channel_id}") if channel_id else None
+        history = fetch(f"/channels/{channel_id}/messages?limit=1") if response and response.status == 200 else None
+        results.append(checks.evaluate_channel(requirement, channel_id, response, history))
+    return tuple(results)
 
 
 def _json(path: Path) -> object | None:
@@ -305,6 +329,8 @@ def _gws_status(binary: str, run: Run) -> GwsStatus | str:
 
 
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
+    from automation.legacy_services import memory_timer_off
+
     try:
         names = [d.destination for d in all_declarations(repo)
                  if d.kind == "cron" and d.account == role and d.attr("runner") == "systemd"]
@@ -312,6 +338,10 @@ def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[Tim
         return ()
     found: list[TimerJob] = []
     for name in names:
+        if memory_timer_off(home, name):
+            # Actual inactive/disabled read-back is reported by legacy_services below.
+            found.append(TimerJob(name, "released-off", "", 0, ""))
+            continue
         raw = _json(home / ".hermes" / "cron-timers" / f"{name}.json")
         state = raw if isinstance(raw, dict) else {}
         found.append(TimerJob(
@@ -350,7 +380,8 @@ def gather(
     interop_path = hermes_dir / "interop" / "config.json"
     from automation.notice_bot import read_override, resolve_token
 
-    notice_override = read_override(home) is not None
+    sender = read_override(home)
+    notice_override = sender is not None
     token = resolve_token(home=home, environ=secrets or {})
     if notice_override:
         names = frozenset({*(names or ()), TOKEN_KEY})
@@ -362,16 +393,29 @@ def gather(
     discord: tuple[CheckResult, ...] | str | None = None
     if online and token:
         try:
-            discord = discord_probe(token, interop_path if interop_path.is_file() else None)
+            config_path = interop_path if interop_path.is_file() else None
+            discord = (_yoodori_probe(token, config_path, sender.channel_id)
+                       if sender is not None and discord_probe is _discord_probe
+                       else discord_probe(token, config_path))
         except Exception as error:  # noqa: BLE001 - a probe failure is a verdict, never a crash
             discord = type(error).__name__
     from automation.interop.approval_directory import channel_override
+    from automation import peer_retired
+    from automation.legacy_services import UNITS, check, marker_path
+
+    legacy_states = tuple(
+        (name, check(home, name, "off", lambda argv: run(
+            argv, {"XDG_RUNTIME_DIR": f"/run/user/{os.getuid() if uid is None else uid}"},
+        )))
+        for name in UNITS if marker_path(home, name).exists()
+    )
 
     return Facts(
         account=account, role=role, home=home, gateway_unit=gateway_unit,
         hermes=(home / ".local" / "bin" / "hermes").is_file(),
         gateway=_gateway(gateway_unit, run, os.getuid() if uid is None else uid),
         gateway_stopped_by_release=stopped_by_release(home),
+        hermes_retired=peer_retired.retired(home),
         auth=_auth(hermes_dir / "auth.json"),
         cooldowns=_cooldowns(hermes_dir / "auth.json", time.time() if now is None else now),
         model_provider=provider,
@@ -388,6 +432,7 @@ def gather(
         timers=timers,
         channel_override=channel_override(home) is not None,
         notice_bot_override=notice_override,
+        legacy_services=legacy_states,
         discord=discord,
         model_default=default,
         fallback_models=fallback_models,

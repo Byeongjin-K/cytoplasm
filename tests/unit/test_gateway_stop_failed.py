@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("marked", [True, False])
 def test_doctor_failed_state_requires_release_marker(marked):
-    facts = SimpleNamespace(gateway="failed", gateway_stopped_by_release=marked,
+    facts = SimpleNamespace(gateway="failed", gateway_stopped_by_release=marked, hermes_retired=False,
                             gateway_unit="hermes-gateway.service")
     assert _gateway(facts).status is (Status.PASS if marked else Status.FAIL)
 

@@ -29,6 +29,11 @@ def rotate_target(
     target = registry.get(target_name)
     if target is None:
         raise RotationError("unknown dashboard target")
+    if target_name == "report-hub":
+        from automation.legacy_services import released_off
+
+        if released_off(Path.home(), "report-hub"):
+            raise RotationError("report-hub is stopped by release; credential rotation is disabled")
     if seams.current_user() != target.account:
         raise RotationError(f"target {target_name} must run as {target.account}")
 

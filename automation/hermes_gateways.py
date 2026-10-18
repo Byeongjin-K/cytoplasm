@@ -29,6 +29,11 @@ def stopped_in_receipt(path: Path, accounts: Sequence[str]) -> bool:
     if "hermes_gateways" not in raw:
         return False  # Receipts written before the release stop switch existed.
     mode = raw["hermes_gateways"]
+    if mode == "retired":
+        if (raw["version"] != 2 or raw.get("peer_retired") != "retired"
+                or surfaces.get("gateway_services") != {}):
+            raise ValueError("GATEWAY-RECEIPT-INVALID: incomplete retirement receipt")
+        return True
     if mode not in ("running", "stopped"):
         raise ValueError("GATEWAY-RECEIPT-INVALID: unknown gateway mode")
     if (raw["version"] != 2

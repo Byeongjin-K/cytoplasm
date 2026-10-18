@@ -361,7 +361,7 @@ def test_deploy_when_agent_self_root_has_the_name_then_blocks_before_stage_one()
     # every non-`absent` answer — including an unreadable one — refuses with exit 4.
     assert script.index('die "MANAGED-BLOCK: mounting a managed skill requires --activate-managed"') < call
     assert call < script.index('log "stage 1/4 SANDBOX (peer, dummy secrets)"')
-    assert call < script.index('push_skill peer "$SRC_DIR" "$SKILL"')
+    assert call < script.index('push_skill "$SANDBOX_ACCOUNT" "$SRC_DIR" "$SKILL"')
     assert 'run_as "$NODE_AGENT_ACCOUNT"' in body
     assert "$HOME/.hermes/skills" in body
     assert 'die "SELF-SKILL-COLLISION-BLOCK: cannot read the agent skill root' in body
@@ -383,7 +383,7 @@ def test_deploy_when_peer_root_entry_is_not_pipeline_authored_then_blocks_fail_c
 
     # When: the root is classified before the staging push.
     region = script[
-        script.index("peer_skill_root_state() {") : script.index('push_skill peer "$SRC_DIR" "$SKILL"')
+        script.index("peer_skill_root_state() {") : script.index('push_skill "$SANDBOX_ACCOUNT" "$SRC_DIR" "$SKILL"')
     ]
 
     # Then: only a proven leftover of our own is overwritten; everything else blocks,
@@ -438,7 +438,7 @@ def test_deploy_when_sandbox_only_exits_then_peer_staging_is_removed() -> None:
     assert "trap cleanup_deploy_temps EXIT" in script
     assert "PEER_STAGING_PUSHED" in guarded
     assert remover.index("chmod -R u+w") < remover.index("rm -rf")
-    assert script.index("PEER_STAGING_PUSHED=1") < script.index('push_skill peer "$SRC_DIR" "$SKILL"')
+    assert script.index("PEER_STAGING_PUSHED=1") < script.index('push_skill "$SANDBOX_ACCOUNT" "$SRC_DIR" "$SKILL"')
 
 
 def test_deploy_when_remove_arm_runs_then_collision_guard_is_skipped() -> None:

@@ -82,6 +82,8 @@ def write_fake_python(bin_dir: Path) -> None:
             _ = sys.stdin.read()
             raise SystemExit(0)
         if script in {"peer_attest.py", "skill_review.py"}:
+            if script == "peer_attest.py" and os.environ.get("FAKE_PEER_ATTEST_FAIL") == "1":
+                raise SystemExit(5)
             print("FAKE-PASS")
             raise SystemExit(0)
         if script == "skill_gate.py":
@@ -110,7 +112,7 @@ def write_fake_python(bin_dir: Path) -> None:
                     and record["deploy_nonce"] == option("--deploy-nonce")
                     and record["personal_head_sha"] == provenance["personal_head_sha"]
                 )
-                raise SystemExit(0 if valid else 1)
+                raise SystemExit(0 if valid and os.environ.get("FAKE_OWNER_PENDING") != "1" else 1)
             if command == "sign":
                 Path(option("--out")).write_text("signed")
                 raise SystemExit(0)

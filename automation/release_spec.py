@@ -41,6 +41,15 @@ DORI_SURFACE_PREFIX: Final = "dori-agent-chat:"
 GATEWAY_STOP_SURFACE: Final = "hermes-gateways:stopped"
 YOODORI_CHANNEL_PREFIX: Final = "yoodori-channel:"
 RAG_MCP_SURFACE: Final = "rag-mcp"
+LEGACY_SERVICE_LINES: Final = {
+    "report-hub": "report-hub 끄기: 옛 #agents-log 보고 대시보드 유닛 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)",
+    "hermes-dashboard": "Hermes 보드 화면 끄기: hermes-dashboard 유닛 정지(보드 데이터 kanban.db는 그대로, 파일 삭제 후 재배포로 다시 켬)",
+    "hermes-memory": "Hermes 메모리 타이머 끄기: memory-curator·memory-relocate 정지(형 기억은 유돌 omo 메모리, 파일 삭제 후 재배포로 다시 켬)",
+}
+
+
+def legacy_service_surface(name: str) -> tuple[str, str]:
+    return f"{name}:off", hashlib.sha256(b"off").hexdigest()
 
 
 def wrapper_surface(node: str) -> str:
