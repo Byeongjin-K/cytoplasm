@@ -13,7 +13,9 @@ API = "https://discord.com/api/v10"
 
 def main() -> None:
     """Create two peer-authored threads and post rate-limit and duplicate probes."""
-    token = os.environ["DISCORD_BOT_TOKEN"]
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token(required=True)
     agent_id = os.environ["INTEROP_AGENT_BOT_ID"]
     guild = next(item for item in _get(token, "/users/@me/guilds") if item["name"] == "Autophagy Lab")
     team = next(item for item in _get(token, f"/guilds/{guild['id']}/channels") if item["name"] == "team")

@@ -352,4 +352,8 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
 
         findings.append(Finding("channel-override", "채널 덮어쓰기", Status.PASS,
                                 CHANNEL_OVERRIDE_NOTICE, "대화·알림 목적지", ()))
+    if facts.notice_bot_override:
+        from automation.notice_bot import NOTICE
+
+        findings.append(Finding("notice-bot", "발신 봇", Status.PASS, NOTICE, "알림·승인 카드", ()))
     return tuple(findings)

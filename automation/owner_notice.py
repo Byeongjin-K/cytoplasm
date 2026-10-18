@@ -47,6 +47,11 @@ def owner_notice_channel(home: Path | None = None) -> str:
     던지면 안 된다(2026-08-21 repair 워처 5일 정지, 9e1b7ad0).
     """
     from automation.interop.approval_directory import channel_override
+    from automation.notice_bot import notice_channel
+
+    selected = notice_channel(home)
+    if selected is not None:
+        return selected
 
     override = channel_override(home)
     if override is not None:
@@ -66,6 +71,11 @@ def owner_notice_channel(home: Path | None = None) -> str:
 def owner_dm_channel(token: str, owner_id: str) -> str:
     """The DM channel this bot opened with the owner — notices only, never a gate."""
     from automation.interop.approval_directory import DiscordChannelDirectory
+    from automation.notice_bot import notice_channel
+
+    selected = notice_channel()
+    if selected is not None:
+        return selected
 
     return DiscordChannelDirectory(token=token, owner_id=owner_id).owner_dm()
 
@@ -132,12 +142,14 @@ def _multipart(body: str, files: Sequence[Path]) -> tuple[str, bytes]:
 
 
 def _post_multipart(token: str, channel_id: str, body: str, files: Sequence[Path]) -> None:
+    from automation.notice_bot import resolve_token
+
     boundary, data = _multipart(body, files)
     request = Request(
         f"{_DISCORD_API}/channels/{channel_id}/messages",
         data=data,
         headers={
-            "Authorization": f"Bot {token}",
+            "Authorization": f"Bot {resolve_token(token)}",
             "Content-Type": f"multipart/form-data; boundary={boundary}",
             "User-Agent": _USER_AGENT,
         },
@@ -188,7 +200,9 @@ def notify_owner(
     Failure is LOUD. A queued-but-undelivered notice is the same silence the feature
     exists to remove, so every failed attempt leaves a journal line — without the token.
     """
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token or not (owner_notice_channel() or _config_owner_id()):
         print(
             "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
@@ -237,7 +251,9 @@ def notify_owner_dm(
     남아 있어 전체 문자열 계약을 퇴역하지 않는다. 그 경계·폴백을 대체하고 예외 해소와
     격리 meeting 배달을 검증한 뒤에만 재판정한다.
     """
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     owner_id = _config_owner_id()
     if not token or not owner_id:
         print(

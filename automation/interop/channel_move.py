@@ -134,11 +134,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     home = Path.home()
     try:
         config = json.loads(Path(os.environ.get("INTEROP_CONFIG", home / ".hermes/interop/config.json")).read_bytes())
-        token = os.environ.get("DISCORD_BOT_TOKEN", "")
+        from automation.notice_bot import file_token, resolve_token
+
+        token = resolve_token()
         if not token:
-            for line in (home / ".env.secrets").read_text(encoding="utf-8").splitlines():
-                if line.startswith("DISCORD_BOT_TOKEN="):
-                    token = line.partition("=")[2].strip().strip("'\"")
+            token = file_token(home / ".env.secrets", shell=True)
         owner = str(config.get("owner_id", ""))
         if not token or not owner:
             raise ValueError("missing credential")

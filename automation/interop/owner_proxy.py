@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 from collections.abc import Callable, Mapping
@@ -214,6 +213,8 @@ def gateway_text(
     event: object, text: str, actor_id: str, load_payload: Callable[[], Mapping[str, object]], ledger_path: Path
 ) -> str | None:
     """게이트웨이 훅의 입구 — 검증된 대리 요청이면 넘길 본문, 아니면 None(=기존 `interop_bot_prose` 거부)."""
+    from automation.notice_bot import resolve_token
+
     try:
         config = load_config(load_payload())
     except Exception as error:  # noqa: BLE001 — 대리 경로를 열 수 없으면 닫힌 쪽이 기본이다.
@@ -222,7 +223,7 @@ def gateway_text(
     if config is None or actor_id != config.bot_id:
         return None
     message = _message_from_event(event, text, actor_id)
-    reader = DiscordOriginReader(token=os.environ.get("DISCORD_BOT_TOKEN", ""))
+    reader = DiscordOriginReader(token=resolve_token())
     verdict = admit(message, config, reader, FileLedger(ledger_path), time.time())
     if isinstance(verdict, Rejected):
         LOGGER.warning("interop owner proxy rejected reason=%s", verdict.reason)

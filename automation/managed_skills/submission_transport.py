@@ -36,7 +36,10 @@ class _DiscordRequest:
 
 
 def _request_bytes(request: _DiscordRequest) -> bytes:
-    if not request.token:
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token(request.token)
+    if not token:
         raise SubmissionTransportError("Discord token is missing")
     try:
         with closing(HTTPSConnection("discord.com", timeout=request.timeout)) as connection:
@@ -45,7 +48,7 @@ def _request_bytes(request: _DiscordRequest) -> bytes:
                 f"/api/v10{request.path}",
                 body=request.body,
                 headers={
-                    "Authorization": f"Bot {request.token}",
+                    "Authorization": f"Bot {token}",
                     "Content-Type": request.content_type,
                     "User-Agent": _USER_AGENT,
                 },

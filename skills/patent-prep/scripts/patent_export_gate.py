@@ -34,16 +34,20 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from . import patent_export_binding
+
+    patent_export_binding.repo_module("approval_directory")
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
     try:
-        lines = ENV_SECRETS.read_text(encoding="utf-8").splitlines()
+        token = file_token(ENV_SECRETS)
     except OSError:
-        lines = []
-    for line in lines:
-        if line.startswith("DISCORD_BOT_TOKEN="):
-            return line.split("=", 1)[1].strip()
+        token = ""
+    if token:
+        return token
     raise ExportGateError("DISCORD_BOT_TOKEN missing", 3)
 
 

@@ -189,10 +189,12 @@ class Runtime:
 
 
 def live_runtime() -> Runtime:
+    from automation.notice_bot import resolve_token
+
     from automation.interop.discord_transport import DiscordTransport
     from automation.interop.reaction_approval import DiscordTransport as RestApi
 
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    token = resolve_token()
     rest = RestApi(token, "")
     return Runtime(
         api=rest.api,

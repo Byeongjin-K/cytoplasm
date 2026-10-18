@@ -217,7 +217,9 @@ def _launch(trigger: Trigger, python_bin: str) -> None:
 
 
 def _discord_post(path: str, payload: dict) -> object:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         return None
     request = Request(

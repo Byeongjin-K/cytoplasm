@@ -195,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
         help="선언 밖 홈 파일도 drift 로 판정",
     )
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
+    parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -211,6 +212,14 @@ def main(argv: list[str] | None = None) -> int:
                                  agent_chat_channel=args.yoodori_channel)
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
+    from automation.notice_bot_release import observe as observe_notice_bot
+
+    try:
+        notice_states = observe_notice_bot(args.runtime_root, args.notice_bot, args.yoodori_channel)
+    except (OSError, subprocess.SubprocessError):
+        print("NOTICE-BOT-UNVERIFIABLE", file=sys.stderr)
+        return 4
+    notice_clean = all(state == "ok" for state in notice_states.values())
     try:
         lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer)
         plan = deploy_all.parse_observations(
@@ -222,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean:
+        if not plan.clean or not notice_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -247,15 +256,23 @@ def main(argv: list[str] | None = None) -> int:
         except (deploy_all.ObservationError, PinError) as error:
             print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
             return 4
-        print(receipt, end="")
+        import json
+
+        document = json.loads(receipt)
+        document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
+        print(json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2))
         return 0
     if args.format == "actions":
         actions = deploy_all.render_actions(plan)
         if actions:
             print(actions)
-        return 0 if plan.clean else 1
+        if not notice_clean:
+            print("ACT|notice-bot|converge")
+        return 0 if plan.clean and notice_clean else 1
     print(deploy_all.render_plan(plan))
-    return 0 if plan.clean else 1
+    if not notice_clean:
+        print("NOTICE-BOT-DRIFT: account overrides differ from the release")
+    return 0 if plan.clean and notice_clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

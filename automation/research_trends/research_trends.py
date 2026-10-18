@@ -327,16 +327,17 @@ def _korean(topic: str, papers: tuple[Paper, ...], draft: str, evidence: str = "
 
 
 def _bot_token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
     try:
-        lines = SECRETS.read_text(encoding="utf-8").splitlines()
+        token = file_token(SECRETS)
     except OSError:
-        lines = []
-    for line in lines:
-        if line.startswith("DISCORD_BOT_TOKEN="):
-            return line.partition("=")[2].strip()
+        token = ""
+    if token:
+        return token
     raise OwnerDmDeliveryError("DISCORD_BOT_TOKEN is unavailable")
 
 

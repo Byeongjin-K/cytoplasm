@@ -44,6 +44,7 @@ deploy_provenance_check "$repo_root" \
   "$repo_root/configs/external-effect-tools.yaml" \
   "$repo_root/configs/node.example.toml" \
   "$repo_root/automation/node_config.py" \
+  "$repo_root/automation/notice_bot.py" \
   "$repo_root/automation/__init__.py" \
   "$repo_root/automation/interop" || exit 4
 # shellcheck source=automation/deploy_push.sh
@@ -139,6 +140,8 @@ for account in "${accounts[@]}"; do
     || interrupted "the runtime package marker"
   push_file "$repo_root/automation/node_config.py" .hermes/interop_runtime/automation/node_config.py \
     || interrupted "the node configuration loader"
+  push_file "$repo_root/automation/notice_bot.py" .hermes/interop_runtime/automation/notice_bot.py \
+    || interrupted "the release-owned sender credential resolver"
   push_file "$repo_root/configs/node.example.toml" .hermes/interop_runtime/automation/node.example.toml \
     || interrupted "the node configuration seed"
   deploy_tree_swap "$repo_root/automation/interop" .hermes/interop_runtime/automation/interop \

@@ -56,16 +56,18 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    budget_gate.repo_module("approval_directory")
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
     try:
-        lines = ENV_SECRETS.read_text(encoding="utf-8").splitlines()
+        token = file_token(ENV_SECRETS)
     except OSError:
-        lines = []
-    for line in lines:
-        if line.startswith("DISCORD_BOT_TOKEN="):
-            return line.split("=", 1)[1].strip()
+        token = ""
+    if token:
+        return token
     raise GateError("DISCORD_BOT_TOKEN 없음 — 프로덕션 확인 경로 사용 불가", 3)
 
 
@@ -137,7 +139,9 @@ def dm_owner(content: str) -> str:
     결과 문구에는 금액·잔액을 싣지 않는다. ``owner_notice``가 지정 통지 채널을
     우선하고, 설정이 없을 때만 소유자 DM을 연다.
     """
-    if not os.environ.get("DISCORD_BOT_TOKEN", "").strip():
+    from automation.notice_bot import resolve_token
+
+    if not resolve_token().strip():
         os.environ["DISCORD_BOT_TOKEN"] = bot_token()
     if not os.environ.get("AUTOPHAGY_OWNER_ID", "").strip():
         os.environ["AUTOPHAGY_OWNER_ID"] = owner_id()

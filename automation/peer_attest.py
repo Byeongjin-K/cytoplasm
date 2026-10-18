@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -235,6 +234,8 @@ def _peer_signing_key() -> Path:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run only from the protected runtime as the peer account."""
+    from automation.notice_bot import resolve_token
+
     tamperable = _find_tamperable_path(REPO_ROOT)
     if tamperable is not None:
         print(f"FATAL: peer attestor checkout is group/other-writable: {tamperable}", file=sys.stderr)
@@ -243,7 +244,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("FATAL: peer attestor must run from the release runtime or /srv/autophagy-agents", file=sys.stderr)
         return 2
     request = _parse_request(sys.argv[1:] if argv is None else argv)
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    token = resolve_token()
     if request is None:
         print("FATAL: invalid attestation arguments", file=sys.stderr)
         return 2

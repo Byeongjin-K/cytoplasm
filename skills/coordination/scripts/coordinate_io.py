@@ -75,24 +75,18 @@ def interop_config() -> dict[str, str]:
 
 
 def discord_bot_token() -> str:
-    """Resolve the Discord token without exposing its value."""
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    ensure_runtime()
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
     try:
-        lines = (Path.home() / ".env.secrets").read_text(encoding="utf-8").splitlines()
+        token = file_token(Path.home() / ".env.secrets", shell=True)
     except OSError:
-        lines = []
-    for line in lines:
-        candidate = line.strip()
-        if not candidate or candidate.startswith("#"):
-            continue
-        key, separator, value = candidate.partition("=")
-        if key.strip() != "DISCORD_BOT_TOKEN" or not separator:
-            continue
-        token = value.split(" #", 1)[0].strip().strip("\"'")
-        if token:
-            return token
+        token = ""
+    if token:
+        return token
     raise CoordinationError("DISCORD_BOT_TOKEN 누락", 3)
 
 

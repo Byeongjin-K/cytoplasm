@@ -482,10 +482,12 @@ def _child_env() -> dict[str, str]:
 
 
 def _discord_fetch(path: str) -> JsonValue:
+    from automation.notice_bot import resolve_token
+
     request = Request(
         f"{DISCORD_API}{path}",
         headers={
-            "Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}",
+            "Authorization": f"Bot {resolve_token(required=True)}",
             "User-Agent": "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)",
         },
     )

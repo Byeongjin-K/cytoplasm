@@ -735,7 +735,7 @@ push_skill peer "$SRC_DIR" "$SKILL"
 # fails closed, including the deploy that would ship the fix. automation/ and
 # automation/interop/ resolve as PEP 420 namespace packages on the node, so no
 # __init__.py needs staging.
-GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py
+GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py
               typing_compat.py git_tag_signature.py peer_attestation.py peer_signed_attestation.py peer_attest_runtime.py skill_gate_e2e.py
               skill_gate_specs.py stored_content.py release_spec.py release_spec_message.py skill_gate_approval.py skill_gate_request.py
               skill_gate_retire.py skill_gate_surface.py)
@@ -748,7 +748,7 @@ GATE_INTEROP_HELPERS=(interop/approval_lease.py interop/approval_lifecycle.py in
 
 # Notice facade import closure: separate from the gate and peer skill payload.
 # tests/unit/test_deploy_staging_owner_notice.py derives coverage from imports.
-OWNER_NOTICE_HELPERS=(owner_notice.py interop/origin_notice.py node_config.py
+OWNER_NOTICE_HELPERS=(owner_notice.py interop/origin_notice.py node_config.py notice_bot.py
                       interop/owner_message.py interop/owner_message_text.py
                       interop/discord_transport.py interop/chunker.py
                       interop/approval_directory.py interop/approval_surface.py)

@@ -47,6 +47,9 @@ probe_owner_notice_credentials() { # probe_owner_notice_credentials <node> <acco
   local runtime
   runtime="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   PYTHONPATH="$runtime" python3 -B -m automation.yoodori_channel --override-status || return 1
+  local notice_status
+  notice_status="$(PYTHONPATH="$runtime" python3 -B -m automation.notice_bot status)" || return 1
+  [[ -z "$notice_status" ]] || printf '%s\n' "$notice_status"
   if [[ ! -e "$path" ]]; then
     printf '%s\n' '[healthcheck] OWNER-NOTICE-CREDENTIAL-ABSENT'
     owner_notice_credentials_guidance "$path"
@@ -62,6 +65,7 @@ probe_owner_notice_credentials() { # probe_owner_notice_credentials <node> <acco
     return 0
   fi
   for key in "${OWNER_NOTICE_REQUIRED_KEYS[@]}"; do
+    [[ "$key" != DISCORD_BOT_TOKEN || -z "$notice_status" ]] || continue
     _owner_notice_value_present "$path" "$key" || missing+=("$key")
   done
   if (( ${#missing[@]} > 0 )); then

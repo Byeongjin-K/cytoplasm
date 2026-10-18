@@ -126,7 +126,9 @@ class DiscordTransport:
     ) -> None:
         if max_attempts < 1:
             raise DiscordTransportError("Discord max attempts must be positive")
-        self.token = token
+        from automation.notice_bot import resolve_token
+
+        self.token = resolve_token(token)
         self.owner_id = owner_id
         self.sleeper = sleeper
         self.max_attempts = max_attempts

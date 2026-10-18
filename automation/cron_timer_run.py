@@ -109,8 +109,11 @@ def deliver(home: Path, job: Job, rc: int, text: str, send: Send | None = None) 
         return ""
     names = ("DISCORD_BOT_TOKEN", "DISCORD_HOME_CHANNEL", "DISCORD_HOME_CHANNEL_THREAD_ID")
     found = {**_env_file(home / ".env.secrets", names), **_env_file(home / ".hermes" / ".env", names)}
-    token = os.environ.get("DISCORD_BOT_TOKEN") or found.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import notice_channel, resolve_token
+
+    token = resolve_token(home=home, environ={**found, **{key: value for key, value in os.environ.items() if value}})
     target = found.get("DISCORD_HOME_CHANNEL_THREAD_ID") or found.get("DISCORD_HOME_CHANNEL", "")
+    target = notice_channel(home) or target
     if not token or not target.isdigit():
         raise TimerError(4, "no Discord token or home channel for deliver=discord")
     (send or _discord_send)(token, target, body)

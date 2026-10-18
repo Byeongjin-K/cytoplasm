@@ -123,6 +123,11 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
     from automation.interop.approval_directory import CHANNEL_OVERRIDE_NOTICE, channel_override
 
     overridden = channel_override() is not None
+    from automation.notice_bot import NOTICE, read_override
+
+    notice_override = read_override() is not None
+    if notice_override:
+        payloads.append({"check": "notice-bot", "status": "PASS", "line": NOTICE})
     if overridden:
         payloads.append({"check": "channel-override", "status": "PASS", "line": CHANNEL_OVERRIDE_NOTICE})
     if args.json:
@@ -131,6 +136,8 @@ def _operator(args: _Arguments, config: NodeConfig | None, run_child: ChildRun) 
         print(parity)
         if overridden:
             print(f"[PASS] {CHANNEL_OVERRIDE_NOTICE}")
+        if notice_override:
+            print(f"[PASS] {NOTICE}")
     return worst
 
 

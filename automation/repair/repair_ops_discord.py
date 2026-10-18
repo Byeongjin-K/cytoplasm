@@ -129,11 +129,13 @@ class RepairDiscordApi:
         return RepairDiscordApi(self.token, binding, self.directory, self.owner_id)
 
     def _api(self, method: str, path: str, payload: dict[str, str] | None = None) -> JsonValue:
+        from automation.notice_bot import resolve_token
+
         request = Request(
             f"{DISCORD_API}{path}",
             data=None if payload is None else json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": f"Bot {self.token}",
+                "Authorization": f"Bot {resolve_token(self.token)}",
                 "Content-Type": "application/json",
                 "User-Agent": USER_AGENT,
             },
@@ -197,7 +199,9 @@ class RepairDiscordSetup:
 
 def configured_setup() -> RepairDiscordSetup:
     """네트워크 없이 기존 필수 자격증명을 읽고 누락을 거부한다."""
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     owner_id = os.environ.get("AUTOPHAGY_OWNER_ID", "")
     if not token or not owner_id:
         raise RepairDiscordError("repair approval Discord credential or owner identity is missing")

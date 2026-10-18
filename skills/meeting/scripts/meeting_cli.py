@@ -136,17 +136,21 @@ def _interop_runtime() -> Path:
 def _transport(channel_id: str):
     runtime = _interop_runtime()
     sys.path.insert(0, str(runtime))
+    from automation.notice_bot import resolve_token
     from automation.interop.discord_transport import DiscordTransport  # noqa: PLC0415
 
-    return DiscordTransport(token=os.environ["DISCORD_BOT_TOKEN"], channel_id=channel_id)
+    return DiscordTransport(token=resolve_token(required=True), channel_id=channel_id)
 
 
 def _discord_api(method: str, path: str, payload: dict | None = None) -> object:
+    sys.path.insert(0, str(_interop_runtime()))
+    from automation.notice_bot import resolve_token
+
     request = Request(
         f"https://discord.com/api/v10{path}",
         data=None if payload is None else json.dumps(payload).encode("utf-8"),
         headers={
-            "Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}",
+            "Authorization": f"Bot {resolve_token(required=True)}",
             "Content-Type": "application/json",
             "User-Agent": "DiscordBot (https://github.com/orientpine/autophagy-agents, 0)",
         },

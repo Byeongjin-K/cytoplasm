@@ -145,7 +145,9 @@ def _merge_effect_bindings(
 
 
 def run_once(now: datetime) -> ResolveResult:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise WatchError("Discord token is unavailable")
     from automation.plaud_sync.effects_live import build_effects
@@ -185,7 +187,9 @@ def _summary(result: ResolveResult) -> str | None:
 
 
 def _repost_posted() -> tuple[str, ...]:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token:
         raise WatchError("Discord token is unavailable")
     from automation.plaud_sync.reaction_transport import DiscordTransport

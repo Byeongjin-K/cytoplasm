@@ -117,12 +117,15 @@ def read_milestones() -> list[dict[str, str]]:
 
 
 def bot_token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    sys.path.insert(0, str(_release_runtime_root()))
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
-    for line in ENV_SECRETS.read_text(encoding="utf-8").splitlines():
-        if line.startswith("DISCORD_BOT_TOKEN="):
-            return line.split("=", 1)[1].strip()
+    token = file_token(ENV_SECRETS)
+    if token:
+        return token
     raise RuntimeError("DISCORD_BOT_TOKEN not available")
 
 

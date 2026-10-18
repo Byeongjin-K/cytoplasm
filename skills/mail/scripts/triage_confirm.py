@@ -38,15 +38,20 @@ def owner_id() -> str:
 
 
 def bot_token() -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    import triage_binding
+
+    triage_binding._repo_module("approval_directory")
+    from automation.notice_bot import file_token, resolve_token
+
+    token = resolve_token()
     if token:
         return token
     try:
-        for line in ENV_SECRETS.read_text(encoding="utf-8").splitlines():
-            if line.startswith("DISCORD_BOT_TOKEN="):
-                return line.split("=", 1)[1].strip()
+        token = file_token(ENV_SECRETS)
     except OSError:
-        pass
+        token = ""
+    if token:
+        return token
     raise GateError("DISCORD_BOT_TOKEN 없음 — 프로덕션 확인 경로 사용 불가", 3)
 
 

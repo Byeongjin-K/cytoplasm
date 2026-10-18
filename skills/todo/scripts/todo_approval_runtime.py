@@ -49,7 +49,10 @@ def _live_request_binding(
 
 
 def request_cli_approval(intent: TodoApprovalIntent, owner: str) -> Verdict:
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    _repo_module("approval_directory")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if not token or not owner:
         raise TodoApprovalError("todo approval identity is unavailable")
     root = Path(os.environ.get("TODO_APPROVAL_ROOT", "~/.hermes/todo-approvals")).expanduser()
@@ -172,7 +175,9 @@ def notify_result(
     새로 열지 않고 거기에 게시하며, 종결 결과면 그 스레드를 상태어로 닫는다. 폴백 목적지는
     새로 해석하지 않고 레코드에 저장된 승인 채널을 그대로 쓴다(워처의 stored-binding 규약).
     """
-    token = os.environ.get("DISCORD_BOT_TOKEN", "")
+    from automation.notice_bot import resolve_token
+
+    token = resolve_token()
     if transport is None:
         if not token:
             raise TodoApprovalError("todo notice identity is unavailable")

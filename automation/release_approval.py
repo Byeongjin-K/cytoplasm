@@ -42,6 +42,7 @@ from automation.release_completion_target import (
     approval_decision,
 )
 from .release_request_gate import ReleaseRequestGate
+from automation.notice_bot import SURFACE as NOTICE_BOT_SURFACE
 from automation.release_spec import (
     ReleaseSpec,
     ReleaseSpecError,
@@ -93,6 +94,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    notice_digest = getattr(args, "notice_bot", None)
+    if notice_digest is not None:
+        if (_SHA256.fullmatch(notice_digest) is None
+                or getattr(args, "hermes_gateways", None) != "stopped"
+                or not getattr(args, "yoodori_channel", None)):
+            print("RELEASE-PLAN-BLOCK: notice-bot requires digest, stopped gateways and channel", file=sys.stderr)
+            return 4
+        surfaces.append((NOTICE_BOT_SURFACE, notice_digest))
     if getattr(args, "hermes_gateways", None) == "stopped":
         surfaces.append(gateway_stop_surface())
     channel_id = getattr(args, "yoodori_channel", None)
@@ -281,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--dori-agent-chat", metavar="BOT_ID", help="릴리스 호스트의 명시적 도리 전환")
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
+    plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -342,6 +352,13 @@ def main(argv: list[str] | None = None) -> int:
     rag.add_argument("--head", required=True)
     rag.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
         argparse.Namespace(skill=None, surface=RAG_MCP_SURFACE, hash=args.hash,
+                           head=args.head, peer_attest_mode="")
+    ))
+    notice = commands.add_parser("authorize-notice-bot")
+    notice.add_argument("--hash", required=True)
+    notice.add_argument("--head", required=True)
+    notice.set_defaults(run=lambda args: skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=NOTICE_BOT_SURFACE, hash=args.hash,
                            head=args.head, peer_attest_mode="")
     ))
     args = parser.parse_args(argv)
