@@ -201,15 +201,12 @@ def notify_owner(
 
     try:
         token = resolve_token()
-    except ImportError:  # an old runtime that cannot import the resolver's helpers keeps today's token
-        token = os.environ.get("DISCORD_BOT_TOKEN", "")
-    if not token or not (owner_notice_channel() or _config_owner_id()):
-        print(
-            "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
-            file=sys.stderr,
-        )
-        return False
-    try:
+        if not token or not (owner_notice_channel() or _config_owner_id()):
+            print(
+                "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
+                file=sys.stderr,
+            )
+            return False
         body = content if content is not None else notice
         if body is None or (notice is not None and content is not None and notice != content):
             print("[owner-notice] NOTIFY-FAILED: TypeError", file=sys.stderr)
@@ -254,16 +251,13 @@ def notify_owner_dm(
 
     try:
         token = resolve_token()
-    except ImportError:  # an old runtime that cannot import the resolver's helpers keeps today's token
-        token = os.environ.get("DISCORD_BOT_TOKEN", "")
-    owner_id = _config_owner_id()
-    if not token or not owner_id:
-        print(
-            "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
-            file=sys.stderr,
-        )
-        return False
-    try:
+        owner_id = _config_owner_id()
+        if not token or not owner_id:
+            print(
+                "[owner-notice] NOTIFY-UNCONFIGURED: owner credential missing, notice not sent",
+                file=sys.stderr,
+            )
+            return False
         body = content if content is not None else notice
         if body is None or (notice is not None and content is not None and notice != content):
             print("[owner-notice] NOTIFY-FAILED: TypeError", file=sys.stderr)

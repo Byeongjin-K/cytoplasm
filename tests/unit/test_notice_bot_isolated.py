@@ -7,10 +7,34 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from automation import owner_notice
 from automation.deploy_declarations import all_declarations
 from tests.unit.test_notice_bot import installed
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("facade", [owner_notice.notify_owner, owner_notice.notify_owner_dm])
+def test_owner_notice_never_uses_old_token_when_resolver_fails(
+    facade, tmp_path, monkeypatch, capsys,
+):
+    installed(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "legacy credential")
+    monkeypatch.setenv("AUTOPHAGY_OWNER_ID", "123")
+
+    def broken():
+        raise ImportError("unavailable")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("resolver failure reached the legacy sender")
+
+    monkeypatch.setattr(owner_notice, "resolve_token", broken)
+    monkeypatch.setattr(owner_notice, "send_notice", forbidden)
+    assert facade("test") is False
+    assert capsys.readouterr().err == "[owner-notice] NOTIFY-FAILED: ImportError\n"
 
 
 def test_isolated_meeting_plugin_refuses_legacy_token_after_cutover(tmp_path):

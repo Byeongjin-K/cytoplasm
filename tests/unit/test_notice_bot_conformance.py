@@ -1,13 +1,13 @@
-"""Every deployed Discord credential read names the one resolver or an explained non-sender."""
+"""Every deployed Discord credential read names the resolver or an explicit exemption."""
 from __future__ import annotations
 
 import ast
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-# These read credentials but never post Discord messages. The token transport and
-# startup-presence checks in shell are separately enumerated below.
+# Every direct read has a reviewed reason; exception handlers are scanned too.
 EXEMPT = {
+    "skills/meeting/plugin/__init__.py": "Standalone legacy ACK only when automation and the override are both absent; any override without its resolver blocks sending.",
     "automation/install/discord_check.py": "Read-only installer GET probe; it checks the credential explicitly supplied by the installer.",
     "automation/install/wizard.py": "Preserves the installer credential across sudo; no Discord sender.",
     "automation/report_hub/collector.py": "Read-only Discord report ingestion; never posts messages.",
@@ -33,21 +33,8 @@ def direct_reads(path: Path) -> list[int]:
         return (isinstance(node, ast.Constant) and node.value in aliases
                 or isinstance(node, ast.Name) and node.id in aliases
                 or isinstance(node, ast.Attribute) and node.attr == "token_env")
-    # A read inside ``except ImportError`` runs only when the resolver itself cannot be imported, i.e. an
-    # older runtime that has no override to honour; everywhere else the resolver must be used.
-    fallback = {
-        id(inner)
-        for handler in ast.walk(tree)
-        if isinstance(handler, ast.ExceptHandler) and handler.type is not None
-        and any(isinstance(name, ast.Name) and name.id in {"ImportError", "ModuleNotFoundError"}
-                for name in (handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]))
-        for statement in handler.body
-        for inner in ast.walk(statement)
-    }
     found = []
     for node in ast.walk(tree):
-        if id(node) in fallback:
-            continue
         if isinstance(node, ast.Call) and node.args and key(node.args[0]):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
             if name in {"get", "getenv", "__getitem__", "_require_env", "startswith"}:
@@ -57,7 +44,7 @@ def direct_reads(path: Path) -> list[int]:
     return found
 
 
-def test_no_direct_credential_reads_outside_resolver_and_non_sender_ledger():
+def test_no_direct_credential_reads_outside_resolver_and_explicit_ledger():
     hits = {
         str(path.relative_to(REPO)): direct_reads(path)
         for folder in ("automation", "skills")
@@ -77,3 +64,13 @@ def test_shell_token_references_are_only_declared_presence_or_environment_plumbi
     }
     assert actual == set(SHELL_EXEMPT)
     assert all(SHELL_EXEMPT.values())
+
+
+def test_import_error_handlers_do_not_hide_direct_credential_reads(tmp_path):
+    source = tmp_path / "sender.py"
+    source.write_text(
+        "try:\n    import missing_resolver\nexcept ImportError:\n"
+        "    token = os.environ.get('DISCORD_BOT_TOKEN', '')\n",
+        encoding="utf-8",
+    )
+    assert direct_reads(source) == [4]
