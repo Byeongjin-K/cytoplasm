@@ -18,7 +18,8 @@ def test_cli_snapshot_includes_all_sender_accounts(tmp_path, monkeypatch, capsys
     runtime, live, digest = _runtime(tmp_path)
     monkeypatch.setattr(deploy_all_probe, "inspect_mounts",
                         lambda *_: SimpleNamespace(stale=(), unmounted=(), orphaned=()))
-    monkeypatch.setattr(deploy_all_probe, "_read_home", lambda *_: digest)
+    monkeypatch.setattr(deploy_all_probe, "_read_home",
+                        lambda account, path: "" if path.endswith(".mode") else digest)
     monkeypatch.setattr(deploy_all_probe, "_list_home", lambda *_: (".hermes/scripts/declared.py",))
     monkeypatch.setattr(deploy_all_observe, "observe_node", lambda *a, **k: [])
     calls = []

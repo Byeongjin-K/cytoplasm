@@ -94,6 +94,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    from automation.auto_write import surface as auto_write_surface
+
+    try:
+        surfaces.extend(auto_write_surface(kind) for kind in getattr(args, "auto_write", None) or ())
+    except ValueError as error:
+        print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+        return 4
     notice_digest = getattr(args, "notice_bot", None)
     if notice_digest is not None:
         if (_SHA256.fullmatch(notice_digest) is None
@@ -291,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--hermes-gateways", choices=("stopped",), help="릴리스 호스트의 명시적 게이트웨이 정지")
     plan.add_argument("--yoodori-channel", metavar="CHANNEL_ID", help="릴리스가 선택한 대화·알림 채널")
     plan.add_argument("--notice-bot", metavar="DIGEST", help="발신 자격증명 SHA-256만 승인에 바인딩")
+    plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -361,6 +369,20 @@ def main(argv: list[str] | None = None) -> int:
         argparse.Namespace(skill=None, surface=NOTICE_BOT_SURFACE, hash=args.hash,
                            head=args.head, peer_attest_mode="")
     ))
+    auto = commands.add_parser("authorize-auto-write")
+    auto.add_argument("--kind", required=True)
+    auto.add_argument("--head", required=True)
+    def authorize_auto(args: argparse.Namespace) -> int:
+        from automation.auto_write import surface
+
+        try:
+            name, digest = surface(args.kind)
+        except ValueError:
+            return 4
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    auto.set_defaults(run=authorize_auto)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

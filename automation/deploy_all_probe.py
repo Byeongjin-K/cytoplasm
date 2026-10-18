@@ -202,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--rag-mcp-refresh", default="", help="MCP refresh result for the receipt")
     parser.add_argument("--notice-bot", default="off", help="릴리스 호스트가 승인한 발신 자격증명 지문")
+    parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
     from automation.yoodori_channel import channel_value
 
     parser.add_argument("--yoodori-channel", type=channel_value, default="off",
@@ -219,6 +220,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways)
     try:
+        from automation import auto_write
+        from automation.node_config import load_node_config
+
+        auto_kinds = () if args.auto_write == "off" else tuple(args.auto_write.split(","))
+        if set(auto_kinds) - auto_write.KINDS.keys():
+            raise deploy_all.ObservationError("unknown auto-write kind")
+        auto_states = {}
+        for kind in auto_write.KINDS:
+            observed = _read_home(load_node_config().agent_account,
+                                  f".hermes/auto-write/{kind}.mode")
+            if observed == "?":
+                raise deploy_all.ObservationError("auto-write setting unreadable")
+            expected = auto_write.surface(kind)[1] if kind in auto_kinds else ""
+            auto_states[kind] = "ok" if observed == expected else "drift"
+        auto_clean = all(state == "ok" for state in auto_states.values())
         lines = observations(args.runtime_root, args.live_root, _read_home, _list_home, observer,
                              (args.notice_bot, args.yoodori_channel))
         notice_states = {parts[2]: parts[3] for line in lines
@@ -236,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean or not notice_clean:
+        if not plan.clean or not notice_clean or not auto_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -265,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
 
         document = json.loads(receipt)
         document["notice_bot"] = {"digest": args.notice_bot, "accounts": notice_states}
+        document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
         print(json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2))
         return 0
     if args.format == "actions":
@@ -273,11 +290,15 @@ def main(argv: list[str] | None = None) -> int:
             print(actions)
         if not notice_clean:
             print("ACT|notice-bot|converge")
-        return 0 if plan.clean and notice_clean else 1
+        if not auto_clean:
+            print("ACT|auto-write|converge")
+        return 0 if plan.clean and notice_clean and auto_clean else 1
     print(deploy_all.render_plan(plan))
     if not notice_clean:
         print("NOTICE-BOT-DRIFT: account overrides differ from the release")
-    return 0 if plan.clean and notice_clean else 1
+    if not auto_clean:
+        print("AUTO-WRITE-DRIFT: node modes differ from the release")
+    return 0 if plan.clean and notice_clean and auto_clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

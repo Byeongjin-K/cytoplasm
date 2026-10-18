@@ -1,2 +1,4 @@
 agent|automation/plaud_sync/cron/plaud_sync_watch.py|.hermes/scripts/plaud_sync_watch.py|required
 agent|automation/plaud_sync/cron/plaud_sync_watch.py|plaud-sync-watch|v2:cron;schedule=every 10m;script=plaud_sync_watch.py;deliver=local;mode=no-agent;runner=systemd
+agent|automation/plaud_sync/cron/auto_write_summary_watch.py|.hermes/scripts/auto_write_summary_watch.py|v2:file;policy=required
+agent|automation/plaud_sync/cron/auto_write_summary_watch.py|auto-write-daily-summary|v2:cron;schedule=30 21 * * *;script=auto_write_summary_watch.py;deliver=local;mode=no-agent;runner=systemd

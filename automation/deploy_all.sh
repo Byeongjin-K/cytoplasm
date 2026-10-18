@@ -63,6 +63,7 @@ fi
 chat_channel="$(PYTHONPATH="$repo_root" python3 -B -m automation.yoodori_channel --release-switch)" || exit 4
 chat_channel="${chat_channel:-off}"
 notice_digest="$(PYTHONPATH="$repo_root" python3 -B -m automation.notice_bot_release digest)" || exit 4
+auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
 if [[ "$notice_digest" != off && ( "$gateway_mode" != stopped || "$chat_channel" == off ) ]]; then
   echo "NOTICE-BOT-REFUSED: stopped gateways and yoodori channel required" >&2
   exit 4
@@ -77,7 +78,13 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --auto-write $auto_kinds --notice-bot $notice_digest --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+converge_auto_write() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release apply \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" \
+    --kinds "$auto_kinds"
 }
 
 converge_notice_bot() {
@@ -270,6 +277,9 @@ case "$mode" in
         exit 4
       fi
     fi
+    if [[ "$auto_kinds" != off ]]; then
+      converge_auto_write || exit 4
+    fi
     if [[ "$notice_digest" != off ]]; then
       "$repo_root/automation/release_approval_remote.sh" authorize-yoodori-channel \
         --channel-id "$chat_channel" --head "$node_sha" || exit 4
@@ -314,6 +324,9 @@ case "$mode" in
           ;;
         notice-bot)
           converge_notice_bot || failures+=("notice-bot")
+          ;;
+        auto-write)
+          converge_auto_write || failures+=("auto-write")
           ;;
         restart-gateway)
           restart_needed=1

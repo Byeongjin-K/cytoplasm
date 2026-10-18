@@ -36,10 +36,12 @@ ssh "$host" 'sudo -n -u ops -H git -C /srv/autophagy-agents pull --ff-only'
 
 # No-agent watcher wrapper.
 push_file "$repo_root/automation/plaud_sync/cron/plaud_sync_watch.py" '.hermes/scripts/plaud_sync_watch.py'
+push_file "$repo_root/automation/plaud_sync/cron/auto_write_summary_watch.py" '.hermes/scripts/auto_write_summary_watch.py'
 
 # Idempotent cron registration (reaction resolve every 10m; Plaud poll is gated
 # inside the tick by PLAUD_SYNC_POLL_SECONDS, default 30m). --all so a paused job is seen.
 source "$repo_root/automation/deploy_cron.sh"
 source "$repo_root/automation/deploy_timer.sh"
 converge_timer plaud-sync-watch "every 10m" plaud_sync_watch.py local
+converge_timer auto-write-daily-summary "30 21 * * *" auto_write_summary_watch.py local
 run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 plaud-sync-watch || true'
