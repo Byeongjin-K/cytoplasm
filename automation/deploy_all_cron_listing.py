@@ -14,6 +14,7 @@ _JOB_HEADER: Final = re.compile(r"^  ([0-9a-f]+) \[(active|paused|completed|disa
 _JOB_FIELD: Final = re.compile(r"^    ([A-Z][A-Za-z ]*):(.*)$")
 _TWO_SPACE: Final = re.compile(r"^  [^ ]")
 _GATEWAY_WARNING: Final = "  ⚠  Gateway is not running"
+_SCHEDULER_WARNING: Final = "  ⚠  Scheduler is not ready"
 _NO_JOBS: Final = "No scheduled jobs."
 
 
@@ -34,7 +35,7 @@ def parse_cron_listing(text: str) -> dict[str, list[dict[str, str]]] | None:
                 return None
             jobs.append({"id": header[1], "state": header[2]})
             ended = False
-        elif line.startswith(_GATEWAY_WARNING):
+        elif line.startswith((_GATEWAY_WARNING, _SCHEDULER_WARNING)):
             continue
         elif _TWO_SPACE.match(line):
             return None
