@@ -102,6 +102,7 @@ class Facts:
     hermes_retired: bool = False
     channel_override: bool = False
     notice_bot_override: bool = False
+    omo_relay: str = ""
     legacy_services: tuple[tuple[str, str], ...] = ()
 
 
@@ -114,7 +115,8 @@ def mask(text: str) -> str:
 def _run(argv: tuple[str, ...], extra: Mapping[str, str]) -> tuple[int, str]:
     try:
         done = subprocess.run(  # noqa: S603 - fixed argv, read-only status commands
-            argv, capture_output=True, text=True, env={**os.environ, **extra}, timeout=60, check=False,
+            argv, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            env={**os.environ, **extra}, timeout=60, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return 127, type(error).__name__
@@ -369,8 +371,18 @@ def gather(
     repo: Path = _REPO, now: float | None = None,
 ) -> Facts:
     from automation.hermes_gateways import stopped_by_release
+    from automation.omo_relay.client import argv as relay_argv, enabled as relay_enabled
 
     hermes_dir = home / ".hermes"
+    relay = ""
+    try:
+        if relay_enabled(home):
+            relay = "unchecked"
+            if online:
+                rc, out = run(tuple(relay_argv(home)), {"HOME": str(home)})
+                relay = "up" if rc == 0 and _relay_ready(out) else "down"
+    except (OSError, ValueError, RuntimeError):
+        relay = "down"
     secrets = read_env_file(home / ".env.secrets")
     names = None if secrets is None else frozenset(key for key, value in (secrets or {}).items() if value)
     paths = {key: Path(secrets[key]).expanduser().exists() for key in PATH_KEYS if secrets and secrets.get(key)}
@@ -432,6 +444,7 @@ def gather(
         timers=timers,
         channel_override=channel_override(home) is not None,
         notice_bot_override=notice_override,
+        omo_relay=relay,
         legacy_services=legacy_states,
         discord=discord,
         model_default=default,
@@ -441,3 +454,10 @@ def gather(
         cron_env=observe_cron_env(repo=repo, role=role, registered=registered,
                                   hermes_env=read_env_file(hermes_dir / ".env"), environ=os.environ),
     )
+
+
+def _relay_ready(text: str) -> bool:
+    try:
+        return json.loads(text) == {"ready": True}
+    except ValueError:
+        return False

@@ -198,6 +198,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     )
     from automation.notice_bot import CARD_LINE, SURFACE
     from automation.auto_write_policy import CARD_LINES, SURFACE_PREFIX
+    from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
 
     wrapper_hosts = [
@@ -224,6 +225,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
            f"유돌 게이트: Gmail 읽기 {YOODORI_GMAIL_READ_COUNT}개 추가"] if any(
             name.startswith(DORI_SURFACE_PREFIX) for name, _digest in spec.surface_digests
         ) else []),
+        *([RELAY_LINE] if any(name == RELAY_SURFACE for name, _digest in spec.surface_digests) else []),
         *(["게이트웨이 멈춤: 노드 agent·peer Hermes 게이트웨이 정지(제거 아님, 파일 삭제 후 재배포로 다시 켬)"]
           if any(name == GATEWAY_STOP_SURFACE for name, _digest in spec.surface_digests) else []),
         *[

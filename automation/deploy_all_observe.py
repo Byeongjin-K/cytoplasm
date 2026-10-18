@@ -261,6 +261,7 @@ def _config(decl: Declaration, root: Path, call: Runner, _cache: dict[str, objec
     return _Seen(*deploy_all_config.observe_config(
         decl, root, call, dori_mode=mode if isinstance(mode, str) else None,
         chat_channel=channel if isinstance(channel, str) else "off",
+        omo_relay_mode=str(_cache.get("omo_relay_mode", "off")),
     ))
 
 
@@ -306,6 +307,7 @@ def collect(
     dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    omo_relay_mode: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
@@ -332,6 +334,7 @@ def collect(
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
     cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
     cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard, "hermes-memory": hermes_memory})
+    cache["omo_relay_mode"] = omo_relay_mode
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
@@ -371,6 +374,7 @@ def observe_node(
     runtime_root: Path, *, gateway_only: bool = False, dori_agent_chat: str | None = None,
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
+    omo_relay_mode: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
@@ -385,4 +389,4 @@ def observe_node(
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
                     hermes_memory=hermes_memory,
-                   agent_chat_channel=agent_chat_channel, peer_retired=peer_retired)
+                   agent_chat_channel=agent_chat_channel, peer_retired=peer_retired, omo_relay_mode=omo_relay_mode)

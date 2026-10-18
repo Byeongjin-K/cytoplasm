@@ -78,6 +78,10 @@ notice_args=()
 auto_kinds="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.auto_write_release switches)" \
   || die "AUTO-WRITE-REFUSED: invalid release-host switch" 4
 auto_args=()
+relay_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.omo_relay_release switch)" \
+  || die "OMO-RELAY-REFUSED: invalid release-host switch or node configuration" 4
+relay_args=()
+[[ "$relay_mode" == off ]] || relay_args=(--omo-relay "$relay_mode")
 if [[ "$auto_kinds" != off ]]; then
   IFS=',' read -r -a kinds <<< "$auto_kinds"
   for kind in "${kinds[@]}"; do auto_args+=(--auto-write "$kind"); done
@@ -264,7 +268,7 @@ if (( decision_rc != 0 )); then
     log "RAG-MCP-PLAN-UNKNOWN: RAG 소스·이미지를 판정하지 못해 카드에 갱신을 싣지 않는다 — 수렴 뒤 영수증의 남은 소유자 조치로 남는다"
   fi
   "${plan_approval[@]}" plan --repo "$REPO_ROOT" --base "$base" --head "$head" \
-    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${legacy_args[@]}" > "$workdir/plan.json" \
+    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${relay_args[@]}" "${legacy_args[@]}" > "$workdir/plan.json" \
     || die "release plan failed" 4
   request_refusal="approval request was refused — 살아 있는 다른 요청은 파괴하지 않는다 (⛔ 로 막혔다면 노드 agent 계정에서: python3 -m automation.release_abandon --version <v> --head <sha> --message-id <id> --reason <why>)"
   if ! post_request; then

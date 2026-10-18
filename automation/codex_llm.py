@@ -11,6 +11,8 @@ and every call fell through to the fallback without anyone choosing that.
 That is why the call does NOT pass ``--ignore-user-config``: that flag drops the
 user config and, with it, the fallback chain. This client makes one subprocess call
 and never retries on its own; when the whole Hermes chain fails, the error propagates.
+The release-installed omo-relay mode instead uses workstation SSH stdin and one
+transport retry. Its model is selected solely by the workstation's omo settings.
 """
 
 from __future__ import annotations
@@ -106,6 +108,7 @@ class CodexClient:
     binary: str
     home: str
     timeout: float = DEFAULT_TIMEOUT
+    relay: bool = False
 
     @classmethod
     def from_environment(
@@ -118,9 +121,20 @@ class CodexClient:
         home = (source.get("HOME") or "").strip()
         if not home:
             raise CodexUnavailableError("HOME is unset; Codex OAuth credentials cannot be located")
-        return cls(binary=_resolve_binary(source, home), home=home, timeout=timeout)
+        from automation.omo_relay_policy import enabled
+
+        try:
+            relay = enabled(Path(home))
+        except (OSError, ValueError):
+            raise CodexUnavailableError("omo relay mode is unreadable or invalid") from None
+        return cls(binary="ssh" if relay else _resolve_binary(source, home),
+                   home=home, timeout=timeout, relay=relay)
 
     def argv(self, prompt: str) -> list[str]:
+        if self.relay:
+            from automation.omo_relay.client import argv
+
+            return argv(Path(self.home))
         return [self.binary, "-z", prompt, "-t", _TASK_MODE]
 
     def complete(self, prompt: str, *, timeout: float | None = None) -> str:
@@ -130,6 +144,8 @@ class CodexClient:
         cannot; this client itself never retries. Raises :class:`CodexUnavailableError`
         when no route answers and :class:`CodexError` when it answers with nothing.
         """
+        if self.relay:
+            return self.complete_served(prompt, timeout=timeout).text
         return self._run(self.argv(prompt), timeout)
 
     def complete_served(self, prompt: str, *, timeout: float | None = None) -> Served:
@@ -138,6 +154,10 @@ class CodexClient:
         The report lives in a private temp file that is removed after the call; a
         missing or unreadable report yields ``unknown`` instead of assuming Codex.
         """
+        if self.relay:
+            from automation.omo_relay.client import complete
+
+            return complete(self.home, prompt, self.timeout if timeout is None else timeout)
         handle, name = tempfile.mkstemp(prefix="autophagy-usage-", suffix=".json")
         os.close(handle)
         usage = Path(name)
