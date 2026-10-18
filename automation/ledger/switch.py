@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import ParamSpec, TypeVar
 
 from automation.ledger_policy import CARD_LINE as CARD_LINE, SURFACE as SURFACE, surface as surface
-from .store import Store, default_path
+from automation.ledger import __main__ as ledger_cli
+from automation.ledger.store import Store, default_path
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -34,7 +35,7 @@ def enabled() -> bool:
 def command_prefix() -> tuple[str, ...]:
     if not enabled():
         return ("hermes", "kanban")
-    return (sys.executable, "-B", str(Path(__file__).with_name("__main__.py")))
+    return (sys.executable, "-B", str(Path(ledger_cli.__file__)))
 
 
 @contextmanager

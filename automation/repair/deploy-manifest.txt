@@ -1,7 +1,7 @@
 # 수리 보고 소비자는 agent no-agent cron이 계정 홈 스크립트를 직접 실행한다.
 agent|automation/repair/cron/repair_report_consume_watch.py|.hermes/scripts/repair_report_consume_watch.py|required
 # 소비자 런타임: 세대 디렉터리(.current.d/<세대>/automation/…)를 가리키는 링크 하나로 바뀐다.
-agent|automation|.hermes/repair-report-runtime/.current|v2:tree;prefix=automation;files=__init__.py,node_config.py,notice_bot.py,interop/__init__.py,interop/chunker.py,interop/discord_transport.py,interop/report.py,repair/__init__.py,repair/repair_capability.py,repair/repair_report_consumer.py,repair/repair_report_queue.py,repair/repair_report_send.py
+agent|automation|.hermes/repair-report-runtime/.current|v2:tree;prefix=automation;files=__init__.py,ledger_policy.py,ledger/__init__.py,ledger/__main__.py,ledger/store.py,ledger/switch.py,node_config.py,notice_bot.py,interop/__init__.py,interop/chunker.py,interop/discord_transport.py,interop/report.py,repair/__init__.py,repair/repair_capability.py,repair/repair_report_consumer.py,repair/repair_report_queue.py,repair/repair_report_send.py
 agent|configs/node.example.toml|.hermes/repair-report-runtime/.current/automation/node.example.toml|v2:file
 # 실행 경로에서 빠진 옛 사본 — 격리 후보(todo 34). 지우지 않는다.
 agent|automation/repair|.hermes/repair|v2:tree;policy=retired;reason=detect-runs-the-release-runtime-copy
