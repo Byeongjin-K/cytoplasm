@@ -136,6 +136,8 @@ class DiscordTransport:
     def api(
         self, method: str, path: str, payload: dict[str, JsonValue] | None = None
     ) -> JsonValue:
+        from automation.notice_bot import resolve_token
+
         attempt = 0
         while True:
             attempt += 1
@@ -146,7 +148,7 @@ class DiscordTransport:
                     f"/api/v10{path}",
                     body=None if payload is None else json.dumps(payload).encode("utf-8"),
                     headers={
-                        "Authorization": f"Bot {self.token}",
+                        "Authorization": f"Bot {resolve_token(self.token)}",
                         "Content-Type": "application/json",
                         "User-Agent": _USER_AGENT,
                     },

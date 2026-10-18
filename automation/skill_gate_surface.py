@@ -135,12 +135,11 @@ class SupplyChainSurface:
     owner: str
     directory: ChannelDirectory
     pinned: str | None = None
+    new_pinned: str | None = None
 
     def new(self) -> ApprovalBinding:
         """Decide, once, where a brand-new supply-chain approval must be posted."""
-        from automation.notice_bot import notice_channel
-
-        return resolve_new_binding(self.kind, self.directory, self.owner, notice_channel() or self.pinned)
+        return resolve_new_binding(self.kind, self.directory, self.owner, self.new_pinned or self.pinned)
 
     def stored(self, record: Mapping[str, str]) -> ApprovalBinding:
         """Replay a record's own binding; a pre-schema record drains through the migrator."""
@@ -168,8 +167,11 @@ class SupplyChainSurface:
 
 def surface_for(kind: ApprovalKind, identity: GateIdentity) -> SupplyChainSurface:
     """Bind one declared kind to this process's directory and the operator's channel pin."""
+    from automation.notice_bot import notice_channel
+
     config = identity.interop_config
-    return SupplyChainSurface(kind, owner_id(config), identity.directory(), pinned_channel_id(config))
+    return SupplyChainSurface(kind, owner_id(config), identity.directory(), pinned_channel_id(config),
+                              notice_channel())
 
 
 def binding_of_post(kind: ApprovalKind, channel_id: str) -> ApprovalBinding:

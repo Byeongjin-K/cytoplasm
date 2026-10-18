@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import replace
 from urllib.error import URLError
 
@@ -11,7 +12,7 @@ from automation import notice_bot, owner_notice, skill_gate_surface
 from automation.cron_timer import Job
 from automation.cron_timer_run import deliver
 from automation.interop import discord_transport, reaction_approval
-from automation.interop.approval_surface import ApprovalKind, ChannelFacts
+from automation.interop.approval_surface import ApprovalKind
 from tests.unit.test_notice_bot import CHANNEL, OLD, VALUE, installed
 
 
@@ -49,6 +50,25 @@ def test_reaction_transport_resolves_explicit_legacy_token(switched):
     assert reaction_approval.DiscordTransport(OLD, "123").token == VALUE
 
 
+def test_existing_reaction_transport_picks_up_cutover_before_post(switched, monkeypatch):
+    (switched / notice_bot.OVERRIDE).unlink()
+    transport = reaction_approval.DiscordTransport(OLD, "123")
+    installed(switched)
+    headers = []
+    class Connection:
+        def request(self, method, path, **kwargs):
+            headers.append(kwargs["headers"]["Authorization"])
+        def getresponse(self):
+            from types import SimpleNamespace
+
+            return SimpleNamespace(status=200, read=lambda: b'{"id":"456"}')
+        def close(self):
+            return None
+    monkeypatch.setattr(reaction_approval, "HTTPSConnection", lambda *a, **k: Connection())
+    assert transport.post_message(CHANNEL, "test") == "456"
+    assert headers == [f"Bot {VALUE}"]
+
+
 def test_timer_ignores_both_legacy_token_and_home_thread(switched):
     (switched / ".hermes/.env").write_text(
         f'DISCORD_BOT_TOKEN="{OLD}"\nDISCORD_HOME_CHANNEL_THREAD_ID=555555555555555555\n'
@@ -61,10 +81,12 @@ def test_timer_ignores_both_legacy_token_and_home_thread(switched):
 
 def test_supply_chain_new_and_stored_bindings_preserve_their_own_channels(switched):
     previous = "555555555555555555"
-    class Directory:
-        def describe(self, channel):
-            return ChannelFacts(0, "custom-name", (), guild_id="123")
-    surface = skill_gate_surface.SupplyChainSurface(ApprovalKind.RELEASE, "123", Directory(), previous)
+    config = switched / "interop.json"
+    config.write_text(json.dumps({"owner_id": "123", "deploy_approvals_channel_id": previous}))
+    def api(method, path, payload=None):
+        return {"type": 0, "name": "custom-name", "recipients": [], "guild_id": "123"}
+    identity = skill_gate_surface.GateIdentity(OLD, api, switched / "gate", config)
+    surface = skill_gate_surface.surface_for(ApprovalKind.RELEASE, identity)
     fresh = surface.new()
     assert fresh.channel_id == CHANNEL
     record = {"kind": fresh.kind.value, "surface": fresh.surface.value,
