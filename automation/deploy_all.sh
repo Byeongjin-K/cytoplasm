@@ -331,9 +331,6 @@ case "$mode" in
       # Execute the node's signed runtime, never copy workstation code for removal.
       retire_peer || exit 4
     fi
-    if [[ "$product_mode" == retired ]]; then
-      retire_hermes_product || exit 4
-    fi
     if [[ "$auto_kinds" != off ]]; then
       converge_auto_write || exit 4
     fi
@@ -443,7 +440,9 @@ case "$mode" in
     if (( ledger_change )) || [[ "$ledger_mode" == on ]]; then
       converge_ledger || exit 4
     fi
-    # Recheck product paths a deployer may have recreated, after ledger migration.
+    # Recheck product paths a deployer may have recreated, after ledger migration. The Hermes
+    # product removal runs only here, after every deployer (2026-10-19: v2.3.0/v2.4.0 stopped at
+    # an early retirement step with nothing else applied).
     if [[ "$peer_mode" == retired ]]; then
       retire_peer || exit 4
     fi

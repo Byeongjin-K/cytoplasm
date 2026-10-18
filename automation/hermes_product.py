@@ -18,12 +18,14 @@ from automation.hermes_product_policy import CARD_LINES as CARD_LINES, SURFACE a
 MARKER: Final = ".hermes/hermes-product-retired"
 TARGETS: Final = (
     ".hermes/state.db", ".hermes/state.db-wal", ".hermes/state.db-shm",
-    ".hermes/sessions", ".hermes/memories", ".hermes/SOUL.md", ".hermes/skills",
+    ".hermes/sessions", ".hermes/memories", ".hermes/skills",
     ".hermes/models_dev_cache.json", ".hermes/models_dev_cache.etag",
     ".hermes/gateway_state.json", ".hermes/gateway-generation.json",
     ".hermes/gateway-starts.log", ".hermes/gateway-stopped-by-release",
 )
-BACKUP_NAMES: Final = ("SOUL.md", "kanban.db")
+# SOUL.md stays: memory_relocate declares it (hermes-soul-recall config) and the release keeps
+# its recall line, so it is a live file until the 0a83 move gives the runtime a new home.
+BACKUP_NAMES: Final = ("kanban.db",)
 HEAD: Final = re.compile(r"[0-9a-f]{40}\Z")
 
 

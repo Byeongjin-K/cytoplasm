@@ -20,7 +20,7 @@ from tests.unit.test_healthcheck_wrapper_release import _fake_plan, _plan_args, 
 
 HEAD = "a" * 40
 KEPT = (".local/bin/hermes", ".hermes/hermes-agent/cli.py", ".hermes/config.yaml",
-        ".hermes/auth.json", ".hermes/USER.md", ".hermes/scripts/our_runtime.py")
+        ".hermes/auth.json", ".hermes/USER.md", ".hermes/scripts/our_runtime.py", ".hermes/SOUL.md")
 
 
 def _home(tmp_path: Path) -> tuple[Path, Path]:
@@ -38,9 +38,9 @@ def _home(tmp_path: Path) -> tuple[Path, Path]:
     return home, runtime
 
 
-def _remove(home: Path, runtime: Path, head: str = HEAD) -> Path:
+def _remove(home: Path, runtime: Path, head: str = HEAD, *, verified: bool = False) -> Path:
     return product.remove(home, head, runtime=runtime, proc_reader=lambda: (),
-                          verify_migration=lambda: False)
+                          verify_migration=lambda: verified)
 
 
 @pytest.mark.parametrize("value", [b"", b"retired\n", b"active", b" retired", b"\xff"])
@@ -112,15 +112,16 @@ def test_only_listed_targets_removed_with_verified_private_backup(tmp_path: Path
     originals = {name: (home / name).read_bytes() for name in KEPT}
     soul = (home / ".hermes/SOUL.md").read_bytes()
     kanban = (home / ".hermes/kanban.db").read_bytes()
+    assert ".hermes/SOUL.md" not in product.TARGETS
     folder = _remove(home, runtime)
     assert all(not (home / name).exists() for name in product.TARGETS)
     assert all((home / name).read_bytes() == data for name, data in originals.items())
     assert (home / ".hermes").is_dir()
     assert (home / ".hermes/kanban.db").read_bytes() == kanban
     assert (home / product.MARKER).read_text() == HEAD
-    assert {p.name for p in folder.iterdir()} == {"SOUL.md", "kanban.db", "sha256.json"}
+    assert (home / ".hermes/SOUL.md").read_bytes() == soul  # a declared live file stays
+    assert {p.name for p in folder.iterdir()} == {"kanban.db", "sha256.json"}
     assert json.loads((folder / "sha256.json").read_text()) == {
-        "SOUL.md": hashlib.sha256(soul).hexdigest(),
         "kanban.db": hashlib.sha256(kanban).hexdigest(),
     }
     assert all(p.stat().st_mode & 0o777 == 0o600 for p in folder.iterdir())
@@ -130,9 +131,9 @@ def test_bad_backup_hash_refuses_before_any_deletion(tmp_path: Path) -> None:
     home, runtime = _home(tmp_path)
     folder = home / ".hermes/retired/hermes-product" / HEAD
     product.backup(home, folder)
-    (folder / "SOUL.md").write_bytes(b"tampered")
+    (folder / "kanban.db").write_bytes(b"tampered")
     with pytest.raises(ValueError, match="백업 해시"):
-        _remove(home, runtime)
+        _remove(home, runtime, verified=True)
     assert (home / ".hermes/state.db").exists()
     assert (home / ".hermes/SOUL.md").exists()
     assert not (home / product.MARKER).exists()
@@ -141,9 +142,9 @@ def test_bad_backup_hash_refuses_before_any_deletion(tmp_path: Path) -> None:
 def test_source_change_after_backup_refuses_before_deletion(tmp_path: Path) -> None:
     home, runtime = _home(tmp_path)
     product.backup(home, home / ".hermes/retired/hermes-product" / HEAD)
-    (home / ".hermes/SOUL.md").write_bytes(b"new source")
+    (home / ".hermes/kanban.db").write_bytes(b"new source")
     with pytest.raises(ValueError, match="백업 뒤 원본"):
-        _remove(home, runtime)
+        _remove(home, runtime, verified=True)
     assert (home / ".hermes/state.db").exists()
 
 
@@ -310,7 +311,7 @@ def test_deploy_refuses_unapproved_product_before_removal(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("selected", [True, False])
-def test_deploy_runs_approved_product_after_peer_at_both_sites(
+def test_deploy_runs_approved_product_once_after_every_other_step(
     tmp_path: Path, selected: bool,
 ) -> None:
     from tests.unit.test_hermes_gateways_stop import _host
@@ -336,14 +337,14 @@ def test_deploy_runs_approved_product_after_peer_at_both_sites(
     assert result.returncode == 0, result.stdout + result.stderr
     calls = (tmp_path / "calls").read_text().splitlines()
     products = [i for i, line in enumerate(calls) if "automation.hermes_product --remove" in line]
-    assert len(products) == (2 if selected else 0)
+    assert len(products) == (1 if selected else 0)
     for index in products:
         assert "authorize-hermes-product --head " + HEAD in calls[index - 1]
         assert "sudo -n -u agent -H env PYTHONPATH=" in calls[index]
         assert any("automation.p5_remove --role peer" in line for line in calls[:index])
     if selected:
         peer_calls = [i for i, line in enumerate(calls) if "automation.p5_remove --role peer" in line]
-        assert peer_calls[0] < products[0] < peer_calls[1] < products[1]
+        assert products[0] > max(peer_calls)  # only after the final peer recheck
 
 
 def test_cli_switch_does_not_read_processes_or_remove(tmp_path: Path) -> None:

@@ -67,11 +67,11 @@ RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에�
 
 릴리스 호스트 `~/.hermes/release-flags/hermes-product`에 줄바꿈 없는 `retired`를
 두면 `hermes-product:retired` 표면과 제거 범위가 릴리스 승인 카드에 붙는다.
-같은 HEAD의 소유자 승인을 확인한 뒤 기존 P5 제거 다음에 agent 계정으로 실행한다.
+같은 HEAD의 소유자 승인을 확인한 뒤, 전량 적용의 **맨 끝**(모든 배포기·장부 이관·P5 재확인 뒤)에 agent 계정으로 한 번 실행한다. 거부하면 적용은 멈추지만 다른 수렴은 이미 끝난 뒤다(v2.3.0·v2.4.0 은 앞쪽 퇴역 단계에서 멈춰 아무것도 적용되지 않았다).
 스위치 부재는 무동작이며 잘못된 값은 거부한다. 스위치 삭제는 **자동 복원하지 않는다**.
 
 제거 범위는 `~/.hermes/` 아래 `state.db`와 `-wal`·`-shm`, `sessions/`,
-`memories/`, `SOUL.md`, `skills/`, `models_dev_cache.json`·`.etag`,
+`memories/`, `skills/`, `models_dev_cache.json`·`.etag`,
 `gateway_state.json`, `gateway-generation.json`, `gateway-starts.log`,
 `gateway-stopped-by-release`뿐이다. `kanban.db`는 작은 장부의 `metadata`에
 같은 트랜잭션으로 기록된 `migration`(보드·카드·상태 개수)·`source` 지문과
@@ -85,11 +85,12 @@ RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에�
 예: 승인 후 사용하지 않는 세션·캐시만 제거되고 배치 호출과 우리 워처는 유지된다.
 반대로 대상 경로를 사용자 유닛(드롭인 포함)·같은 uid의 프로세스 열린 파일/cwd·
 런타임 배포 선언 목적지가 사용하면 이유별 한 줄을 내고 **첫 삭제 전 거부**한다.
-판독 불가도 거부한다. 현재 `memory_relocate` 선언의 `SOUL.md`처럼 제품 경로가
-선언에 남아 있으면 먼저 그 의존을 정리해야 하며 자동으로 선언을 무시하지 않는다.
+판독 불가도 거부한다. 선언에 남은 경로는 자동으로 무시하지 않는다 — 그래서 `SOUL.md`는
+대상이 아니다: `memory_relocate` 가 `hermes-soul-recall` 설정으로 선언하고 릴리스가 회상 줄을
+유지하는 살아 있는 파일이라 0a83 이전 단계에서 다룬다.
 
-Q248 백업은 `~/.hermes/retired/hermes-product/<승인 HEAD>/`의 `SOUL.md`와
-`kanban.db` 원본 및 `sha256.json`뿐이다(0600, fsync, 해시 재조회).
+Q248 백업은 `~/.hermes/retired/hermes-product/<승인 HEAD>/`의 `kanban.db` 원본과
+`sha256.json`뿐이다(0600, fsync, 해시 재조회).
 세션·메모리·state.db는 백업하지 않아 복구할 수 없다. P5가 먼저 제거한 파일의
 원본은 기존 P5 백업에 남으며 카드 C가 없는 원본을 만들어내지는 않는다.
 중단 후 재실행도 기존 백업·원본 해시를 대조하고, 완료 표식은 삭제가 끝난 마지막에 쓴다.
@@ -97,7 +98,7 @@ Q248 백업은 `~/.hermes/retired/hermes-product/<승인 HEAD>/`의 `SOUL.md`와
 
 복원할 때는 제거 스위치를 먼저 없애 다음 릴리스의 재삭제를 막고,
 사용 중인 경로가 없는 상태에서 `sha256.json`과 백업 파일의 SHA-256을 대조한 뒤
-필요한 `SOUL.md`·`kanban.db`만 원래 `~/.hermes/` 위치에 0600으로 복사한다.
+`kanban.db`를 원래 `~/.hermes/` 위치에 0600으로 복사한다.
 장부 DB는 삭제하거나 역동기화하지 않는다. 배치 호출 설정·로그인 파일은 애초에 제거하지 않는다.
 
 관련: `automation/hermes_product.py`, `automation/hermes_product_live.py`,
