@@ -127,12 +127,13 @@ jobs:
           with open(sys.argv[1], "w", encoding="utf-8") as stream:
               stream.write(f"ssh-ed25519 {material} ci-clean-host\n")
           PY
-          python3 -m automation.install --update-trust-key "$key" --dry-run
+          python3 -m automation.install --dry-run
+          python3 -m automation.install --profile core --update-trust-key "$key" --dry-run
 
       - name: Dori profile dry-run on a bare interpreter
         run: |
           set -euo pipefail
-          python3 -m automation.install.dori --dry-run --role okdori --role moodori
+          python3 -m automation.install --dry-run --role okdori --role moodori
 
       - name: Third-party boundary tests on a bare interpreter
         run: |

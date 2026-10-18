@@ -15,22 +15,22 @@ from typing import Final
 from automation.doctor.capabilities import CAPABILITIES
 from automation.install.assets import render_node_toml as _render_config
 from automation.install.owner_actions import FOLLOW_UP_HEADING
-from automation.install.profiles import HEALTHCHECK_DECLARATION_PATH
+from automation.install.profiles import DEFAULT_PROFILE, HEALTHCHECK_DECLARATION_PATH
 from automation.node_config import default_node_config
 
 DEFAULT_ORIGIN_URL: Final = "https://github.com/orientpine/cytoplasm.git"
 DOCTOR_ARGV: Final = ("python3", "-m", "automation.doctor")
 
 PROFILE_MENU: Final = (
-    ("core", "기본 에이전트 — 게이트웨이·승인 게이트·자동 업데이트"),
-    ("rag", "기본 + 개인 RAG(검색·임베딩·Qdrant)"),
-    ("report-hub", "기본 + Lab report-hub(콜렉터·대시보드)"),
-    ("full", "전부(기본 + report-hub + RAG)"),
     ("dori", "도리 — 리드(짱돌)·비서(유돌) 기본 구성, 옥돌·무돌은 선택(root·신뢰키 불필요)"),
+    ("core", "레거시 Hermes — 게이트웨이·승인 게이트·자동 업데이트"),
+    ("rag", "레거시 Hermes + 개인 RAG(검색·임베딩·Qdrant)"),
+    ("report-hub", "레거시 Hermes + Lab report-hub(콜렉터·대시보드)"),
+    ("full", "레거시 Hermes 전부(기본 + report-hub + RAG)"),
 )
 
 #: 도리 프로필은 Hermes 설치기(`PROFILES`)가 아니라 `automation.install.dori` 로 간다.
-DORI_PROFILE: Final = "dori"
+DORI_PROFILE: Final = DEFAULT_PROFILE
 
 
 def dori_argv(roles: tuple[str, ...], owner_call: str | None, *, dry_run: bool) -> tuple[str, ...]:

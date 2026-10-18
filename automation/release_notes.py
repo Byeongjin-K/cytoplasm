@@ -87,7 +87,10 @@ def major_note(plan: ReleasePlan) -> str:
     """카드가 싣는 운영자 경보 한 줄 — 신호가 없으면 빈 문자열이다."""
     if not plan.major_signals:
         return ""
-    return f"MAJOR: 운영자 조치 필요 — {', '.join(plan.major_signals)}"
+    note = f"MAJOR: 운영자 조치 필요 — {', '.join(plan.major_signals)}"
+    if "automation/install/profiles.py:DEFAULT_PROFILE" in plan.major_signals:
+        note += "\nP5 삭제 미포함: 멈춘 Hermes 잡·peer 계정·게이트웨이 유닛은 보존."
+    return note
 
 
 def _sections(commits: tuple[ReleaseCommit, ...]) -> tuple[tuple[str, tuple[str, ...]], ...]:

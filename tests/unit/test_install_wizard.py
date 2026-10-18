@@ -245,7 +245,7 @@ def test_the_wizard_asks_for_what_the_flags_did_not_give(
 
     answers = _answers(tmp_path)
     fake = _Fake(
-        ["2", answers.origin_url, answers.node_name, answers.operator_account, "", "n"],
+        ["3", answers.origin_url, answers.node_name, answers.operator_account, "", "n"],
         dry_run_output=_real_dry_run(tmp_path, capsys),
     )
 

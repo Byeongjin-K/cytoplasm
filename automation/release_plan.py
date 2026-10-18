@@ -126,6 +126,7 @@ def major_signals(repo: Path, *, base: str, head: str) -> tuple[str, ...]:
     watched = (
         ("automation/interop/approval_surface.py", "POLICY_VERSION"),
         ("automation/node_config.py", "_FIELD_NAMES"),
+        ("automation/install/profiles.py", "DEFAULT_PROFILE"),
     )
     signals: list[str] = []
     for path, name in watched:

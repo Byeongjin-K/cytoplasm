@@ -7,6 +7,24 @@
 
 ---
 
+## 도리로 시작하기 (기본)
+
+```bash
+python3 -m automation.install --dry-run
+python3 -m automation.install.wizard
+```
+
+마법사 첫 선택·빈 입력·비대화 프로필 생략은 도리다. root·Hermes·업데이트 신뢰키
+옵션 없이 포크·CLI·역할을 준비한다. 실제 설치에는 git·Bun이 필요하고,
+역할별 봇·채널·모델 로그인은 자기 것으로 구성한다.
+`quickstart.sh --dry-run-only`도 같은 기본 경로를 쓴다.
+선택 역할은 마법사 `--dori-role okdori|moodori`, 직접 설치기 `--role okdori|moodori`다.
+단계와 제한은 [설치 가이드](install.md#도리-기본-설치-p6)가 소유한다.
+
+**이하 §1–§8은 명시적 레거시 Hermes 프로필용 안내**다.
+기존 노드를 P6로 업데이트할 때는 설치기를 재실행하지 않고
+[업그레이드·복구 절차](install.md#p6-기존-노드-업그레이드와-복구)를 따른다.
+
 ## 1. 받은 것
 
 | 받은 것 | 무엇인가 |
@@ -39,6 +57,7 @@ systemd 타이머라서 systemd 없는 컨테이너는 계획 확인용이다. �
 ```bash
 cd ~/autophagy-agents
 python3 -m automation.install.wizard \
+    --profile core \
     --update-trust-key <bundle>/update-trust.pub
 ```
 
@@ -69,14 +88,15 @@ python3 -m automation.install.wizard \
 
 ```bash
 automation/install/quickstart.sh \
+    --profile core \
     --config /tmp/node.toml \
     --update-trust-key <bundle>/update-trust.pub \
     --expect-update-trust-fingerprint 'SHA256:<공지된-지문>' \
     --yes
 ```
 
-셸 래퍼는 `--profile`을 받지 않는다. 프로필을 쓰는 자동화는 마법사에 값과 `--yes`를
-주거나 설치기를 직접 호출한다. `--group-roster` / `--expect-group-skill-fingerprint`는
+셸 래퍼도 `--profile core|rag|report-hub|full`을 받는다. 레거시 프로필 없이 노드 옵션만
+주면 거부한다. `--group-roster` / `--expect-group-skill-fingerprint`는
 마법사 옵션이 아니라 셸 래퍼·설치기 옵션이다 — 그룹 가입은
 [manual-member.md §3](manual-member.md)가 소유한다.
 

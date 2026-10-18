@@ -26,8 +26,8 @@ cytoplasm 은 그대로 제품 저장소이고, 이 폴더가 그 위에 **도�
 ## 설치
 
 ```bash
-python3 -m automation.install.wizard            # 메뉴에서 5. dori
-python3 -m automation.install.dori --dry-run    # 계획만 (쓰기·네트워크 없음)
+python3 -m automation.install.wizard            # 메뉴에서 1. dori (기본)
+python3 -m automation.install --dry-run         # 계획만 (쓰기·네트워크 없음)
 python3 -m automation.install.dori --role okdori --owner-call 형
 ```
 
@@ -51,5 +51,6 @@ python3 -m automation.install.dori --role okdori --owner-call 형
   포크는 커밋 고정 의존), 공개 기본 구성은 리드+비서·옥돌·무돌은 선택, 고정 커밋 PR 로만 올림.
 - 유돌 아바타: 00:16 KST "1번 좋네!"(말랑 젤리 비서판).
 
-이 단계는 층만 더한다. 노드에서 돌고 있는 기존 게이트웨이 동작은 바뀌지 않는다. 수리 티켓
-잡의 이전과 peer 제거는 다음 단계다.
+저장소 층은 P6에서 기본 설치 경로가 됐다. 기존 노드의 멈춘 Hermes·peer·잡은 삭제하지 않는다.
+P5 제거는 별도 결정이며 [메이저 소개](../docs/기능소개/도리-기반-메이저.md)와
+[업그레이드 가이드](../docs/guide/install.md#p6-기존-노드-업그레이드와-복구)가 경계를 설명한다.

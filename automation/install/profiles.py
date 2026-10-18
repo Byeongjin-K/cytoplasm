@@ -25,6 +25,7 @@ class InstallProfile:
 
 
 HEALTHCHECK_DECLARATION_PATH: Final = Path("/etc/autophagy/healthcheck.env")
+DEFAULT_PROFILE: Final = "dori"
 
 #: 프로필로 설치하면 doctor 알람 워처가 함께 온다 — 설치 뒤 끊긴 연결을 사람이 기억해 확인할 필요가 없다.
 _DOCTOR: Final = "doctor-watch"
