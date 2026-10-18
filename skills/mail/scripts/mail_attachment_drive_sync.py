@@ -93,7 +93,8 @@ def sync(
     """Execute a stable plan; failed items remain unrecorded for the next tick."""
     state = archive.state_connection()
     try:
-        download_failed = 0 if dry_run else retry.recover(state)
+        if not dry_run:
+            retry.recover(state)
         items, bogus, missing = archive.discover()
         pending, skipped, prior_ids = archive.plan(state, items, limit)
         if dry_run:
@@ -114,8 +115,8 @@ def sync(
             return item, digest, parent_id, file_id
 
         uploaded = 0
-        failed = download_failed
-        failure_code = "download_failed" if download_failed else ""
+        failed = 0
+        failure_code = ""
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = [pool.submit(upload, item) for item in pending]
             for future in concurrent.futures.as_completed(futures):

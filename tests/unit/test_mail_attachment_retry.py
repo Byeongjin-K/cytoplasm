@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -39,7 +40,12 @@ class FakeDrive:
 
 @pytest.fixture
 def old_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Seed an exhausted October 15 row and the pre-migration archive table."""
+    """Seed a recent recoverable row and the pre-migration archive table."""
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 18, tzinfo=timezone.utc)
+    monkeypatch.setattr(syncer.retry, "datetime", Clock)
     source = tmp_path / "state.db"
     with sqlite3.connect(source) as db:
         db.executescript("""
@@ -49,7 +55,7 @@ def old_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
               status TEXT, attempts INTEGER, href TEXT, size_bytes INTEGER);
             INSERT INTO messages VALUES ('u1', '2026-10-15T10:00:00', 'inbox');
             INSERT INTO attachments VALUES
-              ('u1','report.pdf',NULL,1792000000,'fail',5,'/attachment/1',3);
+              ('u1','report.pdf',NULL,1792000000,'fail',0,'/attachment/1',3);
         """)
     state_dir = tmp_path / "archive"
     state_dir.mkdir()
@@ -108,7 +114,7 @@ def test_cap_sends_one_notice_and_stops_fetching(old_state: Path, monkeypatch) -
     assert len(notices) == 1
     assert "2026-10-15" in notices[0] and "report.pdf" in notices[0]
     assert "\n" not in notices[0] and "/attachment/" not in notices[0]
-    assert [result["failed"] for result in results] == [1, 1, 1, 1, 0, 0, 0, 0]
+    assert [result["failed"] for result in results] == [0] * 8
 
 
 def test_failed_notice_is_retried_next_tick(old_state: Path, monkeypatch) -> None:
@@ -131,14 +137,16 @@ def test_failed_notice_is_retried_next_tick(old_state: Path, monkeypatch) -> Non
 
 def test_old_failed_row_is_retried_without_losing_archived_rows(old_state: Path, monkeypatch) -> None:
     # Given: the old MailOn retry counter is already exhausted.
+    with sqlite3.connect(old_state) as db:
+        db.execute("UPDATE attachments SET attempts=5")
     monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: _recover(old_state))
     drive = FakeDrive()
     # When: the first upgraded tick runs.
     result = syncer.sync(client=drive)
-    # Then: it recovers immediately, preserving the historical archive row.
-    assert result["uploaded"] == 1
+    # Then: MailOn exhaustion is out of scope, preserving the historical archive row.
+    assert result["uploaded"] == 0
     with sqlite3.connect(archive.STATE_DB) as db:
-        assert db.execute("SELECT COUNT(*) FROM archived").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM archived").fetchone()[0] == 1
 
 
 def test_missing_ok_file_is_refetched(old_state: Path, monkeypatch) -> None:
@@ -246,7 +254,8 @@ def test_owner_facade_gets_the_single_notice_line(old_state, monkeypatch) -> Non
 
     notices: list[str] = []
 
-    def fake(text: str, *, message) -> bool:
+    def fake(text: str, *, message, fault) -> bool:
+        assert fault
         notices.append(render(message, destination=Ref(scope="channel", space="guild", guild_id="1", channel_id="2")))
         return False
     monkeypatch.setattr(owner_notice, "notify_owner", fake)
