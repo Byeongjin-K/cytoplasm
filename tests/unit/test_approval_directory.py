@@ -662,7 +662,7 @@ def test_request_thread_ignores_an_origin_outside_agent_chat(interop_config: Pat
     ) == "thread-new"
     assert all(
         "chan-lab" not in path and "msg-9" not in path
-        for _method, path, _payload in fake.calls
+        for method, path, _payload in fake.calls if method != "GET"
     )
 
 

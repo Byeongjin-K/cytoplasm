@@ -47,6 +47,8 @@ def body_attachment(draft: Mapping[str, JsonValue]) -> BodyAttachment:
 def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     """Replay old summary bytes or select the new version over attachment-v1."""
     from automation.interop.approval_card import CardRenderError
+    if draft.get("render_version") == "4":
+        return _summary_v4(draft, instruction)
     if draft.get("bcc"):
         return _summary_v3(draft, instruction)
 
@@ -69,6 +71,18 @@ def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
         "본문: 첨부 파일 참조",
         f"- 반응(기본): {instruction}",
     ))
+
+
+def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
+    recipients = f"- To: {draft['to']}\n- Cc: {draft.get('cc') or '-'}"
+    if draft.get("bcc"):
+        from mail_bcc import summary as bcc_summary
+
+        recipients = bcc_summary(str(draft["to"]), str(draft.get("cc") or ""),
+                                 tuple(str(address) for address in draft["bcc"]))
+    size = body_attachment(draft).metadata["size"]
+    return "\n".join(("📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
+                      f"- 본문: 첨부 파일 참조 ({size} bytes)", instruction))
 
 
 def _summary_v3(draft: Mapping[str, JsonValue], instruction: str) -> str:
