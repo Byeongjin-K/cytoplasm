@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import secrets
 import sys
@@ -157,6 +158,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "surface_digests": [list(row) for row in sorted(surfaces)],
         "version": plan.version,
     }
+    try:
+        release_notes.save_detail(
+            Path(os.environ.get("RELEASE_NOTES_DIR") or Path.home() / ".hermes/release-notes"),
+            plan.head, tuple(sorted(surfaces)), release_notes.detail_body(plan),
+        )
+    except OSError as error:
+        print(f"RELEASE-PLAN-BLOCK: cannot save release detail: {type(error).__name__}", file=sys.stderr)
+        return 4
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 

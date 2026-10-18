@@ -144,6 +144,12 @@ release_note_previous_tag() { # release_note_previous_tag <repo_root> <tag> — 
 release_note_compose() { # release_note_compose <repo_root> <tag> <sha> <draft> <pubkey> > body
   local previous range fingerprint merges
   tail -n +2 -- "$4" | sed -e '/./,$!d'
+  # Saved by the host's plan command before approval; publishing retries keep this sibling.
+  local detail="${4%.md}.details.md"
+  if [[ -f "$detail" ]]; then
+    printf '\n'
+    cat -- "$detail" || return 1
+  fi
   previous="$(release_note_previous_tag "$1" "$2")"
   range="$3"
   [[ -z "$previous" ]] || range="$(git -C "$1" rev-parse "$previous^{commit}" 2>/dev/null)..$3"
