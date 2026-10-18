@@ -78,13 +78,17 @@ def verify_owner_origin(
             or author.get("bot") or str(message.get("id")) != message_id):
         raise JobRefused("origin message is not the owner's own message")
     guild = channel.get("guild_id")
+    from automation.interop.owner_message import discord_link
+
     if channel.get("type") == 1 and not guild:
-        space = "@me"
+        link = discord_link(space="dm", channel_id=channel_id, message_id=message_id)
     elif isinstance(guild, str) and guild.isdigit():
-        space = guild
+        link = discord_link(space="guild", guild_id=guild, channel_id=channel_id, message_id=message_id)
     else:
         raise JobRefused("origin channel could not be placed")
-    return Origin(channel_id, message_id, f"https://discord.com/channels/{space}/{channel_id}/{message_id}")
+    if not link.url:
+        raise JobRefused("origin message link could not be built")
+    return Origin(channel_id, message_id, link.url)
 
 
 def jobs_root(home: Path) -> Path:

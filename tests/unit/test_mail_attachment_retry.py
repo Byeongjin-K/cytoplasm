@@ -242,10 +242,16 @@ def test_owner_facade_gets_the_single_notice_line(old_state, monkeypatch) -> Non
     import mail_attachment_retry as retry
     from automation import owner_notice
 
+    from automation.interop.owner_message import render, Ref
+
     notices: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda text: notices.append(text) or False)
+
+    def fake(text: str, *, message) -> bool:
+        notices.append(render(message, destination=Ref(scope="channel", space="guild", guild_id="1", channel_id="2")))
+        return False
+    monkeypatch.setattr(owner_notice, "notify_owner", fake)
     # When: the facade reports failed delivery.
     delivered = retry.notify_exhausted("기관메일 첨부 보관 실패: 2026-10-15 · report.pdf")
     # Then: that result remains false so the caller keeps its pending notice.
     assert delivered is False
-    assert len(notices) == 1
+    assert len(notices) == 1 and "2026-10-15 · report.pdf" in notices[0]

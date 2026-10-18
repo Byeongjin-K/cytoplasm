@@ -36,10 +36,21 @@ def notify_exhausted(text: str) -> bool:
     if root not in sys.path:
         sys.path.insert(0, root)
     try:
+        from automation.interop.owner_message import Action, OwnerMessage, Ref, Result
         from automation.owner_notice import notify_owner
     except ImportError:
         return False
-    return notify_owner(text)
+    message = OwnerMessage(
+        subject_key="mail-attachment-archive-exhausted",
+        subject="기관메일 첨부 보관 실패",
+        fact=text,
+        location=Ref(scope="resource", search=("Drive", "기관메일 첨부 보관 폴더")),
+        owner=Action("none"),
+        agent_next="더 시도하지 않습니다. 원 메일에서 첨부를 직접 받아 주세요.",
+        recovery="not_applicable",
+        detail=Result("executed"),
+    )
+    return notify_owner(text, message=message)
 
 
 def _available(uid: str, filename: str) -> bool:
