@@ -1,3 +1,3 @@
-from automation.install.installer import main
+from automation.install.entrypoint import main
 
 raise SystemExit(main())

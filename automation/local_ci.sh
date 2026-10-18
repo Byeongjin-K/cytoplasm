@@ -69,8 +69,9 @@ material = base64.b64encode(blob).decode()
 with open(sys.argv[1], "w", encoding="utf-8") as stream:
     stream.write(f"ssh-ed25519 {material} ci-clean-host\n")
 PY
-python3 -m automation.install --update-trust-key "$key" --dry-run >/dev/null
-python3 -m automation.install.dori --dry-run --role okdori --role moodori >/dev/null
+python3 -m automation.install --dry-run >/dev/null
+python3 -m automation.install --profile core --update-trust-key "$key" --dry-run >/dev/null
+python3 -m automation.install --dry-run --role okdori --role moodori >/dev/null
 python3 -m pip install --disable-pip-version-check --quiet pytest
 python3 -m pytest tests/unit/test_install_third_party_boundary.py -q
 INNER_EOF

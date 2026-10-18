@@ -95,7 +95,8 @@ class _Arguments(argparse.Namespace):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python3 -m automation.install.wizard", add_help=True)
-    _ = parser.add_argument("--profile", default=None, help="core | rag | report-hub | full | dori")
+    _ = parser.add_argument("--profile", default=None,
+                            help="dori(기본) | 레거시 Hermes: core, rag, report-hub, full")
     _ = parser.add_argument("--origin-url", default=None)
     _ = parser.add_argument("--node-name", default=None)
     _ = parser.add_argument("--operator", default=None)
@@ -181,7 +182,14 @@ def main(argv: Sequence[str] | None = None, *, io: Console | None = None) -> int
     if args.profile is None and io.tty:
         _section(io, "⓪ 설치 방식")
         args.profile = _ask_profile(io)
+    if args.profile is None:
+        args.profile = DORI_PROFILE
     if args.profile == DORI_PROFILE:
+        if (args.config != _DEFAULT_CONFIG or args.update_trust_key is not None
+                or args.expect_update_trust_fingerprint is not None or args.with_component
+                or args.origin_url is not None or args.node_name is not None or args.operator is not None):
+            io.write("WIZARD-DORI-LEGACY-OPTIONS: 노드 옵션은 레거시 --profile core|rag|report-hub|full 에만 쓴다.\n")
+            return 2
         return _dori(io, args)
     try:
         if args.profile is not None:

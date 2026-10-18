@@ -28,11 +28,13 @@
 #
 # 사용:
 #   automation/install/quickstart.sh \
+#       --profile core \
 #       --config <node.toml> \
 #       --update-trust-key <bundle>/update-trust.pub \
 #       [--expect-update-trust-fingerprint 'SHA256:<공지된-지문>'] [옵션…]
 #
 # 옵션 (아래 7개는 설치기와 **같은 이름으로 그대로 전달**된다):
+#   --profile NAME                         레거시 경로만: core|rag|report-hub|full
 #   --config PATH                           (필수)
 #   --update-trust-key PATH                 (필수)
 #   --expect-update-trust-fingerprint STR
@@ -57,6 +59,22 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# 기본 경로는 도리 마법사다. 아래 기존 노드 설치는 명시적 레거시 프로필에만 남긴다.
+legacy=0
+previous=""
+for arg in "$@"; do
+  if [[ "$previous" == --profile ]]; then
+    case "$arg" in
+      core|rag|report-hub|full) legacy=1 ;;
+    esac
+  fi
+  previous="$arg"
+done
+if [[ "$legacy" -eq 0 ]]; then
+  cd "$REPO_ROOT"
+  exec python3 -m automation.install.wizard "$@"
+fi
 
 log()  { printf '[quickstart] %s\n' "$*"; }
 warn() { printf '[quickstart] WARN: %s\n' "$*" >&2; }
@@ -87,7 +105,7 @@ while [[ $# -gt 0 ]]; do
     --update-trust-key)
       require_value "$1" "${2:-}"; trust_key="$2"; shift 2 ;;
     --expect-update-trust-fingerprint|--discord-config|--group-roster|\
-    --expect-group-skill-fingerprint|--with-component)
+    --expect-group-skill-fingerprint|--with-component|--profile)
       require_value "$1" "${2:-}"; passthrough+=("$1" "$2"); shift 2 ;;
     --dry-run-only) dry_run_only=1; shift ;;
     --yes|--non-interactive) assume_yes=1; shift ;;

@@ -5,6 +5,12 @@
 **Generated:** 2026-07-20 · **Updated:** 2026-07-30 · **Commit:** 157dbd1 · **Branch:** main
 
 ## OVERVIEW
+P6 공개 설치 기본값은 도리다(`automation.install`·마법사·quickstart).
+고정 포크와 리드+YooDori 역할을 설치하며 Hermes 인프라는 명시적 레거시
+`--profile core|rag|report-hub|full`에만 남긴다. 아래 Hermes 런타임 설명은 기존 노드에
+적용된다. 기존 노드는 서명 릴리스로 업데이트하며 멈춘 잡·peer·유닛을 삭제하지 않는다.
+P5 제거는 별도 소유자 결정이다. [메이저 소개](docs/기능소개/도리-기반-메이저.md).
+
 cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전트와 상호운용하며, 설치별 `<primary-node>` / `<rag-node>` 역할로 구동한다. Python 3.12 **stdlib 중심**. 모든 대화·배치 모델 호출은 계정 `~/.hermes/config.yaml` 이 정한 주 모델(현재 `openai-codex/gpt-6.1-sol`, reasoning effort `medium` — 2026-10-02)을 쓰고, 그것이 답하지 못하면(쿼터·인증·전송) 같은 파일의 `fallback_providers`(현재 `xai-oauth/grok-4.7`)로 넘어가며 — 모델은 그 파일 한 곳이 정하고 코드는 적지 않는다(2026-09-29 소유자 결정) — 체인 전체가 실패하면 fail-closed로 전파한다. **모든 외부효과는 소유자(cha) 승인 게이트 경유** — 이것이 아키텍처의 중심 불변식이다.
 
 ## STRUCTURE
@@ -57,6 +63,7 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 |--------|------|----------|------|
 | `plaud_sync` 자동 쓰기 · `auto_write` | module | `automation/auto_write.py` · `automation/plaud_sync/effects_live.py` | Q231(2026-10-18): 호스트 `release-flags/auto-write-plaud`의 정확한 `on`을 릴리스 승인 표면에 묶고 node `auto-write/plaud.mode`를 배치하면 `planned` 노트를 카드 없이 기존 writer로 쓴다. 동결 SHA·클론 잠금·원격 재조회·재시도 불변. 기본 꺼짐·파일 삭제+재배포=카드 복구. 종류별 공용 `auto_write.record(kind, Entry)` 원장(0600, 본문 없음)과 `auto-write-daily-summary`(`30 21 * * *`, 계정 KST, systemd)가 「오늘 자동으로 쓴 것」을 한 번 보낸다(실패=워터마크 불변, 빈 날 침묵). 기존 아래 plaud 행의 건별 승인 설명은 꺼짐일 때의 경로이며 Q233의 나머지 6종 연결은 후속이다. [소개](docs/기능소개/plaud-노트-자동-쓰기.md) |
 | `notice_bot` · `notice_bot_release` | module | `automation/notice_bot.py` · `automation/notice_bot_release.py` | 릴리스 호스트 `notice-bot`의 정확한 `yoodori`가 발신 전환이다. 토큰 SHA-256만 승인 표면에 바인딩하고 기존 호스트 계정 래퍼가 읽은 비밀은 SSH stdin으로만 배치한다. agent·peer 홈과 ops `private_root`의 0600 override를 모든 노드 발신자가 단일 해석기로 우선 읽는다. 정지·채널 전환이 함께 있어야 켜며, 파일 삭제+재배포는 기존 토큰을 복구한다. `check --expected-id`는 GET만 하며 봇 ID·일치 여부만 출력한다. [소개](docs/기능소개/발신-봇-유돌.md) |
+| `install.entrypoint` | module | `automation/install/entrypoint.py` | P6 공개 설치 분기. 생략=`profiles.DEFAULT_PROFILE`(도리), 명시한 레거시 프로필만 기존 노드 설치기. 기본값 변경은 `release_plan.major_signals`가 메이저를 요구하고 신규 카드에 P5 삭제 미포함·보존을 표시한다. |
 | `digest_reaction_scan` | module | `skills/mail/scripts/digest_reaction_scan.py` | 게이트웨이 없는 P5 반응 경로. `mail_triage_watch.py --digest-reactions-only` → 반응만 읽는 CLI, 사용자 타이머 `mail-digest-reactions`(`every 20s`). 최근 3일 카드 최대 20개를 순환하고 429는 Retry-After만큼 다음 스캔을 미룬다. 기존 `digest_actions` claim과 러너 잠금 재사용, 2분 전체 틱 불변. [소개](docs/기능소개/다이제스트-게이트웨이-없는-반응.md) |
 | `memory_relocate.peer_mode` | module | `automation/memory_relocate/peer_mode.py` | P5 피어 은퇴 설정 `~/.hermes/memory-relocate/peer-mode.json`의 `peer_retired: true`. 릴리스 `deploy.sh`가 선언된 JSON 시드를 `push_file`로 쓰며 agent native 파일만 기존 정확한 글·백업 규칙으로 삭제하고 은퇴 영수증을 남긴다. peer 계정 조회·경로 읽기·새 결정 전달 없음. 설정 부재는 기존 양 계정 영수증 대기. [소개](docs/기능소개/메모리-피어-은퇴.md) |
 | `yoodori_read_gate` | module | `automation/yoodori_gate/` | 유돌 SSH 강제명령. 기존 읽기 5종·Gmail 읽기 2종·승인 요청 7종과 `stage <name>` 비공개 파일 전달만 허용한다. `mail-draft <회신 키> --instruction-b64`는 원 지시 좌표를 기존 `reply-request` → `cmd_draft`에 넘겨 초안 카드만 올린다. stage는 SSH stdin을 64 MiB까지 받아 0600 임시 파일→원자 교체하고 sha256·크기를 알린다. `obsidian-request --body-b64`도 같은 폴더에 저장해 기존 `--body-file` CLI로 넘긴다. Gmail은 gws messages list/get만 쓰며 keyring 안내 뒤 JSON도 읽는다. 요청에는 원 지시 좌표가 필수이고 실행·승인·워처·Gmail 쓰기는 거부한다. `v2:file` 배포로 gate 0755·헬퍼를 설치하며 SSH 키는 불변이다. 릴리스 카운트는 렌더러 상수를 테스트로 대조해 `interop_runtime`에 게이트를 넣지 않는다. [사용법·입력 경계](docs/기능소개/agent-chat-유돌-전환.md#유돌의-승인-카드-요청) |

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ import pytest
 from automation import public_gate
 from automation.dori_pin import DoriPin
 from automation.install import dori
+from automation.install.entrypoint import main as public_install
 
 _GIT_ENV = ("-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false")
 _COMMON_HEAD = "Square avatar, centered, circle-crop safe"
@@ -182,3 +184,33 @@ def test_a_wrong_pin_stops_before_anything_is_installed(
     assert not (home / ".dori").exists()
     assert runner.calls == []
     assert not (home / "Documents").exists()
+
+
+def test_default_install_preserves_existing_node_and_dori_state(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the stopped node has paused jobs; Dori is already configured locally.
+    pin = _fork(tmp_path)
+    monkeypatch.setattr(dori, "load_pin", lambda: pin)
+    runner = _Runner()
+    monkeypatch.setattr(
+        dori, "main", partial(dori.main, runner=runner, which=lambda tool: f"/usr/bin/{tool}"),
+    )
+    existing = {
+        ".hermes/cron/jobs.json": '{"jobs": [{"id": "old-job", "state": "paused"}]}\n',
+        ".hermes/gateway-stopped-by-release": "stopped",
+        ".hermes/config.yaml": "model:\n  provider: preserved\n",
+        ".dori/config.json": '{"backend": "herdr", "local": true}\n',
+        "Documents/yoodori/AGENTS.md": "# Locally customized secretary\n",
+    }
+    for name, content in existing.items():
+        path = home / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    # When: apply, not just dry-run, through the public default entrypoint.
+    result = public_install(())
+    # Then
+    assert result == 0
+    assert {name: (home / name).read_text(encoding="utf-8") for name in existing} == existing
+    assert (home / "Documents/zzangdori/AGENTS.md").is_file()
+    assert all(command[0] == "bun" for command, _cwd in runner.calls)

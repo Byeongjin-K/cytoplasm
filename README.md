@@ -128,7 +128,27 @@ action_hash : sha256:7f3c…a19b
 
 ## 빠른 시작
 
+### 도리 기본 설치
+
+신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌은 선택이며
+Hermes는 설치하지 않습니다. Python 3.11 이상, 실제 설치에는 git·Bun이 필요합니다.
+봇 토큰·채널·모델 로그인은 설치별로 준비합니다.
+
+```bash
+python3 -m automation.install --dry-run
+python3 -m automation.install.wizard
+```
+
+마법사 첫 항목과 빈 입력은 도리입니다. `--dori-role okdori`·`--dori-role moodori`로
+선택 역할을 더합니다. 도리 CLI·역할 설치와 기존 업무 노드의 업그레이드는 구분합니다.
+[설치 가이드](docs/guide/install.md)와 [도리 기반 메이저 소개](docs/기능소개/도리-기반-메이저.md)를
+먼저 읽으세요. 이미 전환된 노드는 설치기를 재실행하지 않고 기존 서명 릴리스로 업데이트하며,
+멈춘 Hermes 잡·계정·유닛을 지우지 않습니다.
+
 ### 필요한 것
+
+아래 절차는 기존 노드 유지보수를 위해 `--profile core|rag|report-hub|full`을
+명시한 경우에만 적용됩니다. 기본 도리 경로의 전제가 아닙니다.
 
 | 항목 | 값 |
 |---|---|
@@ -157,6 +177,7 @@ SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang
 
 ```bash
 python3 -m automation.install.wizard \
+    --profile core \
     --update-trust-key <bundle>/update-trust.pub \
     --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
@@ -197,8 +218,8 @@ sudo python3 -m automation.install \
     --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
 ```
 
-`--profile` 은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로 고정해요. 생략하면
-이전과 같은 계획입니다.
+명시적 레거시 `--profile`은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로
+고정합니다. 프로필을 생략하면 위 도리 기본 설치로 갑니다.
 
 설치가 끝난 뒤의 사용법은 [`docs/guide/manual-member.md`](docs/guide/manual-member.md) 가 이어받습니다.
 

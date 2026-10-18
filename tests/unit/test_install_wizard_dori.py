@@ -49,7 +49,7 @@ def test_the_dori_profile_needs_no_trust_key_and_only_plans_on_dry_run_only() ->
 
 
 def test_dori_from_the_menu_plans_then_installs_after_yes() -> None:
-    fake = _Fake(["5", "yes"])
+    fake = _Fake(["", "yes"])
 
     assert main((), io=fake) == 0
 
@@ -65,7 +65,7 @@ def test_anything_but_yes_installs_nothing() -> None:
 
 
 def test_a_refused_plan_stops_before_the_question() -> None:
-    fake = _Fake(["5"], rc=2)
+    fake = _Fake(["1"], rc=2)
 
     assert main((), io=fake) == 2
     assert fake.commands == [(*_DORI, "--dry-run")]
@@ -77,3 +77,13 @@ def test_without_a_terminal_the_dori_install_still_needs_an_explicit_yes() -> No
 
     assert main(("--profile", "dori"), io=fake) == 2
     assert fake.commands == []
+
+
+def test_legacy_component_cannot_be_silently_ignored_by_default_wizard() -> None:
+    # Given
+    console = _Fake([], tty=False)
+    # When
+    result = main(("--with-component", "doctor-watch", "--dry-run-only"), io=console)
+    # Then
+    assert result == 2
+    assert console.commands == []

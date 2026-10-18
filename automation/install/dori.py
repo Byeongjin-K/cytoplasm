@@ -157,7 +157,10 @@ def _fork_state(pin: DoriPin, src: Path) -> tuple[str, str]:
 def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
          which: Callable[[str], str | None] = shutil.which) -> int:
     home = Path(os.environ.get("HOME", str(Path.home())))
-    parser = argparse.ArgumentParser(prog="python3 -m automation.install.dori")
+    parser = argparse.ArgumentParser(
+        prog="python3 -m automation.install",
+        epilog="기존 Hermes 노드 유지보수만 --profile core|rag|report-hub|full 로 명시한다.",
+    )
     _ = parser.add_argument("--dry-run", action="store_true", help="계획과 렌더 결과만 보인다(쓰기·네트워크 없음)")
     _ = parser.add_argument("--role", action="append", default=[], metavar="KEY",
                             help="선택 역할을 더한다(okdori, moodori). lead·yoodori 는 기본")
