@@ -89,7 +89,7 @@ def major_note(plan: ReleasePlan) -> str:
         return ""
     note = f"MAJOR: 운영자 조치 필요 — {', '.join(plan.major_signals)}"
     if "automation/install/profiles.py:DEFAULT_PROFILE" in plan.major_signals:
-        note += "\nP5 삭제 미포함: 멈춘 Hermes 잡·peer 계정·게이트웨이 유닛은 보존."
+        note += " · P5 삭제 미포함: 멈춘 Hermes 잡·peer 계정·게이트웨이 유닛은 보존."
     return note
 
 
