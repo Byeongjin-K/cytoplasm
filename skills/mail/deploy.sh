@@ -98,7 +98,7 @@ push_file "$repo_root/skills/mail/scripts/mail_triage_watch.py" \
 # streak threshold the watcher speaks once when an incident opens and once when it
 # closes, so the delivery target can finally be one that reaches somebody. Measured
 # 2026-08-18: 111 consecutive failures under --deliver local reached nobody at all.
-run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-triage-watch\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "*/2 * * * *" --deliver discord --no-agent --script mail_triage_watch.py; else hermes cron create "*/2 * * * *" --name mail-triage-watch --no-agent --script mail_triage_watch.py --deliver discord; fi'
+run_agent 'PATH="$HOME/.local/bin:$PATH"; { [ -e "$HOME/.hermes/peer-retired" ] || ! command -v hermes >/dev/null; } && exit 0; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-triage-watch\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "*/2 * * * *" --deliver discord --no-agent --script mail_triage_watch.py; else hermes cron create "*/2 * * * *" --name mail-triage-watch --no-agent --script mail_triage_watch.py --deliver discord; fi'
 source "$repo_root/automation/deploy_timer.sh"
 converge_timer mail-triage-watch "*/2 * * * *" mail_triage_watch.py discord
 push_file "$repo_root/skills/mail/scripts/mail_digest_reactions_watch.py" '.hermes/scripts/mail_digest_reactions_watch.py'
@@ -108,7 +108,7 @@ converge_timer mail-digest-reactions "every 20s" mail_digest_reactions_watch.py 
 # actually reaches cha (the 2026-07-31 incident vanished under --deliver local,
 # which has 0 delivery targets). An already-registered job is converged in
 # place with `edit` (preserving its job id/history); otherwise it is created.
-run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-daily-digest\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 8 * * *" --deliver discord --no-agent --script mail_digest_watch.py; else hermes cron create "0 8 * * *" --name mail-daily-digest --no-agent --script mail_digest_watch.py --deliver discord; fi'
+run_agent 'PATH="$HOME/.local/bin:$PATH"; { [ -e "$HOME/.hermes/peer-retired" ] || ! command -v hermes >/dev/null; } && exit 0; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+mail-daily-digest\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 8 * * *" --deliver discord --no-agent --script mail_digest_watch.py; else hermes cron create "0 8 * * *" --name mail-daily-digest --no-agent --script mail_digest_watch.py --deliver discord; fi'
 converge_timer mail-daily-digest "0 8 * * *" mail_digest_watch.py discord
 source "$repo_root/automation/deploy_cron.sh"
 converge_timer mail-attachment-drive-watch "every 30m" mail_attachment_drive_watch.py discord

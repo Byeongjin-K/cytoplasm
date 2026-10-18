@@ -287,3 +287,14 @@ def test_a_raw_listing_without_all_is_rejected(tmp_path: Path) -> None:
     root = _copy_budget(tmp_path, "hermes cron list --all | awk", "hermes cron list | awk")
 
     assert ("listing-without-all", "skills/budget") in _rules(check(root))
+
+
+def test_pinned_mail_hermes_lines_skip_a_retired_or_hermes_free_account() -> None:
+    """The two FS3-pinned mail lines must not re-create paused Hermes jobs after P5
+    (2026-10-18: every deploy re-created them and the retirement step refused)."""
+    deploy = (_REPO / "skills/mail/deploy.sh").read_text(encoding="utf-8")
+    lines = [line for line in deploy.splitlines()
+             if "hermes cron list --all" in line and ("mail-triage-watch" in line or "mail-daily-digest" in line)]
+    assert len(lines) == 2
+    guard = '{ [ -e "$HOME/.hermes/peer-retired" ] || ! command -v hermes >/dev/null; } && exit 0; job_id='
+    assert all(guard in line and line.index(guard) < line.index("hermes cron list") for line in lines)
