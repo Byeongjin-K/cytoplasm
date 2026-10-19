@@ -108,6 +108,7 @@ def assemble_report(
     title: str, notes: tuple[Note, ...], draft: str, evidence_sources: str = "",
     cuts: tuple[str, ...] = (),
 ) -> str:
+    body = re.sub(r"\A#[ \t]+[^\r\n]*(?:\r?\n|$)", "", draft.strip(), count=1).strip()
     note_titles = "\n".join(f"- {note.title}" for note in notes)
     evidence = f"\n\n## 근거\n\n{evidence_sources}" if evidence_sources else ""
     if cuts:
@@ -117,7 +118,7 @@ def assemble_report(
         "## 자료 범위\n\n"
         f"선택 노트 {len(notes)}건을 바탕으로 작성한 초안입니다.\n\n"
         "## 핵심 내용\n\n"
-        f"{draft.strip()}\n\n"
+        f"{body}\n\n"
         "## 근거 노트\n\n"
         f"{note_titles}{evidence}\n"
     )

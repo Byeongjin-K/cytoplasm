@@ -77,6 +77,7 @@ Hermes 실행 파일·게이트웨이·무멘션 응답 및 운영자 peer 진�
 
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `assemble_report` | fn | `skills/report/scripts/report_core.py` | 보고서가 유일한 문서 제목을 소유한다. 모델 초안 맨 앞 H1만 빼고 본문·하위 절·근거 노트는 보존한다. [사용 규약](skills/report/SKILL.md#재료-파일과-입력-한도-2026-10-19) |
 | `google_gate` | package | `automation/google_gate/` | 기본 꺼짐 노드 Google 게이트 준비: 설정 렌더·jobs 토큰 gws shim·doctor 모드·소유자 루트 블록. 자동 배포 없음, 실제 전환은 후속 소유자 카드. [소개](docs/기능소개/구글-게이트-하나로.md) |
 | `gateway_retirement` | module | `automation/gateway_retirement.py` · `automation/gateway_retirement_policy.py` | 2026-10-19 소유자 "이거 아예 삭제해 litellm", 09:00 비용 보고 "이것도 이제 없애라". 호스트 `release-flags/litellm`의 정확한 `retired`를 승인 해시에 묶고 동일 HEAD 전량 적용 맨 끝에만 ops·agent 잔여물을 정리한다. ops 백업 검증·사용 중 거부, agent 제공자 블록·키의 원자 제거, 완료 표식 재실행 무동작. [소개](docs/기능소개/litellm-지우기.md) |
 | `hermes_product` | module | `automation/hermes_product.py` · `automation/hermes_product_live.py` | `hermes-product:retired`를 같은 HEAD 릴리스 승인에 묶어 agent의 명시한 Hermes 제품 경로만 제거한다. 유닛·프로세스·배포 선언 사용 중이면 무삭제 거부, kanban 원본만 0600 해시 검증 백업한다(Q248). 전량 적용 맨 끝에 한 번 실행하고, 선언된 살아 있는 `SOUL.md` 는 남긴다. kanban은 장부의 개수·상태 이관 영수증과 현재 원본 지문 대조 후에만 제거하며 CLI·config·auth·hermes-agent·SOUL 과 `.hermes` 런타임은 보존한다. [소개](docs/기능소개/hermes-유산-정리.md#hermes-제품-제거카드-c) |
