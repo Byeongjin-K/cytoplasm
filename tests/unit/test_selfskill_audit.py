@@ -102,7 +102,7 @@ def test_ledger_when_nothing_changed_then_produces_no_delta_and_no_dm(
     sent: list[str] = []
     monkeypatch.setenv("HERMES_STATE_ROOT", str(tmp_path / "state"))
     monkeypatch.delattr("automation.owner_notice.ACCEPTS_OWNER_MESSAGE")
-    monkeypatch.setattr(report, "notify_owner", lambda body: sent.append(body) is None or True)
+    monkeypatch.setattr(report, "notify_owner", lambda body, **_: sent.append(body) is None or True)
     assert report.run_once(home=home, account_label="agent", now=_NOW) == 0
     sent.clear()
 

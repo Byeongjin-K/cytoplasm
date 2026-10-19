@@ -175,7 +175,7 @@ def envelopes(monkeypatch: pytest.MonkeyPatch, wire: list[str]) -> list[OwnerMes
     captured: list[OwnerMessage | None] = []
     original = owner_notice.notify_owner
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         captured.append(message)
         return original(content, message=message)
 
