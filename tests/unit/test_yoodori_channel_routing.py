@@ -143,6 +143,7 @@ def test_release_authorization_precedes_every_channel_write(
 ) -> None:
     # Given
     repo, home, env = _rig(tmp_path, None, 97)
+    env["INTEROP_CONFIG"] = str(tmp_path / "interop-ops.json")  # the node's real one is root:ops 0640
     flag = home / ".hermes/release-flags/yoodori-channel"
     flag.parent.mkdir(parents=True)
     flag.write_text(value)

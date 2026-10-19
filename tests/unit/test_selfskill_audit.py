@@ -103,6 +103,8 @@ def test_ledger_when_nothing_changed_then_produces_no_delta_and_no_dm(
     monkeypatch.setenv("HERMES_STATE_ROOT", str(tmp_path / "state"))
     monkeypatch.delattr("automation.owner_notice.ACCEPTS_OWNER_MESSAGE")
     monkeypatch.setattr(report, "notify_owner", lambda body, **_: sent.append(body) is None or True)
+    # the seed's skill store is the real live mount on the node
+    monkeypatch.setattr(report, "_governed_root", lambda: tmp_path / "live")
     assert report.run_once(home=home, account_label="agent", now=_NOW) == 0
     sent.clear()
 

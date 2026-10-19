@@ -13,6 +13,7 @@ import pytest
 
 from automation.interop.approval_lease import FileKeyLease, PostingJournal
 from automation.interop.approval_surface import ApprovalKind, ChannelFacts, resolve_new_binding
+import unit_node
 
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -144,6 +145,7 @@ def test_command_chain_replay_and_second_generation_cycle(
 
 def test_offline_scenario_reports_full_approval_matrix(tmp_path: Path) -> None:
     env = {
+        **unit_node.env(),
         "AUTOPHAGY_DEMO_SECRET": "DUMMY-offline",
         "AUTOPHAGY_RUNTIME_ROOT": str(_REPO),
         "HOME": str(tmp_path),

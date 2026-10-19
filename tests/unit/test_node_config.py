@@ -10,6 +10,7 @@ from automation import node_config
 from automation import node_config_state
 
 from automation.node_config import NodeConfigError, default_node_config, load_node_config
+import unit_node
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -121,7 +122,7 @@ def test_shell_bridge_prints_sourceable_resolved_values(tmp_path: Path) -> None:
     result = subprocess.run(
         (sys.executable, "-m", "automation.node_config_sh", "--print-env"),
         cwd=ROOT,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(ROOT)},
+        env={**unit_node.env(), "HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(ROOT)},
         capture_output=True,
         text=True,
         check=False,
@@ -223,7 +224,7 @@ def test_node_config_state_cli_rejects_the_seed_before_a_deploy_can_reach_dns(
     result = subprocess.run(
         (sys.executable, "-m", "automation.node_config_state"),
         cwd=ROOT,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(ROOT)},
+        env={**unit_node.env(), "HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(ROOT)},
         capture_output=True,
         text=True,
         check=False,

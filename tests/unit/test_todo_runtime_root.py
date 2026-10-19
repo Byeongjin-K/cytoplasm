@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import unit_node
 
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -76,6 +77,7 @@ def test_runtime_root_diagnostic_works_from_isolated_mounted_layout(tmp_path: Pa
     outside = tmp_path / "outside"
     outside.mkdir()
     env = {
+        **unit_node.env(),
         "AUTOPHAGY_RUNTIME_ROOT": str(runtime_root),
         "HOME": str(tmp_path / "home"),
         "PATH": os.environ.get("PATH", ""),
@@ -104,6 +106,7 @@ def test_staged_scenario_preserves_explicit_deploy_repo_root(tmp_path: Path) -> 
     outside = tmp_path / "outside"
     outside.mkdir()
     env = {
+        **unit_node.env(),
         "AUTOPHAGY_DEMO_SECRET": "DUMMY-staged-scenario",
         "AUTOPHAGY_REPO_ROOT": str(_REPO),
         "HOME": str(tmp_path / "home"),
@@ -178,6 +181,7 @@ def test_staged_scenario_keeps_an_inherited_runtime_root_when_deploy_root_is_abs
     outside = tmp_path / "outside"
     outside.mkdir()
     env = {
+        **unit_node.env(),
         "AUTOPHAGY_DEMO_SECRET": "DUMMY-peer-review",
         "AUTOPHAGY_RUNTIME_ROOT": str(_REPO),
         "HOME": str(tmp_path / "home"),

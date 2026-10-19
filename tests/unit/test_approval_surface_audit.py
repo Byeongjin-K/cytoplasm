@@ -273,4 +273,7 @@ def test_flow_filter_restricts_the_audit_to_the_account_that_owns_them(tmp_path:
     # Then: the unowned flows are absent from the report entirely, so a root this
     # account cannot see can never veto the gate.
     assert code == 1  # the seeded mail record IS guild-bound and pending
-    assert audit_main_exit(["--json", "--flow", "repair", "--fail-on-guild-bound"]) == 0
+    absent = tmp_path / "repair-pending"  # the real default is unreadable on the node
+    assert audit_main_exit(
+        ["--json", "--flow", "repair", "--state-root", f"repair={absent}", "--fail-on-guild-bound"]
+    ) == 0

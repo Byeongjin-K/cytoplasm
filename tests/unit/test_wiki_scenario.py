@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import unit_node
 
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -22,6 +23,7 @@ def test_wiki_scenario_runs_with_staged_interop_runtime(
     _ = runtime.mkdir()
     _ = shutil.copytree(_REPO / "automation", runtime / "automation")
     environment = {
+        **unit_node.env(),
         "AUTOPHAGY_DEMO_SECRET": "DUMMY-wiki-scenario",
         "AUTOPHAGY_REPO_ROOT": str(runtime),
         "HOME": str(tmp_path),

@@ -4,6 +4,7 @@ errors, no client-side retry — the only fallback is Hermes' own fallback_provi
 from __future__ import annotations
 
 import inspect
+import os
 import subprocess
 import tempfile
 from collections.abc import Mapping
@@ -14,8 +15,11 @@ import pytest
 from automation import codex_llm
 from automation.codex_llm import CodexClient, CodexError, CodexUnavailableError
 
-BIN = "/home/agent/.local/bin/hermes"
-ENV: Mapping[str, str] = {"HOME": "/home/agent", "AUTOPHAGY_HERMES_BIN": BIN}
+# An absent home, not the literal /home/agent: on the primary node that account exists and
+# its omo-relay settings are unreadable to the test user (conftest's unit node root).
+HOME = str(Path(os.environ["AUTOPHAGY_UNIT_NODE_ROOT"]) / "home" / "agent")
+BIN = f"{HOME}/.local/bin/hermes"
+ENV: Mapping[str, str] = {"HOME": HOME, "AUTOPHAGY_HERMES_BIN": BIN}
 NO_CREDENTIALS = "hermes -z: agent failed: No Codex credentials stored. Run `hermes auth` to authenticate."  # noqa: E501
 
 
@@ -66,7 +70,7 @@ def test_subprocess_invocation_is_sandboxed_and_non_interactive(
     _, kwargs = fake.calls[0]
     assert kwargs == {
         "cwd": tempfile.gettempdir(),
-        "env": {"HOME": "/home/agent", "PATH": "/home/agent/.local/bin:/usr/bin:/bin"},
+        "env": {"HOME": HOME, "PATH": f"{HOME}/.local/bin:/usr/bin:/bin"},
         "stdin": subprocess.DEVNULL,
         "capture_output": True,
         "text": True,
