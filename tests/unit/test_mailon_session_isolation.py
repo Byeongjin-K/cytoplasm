@@ -162,7 +162,9 @@ class _FakeBrowser:
     def fill(self, selector: str, _value: str) -> None:
         self.filled.append(selector)
 
-    def eval_js(self, _script: str) -> str:
+    def eval_js(self, script: str) -> str:
+        if "ipt-otp" in script:  # the login form readiness check
+            return '"ready"'
         return self._submit_result
 
     def eval_json(self, _script: str):
