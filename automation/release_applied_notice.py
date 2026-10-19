@@ -267,7 +267,13 @@ def send(
         if not _deliver(version, head, fact, render="owner-ko-v2", fault=True):
             return 3  # 첫 실패 조각에서 멈춘다 — 다음 틱이 전부 다시 보낸다(at-least-once)
     line = owner_line(version, summary, _owner_items(owner))
-    return 0 if _deliver(version, head, line, render="owner-ko-v5") else 3
+    if not _deliver(version, head, line, render="owner-ko-v5"):
+        return 3
+    from automation.interop.origin_notice import ThreadOutcome
+    from automation.release_thread_notice import finish
+
+    finish(version, ThreadOutcome.DONE)
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
