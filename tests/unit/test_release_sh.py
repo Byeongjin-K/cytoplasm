@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Final
 
@@ -186,6 +187,7 @@ def _run(
     gh_create_rc: str = "0",
     wrapper_plan: str = "true",
     rag_plan: str = "true",
+    rehearsal: str | None = "ok",
 ) -> subprocess.CompletedProcess[str]:
     # 낡은 pending 요청이 있는 세계는 stale_head 를 준 테스트에서만 존재한다 —
     # marker 가 없으면 stub 의 request 는 예전 그대로 성공한다.
@@ -214,6 +216,15 @@ def _run(
     gh.chmod(0o755)
     gh_state = tmp_path / "gh-state"
     gh_state.mkdir(exist_ok=True)
+    if rehearsal is not None:
+        # The pre-card gate (lead rule 2026-10-19) needs a node rehearsal of this HEAD.
+        sha = _git(work, "rev-parse", "HEAD").strip()
+        stamp = int(time.time()) - (86400 if rehearsal == "stale" else 0)
+        line = f"REHEARSAL-OK head={sha[:12]} actions=0 steps=plan" if rehearsal != "refused" \
+            else "REHEARSAL-REFUSED step=litellm rc=4"
+        record = tmp_path / ".hermes/deploy-all/rehearsal" / sha
+        record.parent.mkdir(parents=True, exist_ok=True)
+        _ = record.write_text(f"{stamp} {sha}\n{line}\n", encoding="utf-8")
     if note is not None:
         _ = (tmp_path / "note.md").write_text(note, encoding="utf-8")
         arguments = (*arguments, "--notes-file", str(tmp_path / "note.md"))

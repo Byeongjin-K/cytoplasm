@@ -294,11 +294,24 @@ case "$mode" in
     # 2026-10-19 리드 규칙(형이 ✅ 를 세 번 다시 눌렀다): 카드 전에 전량 적용의 노드 쪽 검사를
     # 끝까지 통과시킨다. 노드는 아직 이전 릴리스이므로 후보 트리를 임시 폴더에 실어 그 코드로 돈다.
     node_sha="$(git -C "$repo_root" rev-parse HEAD)" || exit 4
+    # release.sh reads the last result per HEAD before it posts a card; a refusal replaces an older pass.
+    rehearsal_dir="${DEPLOY_ALL_REHEARSAL_DIR:-$HOME/.hermes/deploy-all/rehearsal}"
+    rehearsal_end() { # rehearsal_end <rc> <last line>
+      local record=""
+      echo "$2"
+      if mkdir -p -m 700 "$rehearsal_dir" && record="$(mktemp "$rehearsal_dir/.record.XXXXXX")" \
+        && printf '%s %s\n%s\n' "$(date +%s)" "$node_sha" "$2" > "$record" \
+        && mv -f "$record" "$rehearsal_dir/$node_sha"; then
+        exit "$1"
+      fi
+      [[ -z "$record" ]] || rm -f "$record"
+      log "REHEARSAL-RECORD-FAIL: $rehearsal_dir 에 결과를 남기지 못했다 — release.sh 가 카드를 거부한다"
+      exit 4
+    }
     stage="/tmp/deploy-rehearse.${node_sha:0:12}.$$"
     trap 'ssh "$host" "rm -rf $stage" </dev/null >/dev/null 2>&1 || true' EXIT
     if ! git -C "$repo_root" archive "$node_sha" | ssh "$host" "umask 022; mkdir $stage && tar -xf - -C $stage"; then
-      echo "REHEARSAL-REFUSED step=stage rc=4"
-      exit 4
+      rehearsal_end 4 "REHEARSAL-REFUSED step=stage rc=4"
     fi
     exec_root="$stage"
     check_flag=" --check"
@@ -306,26 +319,24 @@ case "$mode" in
     actions="$(probe actions)"
     rc=$?
     if (( rc == 4 )); then
-      echo "REHEARSAL-REFUSED step=plan rc=4"
-      exit 4
+      rehearsal_end 4 "REHEARSAL-REFUSED step=plan rc=4"
     fi
     grep -E '^ACT[|]' <<< "$actions" || true
     steps="plan"
     if [[ "$peer_mode" == retired ]]; then
-      retire_peer || { echo "REHEARSAL-REFUSED step=peer-retired rc=4"; exit 4; }
+      retire_peer || rehearsal_end 4 "REHEARSAL-REFUSED step=peer-retired rc=4"
       steps+=",peer-retired"
     fi
     if [[ "$product_mode" == retired ]]; then
-      retire_hermes_product || { echo "REHEARSAL-REFUSED step=hermes-product rc=4"; exit 4; }
+      retire_hermes_product || rehearsal_end 4 "REHEARSAL-REFUSED step=hermes-product rc=4"
       steps+=",hermes-product"
     fi
     if [[ "$retirement_mode" == retired ]]; then
-      retire_spend_gateway || { echo "REHEARSAL-REFUSED step=litellm rc=4"; exit 4; }
+      retire_spend_gateway || rehearsal_end 4 "REHEARSAL-REFUSED step=litellm rc=4"
       steps+=",litellm"
     fi
     log "리허설 범위 밖: 카드 인가·배포기 실행·재시동·영수증(✅ 뒤 --apply 가 한다)"
-    echo "REHEARSAL-OK head=${node_sha:0:12} actions=$(grep -c '^ACT[|]' <<< "$actions") steps=$steps"
-    exit 0
+    rehearsal_end 0 "REHEARSAL-OK head=${node_sha:0:12} actions=$(grep -c '^ACT[|]' <<< "$actions") steps=$steps"
     ;;
   --apply)
     # 배포기는 이 체크아웃의 파일을 밀므로, 체크아웃과 노드 릴리스가 같은 세대가

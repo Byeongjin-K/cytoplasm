@@ -28,8 +28,9 @@ REPO_ROOT="${RELEASE_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 log() { printf '[release] %s\n' "$*" >&2; }
 die() { log "RELEASE-BLOCK: $1"; exit "${2:-1}"; }
 
-usage="usage: release.sh [--no-deploy] [--bump {major,minor,patch}] [--notes-file <note.md>]"
+usage="usage: release.sh [--no-deploy] [--bump {major,minor,patch}] [--notes-file <note.md>] [--skip-rehearsal <reason>]"
 no_deploy=0
+skip_rehearsal=""
 bump=patch
 notes_file=""
 while (( $# )); do
@@ -43,6 +44,10 @@ while (( $# )); do
       (( $# >= 2 )) || { echo "$usage" >&2; exit 2; }
       case "$2" in major|minor|patch) bump="$2" ;; *) echo "$usage" >&2; exit 2 ;; esac
       shift 2
+      ;;
+    --skip-rehearsal)
+      (( $# >= 2 )) && [[ -n "${2//[[:space:]]/}" ]] || { echo "$usage" >&2; exit 2; }
+      skip_rehearsal="$2"; shift 2
       ;;
     --help|-h) echo "$usage"; exit 0 ;;
     *) echo "$usage" >&2; exit 2 ;;
@@ -212,6 +217,38 @@ elif (( helper_probe_rc != 0 )); then
   log "HELPER-DRIFT-UNKNOWN: 노드 도우미를 판정하지 못해 그대로 진행한다 — ${helper_probe_output:0:200}"
 fi
 
+# 전제 ⑥(2026-10-19 리드 규칙 — 제거 단계가 ✅ 뒤에야 거절해 소유자가 ✅ 를 세 번 다시 눌렀다):
+# 새 카드를 올리기 전에 같은 후보 HEAD 의 노드 리허설(`deploy_all.sh --rehearse`)이 최근에 통과했는가.
+# 우회는 이유를 적는 `--skip-rehearsal` 뿐이고, 그 이유는 릴리스 노트에 남는다.
+rehearsal_note=""
+rehearsal_gate() {
+  local record="${DEPLOY_ALL_REHEARSAL_DIR:-$HOME/.hermes/deploy-all/rehearsal}/$head"
+  local max="${RELEASE_REHEARSAL_MAX_AGE_SECONDS:-21600}" stamp="" sha="" line="" age
+  if [[ -n "$skip_rehearsal" ]]; then
+    log "REHEARSAL-SKIPPED: $skip_rehearsal — 릴리스 노트에 표시한다"
+    rehearsal_note="리허설 생략: $skip_rehearsal"
+    return 0
+  fi
+  [[ -f "$record" ]] \
+    || die "REHEARSAL-MISSING: ${head:0:12} 의 노드 리허설 기록이 없다 — automation/deploy_all.sh --rehearse 를 먼저 돌린다(우회: --skip-rehearsal <이유>)" 4
+  { read -r stamp sha; IFS= read -r line; } < "$record"
+  [[ "$sha" == "$head" && "$stamp" =~ ^[0-9]+$ ]] \
+    || die "REHEARSAL-INVALID: $record 이 ${head:0:12} 의 기록이 아니다 — 리허설을 다시 돌린다" 4
+  [[ "$line" == "REHEARSAL-OK head=${head:0:12} "* ]] \
+    || die "REHEARSAL-REFUSED: 마지막 리허설이 통과하지 않았다 — ${line:0:200}" 4
+  age=$(( $(date +%s) - stamp ))
+  (( age >= 0 && age <= max )) \
+    || die "REHEARSAL-STALE: 리허설이 ${age}초 전이다(상한 ${max}초) — 다시 돌린다" 4
+  log "REHEARSAL-PASSED: $line"
+  rehearsal_note="리허설: $line"
+}
+note_rehearsal() { # 노트 초안의 리허설 줄을 이번 결과 한 줄로 바꾼다
+  local draft="$1" tmp
+  tmp="$(mktemp "$draft.XXXXXX")" || return 1
+  { grep -v -e '^리허설: ' -e '^리허설 생략: ' -- "$draft" 2>/dev/null; printf '\n%s\n' "$rehearsal_note"; } > "$tmp" \
+    && mv -f -- "$tmp" "$draft" || { rm -f -- "$tmp"; return 1; }
+}
+
 workdir="$(mktemp -d)" || die "mktemp failed" 1
 trap 'rm -rf -- "$workdir"' EXIT
 
@@ -258,6 +295,11 @@ if [[ -z "$base" ]]; then
 fi
 
 if (( decision_rc != 0 )); then
+  # 소유자 결정을 기다리는 카드(rc 7)는 이미 올라가 있다 — 새 카드를 올릴 때만 리허설을 요구한다.
+  if (( decision_rc != 7 )); then
+    rehearsal_gate
+    note_rehearsal "$note_draft" || die "cannot record the rehearsal line in $note_draft" 4
+  fi
   # 태그 전 main이 전진한 APPROVED도 여기서 감사 회수한다. 새 요청은 새 ✅가 필요하다.
   # 서명 태그는 ✅ 뒤에만 잘린다 — 태그가 가리키는 레코드는 카드 반응이 지금 어떻든 실행 완료다(v1.46.1 사건).
   "${approval[@]}" retire --head "$base" --tip "$head" --released "$(released_tags_map "$REPO_ROOT")" \

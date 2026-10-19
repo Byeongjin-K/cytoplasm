@@ -88,7 +88,8 @@ def _rehearse(tmp_path: Path, *, refuse: str = "") -> tuple[subprocess.Completed
     (flags / "hermes-product").write_bytes(b"retired")
     (flags / "litellm").write_bytes(b"retired")
     env.update(NODE_AGENT_ACCOUNT="agent", NODE_PEER_ACCOUNT="peer", NODE_OPS_ACCOUNT="ops",
-               NODE_PRIVATE_ROOT=str(tmp_path / "private"))
+               NODE_PRIVATE_ROOT=str(tmp_path / "private"),
+               DEPLOY_ALL_REHEARSAL_DIR=str(tmp_path / "rehearsal"))
     ssh = tmp_path / "bin/ssh"
     extra = (
         '*"mkdir /tmp/deploy-rehearse."*) cat >/dev/null;;\n'
@@ -113,6 +114,8 @@ def test_rehearsal_runs_every_approved_removal_check_from_the_staged_candidate(t
         line.endswith(" --check") and "PYTHONPATH=/tmp/deploy-rehearse." in line for line in removals)
     assert any(line.startswith("rm -rf /tmp/deploy-rehearse.") for line in calls)
     assert not (tmp_path / "receipt").exists()
+    stamp_sha, last = (tmp_path / "rehearsal" / HEAD).read_text().splitlines()
+    assert stamp_sha.split()[1] == HEAD and last == result.stdout.splitlines()[-1]
 
 
 def test_a_refused_check_names_its_step_and_fails(tmp_path: Path) -> None:
@@ -120,3 +123,45 @@ def test_a_refused_check_names_its_step_and_fails(tmp_path: Path) -> None:
     assert result.returncode == 4
     assert result.stdout.splitlines()[-1] == "REHEARSAL-REFUSED step=litellm rc=4"
     assert any(line.startswith("rm -rf /tmp/deploy-rehearse.") for line in calls)
+    assert (tmp_path / "rehearsal" / HEAD).read_text().splitlines()[1] == "REHEARSAL-REFUSED step=litellm rc=4"
+
+
+@pytest.mark.parametrize(("rehearsal", "reason"), [
+    (None, "REHEARSAL-MISSING"), ("stale", "REHEARSAL-STALE"), ("refused", "REHEARSAL-REFUSED"),
+])
+def test_release_posts_no_card_without_a_recent_passing_rehearsal(
+    tmp_path: Path, rehearsal: str | None, reason: str,
+) -> None:
+    from tests.unit import test_release_sh as rel
+
+    _origin, work = rel._origin_with_commits(tmp_path)
+    result = rel._run(tmp_path, work, decisions="2", rehearsal=rehearsal)
+    assert result.returncode == 4, result.stdout + result.stderr
+    assert f"RELEASE-BLOCK: {reason}" in result.stderr
+    assert not {"plan", "request"} & set(rel._calls(tmp_path))
+
+
+@pytest.mark.parametrize("skip", [False, True])
+def test_a_card_goes_up_after_a_pass_or_an_explained_skip_and_the_note_says_which(
+    tmp_path: Path, skip: bool,
+) -> None:
+    from tests.unit import test_release_sh as rel
+
+    _origin, work = rel._origin_with_commits(tmp_path)
+    head = rel._git(work, "rev-parse", "HEAD").strip()
+    arguments = ("--skip-rehearsal", "노드 불통") if skip else ()
+    result = rel._run(tmp_path, work, decisions="2 7 0", rehearsal=None if skip else "ok",
+                      arguments=arguments)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "request" in rel._calls(tmp_path)
+    note = (tmp_path / "release-notes" / f"{head}.md").read_text(encoding="utf-8")
+    expected = "리허설 생략: 노드 불통" if skip else f"리허설: REHEARSAL-OK head={head[:12]} actions=0 steps=plan"
+    assert note.splitlines()[-1] == expected
+    assert note.count("리허설") == 1
+
+
+def test_skip_needs_a_reason(tmp_path: Path) -> None:
+    from tests.unit import test_release_sh as rel
+
+    _origin, work = rel._origin_with_commits(tmp_path)
+    assert rel._run(tmp_path, work, decisions="2", arguments=("--skip-rehearsal", " ")).returncode == 2

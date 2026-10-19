@@ -144,7 +144,11 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
    통과시킨다(2026-10-19 — 제거 단계가 ✅ 뒤에야 거절해 소유자가 ✅ 를 세 번 다시 눌렀다). 그 체크아웃
    HEAD 의 트리를 노드 임시 폴더에 실어 판정 프로브와 승인된 제거 단계(P5·Hermes 제품·LiteLLM)를
    실제 계정·sudo 모양 그대로 `--check` 로 돌리고, 인가·배포기·재시동·영수증·쓰기는 하지 않는다.
-   마지막 줄이 `REHEARSAL-OK` 가 아니면 카드를 올리지 않는다. 그 마지막 줄은 릴리스 노트에 싣는다.
+   결과는 HEAD 별로 `~/.hermes/deploy-all/rehearsal/<sha>` 에 남고, `release.sh` 는 같은 HEAD 의
+   6시간 안 `REHEARSAL-OK` 가 없으면 새 카드를 올리지 않고 거부한다(`REHEARSAL-MISSING`·`-STALE`·
+   `-REFUSED`·`-INVALID`, 상한 `RELEASE_REHEARSAL_MAX_AGE_SECONDS`). 통과한 마지막 줄은 노트 초안 끝에
+   `리허설: …` 로 자동으로 붙는다. 우회는 `--skip-rehearsal <이유>` 뿐이고 그 이유가 `리허설 생략: …` 로
+   노트에 남는다.
 3. `automation/release.sh [--bump …] --notes-file <노트>` — 승인 카드가 올라가고, 소유자 ✅ 뒤 그 main 커밋에
    update-trust 서명 태그가 잘린다. 노드는 2분 리컨실러로 그 태그에 수렴하고
    `deploy_all.sh --apply` 까지 이어진다.
