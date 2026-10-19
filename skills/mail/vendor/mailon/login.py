@@ -133,6 +133,78 @@ def _on_login_page(url: str) -> bool:
 
 _OPEN_TIMED_OUT = "Operation timed out"
 
+# Slow-login budget (node sync logs, 178 logins in 2026-10): opening the page took p50 5.3 s,
+# p90 27 s, max 57.6 s, and `wait --load domcontentloaded` never resolved (it timed out at 25 s
+# every time, so it proved nothing about the form). On 2026-10-19 an approved send failed because
+# the first fill hit agent-browser's 30 s CDP limit while the page was still busy. So: wait until
+# the login fields actually exist, and retry a timed-out fill a couple of times. Everything here
+# runs before the login form is submitted, so a retry can never repeat a send.
+_FORM_READY_SECONDS = 90.0
+_FORM_POLL_SECONDS = 1.0
+_FILL_ATTEMPTS = 3
+_FILL_RETRY_DELAY_SECONDS = 5.0
+_FORM_READY_JS = (
+    "document.querySelector('input[name=\"ipt-id\"]') && "
+    "document.querySelector('input[name=\"ipt-pw\"]') && "
+    "document.querySelector('input[name=\"ipt-otp\"]') ? 'ready' : 'wait'"
+)
+
+
+def _timed_out(error: BrowserError) -> bool:
+    return "timed out" in str(error).lower()
+
+
+def _wait_for_form(browser: AgentBrowser) -> None:
+    """Return once the three login fields exist; a busy page's CDP timeout counts as not yet."""
+    deadline = time.monotonic() + _FORM_READY_SECONDS
+    while True:
+        try:
+            if browser.eval_js(_FORM_READY_JS).strip().strip('"') == "ready":
+                return
+        except BrowserError as error:
+            if not _timed_out(error):
+                raise
+            log.warning("login form check timed out; the page is still busy")
+        if time.monotonic() >= deadline:
+            raise LoginError(f"login form did not appear within {_FORM_READY_SECONDS:.0f}s")
+        browser.wait_ms(int(_FORM_POLL_SECONDS * 1000))
+
+
+def _fill_credentials(browser: AgentBrowser, cfg: Config) -> None:
+    """Fill id, password and a fresh TOTP; retry only a timed-out fill, before any submit."""
+    for attempt in range(1, _FILL_ATTEMPTS + 1):
+        # Wait until current TOTP window has at least 10 seconds left.
+        # The network round-trip + RSA encryption can eat several seconds;
+        # if the code expires before the server validates it, the response
+        # is indistinguishable from a wrong-password error. Give ourselves
+        # a generous margin.
+        remaining = seconds_until_next_code()
+        if remaining < 10:
+            log.info("TOTP window has %ds left (<10); waiting for next window", remaining)
+            time.sleep(remaining + 1)
+
+        code = generate_code(cfg.totp_secret)
+        log.info("generated TOTP code (length=%d); valid for %ds",
+                 len(code), seconds_until_next_code())
+
+        # Use CSS selectors instead of @eN refs because:
+        #   1. Form field names on mailon.kr are stable (ipt-id, ipt-pw, ipt-otp)
+        #   2. @eN refs require a fresh snapshot AND can become invalid if
+        #      anything modifies the DOM between snapshot and fill
+        log.info("filling credentials via CSS selectors")
+        try:
+            browser.fill('input[name="ipt-id"]', cfg.mailon_id)
+            browser.fill('input[name="ipt-pw"]', cfg.mailon_pw)
+            browser.fill('input[name="ipt-otp"]', code)
+            return
+        except BrowserError as error:
+            if not _timed_out(error) or attempt == _FILL_ATTEMPTS:
+                raise
+            log.warning("credential fill timed out (attempt %d/%d); retrying in %.0fs",
+                        attempt, _FILL_ATTEMPTS, _FILL_RETRY_DELAY_SECONDS)
+            time.sleep(_FILL_RETRY_DELAY_SECONDS)
+            _wait_for_form(browser)
+
 
 def _open_login_page(browser: AgentBrowser, cfg: Config) -> None:
     """Open the login page, tolerating only a load timeout that already reached it.
@@ -159,7 +231,7 @@ def login(browser: AgentBrowser, cfg: Config) -> None:
     """Perform a fresh login. Raises LoginError on failure.
 
     Strategy:
-      1. Navigate to login URL
+      1. Navigate to login URL and wait until the login fields exist
       2. Close any "notice" popups
       3. Wait for the TOTP window to have >=5 seconds left so code doesn't
          expire mid-flight
@@ -168,38 +240,14 @@ def login(browser: AgentBrowser, cfg: Config) -> None:
       6. Wait for URL change away from /integrated/login
     """
     _open_login_page(browser, cfg)
-    log.info("opened; waiting for DOM")
-    try:
-        browser.wait_load("domcontentloaded")
-    except BrowserError as e:
-        log.warning("wait_load(domcontentloaded) failed: %s", e)
+    log.info("opened; waiting for the login fields")
+    _wait_for_form(browser)
 
     log.info("dismissing popups")
     _dismiss_popups(browser)
     log.info("popups dismissed; locating fields")
 
-    # Wait until current TOTP window has at least 10 seconds left.
-    # The network round-trip + RSA encryption can eat several seconds;
-    # if the code expires before the server validates it, the response
-    # is indistinguishable from a wrong-password error. Give ourselves
-    # a generous margin.
-    remaining = seconds_until_next_code()
-    if remaining < 10:
-        log.info("TOTP window has %ds left (<10); waiting for next window", remaining)
-        time.sleep(remaining + 1)
-
-    code = generate_code(cfg.totp_secret)
-    log.info("generated TOTP code (length=%d); valid for %ds",
-             len(code), seconds_until_next_code())
-
-    # Use CSS selectors instead of @eN refs because:
-    #   1. Form field names on mailon.kr are stable (ipt-id, ipt-pw, ipt-otp)
-    #   2. @eN refs require a fresh snapshot AND can become invalid if
-    #      anything modifies the DOM between snapshot and fill
-    log.info("filling credentials via CSS selectors")
-    browser.fill('input[name="ipt-id"]', cfg.mailon_id)
-    browser.fill('input[name="ipt-pw"]', cfg.mailon_pw)
-    browser.fill('input[name="ipt-otp"]', code)
+    _fill_credentials(browser, cfg)
 
     # Submit by calling the page's own login() JS function - this bypasses
     # any visual overlay (popups) that might be blocking the click.
