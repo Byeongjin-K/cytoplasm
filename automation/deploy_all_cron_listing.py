@@ -7,7 +7,9 @@
 """
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Final
 
 _JOB_HEADER: Final = re.compile(r"^  ([0-9a-f]+) \[(active|paused|completed|disabled)\][ \t]*$")
@@ -16,6 +18,40 @@ _TWO_SPACE: Final = re.compile(r"^  [^ ]")
 _GATEWAY_WARNING: Final = "  ⚠  Gateway is not running"
 _SCHEDULER_WARNING: Final = "  ⚠  Scheduler is not ready"
 _NO_JOBS: Final = "No scheduled jobs."
+
+
+def read_cron_job_states(path: Path) -> dict[str, list[dict[str, str]]] | None:
+    """Fresh jobs.json state only; never repair a corrupt store or infer absence from IO failure.
+
+    Accept the runner's object/list envelopes. `enabled` is authoritative in Hermes:
+    a stale state/paused flag must not hide an enabled job. Legacy paused_at is
+    accepted only when enabled is absent. Disabled jobs cannot fire and are safe
+    for the timer's paused invariant, regardless of their display state.
+    """
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    jobs = raw.get("jobs") if isinstance(raw, dict) else raw
+    if not isinstance(jobs, list):
+        return None
+    by_name: dict[str, list[dict[str, str]]] = {}
+    ids: set[str] = set()
+    for job in jobs:
+        match job:
+            case {"id": str(job_id), "name": str(name)} if re.fullmatch(r"[0-9a-f]+", job_id) and name:
+                enabled = job.get("enabled", True)
+                paused_at = job.get("paused_at")
+                if type(enabled) is not bool or (paused_at is not None and not isinstance(paused_at, str)):
+                    return None
+                if job_id in ids:
+                    return None
+                ids.add(job_id)
+                paused = enabled is False or ("enabled" not in job and bool(paused_at))
+                by_name.setdefault(name, []).append({"id": job_id, "state": "paused" if paused else "active"})
+            case _:
+                return None
+    return by_name
 
 
 def _norm(value: str) -> str:

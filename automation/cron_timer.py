@@ -4,7 +4,8 @@
 노드의 릴리스 트리로 `python3 -m automation.cron_timer converge …` 를 부른다.
 
 불변식 — 같은 잡이 두 곳에서 동시에 돌지 않는다:
-1. 타이머는 Hermes 잡이 **paused 인 것을 다시 읽어 확인한 뒤에만** 켠다. 목록을 읽지 못하면
+1. 타이머는 Hermes 잡이 **paused 인 것을 다시 읽어 확인한 뒤에만** 켠다. CLI 목록이 판독
+   불가이고 릴리스 정지 표식이 정확할 때만 jobs.json 을 새로 읽는다. 둘 다 판독 불가면
    아무것도 바꾸지 않는다(rc 4). Hermes 잡은 지우지 않고 일시정지만 한다(되돌리기 = resume).
 2. 러너(`cron_timer_run`)는 매 틱 jobs.json 을 보고 그 잡이 active 면 실행하지 않는다 — 누가
    Hermes 잡을 손으로 resume 해도 두 번 돌지 않는다.
@@ -31,7 +32,8 @@ from pathlib import Path
 from typing import Final
 
 from automation.cron_schedule import ScheduleError, on_calendar
-from automation.deploy_all_cron_listing import parse_cron_listing
+from automation.deploy_all_cron_listing import parse_cron_listing, read_cron_job_states
+from automation.hermes_gateways import stopped_by_release
 
 NAME: Final = re.compile(r"[a-z0-9][a-z0-9-]*")
 SCRIPT: Final = re.compile(r"[A-Za-z0-9_]+\.py")
@@ -136,6 +138,8 @@ class Node:
     def hermes_jobs(self, name: str) -> list[dict[str, str]]:
         rc, out = self._call((self.hermes_bin, "cron", "list", "--all"))
         listing = parse_cron_listing(out) if rc == 0 else None
+        if listing is None and stopped_by_release(self.home):
+            listing = read_cron_job_states(self.home / ".hermes" / "cron" / "jobs.json")
         if listing is None:
             raise TimerError(4, f"hermes cron list --all failed or was unreadable; nothing changed for {name}")
         return listing.get(name, [])

@@ -70,5 +70,10 @@ Hermes 전용 선언을 수렴 대상에서 제외하고, 공급망은 owner 승
   예외: 행동 없는 수동 인덱서(`rag_ingest`, `report_hub` 폴링, `managed_sync` git remote 폴링, `stt_eval`의 Drive·Obsidian 미러 교정본 수집). `stt_eval`은 비공개 평가 상태만 쓰며 Discord 메시지·첨부를 소비하지 않는다.
   별도 분류: **Discord 수신 없는 내부 큐 executor**(`repair_report_consume_watch`) — Discord 메시지·첨부를 수신하거나 폴링하지 않고, capability-bound 내부 큐를 소비해 카드 readback 뒤 보고를 송신하므로 실시간 에이전트와 경쟁 소비자를 만들지 않는다.
 - **no-agent cron**: `~/.env.secrets` 자가 로드 + repo `sys.path` 래퍼 + 자식 subprocess에 자격증명 `env=` 명시 전파.
+- **systemd cron 판독**: `cron_timer.Node.hermes_jobs`는 CLI 목록을 우선한다. 목록 실패·판독 불가일 때
+  계정의 `gateway-stopped-by-release`가 정확한 `stopped`이면 `~/.hermes/cron/jobs.json`을 새로 읽는다.
+  pause는 오프라인 CLI를 그대로 쓰고 저장된 비활성 상태 재확인 뒤에만 타이머를 켠다.
+  표식 부재·오류나 두 소스 모두 판독 불가면 기존 rc 4, pause 불발이면 rc 5다.
+  [판독 계약](../docs/guide/cron-timer-offline.md).
 - 상세 설계 규약: [docs/guide/watcher-cron-설계규약.md](../docs/guide/watcher-cron-설계규약.md).
 - **구독자 틱은 둘이 아니라 하나다** — `managed_sync/cron/managed_sync_watch.py`를 Hermes cron(`managed_sync/deploy.sh`)과 systemd 타이머(`managed_sync/systemd/`, 설치기 opt-in)가 함께 쓴다. 놓은 잠금·자격증명 전파·D3 경계를 배포 경로별로 다시 구현하지 말 것. 같은 tick 안에서도 skill tag fetch와 roster ref fetch는 같은 mirror를 쓰되 호출·실패 상태를 분리한다 — roster 브랜치 부재가 skill 배달을 막으면 안 된다.
