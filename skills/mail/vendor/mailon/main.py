@@ -269,6 +269,7 @@ def cmd_sync(args) -> int:
         elif "inbox" in folders:
             new_count += _sync_folder(db, scraper, cfg, limit, PROJECT_ROOT, full_scan)
 
+        folder_uids: dict[str, str] = {}
         if not all_folders and "sent" in folders:
             sent_uid = resolve_folder_uid(
                 browser, "보낸메일함",
@@ -276,6 +277,7 @@ def cmd_sync(args) -> int:
                 account_email=cfg.mailon_id,
             )
             if sent_uid:
+                folder_uids["sent"] = sent_uid
                 sent_scraper = InboxScraper(
                     browser, cfg.attachments_dir, folder_label="sent", all_folders=False)
                 sent_scraper.folder_uid = sent_uid
@@ -288,7 +290,7 @@ def cmd_sync(args) -> int:
             log.info("attachment retry phase: %d succeeded, %d still failing",
                      retry_ok, retry_fail)
         prune_buttons(db, PROJECT_ROOT, cfg.attachments_dir)
-        backfill_large_links(db, scraper, cfg.mails_dir, PROJECT_ROOT)
+        backfill_large_links(db, scraper, cfg.mails_dir, PROJECT_ROOT, folder_uids=folder_uids)
 
         db.finish_run(run_id, status="ok", new_mails=new_count)
         att_stats = db.attachment_stats()

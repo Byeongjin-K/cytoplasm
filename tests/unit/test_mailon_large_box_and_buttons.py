@@ -126,7 +126,7 @@ def _project(tmp_path):
     return root, att, StateDB(root / "data/state.db")
 
 
-def _save(db, root, att, uid, files, *, body="본문", date=None, status="ok"):
+def _save(db, root, att, uid, files, *, body="본문", date=None, status="ok", folder="inbox"):
     date = date or datetime.now() - timedelta(days=1)
     attachments = []
     for name in files:
@@ -140,7 +140,7 @@ def _save(db, root, att, uid, files, *, body="본문", date=None, status="ok"):
     mail = Mail(uid=uid, folder="inbox", subject=f"s{uid}", sender="a@b", date=date,
                 body_text=body, attachments=attachments)
     md = write_mail(mail, root / "data/mails", root)
-    db.record_message(uid, folder="inbox", subject=mail.subject, sender=mail.sender,
+    db.record_message(uid, folder=folder, subject=mail.subject, sender=mail.sender,
                       recv_date=date.isoformat(), markdown_path=str(md.relative_to(root)))
     return md
 
@@ -182,6 +182,7 @@ class _Rereader:
 
     def read_mail(self, ref, state_db=None):
         self.calls.append(ref.uid)
+        self.folders = [*getattr(self, "folders", []), ref.folder_uid]
         if not self.finds:
             return Mail(uid=ref.uid, folder="inbox", subject=ref.subject, sender=ref.sender,
                         date=ref.date, body_text="대용량 첨부파일")
@@ -208,6 +209,17 @@ def test_recent_large_box_mails_without_their_files_are_read_again_once(tmp_path
     assert reader.calls == ["1"]
     text = missed.read_text(encoding="utf-8")
     assert '  - "big.pdf"' in text and "attachments:[]" not in text
+
+
+def test_a_sent_mail_is_read_from_the_sent_folder_and_keeps_its_label(tmp_path):
+    root, att, db = _project(tmp_path)
+    _save(db, root, att, "6", [], body="대용량 첨부파일", folder="sent")
+    reader = _Rereader(att)
+
+    assert heal.backfill_large_links(db, reader, root / "data/mails", root, folder_uids={"sent": "S"}) == 1
+
+    assert reader.folders == ["S"]
+    assert db.message_row("6")["folder"] == "sent"
 
 
 def test_a_mail_whose_reread_finds_no_link_is_not_read_every_run(tmp_path):

@@ -96,17 +96,17 @@ def _needs_backfill(db: StateDB, project_root: Path, msg: dict) -> bool:
     return not any(is_large_file_link(r["href"]) for r in db.attachment_rows(msg["uid"]))
 
 
-def _folder_uid(folder: str, scraper: InboxScraper) -> str | None:
+def _folder_uid(folder: str, scraper: InboxScraper, folder_uids: dict[str, str]) -> str | None:
     if folder == "inbox":
         return scraper.folder_uid
     if folder.startswith("folder:"):
         return folder.removeprefix("folder:")
-    return None
+    return folder_uids.get(folder)
 
 
 def backfill_large_links(
     db: StateDB, scraper: InboxScraper, mails_dir: Path, project_root: Path,
-    *, now: datetime | None = None,
+    *, folder_uids: dict[str, str] | None = None, now: datetime | None = None,
 ) -> int:
     """Re-read recent mails whose large-file links were missed. Returns the number re-read."""
     since = ((now or datetime.now()) - timedelta(days=BACKFILL_DAYS)).isoformat(timespec="seconds")
@@ -115,7 +115,7 @@ def backfill_large_links(
         if tried >= BACKFILL_MAX_PER_RUN:
             break
         uid = msg["uid"]
-        folder_uid = _folder_uid(msg["folder"], scraper)
+        folder_uid = _folder_uid(msg["folder"], scraper, folder_uids or {})
         if folder_uid is None or not _needs_backfill(db, project_root, msg):
             db.mark_large_link_checked(uid)
             continue
