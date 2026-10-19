@@ -12,21 +12,25 @@ something a meeting decided, and that cut is not copied here.
 from __future__ import annotations
 
 import importlib
+import logging
 import re
 import os
 import sqlite3
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
 from .models import ProjectBoardError, SourceRef
+from .mail_watermark import MailWatermark, received_time
 
 MAX_TEXT: Final = 12_000
 _REPLY_PREFIX: Final = re.compile(r"^\s*(?:\[\s*)?(?:re|fw|fwd|회신|답장|전달)\s*(?:\]\s*)?[:：]?\s*", re.IGNORECASE)
 MEETING_DIR_ENV: Final = "PROJECT_BOARD_MEETING_DIR"
 _REPO: Final = Path(__file__).resolve().parents[2]
+logger = logging.getLogger("project_board.sources")
 
 
 _MINUTES_PREFIX: Final = re.compile(r"^\s*회의록\s*[-—–_:·]?\s*")
@@ -85,18 +89,33 @@ def _connect(runtime: MailRuntime) -> sqlite3.Connection:
     return connection
 
 
-def new_mail(runtime: MailRuntime, *, after_saved_at: int, limit: int) -> list[tuple[str, int]]:
-    """``(uid, saved_at)`` of inbox mail saved after the watermark, oldest first."""
+def new_mail(runtime: MailRuntime, *, after: MailWatermark, limit: int) -> list[tuple[str, datetime]]:
+    """Inbox mail after the received cursor, ordered in UTC with UID ties.
+
+    Parse before ordering or limiting: ISO offsets and naive local MailOn dates cannot
+    be ordered as raw text. Missing/invalid dates are never treated as newly received.
+    """
     connection = _connect(runtime)
     try:
         rows = connection.execute(
-            "SELECT uid, saved_at FROM messages WHERE folder = 'inbox' AND saved_at > ? "
-            "ORDER BY saved_at, uid LIMIT ?",
-            (after_saved_at, limit),
+            "SELECT uid, recv_date FROM messages WHERE folder = 'inbox'",
         ).fetchall()
     finally:
         connection.close()
-    return [(str(row["uid"]), int(row["saved_at"])) for row in rows]
+    found: list[tuple[str, datetime]] = []
+    invalid = 0
+    for row in rows:
+        try:
+            stamp = received_time(row["recv_date"])
+        except (ValueError, TypeError, OverflowError):
+            invalid += 1
+            continue
+        uid = str(row["uid"])
+        if stamp > after.received_at or (stamp == after.received_at and uid not in after.uids):
+            found.append((uid, stamp))
+    if invalid:
+        logger.warning("mail analysis skipped invalid received dates: count=%d", invalid)
+    return sorted(found, key=lambda item: (item[1], item[0]))[:limit]
 
 
 def recent_mail(runtime: MailRuntime, *, since: str, limit: int) -> list[str]:
@@ -110,15 +129,6 @@ def recent_mail(runtime: MailRuntime, *, since: str, limit: int) -> list[str]:
     finally:
         connection.close()
     return [str(row["uid"]) for row in rows]
-
-
-def latest_saved_at(runtime: MailRuntime) -> int:
-    connection = _connect(runtime)
-    try:
-        row = connection.execute("SELECT MAX(saved_at) AS m FROM messages WHERE folder = 'inbox'").fetchone()
-    finally:
-        connection.close()
-    return int(row["m"] or 0)
 
 
 def _inside(root: Path, relative: str) -> Path | None:

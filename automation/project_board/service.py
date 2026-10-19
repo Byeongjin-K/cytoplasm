@@ -8,7 +8,6 @@ whole mailbox history — the owner approves new mail, not years of backlog.
 
 from __future__ import annotations
 
-import json
 import secrets
 import subprocess
 from collections.abc import Callable, Sequence
@@ -25,6 +24,7 @@ from .board_store import BoardStore, task_key_of, utc_stamp
 from .config import DEFAULT_BRAND, BoardConfig, load_config, state_root
 from .dashboard import render_dashboard
 from .llm import LlmConfig, LlmProvider
+from .mail_watermark import MailWatermark, read_watermark, write_watermark
 from .models import (
     DEFAULT_GRADE,
     PendingView,
@@ -36,7 +36,7 @@ from .models import (
     stricter,
 )
 from .proposals import REVISABLE_STATUSES, ProposalRecord, ProposalStore, atomic_write, new_record
-from .sources import MailRuntime, SourceDocument, latest_saved_at, new_mail, read_mail
+from .sources import MailRuntime, SourceDocument, new_mail, read_mail
 
 Poster = Callable[[ProposalRecord], object]
 DASHBOARD_FILE: Final = "dashboard.html"
@@ -199,23 +199,6 @@ def task_grade_for(board: Board, config: BoardConfig, proposal: Proposal) -> str
     return stricter(config.project_grade(proposal.project), proposal.grade)
 
 
-def _watermark_path(board: Board) -> Path:
-    return board.root / "analyze-state.json"
-
-
-def read_watermark(board: Board) -> int | None:
-    try:
-        return int(json.loads(_watermark_path(board).read_text(encoding="utf-8"))["mail_saved_at"])
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        raise ProjectBoardError("analysis watermark is unreadable") from error
-
-
-def write_watermark(board: Board, saved_at: int) -> None:
-    atomic_write(_watermark_path(board), json.dumps({"mail_saved_at": saved_at}))
-
-
 @dataclass(frozen=True, slots=True)
 class AnalyzeTick:
     proposed: tuple[str, ...] = ()
@@ -235,17 +218,18 @@ def analyze_new_mail(
     post: Poster | None,
 ) -> AnalyzeTick:
     """New inbox mail since the watermark → proposals; a retryable failure stops the tick there."""
-    watermark = read_watermark(board)
+    watermark = read_watermark(board.root)
     if watermark is None:
-        write_watermark(board, latest_saved_at(runtime))
+        write_watermark(board.root, MailWatermark(datetime.now(UTC)))
         return AnalyzeTick(initialised=True)
     proposed: list[str] = []
     unrelated = skipped = 0
-    for uid, saved_at in new_mail(runtime, after_saved_at=watermark, limit=config.max_per_tick):
+    for uid, received_at in new_mail(runtime, after=watermark, limit=config.max_per_tick):
         document = read_mail(runtime, uid)
         if document is None:
             skipped += 1
-            write_watermark(board, saved_at)
+            watermark = watermark.advance(received_at, uid)
+            write_watermark(board.root, watermark)
             continue
         try:
             record, outcome = propose(board, document, provider, today=today, post=post, config=config)
@@ -253,7 +237,8 @@ def analyze_new_mail(
             if error.retryable:
                 return AnalyzeTick(tuple(proposed), unrelated, skipped, deferred=f"{uid}: {error}")
             skipped += 1
-            write_watermark(board, saved_at)
+            watermark = watermark.advance(received_at, uid)
+            write_watermark(board.root, watermark)
             continue
         if outcome == "proposed" and record is not None:
             proposed.append(record.request_id)
@@ -261,7 +246,8 @@ def analyze_new_mail(
             unrelated += 1
         else:
             skipped += 1
-        write_watermark(board, saved_at)
+        watermark = watermark.advance(received_at, uid)
+        write_watermark(board.root, watermark)
     return AnalyzeTick(tuple(proposed), unrelated, skipped)
 
 
