@@ -19,7 +19,7 @@ from pathlib import Path
 # sshd runs this file with -I: only its own declared helper directory is added.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from yoodori_request_runtime import (  # noqa: E402
-    Refused, card_env, calendar_card, checked_value, job_env, stage_body, stage_file,
+    Refused, card_env, calendar_card, checked_value, job_env, original_name, stage_body, stage_file,
     stage_mail_attachment, stage_name,
 )
 import yoodori_jobs  # noqa: E402
@@ -67,7 +67,8 @@ _FLAGS = {
                      "--subject": "short", "--body": "body", "--in-reply-to": "id",
                      "--forward": "id", "--forward-gmail": "short", "--attachment": "file",
                      "--bcc-file": "file", "--bcc-column": "short",
-                     "--drive-share": "file", "--share-with": "email", "--drive-folder": "short"},
+                     "--drive-share": "file", "--share-with": "email", "--drive-folder": "short",
+                     "--drive-name": "short"},
     "mail-draft": {"--instruction": "body"},
     "calendar-request": {"--text": "text", "--summary": "short"},
     "todo-request": {"--title": "short", "--notes": "body", "--due": "date"},
@@ -216,6 +217,13 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         raise Refused("choose exactly one of --body-file or --body-b64")
     if name == "mail-compose" and sum(f in values for f in ("--forward", "--forward-gmail", "--in-reply-to")) > 1:
         raise Refused("choose one of --forward, --forward-gmail or --in-reply-to")
+    if name == "mail-compose" and "--drive-name" in values and "--drive-share" not in values:
+        raise Refused("--drive-name goes with --drive-share")
+    if name == "mail-compose" and "--drive-share" in values and "--drive-name" not in values:
+        # A received attachment shares under its own name, not the staging name (live QA 2).
+        received = original_name(STAGING, values["--drive-share"])
+        if received:
+            values["--drive-name"] = _value(received, "short")
     tails: list[str] = []
     if name == "command-request":
         try:
@@ -659,7 +667,7 @@ def main() -> int:
             token = notice_bot.resolve_token(environ=job_env(HOME, RELEASE, ENV))
             yoodori_jobs.verify_owner_origin(argv[2], argv[3], _owner_id(), token)
             path, digest, size = stage_mail_attachment(HOME, STAGING, argv[0], argv[1])
-            print(f"STAGED {path.name} sha256={digest} bytes={size} path={path}")
+            print(f"STAGED {path.name} sha256={digest} bytes={size} path={path} original={argv[1]}")
             rc = 0
         else:
             env = card_env(HOME, RELEASE, ENV) if name in CARD_COMMANDS else ENV

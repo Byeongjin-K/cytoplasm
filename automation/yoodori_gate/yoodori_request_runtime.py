@@ -86,7 +86,23 @@ def stage_mail_attachment(home: Path, staging: Path, uid: str, filename: str) ->
     extensions = re.findall(r"\.([A-Za-z][A-Za-z0-9]{0,9})\b", filename)
     name = f"mail-{uid}-{index + 1}" + (f".{extensions[-1]}" if extensions else "")
     with source.open("rb") as handle:
-        return stage_file(staging, name, handle)
+        staged = stage_file(staging, name, handle)
+    # The staged name is plain ASCII; the original name rides beside it so a Drive share keeps it.
+    stage_file(staging, name + ".name", io.BytesIO(filename.encode("utf-8")))
+    return staged
+
+
+def original_name(staging: Path, staged: str) -> str:
+    """The received attachment's own name recorded beside a staged copy, or empty."""
+    path = Path(staged)
+    sidecar = path.with_name(path.name + ".name")
+    try:
+        if (path.parent.resolve() != staging.resolve() or sidecar.is_symlink()
+                or not sidecar.is_file()):
+            return ""
+        return sidecar.read_text(encoding="utf-8").strip()[:240]
+    except (OSError, UnicodeError):
+        return ""
 
 
 def stage_body(argv: list[str], root: Path) -> list[str]:

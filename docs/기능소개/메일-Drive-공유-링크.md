@@ -41,3 +41,5 @@
 - 승인: 기존 mail compose 카드와 `mail-triage-watch`. 외부효과 규칙 `gws_drive_permission_grant` 의 카드 생산자는 `triage_approval.request_approval` 이다.
 - 테스트: `tests/unit/test_mail_drive_share.py`
 - 한계: 기관메일(mailon) 발송만 지원한다. Gmail 발송 초안에는 붙일 수 없다. Drive 폴더는 `autophagy/공유/` 아래로 제한된다.
+
+**2026-10-19 원래 파일 이름** — 받은 메일 첨부를 `mail-attachment` 로 꺼내 공유하면 드라이브·카드에 임시 이름(`mail-<uid>-<n>.hwpx`) 대신 첨부의 원래 이름(한글·빈칸 그대로)이 쓰인다. `mail-attachment` 가 원래 이름을 staging 옆에 남기고 게이트가 그것을 `--drive-name` 으로 넘긴다. 직접 `--drive-name <이름>` 을 줄 수도 있다(경로 문자는 걸러지고 확장자는 남는다).
