@@ -112,15 +112,24 @@ def _install(home: Path, name: str, mode: str, run: Run) -> int:
         command = ("disable" if mode == "off" else "enable", "--now") if name == "hermes-memory" else (
             "stop" if mode == "off" else "start",
         )
+        if mode == "off" and name != "hermes-memory":
+            # Only systemd's own "not-found" load state means never installed; any other
+            # answer (including a failing probe) still goes through stop and read-back.
+            probe_code, load_state = run(("systemctl", "--user", "show", "-p", "LoadState", "--value", unit))
+            if probe_code == 0 and load_state.strip() == "not-found":
+                continue
         code, _ = run(("systemctl", "--user", *command, unit))
         if code:
+            print(f"LEGACY-SERVICE-FAILED unit={unit} step={command[0]}", file=sys.stderr)
             return 5
         if name == "hermes-memory":
             code, output = run(("systemctl", "--user", "is-enabled", unit))
             if output.strip() != ("disabled" if mode == "off" else "enabled") or code not in (0, 1, 3):
+                print(f"LEGACY-SERVICE-FAILED unit={unit} step=is-enabled", file=sys.stderr)
                 return 5
         code, output = run(("systemctl", "--user", "is-active", unit))
         if output.strip() != ("inactive" if mode == "off" else "active") or code not in (0, 3):
+            print(f"LEGACY-SERVICE-FAILED unit={unit} step=is-active", file=sys.stderr)
             return 5
     if mode == "off":
         marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
