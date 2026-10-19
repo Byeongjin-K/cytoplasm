@@ -156,8 +156,8 @@ def cmd_compose(args: argparse.Namespace) -> int:
         raise triage_gate.GateError("새 메일에는 --subject 와 --body 가 필요합니다 (전달은 --forward)", 2)
     drive_path = str(getattr(args, "drive_share", "") or "")
     share_with = tuple(getattr(args, "share_with", ()) or ())
-    if not drive_path and (share_with or getattr(args, "drive_folder", "")):
-        raise triage_gate.GateError("--share-with · --drive-folder 는 --drive-share 와 함께만 씁니다", 2)
+    if not drive_path and (share_with or getattr(args, "drive_folder", "") or getattr(args, "drive_name", "")):
+        raise triage_gate.GateError("--share-with · --drive-folder · --drive-name 은 --drive-share 와 함께만 씁니다", 2)
     if not drive_path and mail_drive_share.PLACEHOLDER in (args.body or ""):
         # Owner 2026-10-19 "앞으로 이런 실수 없도록 해": refused before a card, not at send time.
         raise triage_gate.GateError(
@@ -165,7 +165,8 @@ def cmd_compose(args: argparse.Namespace) -> int:
             "공유할 파일을 --drive-share 로 주거나 그 자리를 지워 주세요", 2)
     share = (
         mail_drive_share.prepare(drive_path, share_with, body=args.body or "",
-                                 project=str(getattr(args, "drive_folder", "") or ""))
+                                 project=str(getattr(args, "drive_folder", "") or ""),
+                                 name=str(getattr(args, "drive_name", "") or ""))
         if drive_path else None
     )
     forward = None
@@ -741,6 +742,10 @@ def build_parser() -> argparse.ArgumentParser:
     compose.add_argument(
         "--drive-folder", default="", metavar="NAME",
         help="Drive 공유 폴더 한 단 — autophagy/공유/<NAME>/<연도>/ (생략 시 autophagy/공유/<연도>/)",
+    )
+    compose.add_argument(
+        "--drive-name", default="", metavar="NAME",
+        help="Drive 에 올릴 파일 이름(받은 메일 첨부의 원래 이름 등) — 경로 문자는 걸러지고 확장자는 남는다",
     )
     compose.set_defaults(func=cmd_compose)
 

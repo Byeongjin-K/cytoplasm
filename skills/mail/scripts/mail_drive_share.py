@@ -60,8 +60,20 @@ def _people(grantees: tuple[str, ...]) -> list[str]:
     return people
 
 
+def _shown_name(name: str, source: Path) -> str:
+    """The name the file is shared under: the given one (a received attachment's own name, Korean
+    and spaces kept) with path and control characters dropped, else the file's name (live QA 2)."""
+    cleaned = re.sub(r"^[\s.]+", "", re.sub(r"[\x00-\x1f\x7f/\\]+", " ", name)).strip()
+    if not cleaned:
+        return source.name
+    if not Path(cleaned).suffix and source.suffix:
+        cleaned += source.suffix
+    return cleaned[:200]
+
+
 def prepare(
     path: str, grantees: tuple[str, ...], *, body: str, project: str = "", today: date | None = None,
+    name: str = "",
 ) -> dict:
     """Freeze the file and return the share spec the draft hash binds."""
     if body.count(PLACEHOLDER) != 1:
@@ -76,14 +88,15 @@ def prepare(
         raise triage_gate.GateError("공유할 대상이 비어 있지 않은 일반 파일이 아닙니다", 2)
     from automation import drive_outputs, drive_taxonomy
 
+    shown = _shown_name(name, source)
     on = today or (datetime.now(UTC) + _KST).date()
     try:
-        parts, drive_name = drive_outputs.share_target(source.name, on=on, project=project or None)
+        parts, drive_name = drive_outputs.share_target(shown, on=on, project=project or None)
     except drive_taxonomy.TaxonomyError as error:
         raise triage_gate.GateError(f"Drive 공유 위치를 정할 수 없습니다: {error}", 2) from error
     holder = _share_dir() / secrets.token_hex(8)
     holder.mkdir(mode=0o700)
-    frozen = holder / source.name
+    frozen = holder / shown
     try:
         shutil.copyfile(source, frozen)
         os.chmod(frozen, 0o600)
@@ -102,7 +115,7 @@ def prepare(
         "role": ROLE,
         "sha256": sha256,
         "size_bytes": size,
-        "source_name": source.name,
+        "source_name": shown,
     }
 
 
