@@ -27,7 +27,7 @@ from tests.unit.test_deploy_write_inventory import LEDGER, _DEPLOYER, _tree, che
 _REPO: Final = Path(__file__).resolve().parents[2]
 _AUDIT_COMMAND: Final = "grep -nE 'tar -x' $(git ls-files | grep -E '(^|/)deploy[^/]*\\.sh$')"
 _AUDIT_PREFIX: Final = "#audit|"
-_AUDIT_KINDS: Final = ("frozen", "helper", "comment")
+_AUDIT_KINDS: Final = ("frozen", "helper", "comment", "rehearsal")
 _LIVE_TAR: Final = "run_agent 'mkdir -p \"$HOME/.hermes/x\"; tar -xzf - -C \"$HOME/.hermes/x\"'\n"
 _LIVE_TARGET: Final = 'tar -xzf - -C "$HOME/.hermes/x"'
 _APPROVED: Final = {

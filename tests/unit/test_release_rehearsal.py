@@ -107,7 +107,7 @@ def _rehearse(tmp_path: Path, *, refuse: str = "") -> tuple[subprocess.Completed
 def test_rehearsal_runs_every_approved_removal_check_from_the_staged_candidate(tmp_path: Path) -> None:
     result, calls = _rehearse(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,hermes-product,litellm"
+    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,hermes-product,spend-gateway"
     assert not any(line.startswith("authorize ") for line in calls)
     removals = [line for line in calls if "--remove" in line]
     assert len(removals) == 3 and all(
@@ -121,9 +121,9 @@ def test_rehearsal_runs_every_approved_removal_check_from_the_staged_candidate(t
 def test_a_refused_check_names_its_step_and_fails(tmp_path: Path) -> None:
     result, calls = _rehearse(tmp_path, refuse="automation.gateway_retirement")
     assert result.returncode == 4
-    assert result.stdout.splitlines()[-1] == "REHEARSAL-REFUSED step=litellm rc=4"
+    assert result.stdout.splitlines()[-1] == "REHEARSAL-REFUSED step=spend-gateway rc=4"
     assert any(line.startswith("rm -rf /tmp/deploy-rehearse.") for line in calls)
-    assert (tmp_path / "rehearsal" / HEAD).read_text().splitlines()[1] == "REHEARSAL-REFUSED step=litellm rc=4"
+    assert (tmp_path / "rehearsal" / HEAD).read_text().splitlines()[1] == "REHEARSAL-REFUSED step=spend-gateway rc=4"
 
 
 @pytest.mark.parametrize(("rehearsal", "reason"), [

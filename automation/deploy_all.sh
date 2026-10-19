@@ -332,8 +332,8 @@ case "$mode" in
       steps+=",hermes-product"
     fi
     if [[ "$retirement_mode" == retired ]]; then
-      retire_spend_gateway || rehearsal_end 4 "REHEARSAL-REFUSED step=litellm rc=4"
-      steps+=",litellm"
+      retire_spend_gateway || rehearsal_end 4 "REHEARSAL-REFUSED step=spend-gateway rc=4"
+      steps+=",spend-gateway"
     fi
     log "리허설 범위 밖: 카드 인가·배포기 실행·재시동·영수증(✅ 뒤 --apply 가 한다)"
     rehearsal_end 0 "REHEARSAL-OK head=${node_sha:0:12} actions=$(grep -c '^ACT[|]' <<< "$actions") steps=$steps"

@@ -54,9 +54,10 @@ skills/mail/deploy.sh|raw|tar -C \"\$HOME/$staging\" -xzf -|derived build stagin
 #   grep -nE 'tar -x' $(git ls-files | grep -E '(^|/)deploy[^/]*\.sh$')
 # also reads files the inventory scan above does not (the frozen deploy-skill.sh and the shared
 # helpers), so their hits are accounted for here, not as rows: these lines start with "#" and the
-# inventory parser never sees them. Format: #audit|<path>|<frozen|helper|comment>|<hits>|<reason>
+# inventory parser never sees them. Format: #audit|<path>|<frozen|helper|comment|rehearsal>|<hits>|<reason>
 # — <path>, <kind> and <hits> are the identity; a hit not covered by a raw row above or by an entry
 # here, and an entry whose hit count no longer matches, both fail tests/unit/test_deploy_write_ledger_closure.py.
+#audit|automation/deploy_all.sh|rehearsal|1|--rehearse extracts the candidate tree into a node /tmp folder its EXIT trap deletes; no account home is written
 #audit|automation/deploy-skill.sh|frozen|3|skill mount and review staging; the file is frozen and outside the inventory glob
 #audit|automation/deploy_tree.sh|comment|1|describes the in-place extraction the helper replaced
 #audit|automation/deploy_tree_remote.sh|helper|1|deploy_tree_swap extracts into staging, verified before the atomic switch
