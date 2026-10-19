@@ -45,6 +45,7 @@ def compose_and_post(
     drive_share: dict | None = None,
     bcc: tuple[str, ...] = (),
     quote_html: mail_quote.QuoteHtml | None = None,
+    format_test: str = "",
 ) -> dict:
     recipient_body = (
         mail_evidence.sanitize_draft_body(body, evidence_pack)
@@ -60,6 +61,7 @@ def compose_and_post(
         quote=quote, forward=forward, drive_share=drive_share,
         **({"bcc": bcc} if bcc else {}),
         quote_html=quote_html,
+        **({"format_test": format_test} if format_test else {}),
     )
     recipients = ", ".join(item for item in (to, cc) if item)
     gap = triage_recipient.related_recipient_gap(
@@ -93,6 +95,7 @@ def _draft_and_post(
     detail: dict, cls, *, post: bool, instruction: str = "",
     attachments: tuple[str, ...] = (), evidence_pack: object | None = None,
     reply_all: bool = False, digest_card: dict | None = None,
+    format_test: str = "",
 ) -> list[str]:
     actions: list[str] = []
     card = digest_card or {}
@@ -104,6 +107,10 @@ def _draft_and_post(
         mail_quote.reply_all_cc(original, to=to, owner=triage_recipient.owner_address())
         if reply_all else ""
     )
+    if format_test:
+        import mail_reply_format
+
+        mail_reply_format.require_owner_recipients(to, cc, ())
     subject, body, _provider = triage_llm.draft_reply(
         subject=detail.get("subject") or "", sender=detail.get("sender") or "",
         body=detail.get("body") or "",
@@ -122,6 +129,7 @@ def _draft_and_post(
         quote_html=mail_quote.render_quote_html(original),
         origin_channel_id=str(card.get("channel_id") or ""),
         origin_message_id=str(card.get("message_id") or ""),
+        **({"format_test": format_test} if format_test else {}),
     )
     actions.append(f"draft:{draft['id']}")
     if post:

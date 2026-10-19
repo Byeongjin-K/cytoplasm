@@ -110,24 +110,29 @@ def create_draft(
     drive_share: dict | None = None,
     bcc: tuple[str, ...] = (),
     quote_html: mail_quote.QuoteHtml | None = None,
+    format_test: str = "",
 ) -> dict:
     """Persist a pending draft; ``quote`` (the answered or forwarded mail) is sent below ``body``.
 
     ``quote_html`` is the same quote with the original's formatting; without it a quote
     is sent as its text with the line breaks kept.
     """
+    import mail_reply_format
+
+    reply_format = mail_reply_format.select(format_test, to, cc, bcc)
     directory = _public_drafts_dir()
     draft_id = secrets.token_hex(3)
     while (directory / f"{draft_id}.json").exists():
         draft_id = secrets.token_hex(3)
     attachments = triage_core.build_attachment_manifest(attachment_paths)
     private_paths = tuple(item["source_path_private"] for item in attachments)
-    if quote and quote_html is None:
+    if reply_format and quote and quote_html is None:
         quote_html = mail_quote.QuoteHtml(mail_quote.text_quote_html(quote), keeps_format=False)
     argv = triage_core.build_send_argv(
         mailon_python(), to, subject, mail_quote.with_quote(body, quote), private_paths, cc,
         **({"bcc": bcc} if bcc else {}),
-        body_html=mail_quote.html_body(body, quote_html.html if quote and quote_html else ""),
+        **({"body_html": mail_quote.html_body(body, quote_html.html if quote and quote_html else "")}
+           if reply_format else {}),
     )
     record = {
         "argv": list(argv),
@@ -153,6 +158,10 @@ def create_draft(
         "uid_opaque": triage_core.mask_value(uid),
         "policy_version": None,
     }
+    if reply_format:
+        record["reply_format"] = reply_format
+    if reply_format == "html-test":
+        record["render_version"] = "6"
     if bcc:
         record["bcc"] = list(bcc)
     if attachments:
@@ -162,7 +171,7 @@ def create_draft(
         )
     if quote:  # absent on legacy/no-quote drafts so their hashes stay byte-identical
         record["quote"] = quote
-        if quote_html is not None:
+        if reply_format and quote_html is not None:
             record["quote_html"] = quote_html.html
             record["quote_format"] = "original" if quote_html.keeps_format else "text"
     if forward:  # mail_forward.ForwardSource.record(); absent on every non-forward draft

@@ -145,6 +145,12 @@ def _draft_with_payload(draft: Mapping[str, JsonValue], payload: Mapping[str, Js
     cc = cc_value if isinstance(cc_value, str) else _draft_cc(draft)
     subject = _payload_text(payload, "subject")
     body = _payload_text(payload, "body")
+    if draft.get("reply_format") == "html-test":
+        import mail_reply_format
+
+        mail_reply_format.require_owner_recipients(
+            to, cc, tuple(str(address) for address in (draft.get("bcc") or [])),
+        )
     # The guard payload carries the owner-reviewed reply text alone, so rebuilding the
     # argv from it dropped the quoted original that create_draft had frozen in: a
     # forward whose quote was 3,530 chars went out with the 266-char reply only

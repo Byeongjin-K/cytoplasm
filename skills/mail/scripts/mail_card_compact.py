@@ -11,7 +11,7 @@ import re
 from collections.abc import Mapping
 
 VERSION = "5"
-DIGEST_VERSIONS = frozenset({"4", "5"})  # both verify by the stored digest of the posted text
+DIGEST_VERSIONS = frozenset({"4", "5", "6"})  # verify by the stored digest of the posted text
 _FILE_HASH = re.compile(r" · `[0-9a-f]{64}`")
 _HIDDEN = ("- draft:", "- action hash:", "- 반응(기본):", "- body sha256:")
 _SHARE = "- Drive 공유:"
@@ -33,7 +33,10 @@ def share_line(share: Mapping[str, object]) -> str:
     return f"- 보낼 때 `{name}`({_size(share['size_bytes'])}) 공유 링크가 채워짐(공유 대상: {people}, 보기)"
 
 
-def render(legacy: str, instruction: str, share: Mapping[str, object] | None = None) -> str:
+def render(
+    legacy: str, instruction: str, share: Mapping[str, object] | None = None, *,
+    format_test: bool = False,
+) -> str:
     """v4 when ``share`` is None; v5 swaps the internal share block for :func:`share_line`."""
     lines = legacy.splitlines()
     title = lines[0].removeprefix("[mail-triage] ").replace(" (DM 확정)", "")
@@ -49,7 +52,12 @@ def render(legacy: str, instruction: str, share: Mapping[str, object] | None = N
         in_share = False
         if not line.startswith(_HIDDEN):
             kept.append(_FILE_HASH.sub("", line))
-    return "\n".join([f"📨 **{title}**", *kept, instruction])
+    test_lines = []
+    if format_test:
+        from mail_reply_format import TEST_CARD_LINE
+
+        test_lines.append(TEST_CARD_LINE)
+    return "\n".join([f"📨 **{title}**", *test_lines, *kept, instruction])
 
 
 def digest(content: str) -> str:

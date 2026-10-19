@@ -47,8 +47,14 @@ def body_attachment(draft: Mapping[str, JsonValue]) -> BodyAttachment:
 def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     """Replay old summary bytes or select the new version over attachment-v1."""
     from automation.interop.approval_card import CardRenderError
-    if draft.get("render_version") in ("4", "5"):
-        return _summary_v4(draft, instruction, share=draft.get("render_version") == "5")
+    if draft.get("render_version") in ("4", "5", "6"):
+        content = _summary_v4(draft, instruction, share=draft.get("render_version") in ("5", "6"))
+        if draft.get("render_version") == "6" and draft.get("reply_format") == "html-test":
+            from mail_reply_format import TEST_CARD_LINE
+
+            title, rest = content.split("\n", 1)
+            return f"{title}\n{TEST_CARD_LINE}\n{rest}"
+        return content
     if draft.get("bcc"):
         return _summary_v3(draft, instruction)
 

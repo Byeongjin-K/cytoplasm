@@ -262,6 +262,8 @@ def draft_sha256(record: dict) -> str:
         bound["bcc"] = record["bcc"]
     if "quote" in record:  # the answered mail sent below the body (mail_quote)
         bound["quote"] = record["quote"]
+    if "reply_format" in record:
+        bound["reply_format"] = record["reply_format"]
     for key in ("quote_html", "quote_format"):  # the HTML quote and whether it kept the format
         if key in record:
             bound[key] = record[key]
@@ -292,12 +294,14 @@ def render_approvals_message(
     version = draft.get("render_version", "1")
     if version == "1":
         return _render_v1(draft, destination=destination, instruction=instruction)
-    if version in ("4", "5"):
+    if version in ("4", "5", "6"):
         import mail_card_compact
 
-        share = draft.get("drive_share") if version == "5" else None
+        share = draft.get("drive_share") if version in ("5", "6") else None
         return mail_card_compact.render(_render_v1(draft, destination=destination), instruction,
-                                        share if isinstance(share, dict) else None)
+                                        share if isinstance(share, dict) else None,
+                                        **({"format_test": draft.get("reply_format") == "html-test"}
+                                           if version == "6" else {}))
     from automation.interop.approval_card import CardRenderError
     if version not in ("2", "3"):
         raise CardRenderError("unknown mail card render version")

@@ -1,0 +1,2 @@
+# Dynamic release-host mode, verified against the node marker by the release probe.
+agent|automation/mail_html_reply|.hermes/mail-html-reply.mode|v2:derived;algorithm=mail-html-reply-v1
