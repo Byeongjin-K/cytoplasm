@@ -236,7 +236,8 @@ def main(argv: list[str] | None = None) -> int:
                                   hermes_memory=args.hermes_memory,
                                  agent_chat_channel=args.yoodori_channel,
                                  peer_retired=args.peer_retired == "retired",
-                                 omo_relay_mode=args.omo_relay, mail_html_reply=args.mail_html_reply)
+                                 omo_relay_mode=args.omo_relay,
+                                 **({"mail_html_reply": args.mail_html_reply} if args.mail_html_reply == "on" else {}))
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways,
                          retired=args.peer_retired == "retired")

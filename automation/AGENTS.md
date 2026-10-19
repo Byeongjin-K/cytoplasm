@@ -14,6 +14,7 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 `mail_html_reply.prepare_deploy`가 설정·활성 HEAD·승인을 확인한 뒤
 `mail_html_reply/deploy.sh`가 선언된 `push_file`로 agent 표식을 배치한다.
 셸 설정 eval·간접 실행 예외를 추가하지 않고 기존 provenance 닫힌 문법을 지킨다.
+릴리스 카드가 읽는 이 모듈은 `deploy-skill.sh`의 게이트 staging 목록에도 포함한다.
 삭제+다음 릴리스는 평문 복귀이며, 꺼짐 중 시험은 형 기관주소 전용 초안만 허용한다.
 [소개](../docs/기능소개/기관메일-회신-서식-유지.md).
 
