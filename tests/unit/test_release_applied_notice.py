@@ -497,32 +497,33 @@ def test_notice_carries_pending_owner_actions(
     monkeypatch.setenv("ARGV_LOG", str(argv_log))
     monkeypatch.setenv("RELEASE_APPROVAL_CMD", f"bash {stub}")
 
+    inbox = tmp_path / "ops-inbox.jsonl"
+    monkeypatch.setenv("RELEASE_OPS_INBOX", str(inbox))
+
     # When: 워크스테이션 스윕이 노드의 send 를 부르고, 그 인자 그대로 노드가 보낸다
     assert _sweep(sweep_env, repo) == 0
     argv = argv_log.read_text(encoding="utf-8").split("\0")[:-1]
     assert argv[:5] == ["send", "--version", "v1.2.4", "--head", head]
+    assert "--pending" not in argv
     store = tmp_path / "releases" / head
     store.mkdir(parents=True)
     (tmp_path / "current").symlink_to(store)
     monkeypatch.setenv("NODE_RELEASE_CURRENT", str(tmp_path / "current"))
-    sent: list[str] = []
+    sent: list[tuple[bool, str]] = []
     monkeypatch.setattr(
         owner_notice, "notify_owner", lambda notice, *, message=None, fault=False: sent.append((fault, message.fact if message else notice)) or True
     )
     assert release_applied_notice.main(argv) == 0
 
-    # Then: 운영자가 고칠 것(보류·확인 불가)은 페어 채널로 먼저, 형 채널엔 한 줄 + 형만 할 일(sudo)
-    assert [fault for fault, _ in sent] == [True, False]
-    pair, owner = sent[0][1], sent[1][1]
-    assert pair.startswith(f"릴리스 v1.2.4 적용 뒤 운영자 조치 (HEAD {head[:12]})")
-    assert "python3 -m automation.group_roster init-local" in pair
-    assert "2건" in pair
-    assert "확인 불가" in pair
-    assert "sudo" not in pair
-    assert owner == (
+    # Then (Q281): 운영자가 고칠 것(보류·확인 불가)은 디스코드가 아니라 inbox 로, 형 채널엔 한 줄 + 형만 할 일(sudo)
+    assert sent == [(False,
         "✅ v1.2.4 적용됨 · 형이 할 일: 노드에서 "
-        "`sudo bash <release>/automation/provision-deploy-converge.sh` 한 번"
-    )
+        "`sudo bash <release>/automation/provision-deploy-converge.sh` 한 번")]
+    row = json.loads(inbox.read_text(encoding="utf-8"))
+    assert row["kind"] == "release-ops"
+    assert "python3 -m automation.group_roster init-local" in row["content"]
+    assert "2건" in row["content"] and "확인 불가" in row["content"]
+    assert "sudo" not in row["content"]
 
 
 def _rendered_sends(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -661,18 +662,17 @@ raise SystemExit(release_applied_notice.main(sys.argv[1:]))
 """
 
 
-def test_a_partial_split_send_leaves_no_marker_and_the_next_tick_completes(
+def test_a_failed_send_leaves_no_marker_and_the_next_tick_completes(
     sweep_env: Path, repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """실제 스윕 → 실제 노드 send(자식 프로세스): 마커는 모든 조각이 성공한 뒤에만 남는다."""
+    """실제 스윕 → 실제 노드 send(자식 프로세스): 마커와 운영자 inbox 줄은 형 줄이 나간 뒤에만 남는다."""
     import sys
 
     head = _head(repo)
     _complete(sweep_env, head)
     receipt = {"version": 2, "release_sha": head, "pending_owner_actions": _split_actions(),
                "held": [], "pending_unknown": False}
-    pending = _split_pending()
     monkeypatch.setenv("PROBE_OUT", f"/srv/autophagy-agent-releases/{head}\n{json.dumps(receipt)}\n")
     script = tmp_path / "node_send.py"
     _ = script.write_text(_NODE_SEND, encoding="utf-8")
@@ -684,21 +684,22 @@ def test_a_partial_split_send_leaves_no_marker_and_the_next_tick_completes(
     monkeypatch.setenv("NODE_RELEASE_CURRENT", str(tmp_path / "current"))
     sent_log = tmp_path / "sent.jsonl"
     monkeypatch.setenv("SENT_LOG", str(sent_log))
+    inbox = tmp_path / "ops-inbox.jsonl"
+    monkeypatch.setenv("RELEASE_OPS_INBOX", str(inbox))
 
-    # tick 1: 조각 2 실패 → 조각 1 만 나가고 rc 3, 마커 없음
-    monkeypatch.setenv("FAIL_PIECE", "2")
+    # tick 1: 형 줄 전송 실패 → rc 3, 마커 없음, inbox 줄 없음
+    monkeypatch.setenv("FAIL_PIECE", "1")
     assert _sweep(sweep_env, repo) == 0
     assert f"RELEASE-APPLIED-SEND-FAIL rc=3 {head[:12]}" in capsys.readouterr().out
-    assert len(_lines(sent_log)) == 1
+    assert _lines(sent_log) == []
+    assert not inbox.exists()
     assert not (sweep_env / "notified" / head).exists()
 
-    # tick 2: 전부 나가고 마커가 남는다
+    # tick 2: 형 한 줄만 나가고 마커와 inbox 줄 하나가 남는다
     monkeypatch.setenv("FAIL_PIECE", "")
     assert _sweep(sweep_env, repo) == 0
-    second = [json.loads(row) for row in _lines(sent_log)[1:]]
-    assert len(second) > 1
-    delivered = "\n".join(second)
-    assert all(line.strip() in delivered for line in pending[1:])
+    assert [json.loads(row) for row in _lines(sent_log)] == ["✅ v1.2.4 적용됨"]
+    assert len(_lines(inbox)) == 1
     assert (sweep_env / "notified" / head).exists()
 
 

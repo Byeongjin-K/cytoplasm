@@ -33,6 +33,45 @@ def is_ancestor(repo: Path, sha: str, descendant: str) -> bool:
     )
 
 
+def ops_inbox() -> Path | None:
+    """Where the operator's release items go instead of Discord (owner Q281, 2026-10-19).
+
+    `RELEASE_OPS_INBOX`, else the path written in `~/.hermes/release-ops-inbox`; unset means the
+    release log only. The path is per install, so it never lives in code.
+    """
+    configured = os.environ.get("RELEASE_OPS_INBOX", "").strip()
+    if not configured:
+        try:
+            configured = (Path.home() / ".hermes" / "release-ops-inbox").read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+    return Path(configured).expanduser() if configured else None
+
+
+def record_ops(version: str, sha: str, pending: tuple[str, ...]) -> None:
+    """Release log lines plus one inbox line of kind `release-ops`; Discord gets none of them."""
+    items = [line.strip() for line in pending if line.strip() and not line.strip().endswith(":")]
+    if not items:
+        return
+    for item in items:
+        log(f"RELEASE-OPS {version} {sha[:12]} {item}")
+    inbox = ops_inbox()
+    if inbox is None:
+        return
+    now = datetime.now(tz=UTC)
+    row = {
+        "ts": now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z",
+        "id": f"release-ops-{int(now.timestamp() * 1000)}",
+        "kind": "release-ops",
+        "content": f"릴리스 {version} 적용 뒤 운영자 조치 (HEAD {sha[:12]}): " + " / ".join(items),
+    }
+    try:
+        with inbox.open("a", encoding="utf-8") as handle:
+            _ = handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as error:
+        log(f"RELEASE-OPS-INBOX-FAIL {type(error).__name__} {sha[:12]}")
+
+
 def send_command(repo: Path) -> list[str]:
     configured = os.environ.get("RELEASE_APPROVAL_CMD", "").strip()
     if configured:
@@ -104,12 +143,11 @@ class Sweep:
     def _notify(self, sha: str, version: str) -> None:
         from automation.release_applied_notice import release_summary
 
-        pending = ("--pending", json.dumps(list(self.pending))) if self.pending else ()
         owner = ("--owner-pending", json.dumps(list(self.owner_pending))) if self.owner_pending else ()
         summary = release_summary(sha)
         said = ("--summary", summary) if summary else ()
         completed = subprocess.run(
-            (*send_command(self.repo), "send", "--version", version, "--head", sha, *pending, *owner, *said),
+            (*send_command(self.repo), "send", "--version", version, "--head", sha, *owner, *said),
             env={**os.environ, "RELEASE_APPROVAL_MODULE": MODULE},
             check=False,
         )
@@ -118,4 +156,5 @@ class Sweep:
             return
         stamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         mark(self.state, "notified", sha, f"{version} {stamp}")
+        record_ops(version, sha, self.pending)
         log(f"RELEASE-APPLIED-NOTIFIED {version} {sha[:12]}")

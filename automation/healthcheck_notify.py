@@ -21,8 +21,9 @@ import json
 import os
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
     from automation.interop.owner_message import OwnerMessage
 
 DEFAULT_STATE_PATH: Final = Path("/srv/autophagy-private/healthcheck-notify/state.json")
+#: Owner Q281 (2026-10-19): "헬스체크는 10분 넘게 이어질 때만 #dori-pair" — a single blip is never posted.
+SUSTAIN_SECONDS: Final = 600.0
 
 
 def state_path() -> Path:
@@ -45,6 +48,27 @@ class NotifyState:
     """스윕 사이를 넘어가는 유일한 기억: 지금 열려 있는 사건의 체크 이름."""
 
     open_incidents: tuple[str, ...] = ()
+    #: (check name, epoch seconds it was first seen failing) for checks failing right now.
+    first_seen: tuple[tuple[str, float], ...] = ()
+
+
+def sustained(
+    state: NotifyState, *, failing: Sequence[str], now: float,
+) -> tuple[tuple[str, ...], tuple[tuple[str, float], ...]]:
+    """(checks that count as failing for the notice, first-seen times to keep).
+
+    A check counts once it has failed for at least ``SUSTAIN_SECONDS`` since it was first seen in
+    this run of failures, or while its incident is already open. A recovered check forgets its time,
+    so a later failure starts a new 10-minute wait.
+    """
+    seen = dict(state.first_seen)
+    current = tuple(sorted(set(failing)))
+    kept = tuple((name, seen.get(name, now)) for name in current)
+    confirmed = tuple(
+        name for name, first in kept
+        if name in state.open_incidents or now - first >= SUSTAIN_SECONDS
+    )
+    return confirmed, kept
 
 
 def _render(opened: Sequence[str], closed: Sequence[str]) -> str:
@@ -115,13 +139,21 @@ def load_state(path: Path = DEFAULT_STATE_PATH) -> NotifyState:
     names = payload.get("open_incidents")
     if not isinstance(names, list):
         return NotifyState()
-    return NotifyState(tuple(sorted(str(name) for name in names)))
+    raw_seen = payload.get("first_seen")
+    seen = tuple(sorted(
+        (str(name), float(first)) for name, first in raw_seen.items()
+        if isinstance(first, (int, float))
+    )) if isinstance(raw_seen, dict) else ()
+    return NotifyState(tuple(sorted(str(name) for name in names)), seen)
 
 
 def save_state(path: Path, state: NotifyState) -> None:
     """원자적 교체 + 0600. 부분 기록된 상태는 다음 스윕을 오판하게 만든다."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    serialized = json.dumps({"open_incidents": list(state.open_incidents)}, sort_keys=True)
+    serialized = json.dumps(
+        {"open_incidents": list(state.open_incidents), "first_seen": dict(state.first_seen)},
+        sort_keys=True,
+    )
     temporary: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -164,7 +196,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     failing = check_names(given)
     destination = state_path()
     state = load_state(destination)
-    following, notice = plan_notice(state, failing=failing)
+    confirmed, seen = sustained(state, failing=failing, now=time.time())
+    following, notice = plan_notice(state, failing=confirmed)
+    following = replace(following, first_seen=seen)
     if notice is None:
         save_state(destination, following)
         return 0

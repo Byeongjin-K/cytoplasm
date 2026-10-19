@@ -173,6 +173,8 @@ def health_wire(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
     monkeypatch.setenv("OWNER_NOTICE_CHANNEL_ID", "111")
     monkeypatch.setenv("HEALTHCHECK_NOTIFY_STATE", str(tmp_path / "state.json"))
     monkeypatch.setattr(owner_notice, "send_notice", lambda token, channel, body: sent.append(body))
+    # These cases pin the envelope and wire bytes; the 10-minute wait is pinned in test_q281_alerts.py.
+    monkeypatch.setattr(healthcheck, "SUSTAIN_SECONDS", 0.0)
     return sent
 
 

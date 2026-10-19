@@ -251,18 +251,25 @@ def _safe_style(value: str) -> str:
             continue
         if "transparent" in val.lower():
             continue
-        if prop in ("font-size", "line-height", "font") and _too_small(val):
+        if prop in ("font-size", "line-height", "font") and _too_small(val, prop):
             continue
         kept.append(f"{prop}:{val}")
     return ";".join(kept)
 
 
-def _too_small(value: str) -> bool:
-    """A size that makes text unreadable (0, or under 6px/5pt/0.4em) hides it."""
+def _too_small(value: str, prop: str = "") -> bool:
+    """A size that makes text unreadable (0, or under 6px/5pt/0.4em) hides it.
+
+    A unitless line-height is a multiple of the font size (`1.5`), not pixels; reading it as px
+    dropped every normal line spacing from the quote (2026-10-19 test reply).
+    """
     match = re.match(r"^\s*(\d*\.?\d+)\s*(px|pt|em|rem|%)?", value, re.I)
     if match is None:
         return False
-    number, unit = float(match.group(1)), (match.group(2) or "px").lower()
+    number = float(match.group(1))
+    if match.group(2) is None and prop == "line-height":
+        return number < 0.5
+    unit = (match.group(2) or "px").lower()
     floor = {"px": 6.0, "pt": 5.0, "em": 0.4, "rem": 0.4, "%": 40.0}[unit]
     return number < floor
 
