@@ -115,9 +115,11 @@ def backfill_large_links(
         if tried >= BACKFILL_MAX_PER_RUN:
             break
         uid = msg["uid"]
-        folder_uid = _folder_uid(msg["folder"], scraper, folder_uids or {})
-        if folder_uid is None or not _needs_backfill(db, project_root, msg):
+        if not _needs_backfill(db, project_root, msg):
             db.mark_large_link_checked(uid)
+            continue
+        folder_uid = _folder_uid(msg["folder"], scraper, folder_uids or {})
+        if folder_uid is None:  # e.g. the sent folder was not resolved this run; try again next run
             continue
         tried += 1
         ref = MailRef(

@@ -86,10 +86,11 @@ def test_webmail_buttons_are_not_attachments():
     assert [a["filename"] for a in out["attachments"]] == ["1. 과업지시서.hwpx", "3. 사유서.hwpx"]
 
 
-def test_only_mailon_bigfile_paths_count_as_large_file_links():
+def test_bigfile_paths_of_any_institute_count_as_large_file_links():
     assert scraper_mod.is_large_file_link(BIG_A)
+    assert scraper_mod.is_large_file_link("https://mail.example.re.kr:443/bigfileDownload/QUFBQQ==/")
     assert not scraper_mod.is_large_file_link("https://mailon.kr/mail/manage/attach/download?mailUid=7&position=4")
-    assert not scraper_mod.is_large_file_link("https://evil.example/bigfileDownload/QUFBQQ==/")
+    assert not scraper_mod.is_large_file_link("https://mailon.kr/mail/x?next=/bigfileDownload/QUFBQQ==/")
 
 
 class _Expired(http.server.BaseHTTPRequestHandler):
@@ -220,6 +221,17 @@ def test_a_sent_mail_is_read_from_the_sent_folder_and_keeps_its_label(tmp_path):
 
     assert reader.folders == ["S"]
     assert db.message_row("6")["folder"] == "sent"
+
+
+def test_a_sent_mail_waits_for_a_run_that_resolved_the_sent_folder(tmp_path):
+    root, att, db = _project(tmp_path)
+    _save(db, root, att, "6", [], body="대용량 첨부파일", folder="sent")
+    reader = _Rereader(att)
+
+    heal.backfill_large_links(db, reader, root / "data/mails", root)
+    heal.backfill_large_links(db, reader, root / "data/mails", root, folder_uids={"sent": "S"})
+
+    assert reader.calls == ["6"]
 
 
 def test_a_mail_whose_reread_finds_no_link_is_not_read_every_run(tmp_path):

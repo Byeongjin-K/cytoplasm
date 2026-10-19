@@ -85,6 +85,7 @@ SMALL_ATTACHMENT_MAX_BYTES = 30 * 1024 * 1024   # 30 MB
 LARGE_FILE_HOSTS = frozenset({"filefree.mailplug.com"})
 # MailOn's own "대용량 첨부파일" box links to mailon.kr/bigfileDownload/<token>/ (mixed case, so the
 # '/download' selector never matched it). Also public: 200 + the file without cookies (2026-10-19).
+# Other institutes run the same webmail (e.g. a sender's own mail host), with the same path.
 MAILON_LARGE_FILE_PATH = "/bigfileDownload/"
 # Links that failed under the old in-page fetch get a fresh retry budget on top of the usual 5.
 EXTERNAL_MAX_ATTEMPTS = 10
@@ -97,7 +98,7 @@ BUTTON_NAMES = frozenset({
 
 def is_large_file_link(href: str) -> bool:
     parts = urlsplit(href or "")
-    if parts.hostname == "mailon.kr" and parts.path.startswith(MAILON_LARGE_FILE_PATH):
+    if parts.scheme == "https" and parts.path.startswith(MAILON_LARGE_FILE_PATH):
         return True
     return parts.hostname in LARGE_FILE_HOSTS
 URLLIB_CHUNK_SIZE = 1024 * 1024                  # 1 MB per read
