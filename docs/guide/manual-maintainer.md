@@ -144,6 +144,8 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
    통과시킨다(2026-10-19 — 제거 단계가 ✅ 뒤에야 거절해 소유자가 ✅ 를 세 번 다시 눌렀다). 그 체크아웃
    HEAD 의 트리를 노드 임시 폴더에 실어 판정 프로브와 승인된 제거 단계(P5·Hermes 제품·LiteLLM)를
    실제 계정·sudo 모양 그대로 `--check` 로 돌리고, 인가·배포기·재시동·영수증·쓰기는 하지 않는다.
+   이 PC 에서는 `dori/pin.toml` 의 고정 커밋을 임시 폴더로 받아 SHA 를 확인하고 도리 설치기를
+   `--dry-run` 으로 돌린다(`step=dori-pin`, 도리 고정 버전을 올린 릴리스의 설치·업데이트 경로).
    결과는 HEAD 별로 `~/.hermes/deploy-all/rehearsal/<sha>` 에 남고, `release.sh` 는 같은 HEAD 의
    6시간 안 `REHEARSAL-OK` 가 없으면 새 카드를 올리지 않고 거부한다(`REHEARSAL-MISSING`·`-STALE`·
    `-REFUSED`·`-INVALID`, 상한 `RELEASE_REHEARSAL_MAX_AGE_SECONDS`). 통과한 마지막 줄은 노트 초안 끝에

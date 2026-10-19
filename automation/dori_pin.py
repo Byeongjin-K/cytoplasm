@@ -106,12 +106,33 @@ def fetch_at(pin: DoriPin, dest: Path) -> None:
         raise
 
 
+def _rehearse(pin: DoriPin) -> int:
+    """The release's install and update path for a new pin, writing nothing outside a temp folder."""
+    with tempfile.TemporaryDirectory(prefix="dori-pin-rehearse-") as folder:
+        fork = Path(folder) / "fork"
+        try:
+            fetch_at(pin, fork)
+        except (PinError, OSError, subprocess.SubprocessError) as error:
+            print(f"DORI-PIN-REHEARSE-FAIL step=fetch {error}", file=sys.stderr)
+            return 1
+        dry = subprocess.run(
+            (sys.executable, "-B", "-m", "automation.install.dori", "--dry-run", "--src", str(fork)),
+            cwd=REPO_ROOT, capture_output=True, text=True, check=False, timeout=300,
+        )
+        if dry.returncode:
+            print(f"DORI-PIN-REHEARSE-FAIL step=install-dry-run rc={dry.returncode}", file=sys.stderr)
+            return 1
+    print(f"DORI-PIN-REHEARSE-OK commit={pin.commit[:12]}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m automation.dori_pin")
     sub = parser.add_subparsers(dest="command", required=True)
     _ = sub.add_parser("show", help="print the pinned fork commit")
     verify = sub.add_parser("verify", help="does a checkout sit exactly on the pinned commit")
     _ = verify.add_argument("--checkout", type=Path, required=True)
+    _ = sub.add_parser("rehearse", help="fetch the pinned commit into a temporary folder and dry-run the installer on it")
     args = parser.parse_args(argv)
     try:
         pin = load_pin()
@@ -121,6 +142,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "show":
         print(f"DORI-PIN repo={pin.repo} commit={pin.commit}")
         return 0
+    if args.command == "rehearse":
+        return _rehearse(pin)
     head = checkout_head(args.checkout)
     if head != pin.commit:
         print(f"DORI-PIN-MISMATCH: {args.checkout} is at {head or 'no checkout'}, pin is {pin.commit}")
