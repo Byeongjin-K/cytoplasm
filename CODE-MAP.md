@@ -2,6 +2,68 @@
 
 > AGENTS.md의 「CODE MAP」 절을 2026-10-19 글자 그대로 옮긴 파일이다. AGENTS.md는 세션마다 자동으로 읽히고 이 파일은 필요할 때만 읽힌다. 모듈을 고치면 「문서 갱신 규칙」대로 같은 커밋에서 이 파일을 갱신한다.
 
+## STRUCTURE
+```
+autophagy/
+├── skills/       # 19개 스킬 디렉터리 (18 기능 + hello-autophagy 데모). 각 <name>/{SKILL.md, scripts/*_cli.py, scripts/*watch.py, deploy.sh}. 에이전트가 스스로 만든 자가 스킬은 이 트리에 없다(각 계정의 `~/.hermes/skills`)
+├── automation/   # 오케스트레이션·게이트·워처·배치 코어 (interop, repair, rag_ingest, report_hub, skill_generation, selfskill_audit, twin_distill, twin_observe, managed_skills, managed_sync ...)
+├── configs/      # routing-policy.md, peers.example.yaml, external-effect-tools.yaml, rag/
+├── dori/         # 도리 기반 사이토플라즘 저장소 층(2026-10-18 소유자 결정 Q219) — pin.toml(도리 포크 고정 커밋)·roles/(리드·비서 기본, 옥돌·무돌 선택 역할 템플릿+아바타). 개인값 없음, 설치는 automation/install/dori.py
+├── prompts/      # 버전형 LLM 프롬프트 자산
+├── docs/         # guide/(설계규약) patch/(인프라 변경) troubleshooting/ · qa/(W#-# 웨이브 증적)는 추적하지 않는 비공개 운영 저장소 링크다(아래 .omo/ 와 같음)
+├── tests/        # unit/ + e2e/(drivers, scenarios, fixtures)
+├── .omo/         # 계획·오케스트레이션 상태(설계 단일 진실 plans/autophagy-agents.md 포함) — 공개 저장소에 추적되지 않는다. 비공개 운영 저장소 `orientpine/autophagy-ops` 의 `omo/`·`qa/` 를 `automation/ops_link.sh` 가 `.omo`·`docs/qa` 로 링크한다(경로는 `git config autophagy.opsRepo`)
+└── AGENTS.md · README.md
+```
+
+## WHERE TO LOOK
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
+Discord의 `#approvals`·`#notifications`는 아래 표와 예시의 관례 이름이다.
+설정 ID가 있으면 표시 이름은 자유롭게 바꿀 수 있다. 공급망은
+`personal_approvals_channel_id` 또는 명시적 `deploy_approvals_channel_id`와
+type 0을 검증하고, 통지는 `owner_notice_channel_id`를 쓴다.
+설정 없는 레거시 공급망 조회에만 캐시·이름 검색이 남는다.
+peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 이름이 바뀐 뒤에도 같은 id를 요구한다([기능 소개](docs/기능소개/Discord-승인-통지-채널-ID.md)).
+| 작업 | 위치 | 비고 |
+|------|------|------|
+| 새 스킬 제작·배포 | `skills/<name>/`, `automation/deploy-skill.sh` | 4단계 게이트, `docs/guide/스킬-제작.md` |
+| 도리 층(포크 고정·기본 도리 구성) | `dori/`, `automation/dori_pin.py`, `automation/install/dori.py` | 소유자 결정 2026-10-18 00:10 KST "나는 도리 기반의 사이토플라즘을 계속 배포하고싶은데, 내가 지금 구성한 기본 도리 구성을 배포하도록 하고, 기존 사이토 플라즘의 모든 기능이 녹아들면 좋겠어", Q216 "추천대로 Q1~Q7 진행", Q219 "전부 추천대로 — 저장소 층부터 시작 (추천)". 포크는 `dori/pin.toml` 커밋 하나로만 설치되고(SHA 재확인, main 자동 추종 없음), 올릴 때는 그 SHA 를 바꾸는 PR + 릴리스 노트 한 줄. 영수증 `dori_pin`. 이 단계는 층만 더하고 노드 게이트웨이 동작은 불변. [소개](docs/기능소개/도리-저장소-층.md) |
+| 외부효과 승인 게이트 | `automation/interop/external_effect_gate.py` | fail-closed, 해시 바인딩 |
+| 인터롭 규약(보고/질의/조율) | `docs/guide/interop-규약.md`, `automation/interop/` | 단일 진실 |
+| 워처/cron 설계 규칙 | `docs/guide/watcher-cron-설계규약.md` | no-agent cron 필수 규약 |
+| 음성 녹취 → 회의록 | `skills/speechtotext/` | Drive 감시 폴더 → 전사본(.md) → meeting 체인. 전사는 기본 로컬(whisper.cpp) — 원음을 노드 밖으로 내보내지 않는다 |
+| 기능 현황·웨이브 맵 | `docs/features.md` → `.omo/plans/autophagy-agents.md` | 계획 문서가 단일 진실 |
+| 의사결정 트윈 스키마 | `docs/guide/decision-twin-스키마.md` | 트윈 키·판단 근거 규약 |
+| 라우팅·모델·예산 정책 | `configs/routing-policy.md`, `configs/*.yaml` | 주 모델과 폴백은 계정 `~/.hermes/config.yaml` 의 `model:`·`fallback_providers` **한 곳**이 정한다(2026-09-29 소유자 결정 — 현재(2026-10-02) `openai-codex/gpt-6.1-sol`·reasoning effort `medium` → `xai-oauth/grok-4.7`). 코드·스킬·환경변수는 모델을 적지 않고 argv 에 `--provider`·`-m` 을 넣지 않는다(`tests/unit/test_model_single_source_conformance.py`). 확인은 `python3 -m automation.doctor` 의 「주 모델」·「폴백」 줄. peer 도 같은 쌍을 쓰며 `python3 -m automation.model_sync --apply`(운영자)가 agent 블록을 peer 에 맞추고 운영자 모드 doctor 가 `model-parity` 로 어긋남을 알린다. 주 모델을 바꾼 뒤에는 모델 고정 없는 agent 모드 cron 을 같은 정의로 다시 만든다 — Hermes 가 권하는 잡별 모델 고정은 단일 출처를 깨므로 하지 않는다(`configs/routing-policy.md` 「Changing the main model」, doctor 가 `drift_skip` 을 첫 회부터 고장으로 알린다). 제안서 윤문도 이 경로다(Codex CLI 는 codex 그림 생성만) — 게이트웨이와 배치(`automation/codex_llm.py`, `--ignore-user-config` 없음)가 같은 체인을 쓴다. 폴백 추가·제거는 `~/.hermes/config.yaml` 한 곳뿐. 라우팅 로그는 실제로 답한 모델을 `served_provider`·`served_model` 로 적는다(`codex_llm.complete_served`). 내용에 따라 경로를 고르거나 막지 않는다(2026-10-09 콘텐츠 민감 판정 제거) |
+| 참고자료(근거) 조회 | `automation/drive_reference.py`, `skills/recall/scripts/recall_reference.py` | 소유자가 Drive 에 모아 둔 참고자료에서 근거 구절을 찾는 **읽기 전용** 경로. 루트는 `DRIVE_REFERENCE_ROOT`(기본 `KIMM`)이며 산출물 루트(`autophagy/`)와 **다른 트리**다 — 그 폴더는 소유자의 보관함이라 폴더를 만들지 않는다(`ensure_folder_path` 금지, `find_folder_path` 사용). 회의록은 참고자료를 발표자료와 같은 `Deck` 경로로 받아 추출 재료로 쓰며, 질의는 회의 라벨·과제명에 **전사 본문 상위 낱말**을 더해 만든다. 읽을 수 없는 형식과 크기는 `reference_rank.refusal` 이 **내려받기 전에** 판정한다 |
+| Drive 산출물 발행 | `automation/drive_outputs.py`, `docs/guide/drive-publish.md` | 스킬 산출물은 단일 루트 `autophagy/`에 파사드로만 발행 — 규약은 guide가 단독 소유. `project=` 를 주면 카테고리와 연도 사이에 **과제 한 단**이 들어가고(전사본·회의록), 주지 않으면 경로는 예전과 동일해 나머지 스킬은 무영향 |
+| QA 증적 | `docs/qa/<wave-id>/` | 마스킹된 증적. 비공개 운영 저장소의 `qa/` 로 링크된 경로라 공개 저장소에는 없다(`automation/ops_link.sh`) — 공개 문서는 근거로 경로만 인용하고 내용을 옮기지 않는다 |
+| Discord 2-서버·승인 채널 구조 | `docs/guide/discord-server-architecture.md`, `automation/interop/approval_surface.py` | **소유자 전용 승인=개인 서버 `#agent-chat`의 **요청별 스레드**(2026-09-01 — 요청 하나에 스레드 하나, 승인·리마인더·결과 통지가 거기서 완결되고 종결 시 상태 접두어+아카이브, 「요청별 승인 스레드 규칙」; v7~v8 은 kind별 고정 스레드 `승인-<kind>` 였고 v8 부터 repair 포함·Ops 봇 초대 전제, 초대 전 릴리스 금지) / 스킬 공급망 승인=개인 서버 `#approvals`**(배포·peer attest·발행·managed 활성화·release — 2차 주체인 peer 봇 **신원**이 같은 채널에 REST 로 게시·리액션 조회해야 하므로; peer 의 **LLM 게이트웨이는 그 채널을 수신하지 않는다** — peer config 최상위 `discord.ignored_channels`, 스레드 포함·allowed 보다 우선, 2026-09-05 patch. 게이트웨이가 카드를 읽으면 자가 스킬이 승인 카드를 즉석 심사한다). 893da68은 승인을 공유 Lab이 아닌 **개인 서버**로 옮긴 결정이며 공급망에 한정된다. 표면은 `approval_surface.py`가 단일 결정하고 conformance 테스트가 강제한다 — 산문이 아니라 코드가 진실. 해석 키는 `~/.hermes/interop/config.json`의 `agent_chat_channel_id`(미설정=fail-closed). 정기 통지(일일 지출·주간 동향·아침 감사·헬스체크·리마인더)는 별도 `#notifications` — `owner_notice_channel_id`(미설정=DM), 발신은 `automation/owner_notice.py` 파사드 단일 경로(ON-2 이관, ON-3 conformance: 파사드 밖 DM 오픈 신설=RED) |
+| 장애 대응·운영 제약 | `docs/guide/incident-response.md`, `docs/guide/operations.md` | 원인 확인 전 재시작/설정변경/키 재발급 금지 |
+| 연결·승인 점검·알람 | `automation/doctor/`, `docs/guide/연결-승인-점검.md` | 끊긴 로그인·토큰·동의·반복 실패 작업을 `python3 -m automation.doctor` 로 본다(읽기 전용). 설치 마법사가 설치 끝에 같은 점검으로 승인을 안내하고, 매시 워처가 바뀔 때만 알린다 |
+| 관리형 스킬 발행 | `automation/managed_skills/`, `docs/guide/managed-skill-channel.md`, `docs/guide/manual-group-admin.md` | 발행자(cha) 전용. 대상 repo = 그룹 스킬 채널 `orientpine/ribosome`(private) — 코드 repo도, 공개 배포본도 아니다(「세 저장소 구분 규칙」) |
+| 개인→그룹 스킬 제출 | `automation/managed_skills/submission_*.py` | personal provenance 재사용, 그룹 `#approvals` 검토, 자동 import 없음 |
+| 관리형 스킬 구독 | `automation/managed_sync/`, `~/.hermes/managed-sync/` | 구독자(연구원) 전용 — `orientpine/ribosome`에서 받는다(소프트웨어 업데이트는 `cytoplasm`에서 별도로 온다). 틱 배포는 `deploy.sh`(Hermes cron) 또는 설치기 **opt-in** `--with-component managed-sync`(systemd) — 둘 다 같은 래퍼를 돌린다. **배달은 자동, 마운트는 아니다**(D3) |
+| 공개 릴리스 컷 | `automation/release.sh`, `docs/guide/manual-maintainer.md` | 개발 정본 = 공개 `orientpine/cytoplasm` main(2026-10-07 공개 우선 전환). 릴리스 = `release.sh --notes-file <노트>`(소유자 ✅) → cytoplasm 커밋에 서명 태그 + 같은 단계의 GitHub Release 노트(`ensure_release_note`). 노트 없이 남은 태그 보충은 `automation/release-note.sh`. 옛 반출 스크립트 `public_export.sh` 는 롤백 기간이 끝나 2026-10-10 에 지웠다(「공개 릴리스 규칙」) |
+| 에이전트 자가 스킬 루트·감사 원장 | `<계정 홈>/.hermes/skills`(계정 소유 0700, 1차 루트), `automation/selfskill_audit/`, `~/.hermes/selfskill-audit/{state.json,ledger.jsonl}` | 자가 저작은 **승인 없이 착륙**하고 사후 감사한다(소유자 결정 2026-08-15 옵션 B). 관리자 배포 스킬은 `/srv/autophagy-skills/live`에 남아 Hermes `skills.external_dirs`로 읽기 전용 발견된다. 회수는 `hermes curator archive/pin`. 상세: [소개](docs/기능소개/에이전트-자가-스킬.md) |
+
+## COMMANDS
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
+```bash
+pytest tests/unit                     # 단위 테스트 (루트에서 실행, .pytest_cache)
+ruff check .                          # 린트
+automation/deploy-skill.sh <skill>    # 스킬 배포 (4단계 게이트; --sandbox-only / --request-only / --remove)
+automation/local_ci.sh run            # PR 전 로컬 CI (통과 시 push 게이트 영수증 발급)
+automation/merge-pr.sh <pr>           # 체크 green 확인 → 머지 → 릴리스 태그
+automation/deploy_all.sh --plan       # 전 표면 전량 수렴 판정 (--verify 영수증 / --apply 수렴)
+automation/healthcheck.sh             # 양 노드 read-only 헬스체크
+python3 -m automation.rag_ingest      # 개인 RAG 인제스트
+```
+
 ## CODE MAP
 
 감시 최소화(Q250·Q251, 2026-10-18): 헬스체크는 서비스·배포, doctor는 agent의 로그인·작업 결과만 본다.
