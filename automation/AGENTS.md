@@ -15,6 +15,11 @@ Q4 `hermes-memory-off`는 릴리스 승인에 묶인 가역 스위치다. `legac
 파일 삭제+재배포로 복구하며 USER.md·MEMORY.md·백업·recall은 보존한다.
 기억 저장은 유돌 omo(소유자 선호·규칙은 `system/human.md`), 긴 기록은
 `obsidian-request`이며 옛 기억 라우팅 패키지는 은퇴했다.
+다른 정기 작업은 `cron_timer_owner_off`의 `cron-timers-off` 릴리스 스위치로 선택한다.
+정렬·중복 없는 ASCII 잡 이름을 LF로 종결하며 잡별 승인 후 agent의
+`.hermes/cron-timers/owner-off.mode`에 배치한다. `cron_timer.owner_off`가 기존 메모리
+표식과 새 표식을 함께 읽어 수렴·프로브·doctor의 `released-off`를 정한다.
+메모리 두 잡은 새 목록에서 거부해 Q4 미결 게이트를 보존한다.
 
 P5 제거는 `peer_retired` 승인 표면과 배포된 계정 표식으로 선택한다. `p5_remove`는
 계정별 백업을 검증한 다음 유산·일시정지 잡만 지운다. `deploy_all`은 그 모드에서 peer와
@@ -24,6 +29,7 @@ Hermes 전용 선언을 수렴 대상에서 제외하고, 공급망은 owner 승
 ## 서브패키지 맵
 | 경로 | 역할 | wave |
 |------|------|------|
+| `cron_timer_owner_off.py` | `cron-timers-off`의 현재 agent systemd 잡만 동일 HEAD 릴리스 승인에 묶어 disable·stop한다. 전량 배포는 타이머 배포기보다 먼저 0600 node marker를 배치하고, 삭제+재배포는 일반 수렴으로 복구한다. doctor는 실제 disabled·inactive만 `released-off`로 표시한다. [소개](../docs/기능소개/정기-작업-소유자-정지.md) | bug2 |
 | `memory_relocate/peer_mode.py` | P5: 릴리스가 배치한 `peer-mode.json`의 `peer_retired`만 단독 삭제를 선택한다. 참이면 peer 계정·경로에 접근하지 않고 agent만 백업 삭제, 부재면 기존 peer 완료 영수증 대기. [소개](../docs/기능소개/메모리-피어-은퇴.md) | P5 |
 | `interop/` | 외부효과 게이트 + 인터롭 규약 코어 (자체 AGENTS.md 있음) | W1-5/6, W3-3 |
 | `entity_preflight/` | 외부 쓰기 전 개인 고유명사 해석 계약·결정 정책·PII 감사 경계·API 재조회 상태 모델. 미확정 시 **승인 게이트가 아니라 대화 내 clarify**(`clarify.render_clarify` → `ENTITY-CLARIFY` + non-zero exit; calendar `ROUTING-CLARIFY` 선례) — 새 승인 표면·watcher 신설 금지(단위 테스트가 강제). 임계값 단일 위치=`policy.POLICY_SEED_PATH`. 호출 흐름은 `docs/guide/personal-entity-preflight.md` | 계약 |

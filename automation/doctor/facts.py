@@ -339,6 +339,7 @@ def _gws_status(binary: str, run: Run) -> GwsStatus | str:
 
 
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
+    from automation.cron_timer import owner_off
     from automation.legacy_services import memory_timer_off
 
     try:
@@ -349,8 +350,15 @@ def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[Tim
     found: list[TimerJob] = []
     for name in names:
         if memory_timer_off(home, name):
-            # Actual inactive/disabled read-back is reported by legacy_services below.
+            # The legacy-service finding owns the memory pending-choice shutdown.
             found.append(TimerJob(name, "released-off", "", 0, ""))
+            continue
+        if owner_off(home, name):
+            states = tuple(run(("systemctl", "--user", verb, f"autophagy-cron-{name}.timer"),
+                               {"XDG_RUNTIME_DIR": f"/run/user/{uid}"})[1].strip()
+                           for verb in ("is-enabled", "is-active"))
+            found.append(TimerJob(name, "released-off" if states == ("disabled", "inactive")
+                                  else "released-off-drift", "", 0, ""))
             continue
         raw = _json(home / ".hermes" / "cron-timers" / f"{name}.json")
         state = raw if isinstance(raw, dict) else {}

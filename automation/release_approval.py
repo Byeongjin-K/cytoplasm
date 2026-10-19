@@ -108,6 +108,17 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from automation.release_spec import legacy_service_surface as legacy_surface
 
     surfaces.extend(legacy_surface(name) for name in getattr(args, "legacy_service_off", None) or ())
+    from automation.cron_timer_owner_off import selected, surface as timer_surface, validate
+    from automation.cron_timer import TimerError
+
+    try:
+        timer_names = selected(getattr(args, "cron_timers_off", "off"))
+        if timer_names:
+            validate(Path(args.repo), timer_names)
+        surfaces.extend(timer_surface(name) for name in timer_names)
+    except (TimerError, ValueError, UnicodeError, OSError) as error:
+        print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+        return 4
     if getattr(args, "hermes_product", None) == "retired":
         from automation.hermes_product import surface as product_surface
 
@@ -335,6 +346,21 @@ def cmd_authorize_legacy_service(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_authorize_cron_timer(args: argparse.Namespace) -> int:
+    from automation.cron_timer_owner_off import surface, validate
+    from automation.cron_timer import TimerError
+
+    try:
+        validate(Path(__file__).resolve().parents[1], (args.name,))
+        name, digest = surface(args.name)
+    except (TimerError, UnicodeError) as error:
+        print(f"RELEASE-AUTHORIZE-REFUSED: {error}", file=sys.stderr)
+        return 4
+    return skill_gate.cmd_release_authorize(
+        argparse.Namespace(skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="")
+    )
+
+
 def cmd_authorize_peer_retired(args: argparse.Namespace) -> int:
     from automation.peer_retired import surface
 
@@ -398,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
+    plan.add_argument("--cron-timers-off", default="off", help="승인할 정기 작업 정지 목록(쉼표 구분)")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -454,6 +481,10 @@ def main(argv: list[str] | None = None) -> int:
     legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard", "hermes-memory"), required=True)
     legacy.add_argument("--head", required=True)
     legacy.set_defaults(run=cmd_authorize_legacy_service)
+    timer = commands.add_parser("authorize-cron-timer")
+    timer.add_argument("--name", required=True)
+    timer.add_argument("--head", required=True)
+    timer.set_defaults(run=cmd_authorize_cron_timer)
     retired = commands.add_parser("authorize-peer-retired")
     retired.add_argument("--head", required=True)
     retired.set_defaults(run=cmd_authorize_peer_retired)

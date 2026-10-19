@@ -27,6 +27,7 @@ if __package__ in (None, ""):  # pragma: no cover - 스크립트로 직접 실�
 from automation import deploy_all, deploy_all_gateway, deploy_all_observe  # noqa: E402
 from automation.deploy_declarations import all_declarations  # noqa: E402
 from automation.dori_pin import PIN_RELPATH, PinError, load_pin  # noqa: E402
+from automation.cron_timer import TimerError  # noqa: E402
 from automation.peer_retired import retired_destination  # noqa: E402
 from automation.skill_mount_drift import DriftError, inspect_mounts  # noqa: E402
 from automation.watcher_manifest import (  # noqa: E402
@@ -217,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-memory", choices=("on", "off"), default="on")
+    parser.add_argument("--cron-timers-off", default="off")
     parser.add_argument("--peer-retired", choices=("active", "retired"), default="active")
     from automation.yoodori_channel import channel_value
 
@@ -242,6 +244,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from automation import auto_write
         from automation.node_config import load_node_config
+        from automation.cron_timer_owner_off import MARKER, selected
+
+        timer_names = selected(args.cron_timers_off)
+        observed_timers = _read_home(load_node_config().agent_account, str(MARKER))
+        expected_timers = (hashlib.sha256("".join(f"{name}\n" for name in timer_names).encode("ascii")).hexdigest()
+                           if timer_names else "")
+        if observed_timers == "?":
+            raise deploy_all.ObservationError("owner-off timer marker unreadable")
+        timers_clean = observed_timers == expected_timers
 
         ledger_clean = args.ledger == "off"
         if (args.runtime_root / "automation/ledger/release.py").is_file():
@@ -291,11 +302,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         if plan.hermes_gateways != ("retired" if args.peer_retired == "retired" else args.hermes_gateways):
             raise deploy_all.ObservationError("node observation does not match the host gateway mode")
-    except (DriftError, ManifestError, OSError, subprocess.SubprocessError, deploy_all.ObservationError) as error:
+    except (DriftError, ManifestError, OSError, subprocess.SubprocessError, deploy_all.ObservationError,
+            TimerError, UnicodeError) as error:
         print(f"DEPLOY-ALL-UNVERIFIABLE: {error}", file=sys.stderr)
         return 4
     if args.format == "receipt":
-        if not plan.clean or not notice_clean or not auto_clean or not retirement_clean or not ledger_clean:
+        if not plan.clean or not notice_clean or not auto_clean or not retirement_clean or not ledger_clean or not timers_clean:
             print(deploy_all.render_plan(plan), file=sys.stderr)
             return 1
         verified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -329,6 +341,8 @@ def main(argv: list[str] | None = None) -> int:
         document["auto_write"] = {"enabled": auto_kinds, "kinds": auto_states}
         document["ledger"] = {"mode": args.ledger, "verified": ledger_clean}
         document["omo_relay"] = {"route": args.omo_relay}
+        if timer_names:
+            document["cron_timers_off"] = list(timer_names)
         if args.peer_retired == "retired":
             document["peer_retired"] = "retired"
             document["p5_root_cleanup"] = "owner-block-not-executed-by-release"
@@ -342,17 +356,21 @@ def main(argv: list[str] | None = None) -> int:
             print("ACT|notice-bot|converge")
         if not auto_clean:
             print("ACT|auto-write|converge")
+        if not timers_clean:
+            print("ACT|cron-timers|converge")
         if not retirement_clean or not ledger_clean:
             print("ACT|peer-retire|converge")
-        return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
+        return 0 if plan.clean and notice_clean and auto_clean and retirement_clean and timers_clean else 1
     print(deploy_all.render_plan(plan))
     if not notice_clean:
         print("NOTICE-BOT-DRIFT: account overrides differ from the release")
     if not auto_clean:
         print("AUTO-WRITE-DRIFT: node modes differ from the release")
+    if not timers_clean:
+        print("CRON-TIMERS-OWNER-OFF-DRIFT: node marker differs from the release")
     if not retirement_clean or not ledger_clean:
         print("PEER-RETIRED-PENDING: account cleanup completion is not verified")
-    return 0 if plan.clean and notice_clean and auto_clean and retirement_clean else 1
+    return 0 if plan.clean and notice_clean and auto_clean and retirement_clean and timers_clean else 1
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI 진입점

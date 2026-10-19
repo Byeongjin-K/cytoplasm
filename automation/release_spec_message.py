@@ -209,6 +209,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
     from automation.hermes_product_policy import CARD_LINES as PRODUCT_LINES, SURFACE as PRODUCT_SURFACE
     from automation.gateway_retirement_policy import CARD_LINES as RETIREMENT_LINES, SURFACE as RETIREMENT_SURFACE
+    from automation.cron_timer_owner_off_policy import PREFIX as TIMER_PREFIX
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -223,6 +224,8 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
           if any(name == PRODUCT_SURFACE for name, _digest in spec.surface_digests) else []),
         *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),
         *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
+        *[f"정기 작업 끄기: {name.removeprefix(TIMER_PREFIX).removesuffix(':off')} (파일 삭제 후 재배포로 다시 켬)"
+          for name, _digest in spec.surface_digests if name.startswith(TIMER_PREFIX)],
         *([*RETIRE_LINES, ROOT_NOTE]
           if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CARD_LINE] if any(name == SURFACE for name, _digest in spec.surface_digests) else []),

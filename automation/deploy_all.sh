@@ -77,6 +77,7 @@ relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
 memory_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-memory)" || exit 4
+timer_jobs="$(PYTHONPATH="$repo_root" python3 -B -m automation.cron_timer_owner_off switch)" || exit 4
 if [[ "$peer_mode" == retired && "$gateway_mode" != stopped ]]; then
   echo "PEER-RETIRED-REFUSED: stopped gateways required before removal" >&2
   exit 4
@@ -101,12 +102,17 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   if [[ "$format" == actions && "$gateway_mode" == stopped ]]; then
     before="sudo -n -u ${NODE_OPS_ACCOUNT:-ops} -H bash -c 'umask 077; printf stopped > ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release && cmp -s ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release <(printf stopped)' || exit 4; "
   fi
-  ssh "$host" "${before}python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "${before}python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --cron-timers-off $timer_jobs --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_ledger() {
   PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release apply \
     --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" --mode "$ledger_mode"
+}
+
+converge_owner_off() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.cron_timer_owner_off deploy \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha"
 }
 
 retire_peer() {
@@ -363,8 +369,18 @@ case "$mode" in
         --channel-id "$chat_channel" --head "$node_sha" || exit 4
       converge_notice_bot || exit 4
     fi
+    if [[ "$timer_jobs" != off ]]; then
+      converge_owner_off || exit 4
+    fi
     actions="$(probe actions)"
     rc=$?
+    if (( rc == 0 || rc == 1 )) && grep -qx 'ACT|cron-timers|converge' <<< "$actions"; then
+      # Removing the host flag must remove the old marker before timer observation
+      # can schedule the normal, Hermes-safe restoration deployers.
+      converge_owner_off || exit 4
+      actions="$(probe actions)"
+      rc=$?
+    fi
     if (( rc != 0 && rc != 1 )); then
       log "UNVERIFIABLE: the node cannot judge itself"
       exit 4

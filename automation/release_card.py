@@ -52,7 +52,8 @@ def preflight_new_request(spec: ReleaseSpec) -> tuple[ReleaseSpec | None, str]:
         LEGACY_PLAIN_VERSION,
     ):
         if version != NEW_RENDER_VERSION and any(
-            name in (RAG_MCP_SURFACE, "peer-retired:retired", "ledger:on") for name, _digest in spec.surface_digests
+            name in (RAG_MCP_SURFACE, "peer-retired:retired", "ledger:on")
+            or name.startswith("cron-timer:") for name, _digest in spec.surface_digests
         ):
             break  # Never approve an effect on a fallback card that omits its notice.
         candidate = replace(spec, render_version=version)
