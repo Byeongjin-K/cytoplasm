@@ -323,6 +323,11 @@ case "$mode" in
     fi
     grep -E '^ACT[|]' <<< "$actions" || true
     steps="plan"
+    # The pinned Dori fork: fetch that exact commit and dry-run its installer (lead 2026-10-19).
+    read -r -a pin_check <<< "${DEPLOY_ALL_DORI_PIN_CHECK_CMD:-python3 -B -m automation.dori_pin rehearse}"
+    (cd "$repo_root" && PYTHONPATH="$repo_root" "${pin_check[@]}") \
+      || rehearsal_end 4 "REHEARSAL-REFUSED step=dori-pin rc=4"
+    steps+=",dori-pin"
     if [[ "$peer_mode" == retired ]]; then
       retire_peer || rehearsal_end 4 "REHEARSAL-REFUSED step=peer-retired rc=4"
       steps+=",peer-retired"

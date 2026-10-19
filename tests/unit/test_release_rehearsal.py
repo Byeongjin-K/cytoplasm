@@ -80,7 +80,8 @@ def test_p5_check_still_refuses_an_unexpected_job_count(
         p5_remove.check(home, "agent", "hermes")
 
 
-def _rehearse(tmp_path: Path, *, refuse: str = "") -> tuple[subprocess.CompletedProcess[str], list[str]]:
+def _rehearse(tmp_path: Path, *, refuse: str = "", pin_check: str = "true",
+              ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     from tests.unit.test_hermes_gateways_stop import _host
 
     repo, env = _host(tmp_path, "stopped")
@@ -89,7 +90,8 @@ def _rehearse(tmp_path: Path, *, refuse: str = "") -> tuple[subprocess.Completed
     (flags / "litellm").write_bytes(b"retired")
     env.update(NODE_AGENT_ACCOUNT="agent", NODE_PEER_ACCOUNT="peer", NODE_OPS_ACCOUNT="ops",
                NODE_PRIVATE_ROOT=str(tmp_path / "private"),
-               DEPLOY_ALL_REHEARSAL_DIR=str(tmp_path / "rehearsal"))
+               DEPLOY_ALL_REHEARSAL_DIR=str(tmp_path / "rehearsal"),
+               DEPLOY_ALL_DORI_PIN_CHECK_CMD=pin_check)
     ssh = tmp_path / "bin/ssh"
     extra = (
         '*"mkdir /tmp/deploy-rehearse."*) cat >/dev/null;;\n'
@@ -107,7 +109,7 @@ def _rehearse(tmp_path: Path, *, refuse: str = "") -> tuple[subprocess.Completed
 def test_rehearsal_runs_every_approved_removal_check_from_the_staged_candidate(tmp_path: Path) -> None:
     result, calls = _rehearse(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,hermes-product,spend-gateway"
+    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,dori-pin,hermes-product,spend-gateway"
     assert not any(line.startswith("authorize ") for line in calls)
     removals = [line for line in calls if "--remove" in line]
     assert len(removals) == 3 and all(
