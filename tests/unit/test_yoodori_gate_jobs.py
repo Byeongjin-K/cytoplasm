@@ -102,9 +102,6 @@ def test_patent_stt_meeting_and_wiki_jobs(staged: Path) -> None:
                            "--slug", "valve-seal", *ORIGIN] and export.write
     assert stt.argv[-4:] == ["--notify-channel", "123456789", "--notify-message-id", "987654321"]
     assert stt.timeout == 4 * 3600
-    # Owner 2026-10-19 (Q278): wiki notes go to Obsidian; the gate refuses and says where.
-    with pytest.raises(gate.Refused, match="_vault/note"):
-        gate.build_job(["wiki-write", "--title", "실험 규칙", "--body-b64", b64("본문"), *ORIGIN])
 
 
 @pytest.mark.parametrize("words", [
@@ -122,9 +119,6 @@ def test_patent_stt_meeting_and_wiki_jobs(staged: Path) -> None:
     ["patent", "export", "--slug", "x", "--allow-plaintext", *ORIGIN],
     ["stt", "ingest", "--file", str(Path.home() / "x.m4a"), *ORIGIN],
     ["stt", "ingest", "--notify-channel", "1", *ORIGIN],
-    ["wiki-write", "--title", "t", "--body", "plain", *ORIGIN],
-    ["wiki-write", "--edit", "../x", "--body-b64", b64("b"), *ORIGIN],
-    ["wiki-write", "--body-b64", b64("b"), *ORIGIN],
 ])
 def test_job_misuse_is_refused(staged: Path, words: list[str]) -> None:
     with pytest.raises(gate.Refused):

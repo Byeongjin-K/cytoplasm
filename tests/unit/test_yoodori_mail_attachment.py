@@ -72,8 +72,9 @@ def test_an_owner_mail_attachment_is_staged_and_only_its_path_is_printed(
     out = capsys.readouterr().out
     assert rc == 0 and staged.read_bytes() == PAYLOAD
     assert staged.stat().st_mode & 0o777 == 0o600
+    assert (gate.STAGING / "mail-9793361-2.hwpx.name").read_text(encoding="utf-8") == NAME
     assert out.strip() == (f"STAGED mail-9793361-2.hwpx sha256={hashlib.sha256(PAYLOAD).hexdigest()} "
-                           f"bytes={len(PAYLOAD)} path={staged}")
+                           f"bytes={len(PAYLOAD)} path={staged} original={NAME}")
     assert gate.checked_value(str(staged), "file", gate.STAGING) == str(staged)
 
 
