@@ -13,8 +13,9 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Final
 
+from automation.owner_timers_policy import PREFIX as PREFIX
+
 MARKER: Final = ".hermes/owner-timers/off"
-PREFIX: Final = "owner-timer-off:"
 ROOT: Final = Path(__file__).resolve().parents[1]
 NAME: Final = re.compile(r"[a-z0-9][a-z0-9-]*")
 
