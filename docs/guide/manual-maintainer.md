@@ -186,7 +186,7 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
    `헬스체크 허용 목록 갱신 실패 — <node>: <사유>`(설치 뒤 지문 불일치 포함) 또는 `… 보류 —`
    (카드가 그 지문을 싣지 않았음·⛔·승인 확인 불가) 줄로 온다. 실패해도 영수증은 쓰인다.
 
-손으로 다시 설치하는 길(`bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install <node>`)은
+손으로 다시 설치하는 길(`f=$(mktemp) && sudo -n -u ops -H bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --print <node> > "$f" && bash /srv/autophagy-agent-current/automation/provision-healthcheck-probe.sh --from-file "$f" <node>; rm -f "$f"`, 헬스체크 계정이 생성하고 운영자가 설치 — 2026-10-19)은
 그대로다 — 카드가 갱신을 싣지 못한 릴리스의 남은 조치는 다음 릴리스 카드가 다시 싣거나 그 명령으로 닫는다.
 [기능 소개](../기능소개/릴리스-카드-헬스체크-허용목록-갱신.md)
 
