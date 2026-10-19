@@ -247,15 +247,54 @@ def _wrapper_lines(document: Mapping[str, object]) -> list[str]:
     return lines
 
 
-def pending_lines(document: object) -> tuple[str, ...]:
-    """영수증 JSON → 사람이 읽을 남은 소유자 조치 줄. v1·판독 불가 문서는 빈 목록이다(예외 없음)."""
+#: Probes whose failed fix needs root on the node — only the owner holds sudo. Everything else in
+#: the receipt (wrapper refresh, unknown probes, held rows, the RAG stack) the operator fixes,
+#: so the applied notice routes it to the pair channel (owner 2026-10-19 "릴리스 안내 간략하게 만들어").
+_OWNER_ONLY_PROBES: Final = frozenset({"release_helper_drift"})
+
+
+def _owner_only(action: Mapping[str, object]) -> bool:
+    return action.get("probe") in _OWNER_ONLY_PROBES and action.get("status") == "FAIL"
+
+
+def _v2(document: object) -> Mapping[str, object] | None:
     if not isinstance(document, Mapping):
-        return ()
+        return None
     version = document.get("version")
-    if type(version) is not int or version < RECEIPT_VERSION:
+    return document if type(version) is int and version >= RECEIPT_VERSION else None
+
+
+def owner_lines(document: object) -> tuple[str, ...]:
+    """남은 조치 가운데 형만 할 수 있는 것(root) — 형 채널에 실을 짧은 한국어 한 줄씩."""
+    receipt = _v2(document)
+    if receipt is None:
         return ()
+    lines: list[str] = []
+    for action in _records(receipt, "pending_owner_actions"):
+        if not _owner_only(action):
+            continue
+        guidance = action.get("guidance")
+        command = next(
+            (line[line.index("sudo "):] for line in guidance if isinstance(line, str) and "sudo " in line),
+            "",
+        ) if isinstance(guidance, list) else ""
+        lines.append(f"노드에서 `{one_line(command)}` 한 번" if command else "노드 root 도우미 갱신(sudo) 한 번")
+    return tuple(lines)
+
+
+def pending_lines(document: object, *, operator_only: bool = False) -> tuple[str, ...]:
+    """영수증 JSON → 사람이 읽을 남은 조치 줄. v1·판독 불가 문서는 빈 목록이다(예외 없음).
+
+    `operator_only` 면 형만 할 수 있는 조치(`owner_lines`)를 빼고 운영자가 고칠 것만 낸다.
+    """
+    receipt = _v2(document)
+    if receipt is None:
+        return ()
+    document = receipt
     lines: list[str] = _wrapper_lines(document)
     for action in _records(document, "pending_owner_actions"):
+        if operator_only and _owner_only(action):
+            continue
         lines += _action_lines(action)
     if document.get("pending_unknown") is not False:
         lines.append("- 확인 불가 — 위임 프로브(root 자산·RAG·헬스체크 허용 목록)를 릴리스 시점에 돌리지 못했다")
