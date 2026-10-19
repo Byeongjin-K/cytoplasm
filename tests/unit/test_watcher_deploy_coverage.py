@@ -190,6 +190,19 @@ def test_weekly_helper_adopters_ship_the_helper_and_reconcile_weekday_schedule(
     assert helper in guard_block[1].split("|| exit", 1)[0], (
         f"{watch_name} helper must be covered by deploy_provenance_check"
     )
+    if watch_name == "research-trends":
+        # This adopter is retired: runtime delivery remains, schedule creation must not.
+        from automation.deploy_declarations import all_declarations
+
+        rows = all_declarations(_REPO_ROOT)
+        assert not any(row.kind == "cron" and row.destination == watch_name for row in rows)
+        assert any(row.owner == "automation/retired_jobs" and row.policy == "required"
+                   and row.attr("algorithm") == "retired-job-v1"
+                   and row.destination == f".config/systemd/user/autophagy-cron-{watch_name}.timer"
+                   for row in rows)
+        assert not re.search(r"hermes cron (create|edit)|^converge_(cron|timer)\s",
+                             deploy_text, re.M)
+        return
     assert weekday_schedule in deploy_text, (
         f"{watch_name} deploy must set its weekday catch-up schedule"
     )

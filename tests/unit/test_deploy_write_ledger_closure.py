@@ -38,7 +38,6 @@ _APPROVED: Final = {
     ("automation/notes_organize/deploy.sh", "raw"): 1,
     ("automation/rag_stack/deploy_runtime.sh", "raw"): 2,
     ("automation/regression_bank/deploy_lab_node.sh", "raw"): 8,
-    ("automation/research_trends/deploy.sh", "raw"): 1,
     ("skills/budget/deploy.sh", "raw"): 1,
     ("skills/mail/deploy.sh", "dest"): 2,
     ("skills/mail/deploy.sh", "raw"): 5,

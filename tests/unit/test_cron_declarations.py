@@ -31,7 +31,6 @@ HELPER_SOURCE: Final = 'source "$repo_root/automation/deploy_cron.sh"'
 TIMER_SOURCE: Final = 'source "$repo_root/automation/deploy_timer.sh"'
 PINNED: Final = frozenset({
     ("automation/notes_organize", "notes-weekly-organize"),
-    ("automation/research_trends", "research-trends"),
     ("skills/budget", "budget-watch"),
     ("skills/mail", "mail-daily-digest"),
     ("skills/mail", "mail-triage-watch"),
@@ -234,7 +233,7 @@ def test_every_registration_matches_its_declaration() -> None:
 
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
-    assert len(names["agent"]) == 29
+    assert len(names["agent"]) == 28
     assert names["peer"] == {"doctor-watch", "selfskill-audit-watch"}
     timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
     assert timers == {("agent", name) for name in names["agent"]}  # 바로 전환: agent 잡 전부가 타이머

@@ -160,11 +160,12 @@ def test_second_run_is_a_noop(tmp_path: Path) -> None:
 
 def test_removed_jobs_have_no_schedule_and_cleanup_is_required() -> None:
     rows = all_declarations(ROOT)
-    removed = {"memory-curator-watch", "memory-relocate-watch", "reminder-poller", "daily-cost-report"}
+    removed = {"memory-curator-watch", "memory-relocate-watch", "reminder-poller",
+               "daily-cost-report", "research-trends"}
     assert not any(row.kind == "cron" and row.destination in removed for row in rows)
     assert not any(row.source.startswith("automation/reminder_poller/") for row in rows)
     cleanup = [row for row in rows if row.owner == "automation/retired_jobs"]
-    assert len(cleanup) == 5
+    assert len(cleanup) == 6
     assert all(row.kind == "derived" and row.policy == "required" for row in cleanup)
     assert {row.destination for row in cleanup if row.destination.startswith("state/")} == set(retired_jobs.DATA)
 
@@ -223,7 +224,7 @@ def test_release_observer_dispatches_every_cleanup_declaration(status: str) -> N
         result = _derived(row, ROOT, call, {})
         assert result.state == ("unknown" if status == "unexpected" else status)
     assert [call[2] for call in calls] == [
-        "memory-curator-watch", "memory-relocate-watch", "reminder-poller",
+        "memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends",
         "reminder-poller", "reminder-poller",
     ]
     assert all(call[:2] == ("retired-job", str(ROOT)) for call in calls)
@@ -248,8 +249,28 @@ def test_deployer_requires_the_active_release_before_cleanup(
     monkeypatch.setattr(retired_jobs.subprocess, "run", run)
     result = retired_jobs.deploy("test-node", "/srv/current", head)
     assert result == (0 if matches else 4)
-    assert len(calls) == (4 if matches else 1)
+    assert len(calls) == (5 if matches else 1)
     assert calls[0] == ("ssh", "test-node", "readlink /srv/current")
     if matches:
         assert all("automation.retired_jobs install --name " + name in command[2]
                    for name, command in zip(retired_jobs.JOBS, calls[1:], strict=True))
+
+
+def test_research_timer_release_cleanup_preserves_reports_and_topic_state(tmp_path: Path) -> None:
+    units = retired_jobs.unit_paths(tmp_path, "research-trends")
+    units[0].parent.mkdir(parents=True)
+    for path in units:
+        path.write_bytes(b"old unit")
+    kept = (tmp_path / ".hermes/state/research-topics.yaml",
+            tmp_path / ".hermes/research-trends/research-trends-v1.md",
+            tmp_path / "notes/research-trends/report.md")
+    for path in kept:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"keep")
+    calls: list[tuple[str, ...]] = []
+    runner = _live_runner(calls, obeys=True)
+    assert retired_jobs.check(tmp_path, "research-trends", runner) == "stale"
+    retired_jobs.install(tmp_path, "research-trends", runner)
+    assert all(not path.exists() for path in units)
+    assert all(path.read_bytes() == b"keep" for path in kept)
+    assert retired_jobs.check(tmp_path, "research-trends", runner) == "ok"
