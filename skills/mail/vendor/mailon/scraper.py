@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Generator
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin, urlencode, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -79,6 +79,16 @@ PAGE_SIZE = 20
 # Large attachments: extract cookies from browser session and download
 # via Python urllib streaming to disk (no memory limit, streams 1GB+).
 SMALL_ATTACHMENT_MAX_BYTES = 30 * 1024 * 1024   # 30 MB
+# Mailplug "대용량 첨부" links point outside the webmail origin, so an in-page fetch() fails
+# with a CORS "Failed to fetch". They are public download URLs (no login, 2026-10-19 check), so
+# they are fetched directly — never with the webmail session cookies, which stay on mailon.kr.
+LARGE_FILE_HOSTS = frozenset({"filefree.mailplug.com"})
+# Links that failed under the old in-page fetch get a fresh retry budget on top of the usual 5.
+EXTERNAL_MAX_ATTEMPTS = 10
+
+
+def is_large_file_link(href: str) -> bool:
+    return urlsplit(href or "").hostname in LARGE_FILE_HOSTS
 URLLIB_CHUNK_SIZE = 1024 * 1024                  # 1 MB per read
 MAX_MAIL_FETCH_ATTEMPTS = 3
 MAIL_FETCH_RETRY_DELAY_S = 2.0
@@ -634,7 +644,10 @@ class InboxScraper:
         safe_name = self._sanitize_filename(filename)
         target = target_dir / safe_name
 
-        if declared_size is not None and declared_size > SMALL_ATTACHMENT_MAX_BYTES:
+        if is_large_file_link(href):
+            log.info("large-file link; downloading directly: uid=%s %s", uid, filename)
+            self._download_large_via_urllib(href, target, cookies=False)
+        elif declared_size is not None and declared_size > SMALL_ATTACHMENT_MAX_BYTES:
             log.info("large attachment (%d bytes > %d); streaming via urllib: uid=%s %s",
                      declared_size, SMALL_ATTACHMENT_MAX_BYTES, uid, filename)
             self._download_large_via_urllib(href, target)
@@ -667,14 +680,14 @@ class InboxScraper:
             raw = json.loads(raw)
         target.write_bytes(base64.b64decode(raw))
 
-    def _download_large_via_urllib(self, href: str, target: Path) -> None:
-        """Copy browser session cookies and stream download via Python urllib."""
-        cookie_header = self._get_cookie_header_from_browser()
+    def _download_large_via_urllib(self, href: str, target: Path, *, cookies: bool = True) -> None:
+        """Stream a download via Python urllib, with the webmail session cookies unless told not to."""
+        cookie_header = self._get_cookie_header_from_browser() if cookies else ""
         # User-Agent from browser matters less, but we mimic Chrome for safety
         req = urllib.request.Request(
             href,
             headers={
-                "Cookie": cookie_header,
+                **({"Cookie": cookie_header} if cookie_header else {}),
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -775,7 +788,10 @@ class InboxScraper:
         self, state_db: StateDB, *, max_attempts: int = 5,
     ) -> tuple[int, int]:
         """Retry attachments previously marked 'fail'. Returns (succeeded, still_failing)."""
-        failed = state_db.all_failed_attachments(max_attempts=max_attempts)
+        failed = [
+            rec for rec in state_db.all_failed_attachments(max_attempts=EXTERNAL_MAX_ATTEMPTS)
+            if rec["attempts"] < max_attempts or is_large_file_link(rec["href"])
+        ]
         if not failed:
             return (0, 0)
         log.info("retrying %d previously-failed attachment(s)", len(failed))

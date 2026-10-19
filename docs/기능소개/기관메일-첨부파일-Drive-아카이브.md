@@ -30,3 +30,10 @@ MailOn의 첨부파일을 Google Drive `autophagy/메일 첨부파일/<연도>/<
 - `skills/mail/scripts/mail_attachment_drive_sync.py`, `skills/mail/scripts/mail_attachment_drive_watch.py`
 - `automation/drive_client.py`, `skills/mail/scripts/mail_runtime.py`, `skills/mail/deploy-manifest.txt`
 - 회귀: `tests/unit/test_mail_attachment_drive_sync.py`
+
+## 대용량 첨부 링크도 받기 (2026-10-19)
+기관메일의 「대용량 첨부」는 메일에 파일이 붙지 않고 `filefree.mailplug.com` 다운로드 링크로 온다. 수집기는 그 링크를 웹메일 화면 안에서 받으려다 다른 주소라 `Failed to fetch` 로 실패했고(5번 뒤 포기), 첨부가 `ok` 가 아니라 Drive 아카이브도 건너뛰었다(10/18 정준 소장 메일의 pptx·wrl 3개).
+- 이제 그 호스트의 링크는 로그인 없이 바로 내려받는다(노드에서 확인: 로그인·VPN 없이 200/206). 웹메일 세션 쿠키는 그 주소로 보내지 않는다.
+- 옛 방식으로 5번 실패한 대용량 링크는 다음 수집 때 다시 받는다(최대 10번). 받은 파일은 기존 Drive 아카이브가 다음 틱에 저장한다.
+- 링크 만료(보통 한 달) 뒤에는 받을 수 없고 예전처럼 실패로 남는다. 다른 외부 다운로드 주소는 지금처럼 받지 않는다.
+- 시험 `tests/unit/test_mailon_large_file_links.py`.
