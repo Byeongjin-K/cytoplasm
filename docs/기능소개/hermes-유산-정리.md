@@ -73,7 +73,9 @@ RAG 입력을 다시 쓰려면 계정의 `~/.hermes/rag-ingest/config.json`에�
 제거 범위는 `~/.hermes/` 아래 `state.db`와 `-wal`·`-shm`, `sessions/`,
 `memories/`, `skills/`, `models_dev_cache.json`·`.etag`,
 `gateway_state.json`, `gateway-generation.json`, `gateway-starts.log`,
-`gateway-stopped-by-release`뿐이다. `kanban.db`는 작은 장부의 `metadata`에
+`gateway-stopped-by-release`뿐이다. 계정 홈 밖 ops의 `private_root/gateway-stopped-by-release`는
+제거하지 않는다. 영수증이 없는 자동 수렴도 정지 의도를 보존하도록 남기는 표식이다.
+`kanban.db`는 작은 장부의 `metadata`에
 같은 트랜잭션으로 기록된 `migration`(보드·카드·상태 개수)·`source` 지문과
 활성 `mode=on`을 확인하고, 현재 원본 전체 내보내기·원본 DB 개수·지문이 다시
 일치할 때만 추가한다. 증적이 없거나 달라졌거나 `-wal`에 아직 반영 안 된 내용(0바이트 초과)이 있으면 남기고 이유를 알린다.

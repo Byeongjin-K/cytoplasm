@@ -92,10 +92,16 @@ readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-al
 log() { printf '[deploy-all] %s\n' "$*" >&2; }
 
 probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정을 그대로 중계한다
-  local format="$1" extra=""
+  local format="$1" extra="" before=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  # Only --apply requests actions, after authorizing the stop. Persist intent before
+  # any unit mutation, even if planning fails or finds an already-clean retired peer.
+  # Use the existing ops write path; no account-home access or new sudo grant.
+  if [[ "$format" == actions && "$gateway_mode" == stopped ]]; then
+    before="sudo -n -u ${NODE_OPS_ACCOUNT:-ops} -H bash -c 'umask 077; printf stopped > ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release && cmp -s ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release <(printf stopped)' || exit 4; "
+  fi
+  ssh "$host" "${before}python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_ledger() {
@@ -251,13 +257,18 @@ wait_gateway_generation() {
 write_receipt() {
   # 영수증 내용은 노드가 **지금 다시 판정**해 만든다 — 아까의 판정을 재사용하면
   # 그 사이의 변화가 서명된다. read-back 대조는 deploy_push 와 같은 규율이다.
-  local receipt want got
+  local receipt want got after=""
   if ! receipt="$(probe receipt "${wrapper_receipt_args[@]}" "${rag_receipt_args[@]}")"; then
     log "RECEIPT-BLOCK: the node no longer judges itself clean"
     return 1
   fi
   want="$(printf '%s' "$receipt" | sha256sum | cut -d' ' -f1)"
-  printf '%s' "$receipt" | ssh "$host" "sudo -n -u ops -H bash -c 'umask 027; mkdir -p $RECEIPT_DIR && cat > $RECEIPT_DIR/receipt.json'" \
+  # Clear only after the running-mode probe above proves both units active.
+  # Failed/partial starts keep the stop intent, even without a clean receipt.
+  if [[ "$mode" == --apply && "$gateway_mode" == running ]]; then
+    after=" && rm -f -- ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release && test ! -e ${NODE_PRIVATE_ROOT:-/srv/autophagy-private}/gateway-stopped-by-release"
+  fi
+  printf '%s' "$receipt" | ssh "$host" "sudo -n -u ops -H bash -c 'umask 027; mkdir -p $RECEIPT_DIR && cat > $RECEIPT_DIR/receipt.json$after'" \
     || { log "RECEIPT-BLOCK: could not write the receipt"; return 1; }
   got="$(ssh "$host" "sudo -n -u ops -H bash -c 'sha256sum $RECEIPT_DIR/receipt.json | cut -d\" \" -f1'" < /dev/null)"
   got="${got//[[:space:]]/}"
@@ -354,7 +365,7 @@ case "$mode" in
     fi
     actions="$(probe actions)"
     rc=$?
-    if (( rc == 4 )); then
+    if (( rc != 0 && rc != 1 )); then
       log "UNVERIFIABLE: the node cannot judge itself"
       exit 4
     fi

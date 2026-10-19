@@ -22,7 +22,9 @@
    `hermes-gateways:stopped` 표면과 `stopped`의 SHA-256이 승인 해시에 묶인다.
    배포 HEAD의 소유자 승인에 이 표면이 없으면 `GATEWAY-STOP-UNAUTHORIZED`로 멈춘다.
    파일이 없으면 기존 카드 바이트·해시는 바뀌지 않는다.
-2. **실행:** 승인 뒤 배포기가 두 계정에서 `systemctl --user stop hermes-gateway.service`를
+2. **실행:** 승인 뒤 actions 판정 전에 ops의 `private_root/gateway-stopped-by-release`에
+   줄바꿈 없는 `stopped`를 0600으로 쓰고 바이트를 재확인한다. 이미 전량 일치하거나
+   peer가 은퇴한 경우에도 계정 홈 접근 없이 기록한다. 그 뒤 두 계정에서 `systemctl --user stop hermes-gateway.service`를
    실행한 뒤 `systemctl --user reset-failed hermes-gateway.service`로 SIGTERM의 종료코드 1이
    남긴 failed 상태를 지우고 `is-active`가 `inactive`인지 확인한다. start·disable은 하지 않는다.
    한 계정이 실패해도 다른 계정은 시도하며,
@@ -36,11 +38,25 @@
 4. **복구:** 호스트의 스위치 파일을 삭제하고 다시 배포한다.
    배포기가 두 계정의 노드 표식만 지우고 `systemctl --user start hermes-gateway.service`를
    실행한다. 활성 상태·현재 릴리스 세대를 확인한 뒤 전량 재판정한다.
+   실행 모드의 새 영수증을 쓸 때 ops 정지 표식도 지우고 부재를 확인한다.
+   시작이나 전량 판정이 실패하면 ops 표식은 남는다. 한쪽만 정지한 부분 실패도
+   다음 자동 수렴이 두 게이트웨이를 조용히 켜지 못하도록 보수적으로 보존한다.
    서비스 파일·설정을 재설치하거나 enable할 필요가 없다.
 
 영수증은 최상위 `hermes_gateways`에 `stopped` 또는 `running`을,
 `surfaces.gateway_services`에 계정별 확인된 상태를 기록한다.
 노드 표식은 배포기가 쓰고 지우는 운영 상태이며 호스트 스위치를 대신하는 승인 수단이 아니다.
+리컨실러는 영수증이 있으면 그 모드를 우선한다. **영수증 파일이 없을 때만**
+ops 표식의 정확한 `stopped`로 업데이트·롤백 재시동을 생략한다.
+잘못된 바이트·읽기 실패는 `GATEWAY-RECEIPT-BLOCK`으로 수렴 전에 거부한다.
+영수증과 ops 표식이 모두 없으면 기존처럼 재시동한다. 따라서 이 수정 전에 정지한
+노드는 이 코드로 다음 `deploy_all --apply`를 실행하기 전까지 새 표식이 없다.
+계정 홈 표식만으로는 이 폴백이 작동하지 않는다.
+
+기본 ops 표식은 `/srv/autophagy-private/gateway-stopped-by-release`다.
+기존 `peer-retired`와 같은 운영자→ops 쓰기 권한을 쓰며 새 root·sudo 권한은 없다.
+리컨실러의 `ProtectHome=tmpfs`는 `/srv`를 숨기지 않고, 이 유닛에는 `/srv`를
+차단하는 `ReadOnlyPaths`도 없다. peer 계정이 삭제돼도 이 판독은 가능하다.
 정기 작업을 사용자 타이머로 옮긴 기능과 별개라, Hermes 게이트웨이가 수행하던 에이전트 모드 잡은
 정지 중 실행되지 않는다.
 

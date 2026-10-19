@@ -12,12 +12,23 @@ from typing import Final
 STOP_MARKER: Final = ".hermes/gateway-stopped-by-release"
 
 
+def stopped_in_projection(path: Path) -> bool:
+    """Read ops-owned stop intent without entering protected account homes."""
+    try:
+        value = path.read_bytes()
+    except FileNotFoundError:
+        return False  # Pre-projection installs retain the legacy restart policy.
+    if value != b"stopped":
+        raise ValueError("GATEWAY-PROJECTION-INVALID: expected the literal word stopped only")
+    return True
+
+
 def stopped_in_receipt(path: Path, accounts: Sequence[str]) -> bool:
-    """Retain the last fully applied mode; ops can read this outside protected homes."""
+    """Prefer the applied receipt; missing receipts fall back to ops-owned stop intent."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return False  # Legacy installations before their first deploy-all receipt.
+        return stopped_in_projection(path.parent.parent / "gateway-stopped-by-release")
     if not isinstance(raw, dict):
         raise ValueError("GATEWAY-RECEIPT-INVALID: expected an object")
     sha = raw.get("release_sha")
