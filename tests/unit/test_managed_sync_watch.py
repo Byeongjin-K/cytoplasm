@@ -171,7 +171,7 @@ def test_a_failed_notice_does_not_undo_a_staged_release(
     monkeypatch.setattr(watch, "run_sync_once", staged)
     monkeypatch.setattr(watch, "run_roster_once", lambda: None)
 
-    def fail_notice(_notice: str, *, message: OwnerMessage | None = None) -> bool:
+    def fail_notice(_notice: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         return False
 
     monkeypatch.setattr(watch, "notify_owner", fail_notice)

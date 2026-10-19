@@ -210,7 +210,7 @@ def render(message: OwnerMessage, *, destination: Ref) -> str:
     """Validate once; replay v1 or present Discord v2/v3 without changing the contract."""
     _validate(message, destination)
     if message.contract_version != 1 or message.render_version not in {
-        "owner-ko-v1", "owner-ko-v2", "owner-ko-v3", "owner-ko-v4",
+        "owner-ko-v1", "owner-ko-v2", "owner-ko-v3", "owner-ko-v4", "owner-ko-v5",
     }:
         field = "contract_version" if message.contract_version != 1 else "render_version"
         raise OwnerMessageError(message.contract_version, message.render_version, detail=f"message.{field}")
@@ -230,6 +230,12 @@ def render(message: OwnerMessage, *, destination: Ref) -> str:
             assert_never(message.recovery)
     owner = _action(message.owner, action_location, destination)
     presentation = Presentation(location, owner, recovery)
+    if message.render_version == "owner-ko-v5":
+        # One owner-facing line (2026-10-19): the fact, plus the source link when there is one
+        # (angle brackets: no preview card). The key and internal search labels stay in the record.
+        line = " ".join(message.fact.split())
+        link = message.location.url
+        return f"{line} · <{link}>" if link else line
     if message.render_version == "owner-ko-v1":
         return render_v1(message, presentation, _datetime)
     if message.render_version == "owner-ko-v4":

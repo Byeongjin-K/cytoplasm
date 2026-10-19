@@ -36,7 +36,7 @@ tar -C "$stage" -cf - . | ssh "$HOST" "sudo -n -u $ACCOUNT -H bash -c \
 run_log="$REPORT_DIR/remote-run.log"
 set +e
 timeout "$RUN_TIMEOUT" ssh "$HOST" "sudo -n -u $ACCOUNT -H bash -lc \
-  'set -euo pipefail; cd ~; E2E_TEST_MODE=1 python3 $PUSH_DIR/remote.py \
+  'set -euo pipefail; mkdir -p $PUSH_DIR/home; export HOME=$PUSH_DIR/home; cd ~; E2E_TEST_MODE=1 python3 $PUSH_DIR/remote.py \
    --fixtures $PUSH_DIR/fixtures'" </dev/null >"$run_log" 2>&1
 run_rc=$?
 set -e

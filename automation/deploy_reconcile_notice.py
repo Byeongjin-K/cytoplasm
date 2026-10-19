@@ -92,7 +92,7 @@ def send_notice(callback: Callable[[str], bool], content: str, window: Window | 
         return True
     message = build_notice(content, window)
     if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-        ok = notify_owner(content, message=message)
+        ok = notify_owner(content, message=message, fault=True)
     else:
-        ok = notify_owner(content)
+        ok = notify_owner(content, fault=True)
     return ok

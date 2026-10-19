@@ -62,6 +62,17 @@ for yaml in "${scenarios[@]}"; do
   name="$(basename "$yaml" .yaml)"
   driver="$(sed -n 's/^driver:[[:space:]]*//p' "$yaml" | head -1)"
   live_retry="$(sed -n 's/^live_retry:[[:space:]]*//p' "$yaml" | head -1)"
+  # A scenario whose subject was retired by a release switch is reported, not run (2026-10-19:
+  # report-hub, peer coordination and Hermes memory). Removing the switch file brings it back.
+  retired_when="$(sed -n 's/^retired_when:[[:space:]]*//p' "$yaml" | head -1)"
+  if [[ "$retired_when" == ?*=?* ]]; then
+    flag_file="${BANK_RELEASE_FLAGS_DIR:-$HOME/.hermes/release-flags}/${retired_when%%=*}"
+    if [[ -f "$flag_file" && ! -L "$flag_file" && "$(cat -- "$flag_file"; printf x)" == "${retired_when#*=}x" ]]; then
+      echo "=== scenario $name RETIRED (release switch ${retired_when%%=*}=${retired_when#*=})"
+      summary+=("RETIRED $name (${retired_when%%=*})")
+      continue
+    fi
+  fi
   if [[ -z "$driver" || ! -f "$ROOT/$driver" ]]; then
     summary+=("FAIL $name (driver missing: ${driver:-<none>})")
     failed=1

@@ -79,7 +79,7 @@ class TestClaimsReportFailure:
             _ = home
             raise OSError
 
-        def notify(text: str) -> bool:
+        def notify(text: str, **_: object) -> bool:
             sent.append(text)
             return True
 

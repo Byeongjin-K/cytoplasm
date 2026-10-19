@@ -186,9 +186,9 @@ def run_tick() -> int:
             # (i) best-effort: a failed DM must not undo an already-quarantined release.
             message = staged_message(notice)
             if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-                _ = notify_owner(notice, message=message)
+                _ = notify_owner(notice, message=message, fault=True)
             else:
-                _ = notify_owner(notice)
+                _ = notify_owner(notice, fault=True)
         return code
 
 

@@ -48,9 +48,9 @@ def alert_owner(content: str, *, notify: NotifyOwner | None = None) -> bool:
 
         message = build_notice(content)
         if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-            ok = notify_owner(content, message=message)
+            ok = notify_owner(content, message=message, fault=True)
         else:
-            ok = notify_owner(content)
+            ok = notify_owner(content, fault=True)
         return bool(ok)
     except Exception:  # noqa: BLE001 — best-effort notification, must not crash the cron
         return False

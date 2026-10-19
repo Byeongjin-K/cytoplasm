@@ -86,6 +86,11 @@ run_as() { # run_as <account> <script>  (stdin passes through for file pushes)
 
 PEER_RETIRED=active
 SANDBOX_ACCOUNT="$NODE_PEER_ACCOUNT"
+# Where the sandbox account keeps the staged skill, as a node-side shell expression. With peer
+# retired the sandbox runs as agent, whose real ~/.hermes/skills is a live discovery root: staging
+# there shadowed the governed skill for a minute per deploy (2026-10-19 SHADOWS-GOVERNED mail at
+# v2.6.2 and v2.6.3 apply). A retired peer's sandbox therefore gets a home of its own.
+SANDBOX_HOME='$HOME'
 
 # WHY the chmod before every rm below: skill trees are shipped read-only (E9 seals
 # releases 0555/0444) and tar PRESERVES those modes, so the previous deploy's copy
@@ -122,7 +127,7 @@ push_skill() { # push_skill <account> <src_dir> <name>
   local acct="$1" src="$2" name="$3"
   [[ "$(basename "$src")" == "$name" ]] || die "source dir basename must equal skill name"
   skill_archive_stream "$src" "$name" \
-    | run_as "$acct" "chmod -R u+w \"\$HOME/.hermes/skills/$name\" 2>/dev/null; rm -rf \"\$HOME/.hermes/skills/$name\" && mkdir -p \"\$HOME/.hermes/skills\" && tar -xzf - -C \"\$HOME/.hermes/skills\""
+    | run_as "$acct" "chmod -R u+w \"$SANDBOX_HOME/.hermes/skills/$name\" 2>/dev/null; rm -rf \"$SANDBOX_HOME/.hermes/skills/$name\" && mkdir -p \"$SANDBOX_HOME/.hermes/skills\" && tar -xzf - -C \"$SANDBOX_HOME/.hermes/skills\""
 }
 
 PEER_STAGING_PUSHED=0
@@ -133,7 +138,9 @@ PEER_STAGING_PUSHED=0
 # same treatment or the copy silently survives (measured 2026-08-15: coordination, prompt
 # and wiki were still staged on peer from 2026-08-01/08-04, all dr-xr-xr-x).
 remove_peer_skill_copy() { # remove_peer_skill_copy <name>
-  run_as "$SANDBOX_ACCOUNT" "chmod -R u+w \"\$HOME/.hermes/skills/$1\" 2>/dev/null; rm -rf \"\$HOME/.hermes/skills/$1\"" || true
+  run_as "$SANDBOX_ACCOUNT" "chmod -R u+w \"$SANDBOX_HOME/.hermes/skills/$1\" 2>/dev/null; rm -rf \"$SANDBOX_HOME/.hermes/skills/$1\"" || true
+  # A retired peer's sandbox is a home of its own; the Hermes CLI scaffolds files there too.
+  [[ "$SANDBOX_HOME" == '$HOME' ]] || run_as "$SANDBOX_ACCOUNT" "chmod -R u+w \"$SANDBOX_HOME\" 2>/dev/null; rm -rf \"$SANDBOX_HOME\"" || true
 }
 
 # Peer staging must not outlive this execution on ANY exit path, so the EXIT trap owns the
@@ -278,7 +285,7 @@ skill_digest() { # deterministic content hash of the skill dir
   PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -c 'from pathlib import Path; from automation.skill_review import skill_digest; import sys; print(skill_digest(Path(sys.argv[1])))' "$1"
 }
 
-hermes_lists_skill() { # hermes_lists_skill <account> <name> -> exit 0 when listed
+hermes_lists_skill() { # hermes_lists_skill <account> <name> [<home expr>] -> exit 0 when listed
   # `hermes skills list` renders a BORDERED TABLE, so a whole-line match (-Fx) can
   # never succeed — a824c4f introduced one and silently blocked every deploy at
   # SANDBOX until 2026-08-04 (measured: even an installed skill returned exit 1).
@@ -286,7 +293,7 @@ hermes_lists_skill() { # hermes_lists_skill <account> <name> -> exit 0 when list
   # refuses `managed-X` when asked for `X`, which is what a824c4f wanted.
   # Known limit: names wider than the column are rendered truncated with `…` and will
   # not match — no shipped skill name is that long, and a miss fails CLOSED (blocks).
-  run_as "$1" "cd ~ && export PATH=\"\$HOME/.local/bin:\$PATH\" && hermes skills list 2>/dev/null | grep -Fq \"│ $2 \""
+  run_as "$1" "cd ~ && export PATH=\"\$HOME/.local/bin:\$PATH\" && HOME=\"${3:-\$HOME}\" hermes skills list 2>/dev/null | grep -Fq \"│ $2 \""
 }
 
 gate() { # gate <extra-env> <gate-args...> — runs skill_gate.py as agent with its secrets
@@ -719,7 +726,7 @@ fi
 PEER_RETIRED="$(run_as "$NODE_AGENT_ACCOUNT" 'if [[ ! -e "$HOME/.hermes/peer-retired" ]]; then printf active; elif cmp -s "$HOME/.hermes/peer-retired" <(printf retired); then printf retired; else exit 4; fi')" \
   || die "PEER-RETIRED-REFUSED: cannot read deployed retirement mode"
 [[ "$PEER_RETIRED" == active || "$PEER_RETIRED" == retired ]] || die "invalid retirement mode"
-[[ "$PEER_RETIRED" != retired ]] || SANDBOX_ACCOUNT="$NODE_AGENT_ACCOUNT"
+[[ "$PEER_RETIRED" != retired ]] || { SANDBOX_ACCOUNT="$NODE_AGENT_ACCOUNT"; SANDBOX_HOME='$HOME/.hermes/skill-gate/sandbox-home'; }
 assert_agent_root_has_no_self_skill
 
 # ---------- stage 1: sandbox on peer with DUMMY secrets ----------
@@ -859,7 +866,7 @@ validate_gate_staging_imports
 # approval watcher). The peer runs the same hermes runtime, so parse every module the
 # skill ships under that exact interpreter before the 3.12 scenario below can pass it.
 # Dev-time twin scan: tests/unit/test_py311_syntax_guard.py.
-RUNTIME_PARSE="$(run_as "$SANDBOX_ACCOUNT" "\"\$HOME/.hermes/hermes-agent/venv/bin/python\" - \"\$HOME/.hermes/skills/$SKILL\" <<'PY'
+RUNTIME_PARSE="$(run_as "$SANDBOX_ACCOUNT" "\"\$HOME/.hermes/hermes-agent/venv/bin/python\" - \"$SANDBOX_HOME/.hermes/skills/$SKILL\" <<'PY'
 import pathlib, sys
 root = pathlib.Path(sys.argv[1])
 failures = []
@@ -878,7 +885,7 @@ PY
 ")" || sandbox_block "skill does not parse under the hermes runtime interpreter (py3.11); 3.12-only syntax? ${RUNTIME_PARSE:-runtime python missing on peer} (see tests/unit/test_py311_syntax_guard.py)"
 log "runtime parse (peer): $(tail -n1 <<<"$RUNTIME_PARSE")"
 
-run_as "$SANDBOX_ACCOUNT" "python3 - \"\$HOME/.hermes/skills/$SKILL/SKILL.md\" \"$SKILL\" <<'PY'
+run_as "$SANDBOX_ACCOUNT" "python3 - \"$SANDBOX_HOME/.hermes/skills/$SKILL/SKILL.md\" \"$SKILL\" <<'PY'
 import sys, pathlib
 text = pathlib.Path(sys.argv[1]).read_text(encoding=\"utf-8\")
 parts = text.split(\"---\n\")
@@ -893,10 +900,10 @@ assert len(fields.get(\"description\", \"\")) >= 10, \"description missing/too s
 print(\"LINT-PASS name+description ok\")
 PY" || sandbox_block "SKILL.md frontmatter lint failed"
 
-hermes_lists_skill "$SANDBOX_ACCOUNT" "$SKILL" || sandbox_block "hermes skills list does not show $SKILL in sandbox"
+hermes_lists_skill "$SANDBOX_ACCOUNT" "$SKILL" "$SANDBOX_HOME" || sandbox_block "hermes skills list does not show $SKILL in sandbox"
 log "hermes discovery on peer: OK"
 
-run_as "$SANDBOX_ACCOUNT" "test -x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" || chmod +x \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" 2>/dev/null; test -f \"\$HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"" \
+run_as "$SANDBOX_ACCOUNT" "test -x \"$SANDBOX_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" || chmod +x \"$SANDBOX_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\" 2>/dev/null; test -f \"$SANDBOX_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"" \
   || sandbox_block "skill ships no scripts/scenario.sh (sandbox scenario is mandatory)"
 
 # The scenario reaches shared repo modules through AUTOPHAGY_REPO_ROOT, and different
@@ -909,7 +916,7 @@ run_as "$SANDBOX_ACCOUNT" "test -x \"\$HOME/.hermes/skills/$SKILL/scripts/scenar
 # STALE-SKILL-COPY-BLOCK). The sandbox therefore declares its own root as the live root
 # so the guard sees "this copy IS the governed dir" (2026-09-03: without this, v1.1.0
 # left 13 guarded skills SKILL-STALE — stage 1 blocked every one of them).
-SCENARIO_OUT="$(run_as "$SANDBOX_ACCOUNT" "$NODE_RUNTIME_ROOT_SNIPPET; RR=\$(node_runtime_root); REAL_HOME=\"\$HOME\"; IR=\"\$REAL_HOME/.hermes/interop_runtime\"; [[ '$PEER_RETIRED' != retired ]] || IR=\"\$RR\"; [ -d \"\$IR\" ] || { echo 'SANDBOX-HOME-BLOCK interop runtime missing' >&2; exit 90; }; SH=\$(mktemp -d) || exit 91; chmod 700 \"\$SH\" || { rm -rf \"\$SH\"; exit 91; }; trap 'rm -rf \"\$SH\"' EXIT; env -i HOME=\"\$SH\" PATH=/usr/bin:/bin \"\$(printf '%s=%s' AUTOPHAGY_REPO_ROOT \"\$RR\")\" INTEROP_RUNTIME=\"\$IR\" AUTOPHAGY_SKILL_LIVE_ROOT=\"\$REAL_HOME/.hermes/skills\" AUTOPHAGY_DEMO_SECRET=\"DUMMY-w18-sandbox-\$(date +%s)\" bash \"\$REAL_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"")" \
+SCENARIO_OUT="$(run_as "$SANDBOX_ACCOUNT" "$NODE_RUNTIME_ROOT_SNIPPET; RR=\$(node_runtime_root); REAL_HOME=\"\$HOME\"; IR=\"\$REAL_HOME/.hermes/interop_runtime\"; [[ '$PEER_RETIRED' != retired ]] || IR=\"\$RR\"; [ -d \"\$IR\" ] || { echo 'SANDBOX-HOME-BLOCK interop runtime missing' >&2; exit 90; }; SH=\$(mktemp -d) || exit 91; chmod 700 \"\$SH\" || { rm -rf \"\$SH\"; exit 91; }; trap 'rm -rf \"\$SH\"' EXIT; env -i HOME=\"\$SH\" PATH=/usr/bin:/bin \"\$(printf '%s=%s' AUTOPHAGY_REPO_ROOT \"\$RR\")\" INTEROP_RUNTIME=\"\$IR\" AUTOPHAGY_SKILL_LIVE_ROOT=\"$SANDBOX_HOME/.hermes/skills\" AUTOPHAGY_DEMO_SECRET=\"DUMMY-w18-sandbox-\$(date +%s)\" bash \"$SANDBOX_HOME/.hermes/skills/$SKILL/scripts/scenario.sh\"")" \
   || sandbox_block "scenario failed under dummy secrets"
 grep -q "SCENARIO-PASS" <<<"$SCENARIO_OUT" || sandbox_block "scenario output missing SCENARIO-PASS marker"
 log "scenario: $(tail -n1 <<<"$SCENARIO_OUT")"

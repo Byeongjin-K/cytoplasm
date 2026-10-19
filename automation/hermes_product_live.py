@@ -39,14 +39,16 @@ def process_paths(proc: Path = Path("/proc")) -> tuple[Path, ...]:
             for link in links:
                 try:
                     value = os.readlink(link).removesuffix(" (deleted)")
-                except FileNotFoundError:
+                except (FileNotFoundError, ProcessLookupError):
                     continue
                 if value.startswith("/"):
                     paths.append(Path(value))
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
         except PermissionError:
-            if _opaque_helper(entry):
+            # A process that exits mid-scan can deny its fd table on the way out (2026-10-19
+            # v2.6.3 rehearsal); only a process that is still there is a real refusal.
+            if _opaque_helper(entry) or not entry.exists():
                 continue
             raise
     return tuple(paths)

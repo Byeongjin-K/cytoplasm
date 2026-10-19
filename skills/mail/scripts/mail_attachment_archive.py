@@ -7,6 +7,7 @@ CLI stay an effect-only boundary while preserving the existing on-disk contract.
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 import unicodedata
 from dataclasses import dataclass
@@ -170,11 +171,24 @@ def _clip_utf8(value: str, limit: int) -> str:
     return "file"
 
 
+# MailOn rows recorded before its scraper learned to split sizes keep the link text's size tail
+# ("bg&str.wrl 37.86 MB", "file.mp4 547980148"); a Drive name ending in it loses its file type.
+_SIZE_TAIL = re.compile(r"(?:\s*\(?\s*\d+(?:\.\d+)?\s*[KMG]B\s*\)?|\s+\d{4,})\s*$", re.IGNORECASE)
+
+
+def display_filename(filename: str) -> str:
+    """The attachment's own file name without a trailing size the mail page printed beside it."""
+    trimmed = _SIZE_TAIL.sub("", filename).strip()
+    return trimmed if "." in trimmed else filename
+
+
 def remote_name(item: Attachment) -> str:
     """Bound UTF-8 names to Drive's limit without losing collision identity."""
-    prefix, suffix = f"{item.uid}__", item.local.suffix
+    filename = display_filename(item.filename)
+    # The saved copy carries the same tail ("bg&str.wrl 37.86 MB" has suffix ".86 MB").
+    prefix, suffix = f"{item.uid}__", Path(filename).suffix or item.local.suffix
     budget = MAX_REMOTE_NAME_BYTES - len(prefix.encode("utf-8"))
-    stem = item.filename[:-len(suffix)] if suffix and item.filename.endswith(suffix) else item.filename
+    stem = filename[:-len(suffix)] if suffix and filename.endswith(suffix) else filename
     clipped = _clip_utf8(stem, max(16, budget - len(suffix.encode("utf-8")) - 15))
     if clipped != stem:
         clipped += f"_{item.key[:12]}"

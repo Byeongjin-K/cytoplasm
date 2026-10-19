@@ -35,6 +35,7 @@ def poll_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('REMINDER_MILESTONES_FILE', str(milestones))
     monkeypatch.setenv('REMINDER_DB', str(tmp_path / 'reminders.db'))
     monkeypatch.setenv('REMINDER_NOW', NOW.isoformat())
+    monkeypatch.setenv('REMINDER_CALENDAR_EVENTS', '1')  # the node calendar leg is off by default (Q276)
     monkeypatch.setenv('DISCORD_BOT_TOKEN', 'test-token')
     monkeypatch.delenv('REMINDER_DRY_RUN', raising=False)
 
@@ -84,6 +85,7 @@ def test_envelopes_keep_sources_when_poll_is_due(
         agent_next='다음 틱에 새 대상 확인', recovery='not_applicable',
         detail=Periodic(datetime.fromisoformat('2026-07-15T12:00:00+09:00'),
                         datetime.fromisoformat('2026-07-15T13:30:00+09:00')),
+        render_version='owner-ko-v5',
     )
     assert milestone == OwnerMessage(
         subject_key='논문 제출|2026-07-16|D-1', subject='리마인더', fact=MILESTONE,
@@ -91,7 +93,7 @@ def test_envelopes_keep_sources_when_poll_is_due(
                      message_id=None, url=None, search=('마일스톤 출처', 'meeting:sample.md')),
         owner=Action(verb='none', target=None, argument=None),
         agent_next='다음 틱에 새 대상 확인', recovery='not_applicable',
-        detail=Result(outcome='executed'),
+        detail=Result(outcome='executed'), render_version='owner-ko-v5',
     )
 
 
@@ -126,18 +128,10 @@ def test_source_is_visible_when_real_facade_renders(
     code = poll_reminders.main()
     # Then
     assert code == 0
-    assert transport == [
-        '대상: 리마인더 (evt1|2026-07-15T13:00:00+09:00)\n'
-        '사실: ⏰ 일정 리마인더: 약 60분 후 「실험 미팅」 시작 — 2026-07-15 13:00 KST '
-        '(관측: 2026-07-15T12:00:00+09:00 ~ 2026-07-15T13:30:00+09:00)\n'
-        '위치: https://calendar.example.test/events/evt1\n'
-        '인계: 소유자: 조치 없음; 다음: 다음 틱에 새 대상 확인\n'
-        '되돌리기: 해당 없음',
-        '대상: 리마인더 (논문 제출|2026-07-16|D-1)\n'
-        '사실: 📌 마일스톤 D-1: 논문 제출 (마감 2026-07-16) (실행 완료)\n'
-        '위치: 링크 없음 (주소 없음); 검색: 마일스톤 출처 / meeting:sample.md\n'
-        '인계: 소유자: 조치 없음; 다음: 다음 틱에 새 대상 확인\n'
-        '되돌리기: 해당 없음',
+    assert transport == [  # owner-ko-v5 since 2026-10-19: one line, the envelope stays in the record
+        '⏰ 일정 리마인더: 약 60분 후 「실험 미팅」 시작 — 2026-07-15 13:00 KST'
+        ' · <https://calendar.example.test/events/evt1>',
+        '📌 마일스톤 D-1: 논문 제출 (마감 2026-07-16)',
     ]
 
 
