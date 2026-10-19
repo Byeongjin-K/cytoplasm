@@ -216,9 +216,11 @@ def notify_owner(
         # 채널이 지정되면 그 채널로만 — DM 폴백 없음("해당 채널에서만"이 요구다).
         channel_id = fault_target or resolve_notice_target(token)
         if message is not None:
-            from automation.interop.owner_message import Ref, render
+            from automation.interop.owner_message import Ref, render, render_report
 
-            body = render(message, destination=Ref(scope="channel", space="unknown", channel_id=channel_id))
+            # 페어 채널은 사람처럼 한 줄(리드 Q304) — 칸 형식 봉투는 형 채널 판본에만 남는다.
+            shape = render_report if fault_target else render
+            body = shape(message, destination=Ref(scope="channel", space="unknown", channel_id=channel_id))
         if not fault_target:
             # 형 채널에는 사람 말만(형 지시 2026-10-20 00:10 KST). 경고 코드가 든 통지는 형 할 일이
             # 아니므로 통째 페어 채널로(봉투를 줄 단위로 자르지 않는다), JSON 결과 줄은 언제나 빼다.
@@ -229,6 +231,8 @@ def notify_owner(
             if view.data or pair:
                 print(f"[owner-notice] NOTIFY-TRIMMED: data={len(view.data)} to_pair={bool(pair)}", file=sys.stderr)
             body = view.without_data if view.data else body
+            if pair and message is not None:
+                body = render_report(message, destination=Ref(scope="channel", space="unknown", channel_id=pair))
             channel_id = pair or channel_id
             if view.data and not body:
                 return False

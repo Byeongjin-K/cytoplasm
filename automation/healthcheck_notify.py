@@ -112,13 +112,21 @@ def notice_message(state: NotifyState, following: NotifyState) -> OwnerMessage |
     opened = tuple(name for name in following.open_incidents if name not in state.open_incidents)
     closed = tuple(name for name in state.open_incidents if name not in following.open_incidents)
     key = ", ".join(sorted((*opened, *closed)))
+    failed = ", ".join(f"「{name}」" for name in opened)
+    recovered = ", ".join(f"「{name}」" for name in closed)
+    if opened and closed:
+        fact = f"헬스체크 {failed} 점검이 새로 실패했고 {recovered} 점검은 회복됐습니다"
+    elif opened:
+        fact = f"헬스체크 {failed} 점검이 새로 실패했습니다"
+    else:
+        fact = f"헬스체크 {recovered} 점검이 회복됐습니다"
     location = Ref(scope="resource", search=("헬스체크", key))
     owner = Action("none")
     if opened:
         owner = Action("open", location, "원인 확인; 확인 전 재시작·설정변경·키 재발급 금지")
     return OwnerMessage(
         subject_key=key, subject="헬스체크 관측",
-        fact=f"신규 실패: {', '.join(opened) or '없음'}; 회복: {', '.join(closed) or '없음'}",
+        fact=fact,
         location=location, owner=owner, agent_next="다음 스윕에서 상태 관측",
         recovery="not_applicable", detail=Result("executed"), render_version="owner-ko-v2",
     )
