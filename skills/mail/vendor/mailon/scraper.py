@@ -83,12 +83,23 @@ SMALL_ATTACHMENT_MAX_BYTES = 30 * 1024 * 1024   # 30 MB
 # with a CORS "Failed to fetch". They are public download URLs (no login, 2026-10-19 check), so
 # they are fetched directly — never with the webmail session cookies, which stay on mailon.kr.
 LARGE_FILE_HOSTS = frozenset({"filefree.mailplug.com"})
+# MailOn's own "대용량 첨부파일" box links to mailon.kr/bigfileDownload/<token>/ (mixed case, so the
+# '/download' selector never matched it). Also public: 200 + the file without cookies (2026-10-19).
+MAILON_LARGE_FILE_PATH = "/bigfileDownload/"
 # Links that failed under the old in-page fetch get a fresh retry budget on top of the usual 5.
 EXTERNAL_MAX_ATTEMPTS = 10
+# Webmail buttons that look like attachment links: English UI "Save" (the file's own href) and
+# "Download all" (a zip of every file), the large-file box's "PC에 저장", and the Korean labels.
+BUTTON_NAMES = frozenset({
+    "모두저장", "저장", "미리보기", "전체저장", "다운로드", "Save", "Download all", "PC에 저장",
+})
 
 
 def is_large_file_link(href: str) -> bool:
-    return urlsplit(href or "").hostname in LARGE_FILE_HOSTS
+    parts = urlsplit(href or "")
+    if parts.hostname == "mailon.kr" and parts.path.startswith(MAILON_LARGE_FILE_PATH):
+        return True
+    return parts.hostname in LARGE_FILE_HOSTS
 URLLIB_CHUNK_SIZE = 1024 * 1024                  # 1 MB per read
 MAX_MAIL_FETCH_ATTEMPTS = 3
 MAIL_FETCH_RETRY_DELAY_S = 2.0
@@ -255,34 +266,37 @@ def parse_view_async_html(html: str) -> dict:
         out["body_html"] = body_el.decode_contents()
         out["body_text"] = body_el.get_text("\n", strip=True)
 
-    # Attachments - filter out UI buttons like "모두저장"/"저장"
-    skip = {"모두저장", "저장", "미리보기", "전체저장", "다운로드", ""}
+    # Attachments - filter out UI buttons (BUTTON_NAMES) and the zip-of-everything link
     seen = set()
-    for sel in ('a[href*="/mail/download"]', 'a[href*="/download"]', 'a[href*="attach"]'):
+    for sel in ('a[href*="/mail/download"]', 'a[href*="/download"]', 'a[href*="attach"]',
+                f'a[href*="{MAILON_LARGE_FILE_PATH}"]'):
         for a in soup.select(sel):
-            href = str(a.get("href") or "")
-            if not href or href.startswith("javascript"):
-                continue
-            raw_name = (
+            link = attachment_link(
+                str(a.get("href") or ""),
                 str(a.get("data-filename") or "")
                 or str(a.get("download") or "")
-                or a.get_text(" ", strip=True)
-            ).strip()
-            # Strip trailing size bytes (mailon.kr's UI quirk: "file.mp4 547980148")
-            name, declared_size = split_filename_and_size(raw_name)
-            if not name or name in skip:
+                or a.get_text(" ", strip=True),
+            )
+            if link is None:
                 continue
-            key = (href, name)
+            key = (link["href"], link["filename"])
             if key in seen:
                 continue
             seen.add(key)
-            out["attachments"].append({
-                "filename": name,
-                "href": href,
-                "declared_size": declared_size,
-            })
+            out["attachments"].append(link)
 
     return out
+
+
+def attachment_link(href: str, raw_name: str) -> dict | None:
+    """One attachment from a link, or None for scripts, buttons and the zip-of-everything link."""
+    if not href or href.startswith("javascript") or "allDownload=true" in href:
+        return None
+    # Strip trailing size bytes (mailon.kr's UI quirk: "file.mp4 547980148")
+    name, declared_size = split_filename_and_size(raw_name.strip())
+    if not name or name in BUTTON_NAMES:
+        return None
+    return {"filename": name, "href": href, "declared_size": declared_size}
 
 
 # ------------------------------------------------------------ scraper class
@@ -702,6 +716,9 @@ class InboxScraper:
         tmp_path = target.with_suffix(target.suffix + ".part")
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
+                # An expired large-file link answers 200 with MailOn's HTML notice page, not the file.
+                if not cookies and resp.headers.get_content_type() == "text/html":
+                    raise RuntimeError("large-file link returned an HTML page (expired link)")
                 with tmp_path.open("wb") as f:
                     while True:
                         chunk = resp.read(URLLIB_CHUNK_SIZE)

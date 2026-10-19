@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_status
     ON attachments (status);
 
+-- Mails already looked at by the large-link backfill (heal.py), so each is re-read at most once.
+CREATE TABLE IF NOT EXISTS large_link_checked (
+    uid        TEXT PRIMARY KEY,
+    checked_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at   INTEGER NOT NULL,
@@ -214,6 +220,55 @@ class StateDB:
                 (max_attempts,),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    # ------------------------------------------------- heal (heal.py)
+
+    def attachment_rows(self, uid: str) -> list[dict]:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT filename, href, status FROM attachments WHERE uid=?", (uid,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def uids_with_attachment_names(self, names: frozenset[str]) -> list[str]:
+        marks = ",".join("?" for _ in names)
+        with self._conn() as c:
+            rows = c.execute(
+                f"SELECT DISTINCT uid FROM attachments WHERE filename IN ({marks})", tuple(names)
+            ).fetchall()
+            return [r["uid"] for r in rows]
+
+    def delete_attachments(self, uid: str, names: frozenset[str]) -> None:
+        marks = ",".join("?" for _ in names)
+        with self._conn() as c:
+            c.execute(
+                f"DELETE FROM attachments WHERE uid=? AND filename IN ({marks})", (uid, *names)
+            )
+            c.commit()
+
+    def message_row(self, uid: str) -> dict | None:
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM messages WHERE uid=?", (uid,)).fetchone()
+            return dict(row) if row else None
+
+    def unchecked_messages_since(self, since_iso: str) -> list[dict]:
+        """Messages received at or after `since_iso` the large-link backfill has not seen, newest first."""
+        with self._conn() as c:
+            rows = c.execute(
+                """SELECT * FROM messages
+                   WHERE recv_date >= ? AND uid NOT IN (SELECT uid FROM large_link_checked)
+                   ORDER BY recv_date DESC""",
+                (since_iso,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def mark_large_link_checked(self, uid: str) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO large_link_checked (uid, checked_at) VALUES (?, ?)",
+                (uid, int(time.time())),
+            )
+            c.commit()
 
     def attachment_stats(self) -> dict:
         """Summary: {ok:N, fail:N, pending:N}."""
