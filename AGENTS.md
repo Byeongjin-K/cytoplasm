@@ -21,15 +21,15 @@
 ## WHERE TO LOOK
 
 위치 표는 [CODE-MAP.md](CODE-MAP.md) 참조. 아래는 표에 묻힌 규칙만 발췌:
-- 채널 표시 이름은 설정 ID가 있으면 바꿔도 된다. 공급망은 `personal_approvals_channel_id` 또는 명시적 `deploy_approvals_channel_id`와 type 0을 검증, 통지는 `owner_notice_channel_id`. 캐시·이름 검색은 설정 없는 레거시 공급망 조회에만. peer 차단 프로브는 처음 찾은 id를 ops 메모에 남겨 이름이 바뀌어도 같은 id를 요구.
+- 채널 표시 이름은 설정 ID가 있으면 바꿔도 된다. 공급망은 `personal_approvals_channel_id` 또는 명시적 `deploy_approvals_channel_id`와 type 0을 검증, 통지는 `owner_notice_channel_id`. 캐시·이름 검색은 설정 없는 레거시 공급망 조회에만.
 - 새 스킬 제작·배포: `automation/deploy-skill.sh` 4단계 게이트.
 - 도리 포크는 `dori/pin.toml` 커밋 하나로만 설치(SHA 재확인, main 자동 추종 없음). 올릴 때는 SHA 변경 PR + 릴리스 노트 한 줄, 영수증 `dori_pin`. 저장소 층 단계는 노드 게이트웨이 동작 불변.
 - 전사는 기본 로컬 `whisper.cpp`, 원음을 노드 밖으로 내보내지 않는다(speechtotext).
-- 모델: 코드·스킬·환경변수에 모델을 적지 않고 argv에 `--provider`/`-m` 넣지 않는다(`test_model_single_source_conformance.py`). 확인은 `python3 -m automation.doctor`의 「주 모델」·「폴백」 줄. peer도 같은 쌍: `python3 -m automation.model_sync --apply`(운영자), doctor `model-parity`. 주 모델 변경 뒤 모델 고정 없는 agent 모드 cron을 같은 정의로 재생성, 잡별 모델 고정 금지(`configs/routing-policy.md` 「Changing the main model」, `drift_skip`은 첫 회부터 고장). 제안서 윤문도 이 경로(Codex CLI는 codex 그림 생성만), `codex_llm.py`에 `--ignore-user-config` 없음. 폴백 추가·제거는 `~/.hermes/config.yaml`에서만. 라우팅 로그는 `served_provider`·`served_model`(`codex_llm.complete_served`). 내용에 따라 경로를 고르거나 막지 않는다.
+- 모델: 코드·스킬·환경변수에 모델을 적지 않고 argv에 `--provider`/`-m` 넣지 않는다(`test_model_single_source_conformance.py`). 확인은 `python3 -m automation.doctor`의 「주 모델」·「폴백」 줄. 주 모델 변경 뒤 모델 고정 없는 agent 모드 cron을 같은 정의로 재생성, 잡별 모델 고정 금지(`configs/routing-policy.md` 「Changing the main model」, `drift_skip`은 첫 회부터 고장). 제안서 윤문도 이 경로(Codex CLI는 codex 그림 생성만), `codex_llm.py`에 `--ignore-user-config` 없음. 폴백 추가·제거는 `~/.hermes/config.yaml`에서만. 라우팅 로그는 `served_provider`·`served_model`(`codex_llm.complete_served`). 내용에 따라 경로를 고르거나 막지 않는다.
 - Drive 참고자료: 읽기 전용, 루트 `DRIVE_REFERENCE_ROOT`(기본 `KIMM`)는 산출물 `autophagy/`와 다른 트리. `ensure_folder_path` 금지, `find_folder_path` 사용. 회의록 참고자료는 `Deck` 경로로 받고 질의는 회의 라벨·과제명+전사 본문 상위 낱말. 읽을 수 없는 형식·크기는 `reference_rank.refusal`이 내려받기 전에 판정.
 - Drive 산출물: `project=`를 주면 카테고리와 연도 사이에 과제 한 단, 안 주면 기존 경로.
 - QA 증적: 공개 문서는 경로만 인용, 내용을 옮기지 않는다.
-- 승인 표면: 공급망 승인(배포·peer attest·발행·managed 활성화·release)=개인 서버 `#approvals`. peer LLM 게이트웨이는 그 채널을 수신하지 않는다(peer config 최상위 `discord.ignored_channels`, 스레드 포함·allowed보다 우선). 표면은 `approval_surface.py`·conformance 테스트가 단일 진실. `agent_chat_channel_id` 미설정=fail-closed. Ops 봇 초대가 전제, 초대 전 릴리스 금지.
+- 승인 표면: 공급망 승인(배포·발행·managed 활성화·release)=개인 서버 `#approvals`. 표면은 `approval_surface.py`·conformance 테스트가 단일 진실.
 - 정기 통지(일일 지출·주간 동향·아침 감사·헬스체크·리마인더)는 `owner_notice_channel_id`(미설정=DM), 발신은 `automation/owner_notice.py` 파사드만. 파사드 밖 DM 오픈 신설=RED.
 - 원인 확인 전 재시작/설정변경/키 재발급 금지.
 - 관리형 스킬 발행은 cha 전용, 대상 repo = `orientpine/ribosome`(private), 코드 repo·공개 배포본이 아니다(「세 저장소 구분 규칙」). 구독은 연구원 전용. 개인→그룹 제출은 personal provenance 재사용, 그룹 `#approvals` 검토, 자동 import 없음.
@@ -113,9 +113,8 @@
 
 ## 게이트웨이 재시동 규칙 (cha 지시, 2026-07-22)
 
-- 재시동이 결정되면 agent·peer 포함 모든 Hermes gateway(향후 추가 계정 포함)를 함께 재시동한다. 한쪽만 재시동 금지. healthy 서비스는 재시동하지 않고 원인 확인 후에만.
+- 재시동이 결정되면 모든 Hermes gateway(향후 추가 계정 포함)를 함께 재시동한다. 한쪽만 재시동 금지. healthy 서비스는 재시동하지 않고 원인 확인 후에만.
 - 수동 운영·장애 대응·재부팅 복구·배포 스크립트(`automation/skill_generation/deploy.sh` 등) 모든 경로에 적용, 절차는 `docs/guide/operations.md` §2. ops·dashboard 등 다른 unit은 대상 아님.
-- 재시동 창에 fail-closed 타임아웃된 peer attestation/승인은 재시동 후 재요청(차단 아님).
 원문: [RULES.md](RULES.md) 「게이트웨이 재시동 규칙」 · 장부 `cyto-gateway-restart-all`
 
 ## 기능 소개 문서 규칙 (cha 지시, 2026-07-25)
@@ -176,14 +175,14 @@
 ## 결과 통지 원채널 스레드 규칙 (cha 지시, 2026-08-22/23)
 
 - 승인 게이트가 있는 모든 스킬(새 스킬 포함)은 실행·취소·만료 결과를 `approval_thread_id` 스레드로 `origin_notice.deliver(...)`(`automation/interop/origin_notice.py`)만 써서 통지한다. 자체 스레드 생성 금지. 종결엔 반드시 `outcome=`, 중간 ACK엔 넘기지 않는다. 승인 요청·리마인더·게이트 경로는 건드리지 않는다.
-- mutating CLI는 선택 인자 `--origin-channel-id`/`--origin-message-id`를 레코드 `origin_channel_id`/`origin_message_id`에 승인 해시 밖으로 저장(레거시 필드 부재 허용). 문구는 대상·id·사유("…됨" 고정문구 금지). 스킬 마스킹 우선: calendar는 action 종류·draft id만, wiki·patent-prep은 통지 제외.
+- mutating CLI는 선택 인자 `--origin-channel-id`/`--origin-message-id`를 레코드 `origin_channel_id`/`origin_message_id`에 승인 해시 밖으로 저장(레거시 필드 부재 허용). 문구는 대상·id·사유("…됨" 고정문구 금지). 스킬 마스킹 우선: calendar는 action 종류·draft id만, patent-prep은 통지 제외.
 - 실패는 `NOTIFY-FAIL`, tick·exit code·영수증·원장 불변. E2E·주입 승인은 `NOTIFY-SKIP`. 헬퍼는 `INTEROP_RUNTIME`에 실어 배포. 강제 `tests/unit/test_origin_notice_adoption_conformance.py`: `APPROVAL_PRODUCERS` 전부 `origin_notice` 참조 또는 `_RESULT_NOTICE_EXEMPT`에 사유, 헬퍼 밖 스레드 API는 `_THREAD_API_ALLOWED`(meeting 게이트웨이 플러그인)만.
 원문: [RULES.md](RULES.md) 「결과 통지 원채널 스레드 규칙」 · 장부 `cyto-result-notice-origin-thread`
 
 ## 요청별 승인 스레드 규칙 (cha 지시, 2026-09-01)
 
-- 형 전용 승인은 요청 하나에 `#agent-chat` 스레드 하나: 카드·리마인더·결과가 거기서 끝나고 종결 시 `✅ 완료 ·`/`⛔ 취소 ·`/`⌛ 만료 ·` 접두어 뒤 아카이브. `승인-<kind>`는 레거시 `request=None`만, 범위 내 생산자는 금지.
-- `resolve_new_binding(kind, directory, owner, request=RequestThread(title=…, origin_channel_id=…, origin_message_id=…))` 필수. 지시가 이미 `#agent-chat` 아래 스레드 안일 때만 그 스레드에. 안내 문구는 `request_thread_notice`만. 제목은 마스킹 값만: mail·budget=제목, todo=할 일 제목, coordination=조율 라벨, calendar·wiki·patent-prep·repair=id, obsidian=노트 파일명(확장자 포함, 디렉터리·본문 제외).
+- 형 전용 승인은 요청 하나에 스레드 하나: 카드·리마인더·결과가 거기서 끝나고 종결 시 `✅ 완료 ·`/`⛔ 취소 ·`/`⌛ 만료 ·` 접두어 뒤 아카이브. `승인-<kind>`는 레거시 `request=None`만, 범위 내 생산자는 금지.
+- `resolve_new_binding(kind, directory, owner, request=RequestThread(title=…, origin_channel_id=…, origin_message_id=…))` 필수. 지시가 이미 스레드 안일 때만 그 스레드에. 안내 문구는 `request_thread_notice`만. 제목은 마스킹 값만: mail·budget=제목, todo=할 일 제목, coordination=조율 라벨, calendar·patent-prep·repair=id, obsidian=노트 파일명(확장자 포함, 디렉터리·본문 제외).
 - `binding.channel_id`를 `approval_thread_id`로 승인 해시 밖에 저장하고 결과 통지 dict에 싣는다. 자체 스레드 생성·PATCH 금지, 종결은 `origin_notice.close_thread`. 강제 `tests/unit/test_request_thread_adoption_conformance.py`(`request=` 없는 호출 금지), 예외는 공급망 표면 `skill_gate_surface.SupplyChainSurface.new`만 `_KIND_THREAD_EXEMPT`에 사유와. 런타임 먼저 배포.
 원문: [RULES.md](RULES.md) 「요청별 승인 스레드 규칙」 · 장부 `request-thread`
 
@@ -214,7 +213,7 @@
 
 - 게이트 대상 외부효과는 카드 생산자(`approval_lifecycle` 경유 요청 명령)+✅ 워처(no-agent cron/systemd, 사람 실행은 `manual:` 사유)+테스트+실행 영수증을 한 벌로 갖는다. `configs/external-effect-tools.yaml` 규칙 추가 시 함께 만들고, `GATED_RULES`에 생산자(또는 사유), `PRODUCER_WATCHERS`에 워처·테스트 파일을 등록한다(`tests/unit/test_gated_effect_paths_conformance.py`).
 - 즉석 초안·채팅 메시지 ✅ 요청 금지. 승인은 해시에 묶인 카드 ✅ 만. 전용 명령 없으면 `python3 -m automation.effect_request request`.
-- 실행 뒤 원격 재확인, `origin_notice` 로 같은 스레드에. SKILL.md는 요청 명령만, `실행 <id>` fallback은 먼저 제안·요청 금지. 런타임 가드 `automation/interop/chat_approval_guard.py`.
+- 실행 뒤 원격 재확인, `origin_notice` 로 같은 스레드에. SKILL.md는 요청 명령만, `실행 <id>` fallback은 먼저 제안·요청 금지.
 원문: [RULES.md](RULES.md) 「승인 경로 완결 규칙」 · 장부 `cyto-approval-path-complete`
 
 ## Drive 업로드·공유 승인 규칙 (cha 지시, 2026-10-14)
@@ -236,7 +235,7 @@
 
 - Hermes 메모리 상한 USER.md 3,000자·MEMORY.md 3,300자(agent·peer 같음)는 `automation/hermes_memory_config.LIMITS` 만 고쳐 릴리스한다. 노드 수동 수정 금지.
 - 내리기 전 파일부터 줄인다(rc 7). 더 올리기 전 USER.md의 사람 정보·규칙부터 본다.
-- USER.md는 본인만: `PERSON_REFERENCE`→Obsidian 사람 노트, `AGENT_RULE`→MEMORY.md. 제안은 한 줄당 메시지 하나(➡️·📌·🗑️, 반응 하나로 그 줄 동결, 추가 최종 승인 없음, 무반응=보류, 복수=유지). 삭제는 agent·peer 두 네이티브 파일에서 정확히 같은 글만 백업 후 지우고, agent는 동일 선택의 peer 영수증을 기다린다. Q149 agent-only 검증·token-less peer 유지. SOUL 자동 회상 줄·분류 규칙 불변.
+- USER.md는 본인만: `PERSON_REFERENCE`→Obsidian 사람 노트. SOUL 자동 회상 줄·분류 규칙 불변.
 원문: [RULES.md](RULES.md) 「메모리 상한 규칙」 · 장부 `cyto-hermes-memory-limits`
 
 ## 후속 과제 기록 규칙 (cha 지시, 2026-07-26)

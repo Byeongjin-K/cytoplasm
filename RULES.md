@@ -3,6 +3,9 @@
 > AGENTS.md에 있던 형 지침·규약 절의 원문을 2026-10-19(형 결정 Q290) 글자 그대로 옮긴 파일이다. AGENTS.md에는 절마다 짧은 지침문과 이 파일을 가리키는 줄만 남는다. 지침문이 애매하거나 예외·세부가 필요하면 여기 같은 제목 절을 따른다. 규칙을 바꾸면 같은 커밋에서 이 원문과 AGENTS.md 지침문을 함께 고친다.
 
 ## OVERVIEW
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 P6 공개 설치 기본값은 도리다(`automation.install`·마법사·quickstart).
 고정 포크와 리드+YooDori 역할을 설치하며 Hermes 인프라는 명시적 레거시
 `--profile core|rag|report-hub|full`에만 남긴다. 아래 Hermes 런타임 설명은 기존 노드에
@@ -17,6 +20,8 @@ Q245 배치 예외: 릴리스 호스트의 `~/.hermes/release-flags/omo-relay`�
 cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전트와 상호운용하며, 설치별 `<primary-node>` / `<rag-node>` 역할로 구동한다. Python 3.12 **stdlib 중심**. 모든 대화·배치 모델 호출은 계정 `~/.hermes/config.yaml` 이 정한 주 모델(현재 `openai-codex/gpt-6.1-sol`, reasoning effort `medium` — 2026-10-02)을 쓰고, 그것이 답하지 못하면(쿼터·인증·전송) 같은 파일의 `fallback_providers`(현재 `xai-oauth/grok-4.7`)로 넘어가며 — 모델은 그 파일 한 곳이 정하고 코드는 적지 않는다(2026-09-29 소유자 결정) — 체인 전체가 실패하면 fail-closed로 전파한다. **모든 외부효과는 소유자(cha) 승인 게이트 경유** — 이것이 아키텍처의 중심 불변식이다.
 
 ## CONVENTIONS (repo 고유)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 ### 2026-09-19 수리 통합의 추가 계약
 
@@ -70,6 +75,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 ## Owner-confirm 이모지 컨벤션 (cha 지시, 2026-07-17)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 모든 소유자 확정/승인 흐름(mail·budget·calendar·coordination 및 향후 추가되는 모든 confirm)은 동일한 이모지 리액션으로 처리한다:
 
 - **✅ (U+2705, `:white_check_mark:`) = 승인 / 확정 / 실행**
@@ -104,6 +111,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - **배경(사후 반영)**: 2026-07-21, 한 세션이 확정·커밋한 Discord 2-서버 설계(893da68 — "모든 승인=개인 서버, peer attestation의 peer는 자기 두 번째 봇")를 다른 세션이 옛 이해("배포 승인은 공유 Lab")로 문서·config를 덮어써, 존재하지 않는 공유 Lab 채널을 가리켜 배포가 404로 실패했다. 최신 커밋을 먼저 확인했다면 예방 가능했다.
 
 ## 게이트웨이 재시동 규칙 (cha 지시, 2026-07-22)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **게이트웨이 재시동은 항상 agent와 peer를 포함한 모든 Hermes gateway를 함께 재시동한다 — 한쪽만 재시동 금지.**
 
@@ -188,6 +197,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 ## 릴리스 태그 규칙 (cha 지시, 2026-08-20)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **서명 릴리스 태그가 없으면 프로덕션은 전진하지 않는다. 태그는 릴리스 승인(`automation/release.sh`, 소유자 ✅ 1회)이 자른다 — 머지는 축적이다(VA-3, 2026-08-30 개정: `merge-pr.sh` 의 태그 자동 호출 제거).**
 
 - **왜**: 2분 리컨실러가 부르는 `converge_origin_main.sh` 는 **인자를 받지 않는 것이 계약**이다(MD-1). 자동 트리거가 설치될 sha 를 고를 수 있으면 "PR 머지 = sudo 임의 코드 실행"이 되기 때문이고, 그래서 무엇을 설치할지는 **서명만이** 정한다 — **게시된 릴리스 태그 중 가장 최신의 검증된 것**(semver 순)으로 수렴하며, 게시된 릴리스가 하나도 없으면 매 틱 `UPDATE-TRUST-BLOCK` 으로 서고 rc 0 으로 안전하게 건너뛴다. **2026-09-09 이전에는 `origin/main` HEAD 가 그 태그의 peel 대상일 때만 수렴했다** — 그 요구는 태그 컷~수렴 사이에 저장소 전체의 머지 동결을 강요했고(v1.6.5 실측: 태그 push 뒤 PR 하나가 착지하자 노드가 v1.6.4 에 굳었다) 보안은 사지 못했다: 태그는 push 되어야 보이므로 그것을 심을 수 있는 자는 이미 쓰기 권한을 가졌고 서명키만 가진 자는 게시할 수 없다. 진위는 서명이, 신선도는 릴리스 floor 가 그대로 맡는다([소개](docs/기능소개/릴리스-수렴-최신-서명-릴리스.md)).
@@ -217,6 +228,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - **배경(사후 반영)**: 2026-07-25 drive-archive digest 중복 게시 및 message_id 덮어쓰기로 인해 소유자의 승인 ✅가 실종된 결함을 수리하며 도입되었습니다.
 ## 결과 통지 원채널 스레드 규칙 (cha 지시, 2026-08-22/23)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **승인 게이트를 가진 모든 스킬은 실행/취소/만료 결과를 지시가 시작된 채널의 스레드로 통지한다 — 2026-09-01 부터 승인(✅/⛔) 요청 자체가 `#agent-chat`의 **요청별 스레드**에 게시되므로 결과는 레코드의 `approval_thread_id` 로 **그 스레드**에 돌아온다(「요청별 승인 스레드 규칙」; v7~v8 의 kind별 `승인-<kind>` 스레드는 폐지). 구현은 `automation/interop/origin_notice.py` 하나뿐이고, 앞으로 만드는 스킬도 예외가 아니다.**
 
 - **왜**: 2026-08-22 agent-chat에서 시작한 메일 발송의 결과가 "메일 발송 취소됨" 한 줄로 DM에 흩어졌다. 지시가 온 곳으로 결과가 돌아가야 대화가 이어지고, DM에는 승인 버튼만 남아야 소유자가 무엇을 눌러야 하는지 분명하다. 같은 날 mail에 적용했고 2026-08-23 소유자 지시로 전 스킬(budget·calendar·coordination·todo·meeting)에 일반화했다(소개).
@@ -226,6 +239,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - **배포 주의**: 헬퍼는 interop 런타임(`INTEROP_RUNTIME`)에 실려야 한다 — 스킬만 재배포하고 런타임이 낡으면 통지가 `NOTIFY-FAIL`로 남는다(실행 자체는 영향 없음).
 
 ## 요청별 승인 스레드 규칙 (cha 지시, 2026-09-01)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **소유자 전용 승인은 요청 하나에 스레드 하나다 — 승인 카드(✅/⛔)·리마인더·실행/취소/만료 결과가 `#agent-chat` 아래 같은 스레드에서 완결되고, 종결되면 이름에 상태 접두어(`✅ 완료 ·`/`⛔ 취소 ·`/`⌛ 만료 ·`)를 붙여 아카이브한다. kind별 고정 스레드(`승인-<kind>`)는 레거시 호출(`request=None`)에만 남고 범위 내 생산자는 쓰지 않는다.**
 
@@ -245,6 +260,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - ✅·⛔·⌛ 는 제목 이모지로 쓰지 않는다(결정 반응·종결 접두어). 제목 게시 실패는 `THREAD-TITLE-FAIL` 한 줄이고 승인·통지를 막지 않는다. 표와 시나리오: [소개](docs/기능소개/스레드-큰-제목.md)
 
 ## 소유자 메시지 계약 규칙 (cha 지시, 2026-09-09)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **소유자 대면 메시지는 `automation/interop/owner_message.py` 의 봉투 5필드(대상 · 사실 · 위치 · 인계 · 되돌리기)로 만들고, 문구는 스킬이 조립하지 않고 `render(message, destination=…)` 하나가 만든다 — **위치는 문장이 아니라 좌표**이고 지역 참조가 아니면 유효한 링크 또는 검색 안내로 가리킨다. 앞으로 만드는 스킬도 예외가 아니다.** 이 규칙은 「결과 통지 원채널 스레드 규칙」·「요청별 승인 스레드 규칙」을 대체하지 않고 그 위에 얹힌다 — 그 둘이 **어디로** 보낼지를 정하고, 이 규칙이 **무엇이 담겨야** 하는지를 정한다.
 
@@ -268,6 +285,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - **강제**: `tests/unit/test_approval_thread_pointer_conformance.py` — `approval_conformance_inventory.APPROVAL_PRODUCERS` 의 모든 생산자가 `_ADOPTED`(채택 파일이 공용 헬퍼를 import 해 부른다) 또는 사유 있는 `_EXEMPT` 중 정확히 하나에 있어야 하고, `APPROVAL-THREAD ` 형식 리터럴이 헬퍼 밖에 있으면 RED 다. 새 승인 생산자는 lifecycle conformance 가 인벤토리 등록을 강제하므로 여기서 결정을 피할 수 없다 — 산문이 아니라 코드가 진실이다. [소개](docs/기능소개/승인-요청-답장-스레드-링크.md)
 
 ## 승인 경로 완결 규칙 (cha 지시, 2026-10-07)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **게이트 대상 외부효과는 「표준 승인 카드 생산자 + 카드 ✅ 워처 + 실행 영수증」을 한 벌로 갖는다. 에이전트는 즉석 초안을 만들거나 소유자에게 채팅 메시지에 ✅ 를 요청하지 않는다 — 전용 스킬 명령이 없는 작업은 공용 「그 밖의 외부효과」 경로(`python3 -m automation.effect_request request`)로 카드를 올린다(2026-10-17 「모든 요청 승인 경로 규칙」).** 채팅 메시지의 ✅ 는 어떤 워처도 읽지 않는다 — 승인은 해시에 묶인 카드의 ✅ 만이다.
 
@@ -302,6 +321,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 ## 메모리 상한 규칙 (cha 지시, 2026-10-14)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **Hermes 자체 메모리 상한은 저장소가 정하고 릴리스가 노드에 쓴다 — USER.md 3,000자 · MEMORY.md 3,300자, agent·peer 같다. 노드에서 손으로 고치지 않는다.** 소유자 결정(Q138): 「①②③ 다 (추천: ① 오늘, ②·③은 이어서)」 — ① 상한 올리기, ② 사람 정보를 USER.md 밖으로, ③ 매 턴 자동 회상.
 
 - 값은 `automation/hermes_memory_config.LIMITS` 한 곳이고 큐레이터 `CAPS` 가 그것을 읽는다. 바꾸려면 그 상수를 고쳐 릴리스한다 — 선언 `v2:config` 가 계정 설정을 관측하고 `converge_config` 가 맞추며 agent+peer 를 함께 재시동한다.
@@ -310,6 +331,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 - ② USER.md 는 사용자 본인만 담는다: `PERSON_REFERENCE`는 Obsidian 사람 노트로, USER.md의 `AGENT_RULE`은 MEMORY.md로 옮긴다. **2026-10-15 소유자 지시로 새 제안은 한 줄당 메시지 하나**다. 봇이 ➡️ 이동·📌 유지·🗑️ 삭제 세 리액션을 미리 달며 소유자 반응 하나로 해당 줄만 동결한다(추가 최종 승인 없음, 무반응=보류·복수=유지). 메시지 ID·원문 해시·기존 요청 키를 검증한다. 소유자 반응 없는 미결 배치만 옛 메시지를 보존한 채 감사 보관하고 같은 스레드에 개별 재게시한다. 반응한 배치는 예전 계약 그대로다. 삭제는 agent·peer 양쪽 두 네이티브 파일에서 정확히 같은 글만 백업 후 지우고 agent는 동일 선택의 peer 영수증을 기다린다. Q149의 agent-only 검증·token-less peer는 유지한다. SOUL 자동 회상 줄과 분류 규칙은 불변이다. [소개](docs/기능소개/메모리-사람-규칙-정리.md)
 
 ## 후속 과제 기록 규칙 (cha 지시, 2026-07-26)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **작업 중 발견했으나 이번 범위에서 처리하지 않은 사항은, 요청 사항을 마무리한 뒤 `docs/features.md`에 후속 과제로 기록한다 — 기록까지 마쳐야 작업이 종결된다.**
 
@@ -380,6 +403,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 
 ## PR 전 검증 규칙 (cha 지시, 2026-08-25)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **브랜치 push 는 그 트리의 로컬 CI 영수증이 있어야 나간다 — 「PR 전에 CI 를 돌려라」는 산문이 아니라 `automation/hooks/pre-push` 가 강제한다.**
 
 - **왜 훅인가**: 이 저장소는 브랜치 보호를 쓸 수 없다 — private + Free 조합이라 `gh api repos/.../branches/main/protection` 이 **403** 이다. 즉 GitHub CI 는 머지를 막을 권한이 없는 **권고**였고, 2026-08-25 에 실제로 빨간 CI(결제 실패로 잡이 시작조차 못 한 것) 위에서 머지가 이뤄졌다. 지침으로 적으면 그 문장을 읽는 주체가 지키는 만큼만 작동한다 — 「배포 provenance 규칙」의 가드와 「ops 체크아웃 단방향 규칙」의 커밋 거부 훅이 산문에서 코드로 옮겨간 것과 같은 이유다.
@@ -392,6 +417,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 - **한계**: 영수증은 "이 트리가 **이 기계에서** 통과했다"를 증명하지 "깨끗한 호스트에서 통과한다"를 증명하지 않는다. 그 간극은 clean-host 컨테이너 단계가 메우고 완전히는 못 메운다. 훅은 `automation/worktree.sh start` 가 설치하므로 훅을 설치한 적 없는 clone 에는 게이트가 없다 — gitleaks pre-commit 과 같은 성질이다. 상세: [소개](docs/기능소개/push-게이트-로컬-CI-영수증.md)
 
 ## 머지 규칙 (cha 지시, 2026-08-26)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **PR 머지는 `automation/merge-pr.sh <pr>` 로만 한다 — `gh pr merge` 를 직접 부르지 않는다.**
 
@@ -416,6 +443,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 
 ## 공개 릴리스 규칙 (cha 지시, 2026-08-15)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **2026-10-07부터 개발 정본은 공개 `orientpine/cytoplasm` 의 main 이다(공개 우선 전환). 변경은 cytoplasm 브랜치 → PR → 필수 체크(verify·clean-host-install·leak-guard) green → `automation/merge-pr.sh` 머지로만 main 에 들어가고, 릴리스는 `automation/release.sh` 가 소유자 ✅ 뒤 그 main 커밋에 서명 태그를 다는 것이다. 운영 자료(계획·QA 증적·누출 금칙어)는 비공개 운영 저장소 `orientpine/autophagy-ops` 에 두고 공개 저장소에 추적하지 않는다.**
 
 - **무엇이 뒤집혔나.** 옛 흐름(2026-08-15~10-06)에서는 개발이 private 저장소 `orientpine/autophagy-agents` 에서만 이뤄졌고, cytoplasm 은 `public_export.sh` 가 fresh-history 스냅샷으로만 갱신하는 일방향 파생본이었다. 이제 사람·에이전트·수리 자동화가 모두 cytoplasm 에 브랜치를 push하고 PR 을 연다. private 저장소는 롤백 기간(공개 우선 릴리스 3회 무사고) 동안 되돌리기 경로로 남았다가 2026-10-10 archive 됐다(읽기 전용, 이력 보관). 그 날짜 이전의 문서·QA 증적이 "private 에서 개발한다" 고 말하면 옛 흐름의 기록이다.
@@ -433,6 +462,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 
 ## 개인화 코드 금지 규칙 (SC-2, 2026-08-30)
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 **개인 맞춤값(채널·메시지 id 상수, 과제명·기관명, 개인 경로·이름)은 코드에 하드코딩하지 않는다 — 자리는 `configs/*.example` 시드와 `~/.hermes/…`·`/srv/autophagy-private/…` 런타임 설정뿐이다.**
 
 - **왜**: 이 저장소가 곧 공개 저장소다 — 2026-10-07 공개 우선 전환부터 커밋·PR 이 그대로 공개된다(전환 전에는 다음 릴리스의 반출 스크립트가 내보냈다). 시크릿은 gitleaks 가, 알려진 실명·과제명은 `public_gate` 금칙어가 잡지만 **목록에 없는 개인 맞춤 로직은 기계가 못 잡는다** — snowflake 상수 하나, 과제명 분기 하나가 그대로 공개된다. 특히 **수리(repair) 패치**는 프로덕션 관찰에서 태어나므로 개인화가 스며들기 가장 쉬운 경로다.
@@ -442,6 +473,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 - **배경**: `.omo/plans/release-convergence-and-versioned-approval.md` §5.2 SC-2. 지금은 추적된 코드가 곧 공개 트리이므로(전환 전 반출 스크립트도 `git archive <commit>` 으로 추적된 코드만 내보냈다 — 2026-08-30 실측) — 그래서 막을 곳은 정확히 "추적되는 코드 안의 개인화"다.
 
 ## 세 저장소 구분 규칙 (cha 지시, 2026-08-16)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **코드는 공개 `orientpine/cytoplasm` 하나에서 개발되고 배포된다(2026-10-07 공개 우선 전환 — 개발 정본이자 배포본). 그룹 관리형 스킬 채널 `orientpine/ribosome`(private)과는 합쳐지지 않고, 운영 자료는 비공개 운영 저장소 `orientpine/autophagy-ops` 에 따로 있다. 옛 개발 저장소 `orientpine/autophagy-agents`(private)는 2026-10-10 archive 됐다(읽기 전용). 어느 것을 말하는지 먼저 확정하고 답한다.**
 
@@ -491,6 +524,8 @@ automation/worktree.sh finish <이름>                          # 세션 종료
 - **카드도 정본을 먼저 가리킨다.** `--project` 를 준 인제스트의 카드 본문은 `출처(정본): Drive 회의록/<과제명>/` 을 먼저 적고 로컬 사본을 뒤에 적는다. 과제명을 모르면 없는 경로를 지어내지 않고 기존 로컬 경로만 적는다.
 - **배경(사후 반영)**: 2026-08-26, 전사본에서 만든 공정표 템플릿이 기관명을 틀렸다 — `한정기술`(정본은 **한국전력기술**, 다른 회사), `현대중공업 서부기계`(정본 **현대중공업터보기계**), 열교환기 `대통`(정본 **계통**) 열수력. 마감일도 `2028-02-01/04-01`(정본 **02-29/04-30**)로 어긋났고, 회의록이 규정한 열 위치(B2=기관명, B~E=대·중·소분류, H~I=시작·종료일, N=결과물)를 무시한 간트 격자를 지어냈다. 그 파일은 8개 참여기관에 배포될 것이었다. 완성 회의록에는 「용어·명칭 교정 기준」 표가 있어 이 오기들이 이미 교정돼 있었다 — 읽을 곳을 안 읽은 것이 유일한 원인이다.
 ## 산출물은 Drive에 둔다 (cha 지시, 2026-08-26)
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **에이전트가 cha에게 내놓는 산출물(문서·표·보고서)은 로컬 경로에 남기지 않고 Drive 표준 트리에 발행한다.**
 

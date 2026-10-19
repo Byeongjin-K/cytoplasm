@@ -18,6 +18,8 @@ autophagy/
 
 ## WHERE TO LOOK
 
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 Discord의 `#approvals`·`#notifications`는 아래 표와 예시의 관례 이름이다.
 설정 ID가 있으면 표시 이름은 자유롭게 바꿀 수 있다. 공급망은
 `personal_approvals_channel_id` 또는 명시적 `deploy_approvals_channel_id`와
@@ -48,6 +50,9 @@ peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 
 | 에이전트 자가 스킬 루트·감사 원장 | `<계정 홈>/.hermes/skills`(계정 소유 0700, 1차 루트), `automation/selfskill_audit/`, `~/.hermes/selfskill-audit/{state.json,ledger.jsonl}` | 자가 저작은 **승인 없이 착륙**하고 사후 감사한다(소유자 결정 2026-08-15 옵션 B). 관리자 배포 스킬은 `/srv/autophagy-skills/live`에 남아 Hermes `skills.external_dirs`로 읽기 전용 발견된다. 회수는 `hermes curator archive/pin`. 상세: [소개](docs/기능소개/에이전트-자가-스킬.md) |
 
 ## COMMANDS
+
+> **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
+
 ```bash
 pytest tests/unit                     # 단위 테스트 (루트에서 실행, .pytest_cache)
 ruff check .                          # 린트
