@@ -24,14 +24,35 @@ def unit_paths(home: Path, name: str) -> tuple[Path, Path]:
     return safe_path(home, base + ".timer"), safe_path(home, base + ".service")
 
 
+_RUNNING: Final = {"is-active": ("active", "activating", "reloading", "deactivating"),
+                   "is-enabled": ("enabled", "enabled-runtime", "linked", "linked-runtime", "alias")}
+
+
+def running(unit: str, runner: Runner) -> bool:
+    """True when systemd plainly reports the unit running or enabled; False when stopped.
+
+    A running timer is work for the deployer (`stale`), not an unreadable state: reporting it as
+    `unknown` made the release hold the cleanup without ever calling it.
+    """
+    try:
+        stopped(unit, runner)
+        return False
+    except ValueError:
+        pass
+    for verb, states in _RUNNING.items():
+        result = runner(("systemctl", "--user", verb, unit))
+        if result.returncode in (0, 1, 3, 4) and result.stdout.strip() in states:
+            return True
+    raise ValueError("RETIRED-JOB-REFUSED: unit state unreadable")
+
+
 def check(home: Path, name: str, runner: Runner = run) -> str:
-    """Observe actual stopped units and exact paths; unreadable is never absent."""
+    """Observe actual units and exact paths; unreadable is never absent."""
     try:
         units = unit_paths(home, name)
-        for path in units:
-            stopped(path.name, runner)
+        live = [running(path.name, runner) for path in units]
         data = tuple(safe_path(home, path) for path in DATA) if name == "reminder-poller" else ()
-        return "stale" if any(path.exists() for path in (*units, *data)) else "ok"
+        return "stale" if any(live) or any(path.exists() for path in (*units, *data)) else "ok"
     except (OSError, ValueError, subprocess.SubprocessError):
         return "unknown"
 

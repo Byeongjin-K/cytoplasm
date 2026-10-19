@@ -94,6 +94,22 @@ def test_a_running_retired_timer_is_stopped_then_removed_with_its_data(tmp_path:
     assert all(not path.exists() for path in paths)
 
 
+def test_a_running_timer_is_stale_work_for_the_deployer_not_unknown(tmp_path: Path) -> None:
+    # Given: the retired timer still runs (the release must call the cleanup, not hold it).
+    _seed(tmp_path)
+    # When / Then
+    assert retired_jobs.check(tmp_path, "reminder-poller", _live_runner([], obeys=True)) == "stale"
+
+
+def test_an_unreadable_unit_state_is_unknown(tmp_path: Path) -> None:
+    _seed(tmp_path)
+
+    def garbled(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 0, "???", "")
+
+    assert retired_jobs.check(tmp_path, "reminder-poller", garbled) == "unknown"
+
+
 def test_a_timer_that_stays_active_prevents_every_file_deletion(tmp_path: Path) -> None:
     paths = _seed(tmp_path)
     before = {path: path.read_bytes() for path in paths}
