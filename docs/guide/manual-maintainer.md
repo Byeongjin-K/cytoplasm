@@ -324,7 +324,7 @@ rm -f /tmp/update-trust.pub
 
 노트에 **반드시** 들어가야 하는 것:
 
-- 업데이트 신뢰키 **지문**(현재 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`).
+- 업데이트 신뢰키 **지문**(현재 `SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU`, v2.6.6 부터).
   신규 설치는 설치기 번들의 키를 **설치기가 아닌 경로로** 대조해야 하는데, 그 대역외
   경로가 바로 README와 이 릴리스 노트다(P0-6 부트스트랩).
 - 이 릴리스가 MAJOR라면 무엇이 거부되는지·어떤 오류 문자열이 보이는지·운영자가 무엇을
@@ -438,6 +438,8 @@ ssh-keygen -lf ~/.ssh/autophagy_update_trust.pub
 > 역산한 절차이며, 첫 실수행 때 관측값으로 갱신한다.
 >
 > **첫 회전(2026-10-13, 소유자 노드 6단계·구 개인키 폐기 2026-10-15 완료)**: 릴리스 호스트를 옮기면서(루트 `AGENTS.md` 「릴리스 태그 규칙」) 키를 복사하지 않고 새 머신에서 새 키를 만들었다. 구 키 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA` → 신 키 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`(ED25519, `update-trust@autophagy`). 신 키 첫 릴리스(v1.22.3)의 노트가 신 지문을 공지했다. 그 공지를 놓친 제3자 서버 하나가 v1.22.2 에 조용히 멈췄고(2026-10-16 확인), 그래서 지금은 §3.1 의 정체 경고가 그 서버 운영자에게 원인과 새 지문을 알린다.
+>
+> **두 번째 회전(2026-10-19)**: 릴리스 호스트를 노드와 같은 기계(운영자 계정)로 옮기면서 같은 순서로 새 키를 만들었다. `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` → `SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU`. 비밀 키는 운영자 계정 `~/.ssh`(0700)에만 있고 노드 서비스 계정(agent·ops·peer)은 읽지 못한다. 노드 신뢰 파일에 새 키를 덧붙인 뒤 v2.6.6 을 새 키로 서명하고, 노드가 v2.6.6 으로 전진한 뒤 옛 키 줄을 뺀다(§3.4 의 5~7단계).
 
 ### 3.1 불변식 — 이것 하나만 지키면 된다
 
