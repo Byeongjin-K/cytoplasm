@@ -32,6 +32,12 @@ def complete(home: str, prompt: str, timeout: float) -> Served:
     """Retry transport/overload once, preserving the public error and Served types."""
     from automation.codex_llm import CodexError, CodexUnavailableError, Served
 
+    from automation.omo_relay.runner import LIMIT
+
+    size = len(prompt.encode("utf-8"))
+    if size > LIMIT:
+        # The workstation refuses it unread with rc=2; say why here (live QA 4, 2026-10-19).
+        raise CodexUnavailableError(f"omo relay input too large ({size} bytes > {LIMIT})")
     try:
         command = argv(Path(home))
     except (OSError, RelayConfigError):

@@ -1,7 +1,7 @@
 ---
 name: report
 description: "내 노트로 보고서·발표 슬라이드·대본을 만들라고 할 때 사용. 개인 노트로 보고서·reveal.js 슬라이드·발표 대본을 생성한다. 모든 입력은 같은 모델·발행 경로를 사용한다. W5-3."
-version: 1.1.1
+version: 1.1.2
 author: autophagy-agents
 license: MIT
 metadata:
@@ -66,3 +66,9 @@ python3 /srv/autophagy-skills/live/report/scripts/report_cli.py script \
 
 ## Drive 게시 (최종본)
 최종 산출물은 `DRIVE_PUBLISH_ENABLED=1`일 때 cha 본인 Drive의 `autophagy/주간동향/<YYYY>/<YYYY-Www>_주간연구동향/`에 생성 즉시 자동 업로드된다(초안 제외, 리뷰용, 게이트 없음). 보고서·슬라이드·대본 3종이 그 주간 번들 폴더 한 곳에 모이며, 같은 주에 다시 만들면 새 파일이 생기지 않고 기존 파일이 갱신된다. 발행은 공용 파사드 `automation.drive_outputs`만 쓴다. 상세: `docs/guide/drive-publish.md`.
+
+## 재료 파일과 입력 한도 (2026-10-19)
+
+- `report --material-file <파일>`(여러 번 가능)을 주면 노트 폴더 대신 그 파일들만 재료로 쓴다. 유돌은 옵시디언 노트를 `note-get` 으로 읽어 `stage` 한 뒤 그 경로를 넘긴다.
+- 모델 중계는 256 KiB 넘는 입력을 받지 않는다. 재료는 200 KiB 안으로 맞추고(앞에서부터 통째로, 넘치는 노트는 앞부분만, 나머지는 뺌), 보고서 끝 `근거` 아래 `자료 줄임(모델 입력 한도):` 한 줄에 무엇을 얼마나 줄였는지 적는다. 조용히 빠지지 않는다.
+- 모델 호출이 실패하면 `REPORT-REFUSED <종류>: <원인>` 으로 원인을 함께 출력한다.
