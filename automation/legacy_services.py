@@ -7,7 +7,8 @@ import os
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
@@ -81,26 +82,33 @@ def check(home: Path, name: str, mode: str, run: Run = _run) -> str:
 def install(home: Path, name: str, mode: str, run: Run = _run) -> int:
     """Refuse unresolved choices before stopping either memory timer, under its watcher lock."""
     if name == "hermes-memory" and mode == "off":
-        from automation.memory_relocate.model import RelocationError
-        from automation.memory_relocate.relocation_store import RelocationStore
-
-        lock = home / ".hermes/memory-relocate/watch.lock"
-        lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with lock.open("a", encoding="utf-8") as handle:
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as error:
-                raise ValueError("MEMORY-OFF-REFUSED: 메모리 이동 실행 중, 타이머 무변경") from error
-            try:
-                pending = RelocationStore(home / ".hermes/memory-curator/relocations.json").pending()
-            except RelocationError as error:
-                raise ValueError("MEMORY-OFF-REFUSED: 메모리 선택 상태 판독 불가, 타이머 무변경") from error
-            if pending:
-                raise ValueError(
-                    f"MEMORY-OFF-REFUSED: 미결 메모리 선택 {len(pending)}건을 먼저 종결하세요. 타이머 무변경"
-                )
+        with memory_stop_guard(home):
             return _install(home, name, mode, run)
     return _install(home, name, mode, run)
+
+
+@contextmanager
+def memory_stop_guard(home: Path) -> Iterator[None]:
+    """Both release switches retain the same pending-choice check and watcher lock."""
+    from automation.memory_relocate.model import RelocationError
+    from automation.memory_relocate.relocation_store import RelocationStore
+
+    lock = home / ".hermes/memory-relocate/watch.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with lock.open("a", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ValueError("MEMORY-OFF-REFUSED: 메모리 이동 실행 중, 타이머 무변경") from error
+        try:
+            pending = RelocationStore(home / ".hermes/memory-curator/relocations.json").pending()
+        except RelocationError as error:
+            raise ValueError("MEMORY-OFF-REFUSED: 메모리 선택 상태 판독 불가, 타이머 무변경") from error
+        if pending:
+            raise ValueError(
+                f"MEMORY-OFF-REFUSED: 미결 메모리 선택 {len(pending)}건을 먼저 종결하세요. 타이머 무변경"
+            )
+        yield
 
 
 def _install(home: Path, name: str, mode: str, run: Run) -> int:

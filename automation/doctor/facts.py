@@ -320,14 +320,27 @@ def _discord_channels(path: Path) -> tuple[tuple[str, ...], tuple[str, ...]] | N
 
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
     from automation.legacy_services import memory_timer_off
+    from automation.owner_timers import OwnerTimersError, read_list, MARKER
 
     try:
         names = [d.destination for d in all_declarations(repo)
                  if d.kind == "cron" and d.account == role and d.attr("runner") == "systemd"]
     except (ManifestError, OSError):
         return ()
+    try:
+        owner_off = read_list(home / MARKER, repo)
+    except (OwnerTimersError, OSError):
+        return tuple(TimerJob(name, "unknown", "", 0, "") for name in names)
     found: list[TimerJob] = []
     for name in names:
+        if name in owner_off:
+            timer = f"autophagy-cron-{name}.timer"
+            _, enabled = run(("systemctl", "--user", "is-enabled", timer),
+                             {"XDG_RUNTIME_DIR": f"/run/user/{uid}"})
+            state = _gateway(timer, run, uid)
+            found.append(TimerJob(name, "released-off" if enabled.strip() == "disabled"
+                                 and state == "inactive" else "unknown", "", 0, ""))
+            continue
         if memory_timer_off(home, name):
             # Actual inactive/disabled read-back is reported by legacy_services below.
             found.append(TimerJob(name, "released-off", "", 0, ""))

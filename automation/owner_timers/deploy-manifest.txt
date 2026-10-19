@@ -1,0 +1,2 @@
+# The derived state includes the exact list, ownership/mode, and disabled/inactive timers.
+agent|automation/owner_timers|.hermes/owner-timers/off|v2:derived;algorithm=owner-timers-v1

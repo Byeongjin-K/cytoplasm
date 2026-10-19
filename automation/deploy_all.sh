@@ -80,6 +80,7 @@ relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
 memory_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-memory)" || exit 4
+owner_timers="$(PYTHONPATH="$repo_root" python3 -B -m automation.owner_timers switch)" || exit 4
 if [[ "$peer_mode" == retired && "$gateway_mode" != stopped ]]; then
   echo "PEER-RETIRED-REFUSED: stopped gateways required before removal" >&2
   exit 4
@@ -102,7 +103,12 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+}
+
+converge_owner_timers() {
+  PYTHONPATH="$repo_root" python3 -B -m automation.owner_timers deploy \
+    --repo "$repo_root" --host "$host" --runtime "$RUNTIME_ROOT" --head "$node_sha" --jobs "$owner_timers"
 }
 
 converge_ledger() {
@@ -334,6 +340,9 @@ case "$mode" in
     fi
     grep -E '^ACT[|]' <<< "$actions" || true
     steps="plan"
+    ssh "$host" "sudo -n -u $NODE_AGENT_ACCOUNT -H env PYTHONPATH=$exec_root python3 -B -m automation.owner_timers check --jobs $owner_timers" </dev/null \
+      || rehearsal_end 4 "REHEARSAL-REFUSED step=owner-timers-off rc=4"
+    steps+=",owner-timers-off"
     # The pinned Dori fork: fetch that exact commit and dry-run its installer (lead 2026-10-19).
     read -r -a pin_check <<< "${DEPLOY_ALL_DORI_PIN_CHECK_CMD:-python3 -B -m automation.dori_pin rehearse}"
     (cd "$repo_root" && PYTHONPATH="$repo_root" "${pin_check[@]}") \
@@ -424,6 +433,9 @@ case "$mode" in
         --channel-id "$chat_channel" --head "$node_sha" || exit 4
       converge_notice_bot || exit 4
     fi
+    # An absent host list leaves ordinary installs unchanged. A remaining node marker
+    # is observed by its declaration and its deployer restores the previous jobs.
+    [[ "$owner_timers" == off ]] || converge_owner_timers || exit 4
     actions="$(probe actions)"
     rc=$?
     if (( rc == 4 )); then
