@@ -72,7 +72,7 @@ Gmail 읽기(`gmail-list`, `gmail-get`)와
 | `command-request` | `-m automation.effect_request request command … -- <argv>` | 필수 `--summary --target --argv-b64`; cwd·timeout은 기존 CLI 기본값 |
 | `obsidian-request` | `-m automation.obsidian_write request` | 필수 `--relpath`, `--body-file` 또는 `--body-b64` 중 하나, 선택 `--title` |
 
-2026-10-18 부터 위키 읽기(`wiki-search`, `wiki-get`)와 형 명령 잡(`doc`, `patent`, `stt`, `meeting`, `wiki-write`, `job`, `job-file`)도 있다 — 카드 없이 형 계정 안에 쓰는 경로이며 노드가 근거 메시지가 형 글인지 확인한다. 사용법은 [유돌 형 명령 통로](유돌-형-명령-통로.md).
+2026-10-18 부터 위키 읽기(`wiki-search`, `wiki-get`)와 형 명령 잡(`doc`, `patent`, `stt`, `meeting`, `job`, `job-file`)도 있다 — 카드 없이 형 계정 안에 쓰는 경로이며 노드가 근거 메시지가 형 글인지 확인한다. 사용법은 [유돌 형 명령 통로](유돌-형-명령-통로.md).
 
 ### PC에서 파일 전달: `stage <name>`
 

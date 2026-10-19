@@ -98,16 +98,13 @@ def test_doc_job_routes_outputs_and_marks_writes(staged: Path) -> None:
 def test_patent_stt_meeting_and_wiki_jobs(staged: Path) -> None:
     export = gate.build_job(["patent", "export", "--slug", "valve-seal", *ORIGIN])
     stt = gate.build_job(["stt", "ingest", "--file", str(staged), "--project", "과제", *ORIGIN])
-    wiki = gate.build_job(["wiki-write", "--title", "실험 규칙", "--body-b64", b64("본문\n둘째 줄"), *ORIGIN])
-    edit = gate.build_job(["wiki-write", "--edit", "lab-rule", "--body-b64", b64("고침"), *ORIGIN])
     assert export.argv == [PY, f"{LIVE}/patent-prep/scripts/patent_cli.py", "export-now",
                            "--slug", "valve-seal", *ORIGIN] and export.write
     assert stt.argv[-4:] == ["--notify-channel", "123456789", "--notify-message-id", "987654321"]
     assert stt.timeout == 4 * 3600
-    assert wiki.argv == [PY, f"{LIVE}/wiki/scripts/wiki_cli.py", "write", "--title", "실험 규칙",
-                         "--body", "본문\n둘째 줄", *ORIGIN]
-    assert wiki.label == "위키 새 노트" and edit.label == "위키 lab-rule"
-    _parses(REPO / "skills/wiki/scripts", "wiki_cli", wiki.argv[2:])
+    # Owner 2026-10-19 (Q278): wiki notes go to Obsidian; the gate refuses and says where.
+    with pytest.raises(gate.Refused, match="_vault/note"):
+        gate.build_job(["wiki-write", "--title", "실험 규칙", "--body-b64", b64("본문"), *ORIGIN])
 
 
 @pytest.mark.parametrize("words", [

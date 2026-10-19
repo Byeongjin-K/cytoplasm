@@ -5,6 +5,7 @@ import hashlib
 import io
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,43 @@ def stage_file(root: Path, name: str, source: BinaryIO) -> tuple[Path, str, int]
         finally:
             temporary.unlink(missing_ok=True)
     return destination, digest.hexdigest(), size
+
+
+def stage_mail_attachment(home: Path, staging: Path, uid: str, filename: str) -> tuple[Path, str, int]:
+    """Copy one saved attachment of a mail in the owner's mailbox into the private staging folder.
+
+    Owner 2026-10-19 (live QA 2): a Drive share or a new mail may carry a file that arrived by mail,
+    and only staged paths are accepted. The bytes stay on the node; YooDori gets path, digest, size.
+    """
+    data = home / ".hermes/mailon-runtime/state/data"
+    try:
+        db = sqlite3.connect(f"file:{data / 'state.db'}?mode=ro", uri=True)
+        try:
+            rows = db.execute("SELECT filename, local_path FROM attachments WHERE uid = ? AND status = 'ok' "
+                              "ORDER BY rowid", (uid,)).fetchall()
+        finally:
+            db.close()
+    except sqlite3.Error:
+        raise Refused("mailbox index unreadable") from None
+    names = [str(row[0]) for row in rows]
+    if filename not in names:
+        raise Refused("no saved attachment by that name in that mail of the owner's mailbox")
+    index = names.index(filename)
+    local = rows[index][1]
+    candidates = [Path(local) if Path(local).is_absolute() else home / local] if local else []
+    candidates.append(data / "attachments" / uid / filename)
+    runtime = (home / ".hermes/mailon-runtime").resolve()
+    source = next((path for path in candidates if not path.is_symlink() and path.is_file()
+                   and path.resolve().is_relative_to(runtime)), None)
+    if source is None:
+        raise Refused("that attachment is not saved on the node")
+    if source.stat().st_size > MAX_STAGE_BYTES:
+        raise Refused("attachment exceeds 64 MiB")
+    # Letter-first extensions only: a recorded name may still end in the page's size ("x.wrl 37.86 MB").
+    extensions = re.findall(r"\.([A-Za-z][A-Za-z0-9]{0,9})\b", filename)
+    name = f"mail-{uid}-{index + 1}" + (f".{extensions[-1]}" if extensions else "")
+    with source.open("rb") as handle:
+        return stage_file(staging, name, handle)
 
 
 def stage_body(argv: list[str], root: Path) -> list[str]:
