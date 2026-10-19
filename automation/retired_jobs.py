@@ -36,15 +36,31 @@ def check(home: Path, name: str, runner: Runner = run) -> str:
         return "unknown"
 
 
+def quiesce(unit: str, runner: Runner) -> None:
+    """Stop and disable a job the owner retired (2026-10-19 "끄지 말고 삭제", Q282).
+
+    The release approval authorizes this; a timer that still runs (the node's reminder poller)
+    would otherwise refuse every release. Nothing is deleted unless the read-back says stopped.
+    """
+    try:
+        stopped(unit, runner)
+        return
+    except ValueError:
+        pass
+    verb = ("disable", "--now") if unit.endswith(".timer") else ("stop",)
+    checked(("systemctl", "--user", *verb, unit), runner)
+    stopped(unit, runner)
+
+
 def install(home: Path, name: str, runner: Runner = run) -> None:
-    """Never stop a live job implicitly; remove data only after unit removal read-back."""
+    """Stop the retired job, then remove data only after unit removal read-back."""
     units = unit_paths(home, name)
     # Validate every path before unlinking any of them, including data symlinks.
     if name == "reminder-poller":
         for path in DATA:
             safe_path(home, path)
     for path in units:
-        stopped(path.name, runner)
+        quiesce(path.name, runner)
     if any(path.exists() for path in units):
         for path in units:
             path.unlink(missing_ok=True)

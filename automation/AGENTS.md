@@ -23,7 +23,7 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 
 2026-10-19 소유자 “끄지 말고 삭제”와 Q282로 메모리 예약 작업 둘과
 `reminder_poller` 전체를 제거했다. `hermes-memory-off` 스위치도 제거했다.
-`retired_jobs`의 필수 derived 선언이 정지·비활성 유닛만 삭제하고 재조회한다.
+`retired_jobs`의 필수 derived 선언이 아직 도는 타이머를 멈춘 뒤(멈춤 재조회) 유닛을 삭제하고 재조회한다.
 알림 유닛 제거 확인 뒤 정확히 `state/reminders.db`·`state/milestones.yaml`만
 심링크를 거부하며 삭제한다. USER.md·MEMORY.md·메모리 백업·recall은 보존한다.
 기억 저장은 유돌 omo(소유자 선호·규칙은 `system/human.md`), 긴 기록은

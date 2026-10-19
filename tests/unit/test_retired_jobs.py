@@ -60,12 +60,46 @@ def test_data_deleted_only_after_stopped_unit_removal_confirmation(tmp_path: Pat
                for path in paths[:2])
 
 
-def test_active_timer_prevents_every_file_deletion(tmp_path: Path) -> None:
+def _live_runner(calls: list[tuple[str, ...]], *, obeys: bool):
+    """A still-running timer; `obeys` says whether disable/stop actually takes effect."""
+    halted: set[str] = set()
+
+    def run(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        verb, unit = argv[2], argv[-1]
+        if verb in ("disable", "stop"):
+            if obeys:
+                halted.add(unit)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if verb == "daemon-reload":
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if unit in halted:
+            return subprocess.CompletedProcess(argv, 3, "inactive" if verb == "is-active" else "disabled", "")
+        return subprocess.CompletedProcess(argv, 0, "active" if verb == "is-active" else "enabled", "")
+    return run
+
+
+def test_a_running_retired_timer_is_stopped_then_removed_with_its_data(tmp_path: Path) -> None:
+    # Given: the node's reminder poller is still enabled and active (owner Q282 retires it).
+    paths = _seed(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    # When: the declared cleanup runs.
+    retired_jobs.install(tmp_path, "reminder-poller", _live_runner(calls, obeys=True))
+    # Then: the timer is disabled with --now and the service stopped before anything is deleted.
+    timer, service = paths[0].name, paths[1].name
+    assert ("systemctl", "--user", "disable", "--now", timer) in calls
+    assert ("systemctl", "--user", "stop", service) in calls
+    assert calls.index(("systemctl", "--user", "disable", "--now", timer)) < calls.index(
+        ("systemctl", "--user", "daemon-reload"))
+    assert all(not path.exists() for path in paths)
+
+
+def test_a_timer_that_stays_active_prevents_every_file_deletion(tmp_path: Path) -> None:
     paths = _seed(tmp_path)
     before = {path: path.read_bytes() for path in paths}
     calls: list[tuple[str, ...]] = []
     with pytest.raises(ValueError):
-        retired_jobs.install(tmp_path, "reminder-poller", _runner(tmp_path, calls, active=True))
+        retired_jobs.install(tmp_path, "reminder-poller", _live_runner(calls, obeys=False))
     assert {path: path.read_bytes() for path in paths} == before
     assert not any(call[2] == "daemon-reload" for call in calls)
 
