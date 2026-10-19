@@ -46,6 +46,17 @@ REPLY_DIV = (
     "<div style=\"font-family:'맑은 고딕','Malgun Gothic',sans-serif;"
     "font-size:10.5pt;line-height:160%;white-space:pre-wrap\">"
 )
+
+
+@pytest.fixture(autouse=True)
+def _released_html_reply(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Existing HTML regressions exercise the explicitly released on mode."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    marker = Path.home() / ".hermes/mail-html-reply.mode"
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"on")
+
+
 ORIGINAL_HTML = (
     '<table border="1"><tr><td style="color:#c00000;font-family:돋움"><b>견적 표</b></td>'
     "</tr></table><p>다음 주 회의 참석 가능 여부 회신 부탁드립니다.</p><p>감사합니다.</p>"

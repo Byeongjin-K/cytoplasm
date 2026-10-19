@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,10 +13,12 @@ import pytest
 
 from automation import deploy_all_observe, release_approval
 from automation.deploy_declarations import parse_declaration_file
-from tests.unit import test_release_authorize as auth
-from tests.unit.test_healthcheck_wrapper_release import _fake_plan, _plan_args, _spec
-
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import test_release_authorize as auth  # noqa: E402
+from test_healthcheck_wrapper_release import _fake_plan, _plan_args, _spec  # noqa: E402
+
 SURFACE = ("mail-html-reply:on", hashlib.sha256(b"on").hexdigest())
 
 
@@ -181,7 +184,7 @@ def test_removing_host_switch_deploys_off_through_same_declared_writer(tmp_path)
 
 def test_release_shell_passes_host_opt_in_to_plan(tmp_path):
     # Given: the existing sandbox runs the actual release shell, with no real node.
-    from tests.unit.test_release_sh import _origin_with_commits, _run
+    from test_release_sh import _origin_with_commits, _run
 
     _origin, work = _origin_with_commits(tmp_path)
     flag = tmp_path / ".hermes/release-flags/mail-html-reply"

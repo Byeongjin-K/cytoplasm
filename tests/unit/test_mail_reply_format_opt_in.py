@@ -8,6 +8,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "skills/mail/scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mail_approval_attachment  # noqa: E402
 import mail_drive_share  # noqa: E402
@@ -16,7 +17,7 @@ import mail_quote  # noqa: E402
 import triage_cli  # noqa: E402
 import triage_core  # noqa: E402
 import triage_gate  # noqa: E402
-from tests.unit.test_mail_reply_quote import (  # noqa: E402
+from test_mail_reply_quote import (  # noqa: E402
     OWNER, REPLY_TEXT, _detail, _only_draft, _run_cli, _setup_env,
 )
 

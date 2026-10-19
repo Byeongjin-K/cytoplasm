@@ -21,7 +21,6 @@ _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "skills" / "mail" / "scripts"))
 sys.path.insert(0, str(_REPO / "skills" / "mail" / "vendor"))
 
-import mail_quote  # noqa: E402
 import triage_cli  # noqa: E402
 import triage_core  # noqa: E402
 import triage_gate  # noqa: E402
@@ -222,9 +221,7 @@ def test_compose_without_in_reply_to_is_byte_identical_to_before(
     ) == 0
     _path, record = _only_draft()
     assert "quote" not in record
-    assert record["argv"] == list(triage_core.build_send_argv(
-        "python3", "x@y.z", "제목", "본문", body_html=mail_quote.html_body("본문", ""),
-    ))
+    assert record["argv"] == list(triage_core.build_send_argv("python3", "x@y.z", "제목", "본문"))
 
 
 # --- C4: approval rendering notes the quote in one line -----------------------------
