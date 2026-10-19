@@ -15,6 +15,8 @@ DIGEST_VERSIONS = frozenset({"4", "5"})  # both verify by the stored digest of t
 _FILE_HASH = re.compile(r" · `[0-9a-f]{64}`")
 _HIDDEN = ("- draft:", "- action hash:", "- 반응(기본):", "- body sha256:")
 _SHARE = "- Drive 공유:"
+# Owner Q273 (2026-10-19 12:31 KST): an address with no Google account is shared with Google's invite.
+INVITE_NOTICE = "- 받는 분에게 구글 계정이 없으면 구글이 초대 알림 메일도 보냅니다."
 
 
 def _size(value: object) -> str:
@@ -40,7 +42,7 @@ def render(legacy: str, instruction: str, share: Mapping[str, object] | None = N
     for line in lines[1:]:
         if share is not None and line.startswith(_SHARE):
             in_share = True
-            kept.append(share_line(share))
+            kept.extend((share_line(share), INVITE_NOTICE))
             continue
         if in_share and line.startswith("  "):
             continue

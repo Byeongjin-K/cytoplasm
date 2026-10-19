@@ -194,6 +194,7 @@ class ShareResult:
     file_id: str
     link: str
     action: str
+    invited_by_google: tuple[str, ...] = ()
 
 
 class ShareRefused(RuntimeError):
@@ -217,6 +218,13 @@ def share_target(name: str, *, on: date, project: str | None = None) -> tuple[tu
     drive_name = artifact_name(period_key("oneshot", on), path.stem, path.suffix)
     _ = ensure_depth((*parts, drive_name))
     return parts, drive_name
+
+
+def _same_bytes(drive: DriveClient, file_id: str, sha256: str, size: int) -> bool:
+    try:
+        return drive.file_checksum(file_id) == (sha256, size)
+    except DriveClientError:  # unreadable: upload again below rather than trust it
+        return False
 
 
 def _local_digest(local: Path) -> tuple[str, int]:
@@ -266,6 +274,10 @@ def share(
             file_id = ""
     if not file_id:
         parent_id = drive.ensure_folder_path(tuple(checked[:-1]))
+        existing = drive.find_file(checked[-1], parent_id)
+        if existing and _same_bytes(drive, existing, sha256, size):
+            file_id = existing  # an earlier attempt already uploaded these exact bytes
+    if not file_id:
         uploaded = drive.upsert_file(local, checked[-1], parent_id)
         file_id = uploaded["id"]
         action = uploaded["action"]
@@ -282,16 +294,22 @@ def share(
             f"file is already shared beyond the approved people ({len(unexpected)})",
             "drive_permission_refused",
         )
+    invited: list[str] = []
     for person in people:
         if person not in present:
-            drive.grant_reader(file_id, person)
+            try:
+                if drive.grant_reader(file_id, person):
+                    invited.append(person)
+            except DriveClientError as error:
+                raise ShareRefused(str(error), "drive_grant_refused") from error
     try:
         final = drive.shared_readers(file_id)
     except DriveClientError as error:
         raise ShareRefused(str(error), "drive_permission_refused") from error
     if final != frozenset(people):
         raise ShareRefused("the share does not name exactly the approved people", "drive_permission_refused")
-    return ShareResult(file_id=file_id, link=drive.web_view_link(file_id), action=action)
+    return ShareResult(file_id=file_id, link=drive.web_view_link(file_id), action=action,
+                       invited_by_google=tuple(invited))
 
 
 def publish_state_file(

@@ -1,7 +1,7 @@
 ---
 name: mail
 description: "메일을 읽거나 찾거나 회신·작성·전달·발송하라고 할 때 사용. 기관메일(mailon.kr) 스킬. 메일 작성·발송 지시에서 수신자가 이메일 주소가 아니라 사람 이름이면(예: '홍길동 박사님께 메일') 반드시 먼저 resolve로 이름→이메일 해석(기관 웹메일 자동완성 기반, READ-ONLY) — 메일함 검색만으로 포기하거나 주소를 추측·유추하는 것은 금지. 읽기: list/get/classify/status/resolve 래퍼(W4-1, READ-ONLY). 파이프라인(W4-2): 수신메일 중요도·업무 분류(계정 모델 체인)→다이제스트(08:00 KST)→소유자 지시 기반 회신 초안(Codex OAuth)→현재 승인 표면의 소유자 게이트→mailon 발송→approvals.jsonl. 새 메일 작성(compose)도 동일 watch·해시 바인딩 게이트를 경유한다. 발송은 반드시 승인 게이트 경유 — 직접 send 금지. 회신은 승인 메시지 한 건에 전문과 sha256을 함께 표시한다. 승인 표면은 `approval_surface.py` 정책과 draft의 저장된 바인딩으로 결정되며, 폐지 표면의 미결정 초안은 승인 없이 만료된다. 회신·후속메일은 메일 클라이언트의 회신처럼 원문(헤더+본문)을 발송 본문 하단에 인용한다(draft 기본, --reply-all 로 전체회신, compose --in-reply-to <uid> 로 후속메일). 전달(FW·포워드·'Gmail로 보내줘')은 compose --forward <uid>(기관메일) / --forward-gmail <message-id>(Gmail) — 원문 인용 + 원 첨부 바이트 그대로, 같은 승인 카드."
-version: 1.20.0
+version: 1.21.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -259,11 +259,11 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --to <주�
 
 - **본문에 `<Drive 링크>` 를 정확히 한 번** 쓴다. ✅ 뒤 그 자리가 실제 Drive 링크로 바뀜다. 없거나 두 번 이상이면 exit 2 로 초안을 만들지 않는다.
 - 반대로 `--drive-share` 없이 본문에 `<Drive 링크>` 를 쓰면 카드를 올리지 않고 exit 2 로 거절된다. 공유할 파일이 있으면 `--drive-share` 로 주고, 없으면 그 자리를 지운다.
-- **공유는 사람별 보기 권한(reader)뿐**이다. 링크 공개(anyone)·도메인 공유·편집 권한을 만드는 옵션은 없고, 파일에 소유자와 `--share-with` 사람 말고 다른 권한이 보이면 메일을 보내지 않는다. Drive 는 별도 알림 메일을 보내지 않는다(링크는 우리 메일이 전한다).
+- **공유는 사람별 보기 권한(reader)뿐**이다. 링크 공개(anyone)·도메인 공유·편집 권한을 만드는 옵션은 없고, 파일에 소유자와 `--share-with` 사람 말고 다른 권한이 보이면 메일을 보내지 않는다. 링크는 우리 메일이 전하므로 Drive 에는 조용히 공유하라고 먼저 요청한다. 받는 사람에게 구글 계정이 없으면 Drive 가 조용한 공유를 거절하므로, 그때는 구글이 보내는 초대 알림 메일을 켜고 다시 공유한다(형 결정 Q273, 2026-10-19 12:31 KST). 카드에 「받는 분에게 구글 계정이 없으면 구글이 초대 알림 메일도 보냅니다」 줄이 있다.
 - **올리는 곳**은 `autophagy/공유/<연도>/<날짜>_<파일명>`, `--drive-folder <이름>` 을 주면 `autophagy/공유/<이름>/<연도>/` 다. 요청 시점에 정해져 카드에 보이고 승인에 묶인다.
 - **승인에 묶이는 것**: 파일 sha256·크기, Drive 폴더·파일명, 공유받는 사람, 역할 reader, 본문(자리 포함). 파일은 요청 때 비공개 폴더(`~/.hermes/mail-triage/drive-share/`, 0700)에 복사되고, ✅ 뒤 복사본이 한 바이트라도 다르면 올리지 않는다.
-- **승인 카드**: compose 카드에 `Drive 공유: <파일> · <바이트> · <sha256>`, `올릴 곳`, `보기 권한(reader)만: <사람> — 링크 공개 없음`, "하나라도 실패하면 메일은 나가지 않습니다" 줄이 더해진다. 게시 성공 시 `COMPOSED` 다음에 `DRIVE-SHARE draft=<id> file=<Drive 파일명> people=<N> role=reader` 와 `APPROVAL-THREAD … url=` 이 나온다 — 답장에는 그 url 을 싣는다.
-- **✅ 뒤 순서**(같은 watch tick): 업로드 → Drive 의 sha256·크기 대조 → 권한 확인 → 사람별 reader 부여 → 권한 재확인 → 링크를 넣어 발송. 어느 단계든 실패하면 **메일은 나가지 않고** 같은 승인 스레드에 `⚠️ 발송 실패 … 멈춘 단계: drive_share · 원인: <drive_upload_failed|drive_checksum_mismatch|drive_permission_refused|local_copy_changed>` 가 남는다. 업로드 전송 실패는 메일 재시도와 같은 간격으로 다시 시도하고, 체크섬·권한 이상은 다시 시도하지 않는다. 공유까지 끝난 뒤 발송만 실패하면 다음 시도는 올린 파일을 다시 쓴다.
+- **승인 카드**: v5 카드(2026-10-19)는 `보낼 때 <파일>(<크기>) 공유 링크가 채워짐(공유 대상: <사람>, 보기)` 한 줄과 「받는 분에게 구글 계정이 없으면 구글이 초대 알림 메일도 보냅니다」 줄을 싣는다. 본문이 길어 텍스트 파일로 옮겨진 카드에도 같은 두 줄과 첨부 이름·크기가 보인다(v4 는 공유도 첨부도 빠져 형이 무엇이 누구에게 가는지 카드에서 볼 수 없었다). 저장된 v4 카드는 예전 그대로 다시 그린다. 게시 성공 시 `COMPOSED` 다음에 `DRIVE-SHARE draft=<id> file=<Drive 파일명> people=<N> role=reader` 와 `APPROVAL-THREAD … url=` 이 나온다 — 답장에는 그 url 을 싣는다.
+- **✅ 뒤 순서**(같은 watch tick): 업로드 → Drive 의 sha256·크기 대조 → 권한 확인 → 사람별 reader 부여 → 권한 재확인 → 링크를 넣어 발송. 어느 단계든 실패하면 **메일은 나가지 않고** 같은 승인 스레드에 `⚠️ 발송 실패 … 멈춘 단계: drive_share · 원인: <drive_upload_failed|drive_checksum_mismatch|drive_permission_refused|drive_grant_refused|local_copy_changed>` 가 남는다. 업로드 전송 실패는 메일 재시도와 같은 간격으로 다시 시도하고, 체크섬·권한 이상과 공유 거절(`drive_grant_refused`)은 다시 시도하지 않는다. 초안 레코드의 `last_error.detail` 에 실패한 호출과 Drive 의 원문 오류가 남는다(카드·통지에는 나오지 않음). 같은 폴더에 같은 바이트의 파일이 이미 있으면(앞선 시도가 올린 것) 다시 올리지 않고 그 파일을 쓴다.
 - **대리 요청(`[도리 대리 · 소유자 요청 <link>]`)도 같다**: 위 명령으로 카드만 올리고 승인은 카드의 cha ✅ 뿐이다.
 
 ### 5. 수동 Triage (Legacy)

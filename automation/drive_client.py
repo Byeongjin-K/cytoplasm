@@ -38,6 +38,7 @@ class DriveClientError(RuntimeError):
     """A gws Drive call failed or returned an unusable response (fail closed)."""
 
 
+
 def _q_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
@@ -201,6 +202,10 @@ class DriveClient:
     def web_view_link(self, file_id: str) -> str:
         return self._web_view_link(file_id)
 
+    def find_file(self, name: str, parent_id: str) -> str | None:
+        """The id of the untrashed file ``name`` directly under ``parent_id``, if any."""
+        return self._find_file(name, parent_id)
+
     def _web_view_link(self, file_id: str) -> str:
         result = self._run(
             [self.gws_bin, "drive", "files", "get", "--params",
@@ -323,13 +328,26 @@ class DriveClient:
             raise DriveClientError(f"소유자 권한이 유일하지 않음({owners}건, fail-closed): {file_id}")
         return frozenset(readers)
 
-    def grant_reader(self, file_id: str, email: str) -> None:
-        """Give one named person view-only access; Drive sends no notice (the mail carries the link)."""
-        _ = self._run(
-            [self.gws_bin, "drive", "permissions", "create", "--params",
-             json.dumps({"fileId": file_id, "sendNotificationEmail": False}),
-             "--json", json.dumps({"type": "user", "role": SHARE_ROLE, "emailAddress": email})]
-        )
+    def grant_reader(self, file_id: str, email: str) -> bool:
+        """Give one named person view-only access; return whether Google mailed them an invite.
+
+        The mail carries the link, so Drive is asked to stay silent. Drive refuses a silent
+        invite to an address with no Google account; the owner chose (Q273, 2026-10-19 12:31
+        KST) to share anyway and let Google send its own invite in that case.
+        """
+        def create(notify: bool) -> None:
+            _ = self._run(
+                [self.gws_bin, "drive", "permissions", "create", "--params",
+                 json.dumps({"fileId": file_id, "sendNotificationEmail": notify}),
+                 "--json", json.dumps({"type": "user", "role": SHARE_ROLE, "emailAddress": email})]
+            )
+
+        try:
+            create(False)
+        except DriveClientError:
+            create(True)
+            return True
+        return False
 
     def _fetch_media(self, file_id: str, fetched: Path, tmp: Path, export_as: str = "") -> None:
         """Land ``file_id``'s bytes at ``fetched``, inside the private directory ``tmp``.
