@@ -108,7 +108,19 @@ def test_fill_still_fails_closed_when_the_editor_never_returns() -> None:
     with pytest.raises(BrowserError, match="compose editor frame unavailable"):
         ComposeSender(browser, clock=browser.clock).send(_request(), dry_run=True)
     assert browser.fill_attempts > 1
-    assert browser.now < 60.0
+    assert browser.now < 90.0
+
+
+def test_fill_waits_out_a_slow_page_whose_editor_returns_after_twenty_seconds() -> None:
+    # Given: 2026-10-19 실측처럼 느린 페이지에서 편집기가 20초 넘게 돌아오지 않는 compose.
+    browser = _ReloadingEditorBrowser(unavailable_s=25.0)
+
+    # When: dry-run 으로 본문까지 채운다.
+    result = ComposeSender(browser, clock=browser.clock).send(_request(), dry_run=True)
+
+    # Then: 편집기가 돌아온 뒤의 채우기가 성공한다.
+    assert result.status == "dry_run"
+    assert browser.now >= 25.0
 
 
 def test_other_editor_errors_are_not_retried() -> None:

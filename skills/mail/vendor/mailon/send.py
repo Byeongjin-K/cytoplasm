@@ -496,8 +496,11 @@ def _editor_fill_script(body: str) -> str:
 # threw "compose editor frame unavailable" on nearly every watch tick and two
 # approved mails waited hours. Retry the real fill and let its success be the
 # readiness signal, as open_compose_when_ready() does for compose itself.
+# 2026-10-19: on a slow webmail (page 'load' never fired, finish_page_boot ran) the
+# editor was still gone 20s after compose opened and an approved mail stopped at
+# editor_fill. The budget now covers a slow page; the fill still stops before any send.
 _EDITOR_UNAVAILABLE = "compose editor frame unavailable"
-EDITOR_READY_TIMEOUT_S = 20.0
+EDITOR_READY_TIMEOUT_S = 60.0
 
 
 def _fill_editor_when_ready(
