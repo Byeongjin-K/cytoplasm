@@ -119,3 +119,23 @@ def test_new_binding_preserves_live_guild_when_owner_thread_is_reused(
     )
     # Then: every producer receives the verified guild as routing metadata.
     assert (binding.channel_id, binding.guild_id) == (THREAD, GUILD)
+
+
+def test_compose_still_adds_reactions_when_interop_runtime_lacks_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: the node's interop runtime predates resume_thread (mail skill deployed first).
+    api = _compose_api(tmp_path, monkeypatch, PREFIXES[0] + NAME)
+
+    def old_runtime() -> object:
+        raise AttributeError("resume_thread")
+
+    monkeypatch.setattr(triage_confirm, "_origin_notice", old_runtime)
+    # When: compose posts into the reused thread.
+    assert _compose() == 0
+    # Then: the card still gets both approval reactions and one rename diagnostic.
+    puts = [call for call in api.calls if call[0] == "PUT"]
+    assert len(puts) == 2
+    draft, = triage_gate.list_drafts()
+    assert draft["message_id"] == CARD and draft["status"] == "pending"
+    assert [line.split()[0] for line in capsys.readouterr().err.splitlines()] == ["THREAD-RENAME-FAIL"]

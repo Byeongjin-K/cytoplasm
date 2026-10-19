@@ -145,7 +145,10 @@ class MailApprovalGate:
             reply = {"reply_to": card} if card else {}
             message_id = triage_confirm.post_approval_request(content, intent.channel_id, **reply)
         if self.draft.get("origin_channel_id") == intent.channel_id:
-            triage_confirm._origin_notice().resume_thread(triage_confirm._api, intent.channel_id)
+            try:
+                triage_confirm._origin_notice().resume_thread(triage_confirm._api, intent.channel_id)
+            except Exception as error:  # noqa: BLE001 — an older interop runtime must not cost the card its reactions
+                print(f"THREAD-RENAME-FAIL thread={intent.channel_id} err={type(error).__name__}", file=sys.stderr)
         for emoji in (triage_confirm.APPROVE_EMOJI, triage_confirm.CANCEL_EMOJI):
             try:
                 triage_confirm.add_reaction(message_id, emoji, intent.channel_id)
