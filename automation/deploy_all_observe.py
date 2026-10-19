@@ -183,6 +183,16 @@ def _file(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]
 
 
 def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
+    if decl.attr("algorithm") == "mail-html-reply-v1":
+        mode = _cache.get("mail_html_reply", "off")
+        if mode not in ("on", "off"):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("sha", decl.destination))
+        have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
+        # Before the first release there is no marker; that is the plain-text default.
+        state = "ok" if mode == "off" and have == "-" else _state(want, have)
+        return _Seen(want, want if state == "ok" else have, state)
     if decl.attr("algorithm") == "owner-timers-v1":
         value = str(_cache.get("owner_timers_off", "off"))
         rc, out = call(decl.account, ("owner-timers", str(root), value))
@@ -315,6 +325,7 @@ def collect(
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
+    mail_html_reply: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
@@ -343,6 +354,7 @@ def collect(
     cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
     cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard, "hermes-memory": hermes_memory})
     cache["omo_relay_mode"] = omo_relay_mode
+    cache["mail_html_reply"] = mail_html_reply
     cache["owner_timers_off"] = owner_timers_off
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
@@ -389,6 +401,7 @@ def observe_node(
     hermes_gateways: str = "running",
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
+    mail_html_reply: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
@@ -404,4 +417,5 @@ def observe_node(
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
                     hermes_memory=hermes_memory, owner_timers_off=owner_timers_off,
-                   agent_chat_channel=agent_chat_channel, peer_retired=peer_retired, omo_relay_mode=omo_relay_mode)
+                   agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
+                   omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply)

@@ -96,6 +96,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    if getattr(args, "mail_html_reply", None) == "on":
+        from automation.mail_html_reply import surface as mail_html_surface
+
+        surfaces.append(mail_html_surface())
     from automation.owner_timers import decode as decode_timers, surfaces as timer_surfaces
 
     try:
@@ -421,6 +425,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--fault-channel", metavar="CHANNEL_ID", help="고장 알림을 유돌·리드 페어 채널로")
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
+    plan.add_argument("--mail-html-reply", choices=("on",), help="기관메일 회신 새 서식 켜기")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
     plan.add_argument("--owner-timers-off", default="off")
@@ -556,6 +561,16 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     ledger.set_defaults(run=authorize_ledger)
+    html_reply = commands.add_parser("authorize-mail-html-reply")
+    html_reply.add_argument("--head", required=True)
+    def authorize_html_reply(args: argparse.Namespace) -> int:
+        from automation.mail_html_reply import surface
+
+        name, digest = surface()
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    html_reply.set_defaults(run=authorize_html_reply)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

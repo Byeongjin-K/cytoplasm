@@ -404,8 +404,12 @@ def verify_compose_form(
     if form.get("__probe_error"):
         return False, dump
     marker = _body_marker(body)
+    # The editor stores HTML, so '&', '<' and '>' of the marker read as entities there.
+    import html as html_module
+    spellings = {marker, html_module.escape(marker, quote=False)}
     body_ok = bool(marker) and any(
-        marker in str(v) for k, v in form.items() if k != "__probe_error")
+        spelling in str(v) for spelling in spellings
+        for k, v in form.items() if k != "__probe_error")
     if not body_ok:
         return False, dump
     method = str(form.get("method", ""))
@@ -452,10 +456,10 @@ def verify_compose_form(
     return routing_ok, dump
 
 
-def fill_body_via_editor_api(browser: TriggerBrowser, body: str) -> None:
-    """Re-commit the body through the Namo CrossEditor API / hidden field."""
+def fill_body_via_editor_api(browser: TriggerBrowser, body: str, html: str | None = None) -> None:
+    """Re-commit the body (``html`` when given) through the Namo CrossEditor API / hidden field."""
     import html as html_module
-    html_body = html_module.escape(body).replace("\n", "<br>")
+    html_body = html if html else html_module.escape(body).replace("\n", "<br>")
     script = _EDITOR_API_FILL_TEMPLATE.replace("__HTML__", json.dumps(html_body))
     try:
         result = _unwrap(browser.eval_js(script))

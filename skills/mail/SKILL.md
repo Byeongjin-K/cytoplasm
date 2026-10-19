@@ -178,6 +178,14 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py reply-request --ke
 2. `draft --uid <uid> --instruction "<지시문>" [--reply-all]` 명령을 실행하여 초안을 생성하고 현재 mail-reply 승인 스레드에 게시한다. 답장에는 출력의 `APPROVAL-THREAD … url=` 링크를 그대로 싣는다(§4-2).
 3. 초안은 `prompts/reply-draft-v2.md`를 사용하며, 항상 승인된 Codex OAuth 티어에서 생성된다.
 4. **원문 인용 (2026-09-01, 소유자 지시)**: 발송 본문은 메일 클라이언트의 회신처럼 `<회신문>` + 빈 줄 + `-----원본 메시지-----` 헤더(보낸 사람·보낸 날짜·받는 사람·참조·제목) + 원문 본문이다(`scripts/mail_quote.py`, 원문은 20,000자에서 절단 마커). vendor mailon 에는 답장 명령이 없어 새 메일 compose 로 나가므로, 인용이 없으면 상대는 무엇에 대한 답인지 알 수 없다. draft 레코드의 `body` 는 소유자가 검토하는 회신문만이고 인용은 `quote` 필드·동결 argv 에 들어가 승인 해시에 함께 바인딩된다. 승인 메시지는 인용을 덤프하지 않고 `- 원문 인용: 포함` 한 줄로만 알린다(Discord 2,000자 한도). 엔티티 프리플라이트는 회신문만 정규화해 되돌려주므로 인용은 발송 직전 실행 경계(`scripts/mail_preflight.py`)에서 회신문 아래에 다시 붙인다 — 2026-09-03 전달 메일이 원문 없이 회신문만 발송된 사고가 그 이유다.
+   **서식 (2026-10-19, #119 · v2.6.6 기본 꺼짐)**: 릴리스로 배치된 `~/.hermes/mail-html-reply.mode`가 `on`일 때만 새 초안에 `--body-html`을 함께 동결한다. 꺼짐·표식 부재에서는 기존 평문 `--body`만 쓴다. **형이 자기 메일함에서 시험 회신을 확인하고 릴리스 스위치를 켜기 전에는 다른 사람에게 새 서식을 사용하지 않는다.** 켜짐에서는 회신문을 `맑은 고딕` 10.5pt·줄 간격 160%로 감싸고 원문 HTML의 표·색·글꼴을 아래에 인용한다. `mail_quote.sanitize_html`이 스크립트·이벤트·원격/`cid:` 이미지·위험 CSS를 제거하고 100,000바이트 상한을 지킨다. HTML이 없으면 평문 인용을 HTML로 감싼다. 서식·본문·인용은 승인 해시에 묶이고 프리플라이트와 Drive 링크 치환에도 유지된다. 발송 시 표식을 다시 읽어 이미 검토한 초안의 서식을 바꾸지 않는다.
+   **유돌의 시험 회신 절차:** 기존 `triage_recipient.owner_address()`가 읽는 `MAILON_ID`(없으면 `~/.env.secrets`)에서 형 기관주소를 확인하고, 원문 UID를 골라 아래 명령으로 **한 건만** 초안을 올린다. 주소를 추측하지 않는다. 답장에는 출력된 `APPROVAL-THREAD … url=`을 그대로 싣는다. 카드의 **새 서식 시험 회신(형 주소에만)** 줄을 형이 확인하고 ✅ 해야 발송된다. To·Cc·Bcc는 전부 형 주소여야 하고 다른 주소가 하나라도 있으면 exit 2로 거부한다. `draft --format-test html`은 원 발신자가 형일 때만 가능하다(다른 사람 원문을 형에게 시험하려면 `compose --to <형 기관주소> --in-reply-to <uid>`).
+
+   ```bash
+   python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --to <형 기관주소> --subject "Re: <원 제목>" --body "<시험 회신문>" --in-reply-to <uid> --format-test html
+   ```
+
+   전체 켜짐은 릴리스 호스트 `~/.hermes/release-flags/mail-html-reply`의 정확한 `on`과 **같은 HEAD의 릴리스 카드 ✅**로만 배치한다(개행 등 다른 바이트는 exit 4). 노드 표식을 직접 쓰지 않는다. **되돌리기:** 호스트 스위치 파일 삭제 후 다시 릴리스하면 새 초안부터 평문으로 복귀한다. 이미 만들어진 HTML 초안도 평문으로 바꾸려면 폐기 후 다시 만든다.
 5. **전체회신**: cha 가 "전체회신"·"모두에게"·"참조 그대로" 라고 하면 `--reply-all` 을 붙인다 — 원문 frontmatter 의 To∪Cc 에서 소유자(`MAILON_ID`)와 발신자를 뺀 주소가 Cc 로 들어가 argv·해시에 바인딩되고 승인 메시지에 `- Cc:` 로 표시된다. 지시가 없으면 기본은 발신자 단독 회신이다. 원문에 다른 수신자가 없으면 `--reply-all` 도 단독 회신과 같다.
 
 ### 4. 새 메일 작성 (compose — 요청별 승인 스레드 확정)

@@ -182,7 +182,9 @@ def prepare_request(draft: dict[str, JsonValue], notice: str) -> tuple[ApprovalI
     approval = import_module("triage_approval")
     cards = approval._repo_module("approval_card")
     version = draft.get("render_version", "1" if draft.get("message_id") else None)
-    selected_version = version or mail_card_compact.VERSION
+    if version == "6" and not draft.get("message_id"):
+        version = None  # An unposted format-test still needs the standard long-body fallback.
+    selected_version = version or ("6" if draft.get("reply_format") == "html-test" else mail_card_compact.VERSION)
     prepared = dict(draft)
     try:
         try:

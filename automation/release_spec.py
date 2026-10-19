@@ -290,7 +290,7 @@ class ReleaseSpec:
             if not name.startswith(("skill:", "home:", WRAPPER_SURFACE_PREFIX, DORI_SURFACE_PREFIX,
                                     YOODORI_CHANNEL_PREFIX))
             and name not in (RAG_MCP_SURFACE, GATEWAY_STOP_SURFACE, NOTICE_BOT_SURFACE, "ledger:on", OMO_RELAY_SURFACE,
-                             "hermes-product:retired")
+                              "hermes-product:retired", "mail-html-reply:on")
             and not name.startswith(("auto-write:", "fault-channel:"))
         )
         return " · ".join(summary) or "변경 없음"

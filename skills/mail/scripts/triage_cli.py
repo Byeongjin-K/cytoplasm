@@ -101,6 +101,7 @@ def cmd_draft(args: argparse.Namespace) -> int:
         evidence_pack=pack,
         reply_all=bool(getattr(args, "reply_all", False)),
         digest_card=getattr(args, "digest_card", None),
+        **({"format_test": args.format_test} if getattr(args, "format_test", "") else {}),
     )
     if "reply-no-address" in actions:
         raise triage_gate.GateError("회신 주소를 찾을 수 없음 — 초안 생성 불가", 2)
@@ -142,6 +143,12 @@ def cmd_compose(args: argparse.Namespace) -> int:
         ),
         (args.to, ", ".join(getattr(args, "cc", ()) or ())),
     )
+    if getattr(args, "format_test", ""):
+        import mail_reply_format
+
+        mail_reply_format.require_owner_recipients(
+            args.to, ", ".join(getattr(args, "cc", ()) or ()), args.bcc_addresses,
+        )
     if triage_mode.effective_mode() == "no-go":
         raise triage_gate.GateError("mail-mode=no-go — W4-2 파이프라인 비활성(W4-1N 분기)", 3)
     forwarding = bool(getattr(args, "forward", "") or getattr(args, "forward_gmail", ""))
@@ -189,10 +196,13 @@ def _compose(
             args.to, subject, body,
         )
     in_reply_to = str(getattr(args, "in_reply_to", "") or "")
+    quote_html = None
     if forward is not None:
         quote = forward.quote
     elif in_reply_to:
-        quote = mail_quote.render_quote(mail_quote.parse_original(_get_mail(in_reply_to)))
+        original = mail_quote.parse_original(_get_mail(in_reply_to))
+        quote = mail_quote.render_quote(original)
+        quote_html = mail_quote.render_quote_html(original)
     else:
         quote = ""
     extra = tuple(getattr(args, "attachment", ()) or ())
@@ -203,6 +213,8 @@ def _compose(
         origin_channel_id=str(getattr(args, "origin_channel_id", "") or ""),
         origin_message_id=str(getattr(args, "origin_message_id", "") or ""),
         quote=quote,
+        quote_html=quote_html,
+        **({"format_test": args.format_test} if getattr(args, "format_test", "") else {}),
         forward=forward.record() if forward else None,
         drive_share=share,
         **({"bcc": args.bcc_addresses} if getattr(args, "bcc_addresses", ()) else {}),
@@ -652,6 +664,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     draft.add_argument("--no-post", action="store_true", help="초안만 만들고 승인 메시지 게시 생략")
     draft.add_argument("--with-evidence", action="store_true", help="상대·주제 관련 개인 근거 사용")
+    draft.add_argument("--format-test", choices=("html",), default="", help="형 기관주소에만 새 서식 시험")
     draft.add_argument(
         "--reply-all", action="store_true",
         help="전체회신 — 원문의 받는 사람·참조 전원을 Cc 에 넣는다 (소유자·발신자 제외)",
@@ -694,6 +707,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compose.add_argument("--no-post", action="store_true", help="초안만 만들고 승인 메시지 게시 생략")
     compose.add_argument("--with-evidence", action="store_true", help="상대·주제 관련 개인 근거 사용")
+    compose.add_argument("--format-test", choices=("html",), default="", help="형 기관주소에만 새 서식 시험")
     compose.add_argument(
         "--origin-channel-id", default="",
         help="발신 지시를 받은 원 채널 id — 발송/취소 결과를 이 채널의 스레드로 통지",

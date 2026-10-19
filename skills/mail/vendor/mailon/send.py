@@ -143,6 +143,8 @@ class SendRequest:
     body: str
     attachments: tuple[Path, ...]
     bcc: tuple[str, ...] = ()
+    # The editor content when set; ``body`` stays the plain text the form gate checks.
+    body_html: str = ""
 
     def __post_init__(self) -> None:
         if not self.recipients:
@@ -273,7 +275,8 @@ class ComposeSender:
             **({"bcc": ",".join(request.bcc)} if request.bcc else {}),
         ))
         self._step = "editor_fill"
-        _fill_editor_when_ready(self._browser, request.body, clock=self._clock)
+        _fill_editor_when_ready(self._browser, request.body, clock=self._clock,
+                                html=request.body_html)
 
         post_count = self._browser.network_post_count()
         if dry_run:
@@ -339,7 +342,8 @@ class ComposeSender:
         if not form_ok:
             log.warning("compose form incomplete (%s); refilling body via editor API",
                         form_dump[:800])
-            send_trigger.fill_body_via_editor_api(self._browser, request.body)
+            send_trigger.fill_body_via_editor_api(self._browser, request.body,
+                                                  html=request.body_html or None)
             form_ok, form_dump = send_trigger.verify_compose_form(
                 self._browser, request.recipients, request.body, cc=request.cc, **bcc_options)
         log.info("compose form state: %s", form_dump[:2500])
@@ -475,15 +479,16 @@ def _attachment_manifest_sha256(attachments: tuple[Path, ...]) -> str:
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-def _editor_fill_script(body: str) -> str:
-    encoded_body = json.dumps(body)
+def _editor_fill_script(body: str, html: str = "") -> str:
+    encoded_body = json.dumps(html or body)
+    target = "innerHTML" if html else "innerText"
     return (
         "(function(value) {"
         "var frame = document.querySelector('#NamoSE_Ifr__mail_editor_nm');"
         "if (!frame || !frame.contentDocument || !frame.contentDocument.body) {"
         f"throw new Error({json.dumps(_EDITOR_UNAVAILABLE)});"
         "}"
-        "frame.contentDocument.body.innerText = value;"
+        f"frame.contentDocument.body.{target} = value;"
         "frame.contentDocument.body.dispatchEvent(new Event('input', {bubbles: true}));"
         f"}})({encoded_body});"
     )
@@ -509,8 +514,9 @@ def _fill_editor_when_ready(
     *,
     clock: Callable[[], float],
     timeout_s: float = EDITOR_READY_TIMEOUT_S,
+    html: str = "",
 ) -> None:
-    script = _editor_fill_script(body)
+    script = _editor_fill_script(body, html)
     deadline = clock() + timeout_s
     while True:
         try:

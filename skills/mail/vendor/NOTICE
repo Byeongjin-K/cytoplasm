@@ -83,6 +83,16 @@ Local fixes
   keeps the old full walk. Regression:
   `tests/unit/test_mailon_list_early_stop.py`.
 
+* 2026-10-19 — `mailon/writer.py`, `mailon/send.py`, `mailon/send_trigger.py`,
+  `mailon/main.py`: replies went out as plain text in the editor's default font
+  and quoted only the original's extracted text, because the writer dropped the
+  `body_html` the scraper had already parsed. The writer now keeps it in a
+  sibling `<mail>.html`; `send --body-html` fills the editor with that HTML
+  (`innerHTML`, or the editor API on refill) while `--body` stays the plain
+  text the form gate checks, and the gate also matches the marker in its
+  HTML-escaped spelling. Recipient checks are unchanged. Regression:
+  `tests/unit/test_mailon_body_html.py`.
+
 The private development repository preserves those bytes. Public-history
 snapshots run `automation/public_export_redaction.py` against the materialized
 copy only, replacing identifying fixture/comment values without changing the
