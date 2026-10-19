@@ -140,6 +140,11 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
 1. 변경이 PR 로 cytoplasm main 에 머지됐다(필수 체크 셋 green, `automation/merge-pr.sh`).
 2. 서명키를 가진 워크스테이션의 메인 체크아웃에서 `automation/local_ci.sh run` 으로 그 트리의
    영수증을 만든다(루트 `AGENTS.md` 「릴리스 태그 규칙」의 워크스테이션 전제).
+   이어서 `automation/deploy_all.sh --rehearse` 로 전량 적용의 노드 쪽 검사를 읽기 전용으로 끝까지
+   통과시킨다(2026-10-19 — 제거 단계가 ✅ 뒤에야 거절해 소유자가 ✅ 를 세 번 다시 눌렀다). 그 체크아웃
+   HEAD 의 트리를 노드 임시 폴더에 실어 판정 프로브와 승인된 제거 단계(P5·Hermes 제품·LiteLLM)를
+   실제 계정·sudo 모양 그대로 `--check` 로 돌리고, 인가·배포기·재시동·영수증·쓰기는 하지 않는다.
+   마지막 줄이 `REHEARSAL-OK` 가 아니면 카드를 올리지 않는다. 그 마지막 줄은 릴리스 노트에 싣는다.
 3. `automation/release.sh [--bump …] --notes-file <노트>` — 승인 카드가 올라가고, 소유자 ✅ 뒤 그 main 커밋에
    update-trust 서명 태그가 잘린다. 노드는 2분 리컨실러로 그 태그에 수렴하고
    `deploy_all.sh --apply` 까지 이어진다.
