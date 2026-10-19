@@ -70,6 +70,7 @@ def test_fault_producers_use_pair_with_legacy_fallback(routing, monkeypatch, cal
     monkeypatch.setenv("HEALTHCHECK_NOTIFY_STATE", str(routing / "health/state.json"))
     # When: a fault producer emits one incident.
     if caller == "healthcheck":
+        monkeypatch.setattr(healthcheck_notify, "SUSTAIN_SECONDS", 0.0)  # wait pinned in test_q281_alerts.py
         healthcheck_notify.main(["synthetic-fault|local|node|account|target"])
     elif caller == "attachment":
         from tests.unit.test_mail_attachment_retry import syncer

@@ -55,6 +55,7 @@ def test_healthcheck_new_failure_uses_discord_header_with_sender_override(
     path = tmp_path / "state.json"
     monkeypatch.setenv("HEALTHCHECK_NOTIFY_STATE", str(path))
     healthcheck_notify.save_state(path, healthcheck_notify.NotifyState(("recovered",)))
+    monkeypatch.setattr(healthcheck_notify, "SUSTAIN_SECONDS", 0.0)  # wait pinned in test_q281_alerts.py
     requests = []
 
     def post(request, **kwargs):
