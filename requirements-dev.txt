@@ -6,3 +6,8 @@ PyYAML==6.0.2
 # Development and CI tools are pinned so gate behavior changes deliberately.
 pytest==7.4.4
 ruff==0.15.7
+
+# The unit suite runs on every core (`pytest -n auto`) in CI and in automation/local_ci.sh.
+# execnet is the plugin's worker transport, pinned too so both sides resolve the same pair.
+pytest-xdist==3.6.1
+execnet==2.1.2

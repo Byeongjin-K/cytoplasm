@@ -14,7 +14,8 @@ CI와 단위 테스트가 새 체크아웃, 선택적 vendor 의존성, 반복 �
 
 ### 정상 경로
 1. 기여자가 새 체크아웃에서 `requirements-dev.txt`를 설치한다.
-2. `python3 -m pytest tests/unit -q`와 `ruff check . --exclude skills/mail/vendor`를 실행한다.
+2. `python3 -m pytest tests/unit -q -n auto`와 `ruff check . --exclude skills/mail/vendor`를 실행한다
+   (`-n auto` 는 pytest-xdist 로 모든 코어를 쓴다 — [단위 시험 병렬](ci-단위-시험-병렬.md)).
 3. 선택적 `mailon` 의존성이 있으면 메일 compose 검증을 실행하고, 없으면 그 모듈만 skip한다.
 4. 전체 스위트가 끝나도 `land.sh` 경합용 git clone은 pytest의 `tmp_path`와 함께 회수된다.
 

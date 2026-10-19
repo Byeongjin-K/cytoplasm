@@ -139,9 +139,17 @@ cmd_run() {
   # one with no hint (2026-10-19, the primary node as release host). Say it once, up front.
   bwrap --ro-bind / / --unshare-all true 2>/dev/null \
     || die "bubblewrap cannot create namespaces here; allow it once as root: an /etc/apparmor.d/bwrap profile with 'userns,' for /usr/bin/bwrap, then apparmor_parser -r it"
+  # The unit step runs on every core like the workflow (`-n auto`, pytest-xdist): 2026-10-19 the
+  # primary node took 549-563 s serial and 65-75 s parallel with the same test ids and outcomes.
+  # Local CI never installs tools (the developer's environment is not ours to change), so a
+  # missing plugin is said once, up front, instead of as an "unrecognized arguments: -n" usage error.
+  local xdist_pin
+  xdist_pin="$(grep -m1 '^pytest-xdist==' requirements-dev.txt 2>/dev/null || printf 'pytest-xdist')"
+  python3 -c 'import xdist' 2>/dev/null \
+    || die "pytest-xdist is required to run the unit tests in parallel like CI; install the pin from requirements-dev.txt into $(command -v python3) first (uv pip install --python $(command -v python3) ${xdist_pin}, or python3 -m pip install ${xdist_pin})"
   record_step lint ruff check . --exclude skills/mail/vendor \
     || die "lint failed — no receipt written"
-  record_step unit-tests python3 -m pytest tests/unit -q \
+  record_step unit-tests python3 -m pytest tests/unit -q -n auto \
     || die "unit tests failed — no receipt written"
   record_step public-gate python3 -m automation.public_gate range origin/main HEAD --text-env PR_TEXT \
     || die "public leak gate failed — no receipt written"
