@@ -148,13 +148,31 @@ def _probe_command() -> list[str]:
     ]
 
 
-def _probe() -> tuple[str | None, str | None, tuple[str, ...]]:
-    """노드 사실을 한 번만 읽는다 — 포인터도 영수증도 노드 전역이라 sha 마다 찌를 이유가 없다."""
+def _probe() -> tuple[str | None, str | None, tuple[str, ...], tuple[str, ...]]:
+    """노드 사실을 한 번만 읽는다 — 포인터도 영수증도 노드 전역이라 sha 마다 찌를 이유가 없다.
+
+    남은 조치는 둘로 나눠 돌려준다: 운영자가 고칠 것(페어 채널)과 형만 할 수 있는 것(형 채널).
+    """
     result = subprocess.run(_probe_command(), capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        return None, None, ()
+        return None, None, (), ()
     pointer, receipt = parse_probe(result.stdout)
-    return pointer, receipt, deploy_receipt.pending_lines(_split_probe(result.stdout)[1])
+    document = _split_probe(result.stdout)[1]
+    return (
+        pointer, receipt,
+        deploy_receipt.pending_lines(document, operator_only=True), deploy_receipt.owner_lines(document),
+    )
+
+
+def release_summary(sha: str) -> str:
+    """그 릴리스 노트의 첫 줄(`# 한 줄 요약`) — release.sh 가 승인 전에 둔 초안. 없으면 빈 줄."""
+    root = os.environ.get("RELEASE_NOTES_DIR", "").strip() or str(Path.home() / ".hermes" / "release-notes")
+    try:
+        first = (Path(root) / f"{sha}.md").read_text(encoding="utf-8").splitlines()[:1]
+    except (OSError, UnicodeDecodeError):
+        return ""
+    title = first[0].removeprefix("#").strip() if first and first[0].startswith("# ") else ""
+    return deploy_receipt.one_line(title)
 
 
 def sweep(state: Path, repo: Path) -> None:
@@ -162,8 +180,8 @@ def sweep(state: Path, repo: Path) -> None:
     candidates = release_applied_state.unnotified(state)
     if not candidates:
         return
-    pointer_sha, receipt_sha, pending = _probe()
-    tick = release_applied_state.Sweep(state, repo, pointer_sha, receipt_sha, pending)
+    pointer_sha, receipt_sha, pending, owner = _probe()
+    tick = release_applied_state.Sweep(state, repo, pointer_sha, receipt_sha, pending, owner)
     for sha in candidates:
         tick.handle(sha)
 
@@ -188,12 +206,47 @@ def _pending_facts(encoded: str) -> tuple[str, ...]:
         return ()
     return chunk_lines(
         items, limit=_PENDING_PIECE,
-        header=lambda index, total: "남은 소유자 조치:" if total == 1 else f"남은 소유자 조치 ({index}/{total}):",
+        header=lambda index, total: "운영자가 고칠 것:" if total == 1 else f"운영자가 고칠 것 ({index}/{total}):",
     )
 
 
-def send(version: str, head: str, models: str = "", pending: str = "") -> int:
-    """노드에서 도는 절반 — 포인터를 다시 확인하고 목적지는 파사드에 맡긴다."""
+def _owner_items(encoded: str) -> tuple[str, ...]:
+    if not encoded:
+        return ()
+    try:
+        items = json.loads(encoded)
+    except ValueError:
+        return ("확인 불가 — 전달된 목록을 읽지 못했다",)
+    if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+        return ("확인 불가 — 전달된 목록을 읽지 못했다",)
+    return tuple(deploy_receipt.one_line(item) for item in items if item.strip())
+
+
+def owner_line(version: str, summary: str = "", owner: Sequence[str] = ()) -> str:
+    """형 채널의 한 줄 — 적용 사실·무엇이 바뀌었는지·형이 직접 할 일만."""
+    line = f"✅ {version} 적용됨" + (f" — {summary}" if summary else "")
+    return line + (f" · 형이 할 일: {'; '.join(owner)}" if owner else "")
+
+
+def _deliver(version: str, head: str, fact: str, *, render: str, fault: bool = False) -> bool:
+    from automation.release_applied_message import applied_message
+
+    message = applied_message(version, head, fact, render_version=render)
+    extra = {"fault": True} if fault else {}
+    if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
+        return owner_notice.notify_owner(fact, message=message, **extra)
+    return owner_notice.notify_owner(fact, **extra)
+
+
+def send(
+    version: str, head: str, models: str = "", pending: str = "", owner: str = "", summary: str = "",
+) -> int:
+    """노드에서 도는 절반 — 포인터를 다시 확인하고 목적지는 파사드에 맡긴다.
+
+    형 채널에는 한 줄(v5, 봉투는 기록에만)만 간다. 운영자가 고칠 기술 항목은 릴리스가 정한 페어
+    채널(`fault=True`)로 먼저 보낸다 — 형 줄이 나간 뒤 페어가 실패해 다음 틱에 형 줄이 다시 가는
+    일을 막는다(소유자 지시 2026-10-19 "릴리스 안내 간략하게 만들어").
+    """
     del models  # Older workstation senders may still pass the retired Hermes summary.
     current = os.environ.get("NODE_RELEASE_CURRENT", "").strip() or _DEFAULT_RELEASE_CURRENT
     try:
@@ -207,20 +260,14 @@ def send(version: str, head: str, models: str = "", pending: str = "") -> int:
             file=sys.stderr,
         )
         return 4
-    from automation.release_applied_message import applied_message
-
-    content = f"릴리스 {version} 가 적용되었습니다. (HEAD {head[:12]})"
     pieces = _pending_facts(pending)
-    facts = (f"{content}\n{pieces[0]}", *pieces[1:]) if pieces else (content,)
-    for fact in facts:
-        message = applied_message(version, head, fact)
-        if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-            delivered = owner_notice.notify_owner(fact, message=message)
-        else:
-            delivered = owner_notice.notify_owner(fact)
-        if not delivered:
+    title = f"릴리스 {version} 적용 뒤 운영자 조치 (HEAD {head[:12]})"
+    for index, piece in enumerate(pieces):
+        fact = f"{title}\n{piece}" if index == 0 else piece
+        if not _deliver(version, head, fact, render="owner-ko-v2", fault=True):
             return 3  # 첫 실패 조각에서 멈춘다 — 다음 틱이 전부 다시 보낸다(at-least-once)
-    return 0
+    line = owner_line(version, summary, _owner_items(owner))
+    return 0 if _deliver(version, head, line, render="owner-ko-v5") else 3
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -233,11 +280,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     _ = sender.add_argument("--version", required=True)
     _ = sender.add_argument("--head", required=True)
     _ = sender.add_argument("--models", default="", help=argparse.SUPPRESS)
-    _ = sender.add_argument("--pending", default="", help="영수증의 남은 소유자 조치 줄(JSON 목록)")
+    _ = sender.add_argument("--pending", default="", help="운영자가 고칠 남은 조치 줄(JSON 목록) — 페어 채널")
+    _ = sender.add_argument("--owner-pending", default="", help="형만 할 수 있는 조치(JSON 목록) — 형 한 줄")
+    _ = sender.add_argument("--summary", default="", help="릴리스 노트 첫 줄(무엇이 바뀌었는지)")
     arguments = parser.parse_args(argv)
     if arguments.command == "send":
         return send(
-            str(arguments.version), str(arguments.head), str(arguments.models), str(arguments.pending)
+            str(arguments.version), str(arguments.head), str(arguments.models), str(arguments.pending),
+            str(arguments.owner_pending), str(arguments.summary),
         )
     try:
         sweep(Path(str(arguments.state)), Path(str(arguments.repo)))

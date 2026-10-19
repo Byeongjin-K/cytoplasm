@@ -51,7 +51,7 @@ def test_the_node_send_ignores_the_legacy_model_argument(
     monkeypatch.setenv("NODE_RELEASE_CURRENT", str(pointer))
     sent: list[str] = []
     monkeypatch.setattr(
-        owner_notice, "notify_owner", lambda content, *, message=None: sent.append(content) or True
+        owner_notice, "notify_owner", lambda content, *, message=None, fault=False: sent.append(content) or True
     )
     summaries = release_models.parse_output(f"=== agent\n{_AGENT}=== peer\n{_AGENT}")
 
@@ -60,4 +60,4 @@ def test_the_node_send_ignores_the_legacy_model_argument(
     )
 
     assert code == 0
-    assert sent == [f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_HEAD[:12]})"]
+    assert sent == ["✅ v1.2.4 적용됨"]

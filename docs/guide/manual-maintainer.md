@@ -182,11 +182,11 @@ agent+peer 게이트웨이를 함께 재시동한다. 내장 USER.md·MEMORY.md�
    `--print <node>` 출력을 `provision-healthcheck-probe.sh --from-file` 로. 설치 뒤 헤더 지문을 다시 읽어
    대조한다. sudo 도 authorized_keys 도 건드리지 않는다.
 3. **결과** — 영수증이 그 자리에서 위임 프로브를 다시 돌리므로 설치가 되면 `pending_owner_actions` 에서
-   빠진다. 실패·보류는 영수증 `wrapper_refresh` 에 남고 적용 통지의 「남은 소유자 조치」에
+   빠진다. 실패·보류는 영수증 `wrapper_refresh` 에 남고 적용 통지의 페어 채널 「운영자가 고칠 것」에
    `헬스체크 허용 목록 갱신 실패 — <node>: <사유>`(설치 뒤 지문 불일치 포함) 또는 `… 보류 —`
    (카드가 그 지문을 싣지 않았음·⛔·승인 확인 불가) 줄로 온다. 실패해도 영수증은 쓰인다.
 
-손으로 다시 설치하는 길(`bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install <node>`)은
+손으로 다시 설치하는 길(`f=$(mktemp) && sudo -n -u ops -H bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --print <node> > "$f" && bash /srv/autophagy-agent-current/automation/provision-healthcheck-probe.sh --from-file "$f" <node>; rm -f "$f"`, 헬스체크 계정이 생성하고 운영자가 설치 — 2026-10-19)은
 그대로다 — 카드가 갱신을 싣지 못한 릴리스의 남은 조치는 다음 릴리스 카드가 다시 싣거나 그 명령으로 닫는다.
 [기능 소개](../기능소개/릴리스-카드-헬스체크-허용목록-갱신.md)
 
@@ -197,7 +197,9 @@ RAG 노드가 설정된 설치에서는 승인 전에 기존 `rag_stack_current`
 추가하고 카드에 `검색 잠깐 끊김(~1분)·되돌림 있음` 한 줄을 표시한다. 판독 불가면
 `RAG-MCP-PLAN-UNKNOWN` 경고를 남기고 해당 갱신만 카드에서 빼고 릴리스를 진행한다.
 미상을 최신이라고 추측하거나 승인에 없는 RAG 갱신을 실행하지 않는다. 수렴 뒤에도 판정할 수
-없으면 영수증과 적용 통지의 남은 소유자 조치에 남는다.
+없으면 영수증과 적용 통지의 페어 채널 「운영자가 고칠 것」에 남는다.
+
+적용 통지는 형 채널에 `✅ <버전> 적용됨 — <릴리스 노트 제목>` 한 줄만 보낸다. 형만 할 수 있는 조치(root 도우미의 sudo 한 번)만 그 줄에 `형이 할 일:` 로 붙고, 나머지 기술 항목은 페어 채널로 먼저 간다(2026-10-19 형 "릴리스 안내 간략하게 만들어"). [기능 소개](../기능소개/릴리스-완료-알림-한-줄.md)
 
 소유자 승인 뒤 `deploy_all.sh --apply`가 source sync와 MCP 전용
 `docker compose up -d --build --no-deps mcp`를 ops로 실행한다. 노드의 비공개 설정을 보존하고,

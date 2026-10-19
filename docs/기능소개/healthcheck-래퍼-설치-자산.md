@@ -43,8 +43,10 @@ python3 -m automation.install --config /root/node.toml --update-trust-key /root/
 healthcheck나 서비스 선언을 바꾼 뒤에는 노드에서 운영자 계정으로 재생성한다.
 
 ```bash
-bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install <node>
+f=$(mktemp) && sudo -n -u ops -H bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --print <node> > "$f" && bash /srv/autophagy-agent-current/automation/provision-healthcheck-probe.sh --from-file "$f" <node>; rm -f "$f"
 ```
+
+헬스체크 계정(`ops`)이 생성한다 — 드리프트 프로브는 그 계정의 시야로 판정하고, 비공개 루트의 은퇴 표식은 그 계정만 읽는다. 운영자가 `--install` 로 만들면 은퇴한 행이 남아 지문이 영영 맞지 않는다(2026-10-19 노드 실측).
 
 첫 릴리스가 아직 없다면 위 경로 대신 설정한 배포 체크아웃을 쓴다. 래퍼 본문을 손으로
 수정하거나 허용 해시를 별도로 유지하지 않는다.

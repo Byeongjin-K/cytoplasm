@@ -507,18 +507,22 @@ def test_notice_carries_pending_owner_actions(
     monkeypatch.setenv("NODE_RELEASE_CURRENT", str(tmp_path / "current"))
     sent: list[str] = []
     monkeypatch.setattr(
-        owner_notice, "notify_owner", lambda notice, *, message=None: sent.append(message.fact if message else notice) or True
+        owner_notice, "notify_owner", lambda notice, *, message=None, fault=False: sent.append((fault, message.fact if message else notice)) or True
     )
     assert release_applied_notice.main(argv) == 0
 
-    # Then: 사실 줄에 프로브 자신의 안내·묶인 보류·확인 불가가 실린다
-    assert len(sent) == 1
-    fact = sent[0]
-    assert fact.startswith(f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {head[:12]})")
-    assert "sudo bash <release>/automation/provision-deploy-converge.sh" in fact
-    assert "python3 -m automation.group_roster init-local" in fact
-    assert "2건" in fact
-    assert "확인 불가" in fact
+    # Then: 운영자가 고칠 것(보류·확인 불가)은 페어 채널로 먼저, 형 채널엔 한 줄 + 형만 할 일(sudo)
+    assert [fault for fault, _ in sent] == [True, False]
+    pair, owner = sent[0][1], sent[1][1]
+    assert pair.startswith(f"릴리스 v1.2.4 적용 뒤 운영자 조치 (HEAD {head[:12]})")
+    assert "python3 -m automation.group_roster init-local" in pair
+    assert "2건" in pair
+    assert "확인 불가" in pair
+    assert "sudo" not in pair
+    assert owner == (
+        "✅ v1.2.4 적용됨 · 형이 할 일: 노드에서 "
+        "`sudo bash <release>/automation/provision-deploy-converge.sh` 한 번"
+    )
 
 
 def _rendered_sends(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -526,7 +530,7 @@ def _rendered_sends(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     bodies: list[str] = []
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         assert message is not None
         bodies.append(render(message, destination=Ref(scope="channel", channel_id="1500000000000000002")))
         return True
@@ -553,9 +557,10 @@ def test_new_notices_render_each_pending_item_on_its_own_line(
         ["send", "--version", "v1.2.4", "--head", _SHA, "--pending", json.dumps(pending)]
     ) == 0
 
-    assert len(bodies) == 1
+    assert len(bodies) == 2
+    assert bodies[1] == "✅ v1.2.4 적용됨"
     rendered = bodies[0].splitlines()
-    for line in pending:
+    for line in pending[1:]:
         assert any(row.endswith(line) for row in rendered), line
 
 
@@ -606,7 +611,7 @@ def test_a_header_less_pending_list_keeps_every_item(
 
 def _split_actions() -> list[dict[str, object]]:
     return [
-        {"probe": "release_helper_drift", "node": "primary", "check": f"C{index}" + "c" * 298,
+        {"probe": "rag_stack_current", "node": "primary", "check": f"C{index}" + "c" * 298,
          "status": "FAIL", "guidance": [f"G{index}" + "g" * 298]}
         for index in range(6)
     ]
@@ -627,7 +632,7 @@ def test_a_failed_piece_stops_the_split_send_with_rc_3(
     _node_pointer(tmp_path, monkeypatch)
     attempts: list[str] = []
 
-    def flaky(content: str, *, message: object = None) -> bool:
+    def flaky(content: str, *, message: object = None, fault: bool = False) -> bool:
         attempts.append(content)
         return len(attempts) != 2
 
@@ -644,7 +649,7 @@ _NODE_SEND = """\
 import json, os, sys
 from automation import owner_notice, release_applied_notice
 calls = []
-def fake(content, *, message=None):
+def fake(content, *, message=None, fault=False):
     calls.append(content)
     if os.environ.get("FAIL_PIECE") == str(len(calls)):
         return False
@@ -714,7 +719,7 @@ class TestSendAtTheNode:
         monkeypatch.setenv("NODE_RELEASE_CURRENT", str(self._pointer(tmp_path, _SHA)))
         sent: list[str] = []
         monkeypatch.setattr(
-            owner_notice, "notify_owner", lambda notice, *, message=None: sent.append(notice) or True
+            owner_notice, "notify_owner", lambda notice, *, message=None, fault=False: sent.append(notice) or True
         )
 
         # When
@@ -724,9 +729,7 @@ class TestSendAtTheNode:
 
         # Then: 번호는 인자 그대로 쓰고 목적지는 파사드가 정한다
         assert exit_code == 0
-        assert sent == [
-            f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})"
-        ]
+        assert sent == ["✅ v1.2.4 적용됨"]
 
     def test_a2_the_notice_lands_in_the_configured_notice_channel(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -762,9 +765,7 @@ class TestSendAtTheNode:
         assert channel == "1500000000000000002"
         from automation.release_applied_message import applied_message
         from automation.interop.owner_message import Ref, render
-        message = applied_message(
-            "v1.2.4", _SHA, f"릴리스 v1.2.4 가 적용되었습니다. (HEAD {_SHA[:12]})"
-        )
+        message = applied_message("v1.2.4", _SHA, "✅ v1.2.4 적용됨", render_version="owner-ko-v5")
         assert message is not None
         assert body == render(message, destination=Ref(scope="channel", channel_id=channel))
 
@@ -772,7 +773,7 @@ class TestSendAtTheNode:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("NODE_RELEASE_CURRENT", str(self._pointer(tmp_path, _SHA)))
-        monkeypatch.setattr(owner_notice, "notify_owner", lambda notice, *, message=None: False)
+        monkeypatch.setattr(owner_notice, "notify_owner", lambda notice, *, message=None, fault=False: False)
 
         assert release_applied_notice.main(["send", "--version", "v1.2.4", "--head", _SHA]) == 3
 

@@ -14,10 +14,11 @@
 wrapper_probe_log() { printf '[healthcheck-wrapper] %s\n' "$*" >&2; }
 
 wrapper_probe_guidance() { # wrapper_probe_guidance <node>
+  # Generated as the healthcheck account: only its view matches this probe's expected digest.
   wrapper_probe_log \
-    "regenerate on the node (no root needed — the operator owns the file):"
+    "regenerate on the node as the operator (no root needed — the operator owns the file):"
   wrapper_probe_log \
-    "  bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install $1"
+    "  f=\$(mktemp) && sudo -n -u ${NODE_OPS_ACCOUNT:-ops} -H bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --print $1 > \"\$f\" && bash /srv/autophagy-agent-current/automation/provision-healthcheck-probe.sh --from-file \"\$f\" $1; rm -f \"\$f\""
 }
 
 probe_healthcheck_wrapper_current() {
