@@ -42,6 +42,11 @@ def render(
     title = lines[0].removeprefix("[mail-triage] ").replace(" (DM 확정)", "")
     kept: list[str] = []
     in_share = False
+    # A forward with no note of its own showed an empty code block (live QA 1, 2026-10-19).
+    for start in range(1, len(lines) - 3):
+        if lines[start:start + 4] == ["- 본문:", "```", "", "```"]:
+            lines = [*lines[:start], *lines[start + 4:]]
+            break
     for line in lines[1:]:
         if share is not None and line.startswith(_SHARE):
             in_share = True
