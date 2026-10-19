@@ -92,7 +92,7 @@ def _job(job_id: str, name: str, state: str = "active") -> Job:
     return (job_id, name, "*/5 * * * *", "local", f"{name}.py", _MODE, "", state)
 
 
-_FIXTURE_ROW: Final = declared_cron("automation/cost-report")
+_FIXTURE_ROW: Final = declared_cron("automation/effect_request")
 
 #: 사례 이름 → (목록, 계약상 기대: None = 판독 불가, 아니면 뽑힌 잡들).
 _CASES: Final[dict[str, tuple[str, list[Job] | None]]] = {

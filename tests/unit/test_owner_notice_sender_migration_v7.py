@@ -8,11 +8,9 @@ contains a private patent Drive link and must remain DM-only.
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import os
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -27,19 +25,6 @@ from automation.selfskill_audit import report  # noqa: E402
 budget_binding = importlib.import_module("budget_binding")
 budget_confirm = importlib.import_module("budget_confirm")
 procure_review = importlib.import_module("procure_review")
-
-
-def _load_cost_report() -> ModuleType:
-    path = _REPO / "automation" / "cost-report" / "send_cost_report.py"
-    spec = importlib.util.spec_from_file_location("cost_report_sender_v7", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-cost_report = _load_cost_report()
 
 
 @pytest.fixture
@@ -84,24 +69,6 @@ def test_procurement_review_uses_facade_target(
     procure_review.send_review(target, "검토")
 
     assert posted == [(expected_target, (target,))]
-
-
-@pytest.mark.parametrize(
-    ("channel", "expected_target"),
-    (("notice-channel", "notice-channel"), ("", "owner-dm")),
-)
-def test_cost_report_uses_facade_transport(
-    monkeypatch: pytest.MonkeyPatch,
-    notice_attempts: list[tuple[str, str]],
-    channel: str,
-    expected_target: str,
-) -> None:
-    monkeypatch.setattr(owner_notice, "owner_notice_channel", lambda _home=None: channel)
-
-    cost_report.send_dm("masked cost report")
-
-    assert [target for target, _body in notice_attempts] == [expected_target]
-    assert "masked cost report" in notice_attempts[0][1]
 
 
 @pytest.mark.parametrize(

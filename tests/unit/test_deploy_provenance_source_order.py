@@ -43,7 +43,7 @@ _SCRIPT_DIRECTORY: Final = (
 )
 _NODE_ENV_LINE: Final = 'eval "$(python3 "$repo_root/automation/node_config_sh.py" --print-env)"'
 _NODE_ENV_DEPLOYERS: Final = (
-    "automation/cost-report", "automation/doctor", "automation/effect_request", "automation/interop", "automation/legacy_services", "automation/managed_sync",
+    "automation/doctor", "automation/effect_request", "automation/interop", "automation/legacy_services", "automation/managed_sync",
     "automation/memory_curator", "automation/memory_provider", "automation/memory_relocate",
     "automation/notes_organize", "automation/obsidian_write", "automation/omo_relay",
     "automation/plaud_sync", "automation/project_board",

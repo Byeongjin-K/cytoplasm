@@ -198,7 +198,6 @@ _BUILDERS = (
     ("automation.research_trends.research_trends_core", "report_message", ("body",)),
     ("automation.managed_sync.cron.managed_sync_watch", "staged_message", ("body",)),
     ("automation.healthcheck_notify", "notice_message", (None, None)),
-    ("automation.cost-report.send_cost_report", "periodic_message", ("body", "")),
     ("skills.todo.scripts.todo_result_message", "result_message", ({}, "body", "DONE")),
     ("skills.budget.scripts.budget_result_message", "result_message", ({}, "body", "DONE")),
     ("skills.coordination.scripts.coordination_result_notice", "result_message", ({}, "body", "done")),

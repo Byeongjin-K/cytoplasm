@@ -2599,7 +2599,7 @@ pre > code {
           <span class="muted">프로덕션 / 에이전트 런타임</span>
         </div>
         <div class="node__list">
-          <button class="svc" type="button" data-tip="ops · litellm-gateway.service · 모델 라우팅·비용 캡 · 127.0.0.1:4000">LiteLLM 게이트웨이</button>
+          <button class="svc" type="button" data-tip="2026-10-19 소유자 결정: 이거 아예 삭제해 litellm. 일일 비용 보고도 폐기. 재설치하지 않음.">LiteLLM · 폐기</button>
           <button class="svc" type="button" data-tip="agent · hermes-gateway.service · 주 Hermes 에이전트 게이트웨이">agent Hermes 게이트웨이</button>
           <button class="svc" type="button" data-tip="peer · hermes-gateway.service · 독립 peer 게이트웨이 + 스킬 attestation 주체">peer Hermes 게이트웨이</button>
           <button class="svc" type="button" data-tip="agent · hermes-dashboard.service · 개인 Kanban 보드">Kanban 대시보드</button>
@@ -2628,7 +2628,7 @@ pre > code {
     <div class="card">
       <h3 class="h3">healthcheck가 보는 항목</h3>
       <ul>
-        <li><span class="mono">&lt;primary-node&gt;</span> — LiteLLM · agent gateway · peer gateway · report-hub collector · report-hub dashboard · dashboard auth · checkout mirrors origin/main · skill mounts match release</li>
+        <li><span class="mono">&lt;primary-node&gt;</span> — agent gateway · peer gateway · report-hub collector · report-hub dashboard · dashboard auth · checkout mirrors origin/main · skill mounts match release</li>
         <li><span class="mono">&lt;rag-node&gt;</span> — embedding · Qdrant · MCP</li>
       </ul>
       <p class="faint">헬스체크는 읽기 전용이다. 실패는 <span class="kbd">repair</span> 스킬이 민감정보를 지운 Kanban 수리 티켓으로 남기고, 자동 수리는 사람 검토 전까지 실행되지 않는다.</p>
@@ -2661,7 +2661,7 @@ pre > code {
     <details class="wave" data-wave="w1">
       <summary class="wave__sum"><span class="wave__id mono">W1</span><span class="wave__name">코어 시스템</span><span class="wave__meta muted">9개 항목 · 8 완료 · 1 조건부</span></summary>
       <ul class="wave__list">
-        <li><span class="mono">W1-1</span> LiteLLM 게이트웨이 — 모델 라우팅·비용 캡·특허 민감 콘텐츠 차단을 한 곳에서 건다. <span class="badge badge--ok">완료</span></li>
+        <li><span class="mono">W1-1</span> LiteLLM 게이트웨이 — 과거 구현 기록. 2026-10-19 소유자 결정으로 비용 보고와 함께 제거한다. <span class="badge">폐기</span></li>
         <li><span class="mono">W1-2</span> 개인 Hermes 에이전트 — Discord 한국어 DM으로 대화하는 주 에이전트. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W1-3</span> 테스트 피어 프로비저닝 — 상호운용과 증언을 시험할 두 번째 봇을 세웠다. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W1-4</span> 개인 Kanban 웹 보드 — 티켓과 작업 상태를 눈으로 확인하는 보드. <span class="badge badge--ok">완료</span></li>

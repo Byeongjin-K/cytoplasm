@@ -138,65 +138,17 @@ python3 automation/install/discord_check.py --config ~/.hermes/interop/config.js
 
 ### 2.1 최소 요구
 
-**OpenAI 호환 `/v1` 엔드포인트 1개**와 그것을 쓸 **자기 키**. 그 이상은 요구하지 않는다.
-게이트웨이는 `POST /v1/chat/completions`(및 모델 목록)만 사용한다.
+계정 `~/.hermes/config.yaml`의 주 모델과 `fallback_providers`에 맞는 공급자 로그인이 필요하다.
+대화와 배치는 같은 설정을 읽으며 별도 비용 프록시를 요구하지 않는다.
+확인은 `python3 -m automation.doctor`의 주 모델·폴백 항목으로 한다.
 
-### 2.2 왜 LiteLLM을 권하는가
+### 2.2 폐기된 비용 게이트웨이
 
-이 프로젝트의 라우팅·예산·민감도 정책(`configs/routing-policy.md`)은 **게이트웨이 앞단에서
-강제되도록** 설계돼 있다. 자기 노드 loopback에 LiteLLM을 띄우면 프로바이더를 바꿔도 위쪽
-설정이 그대로 남고, 월 하드캡과 태그 기반 거부를 **모델 호출 전에** 걸 수 있다.
-LiteLLM이 아니어도 OpenAI 호환 엔드포인트면 동작하지만, 그 경우 예산 상한과 민감도 차단은
-**당신이 직접 마련해야 한다**.
-
-### 2.3 예시 — LiteLLM 최소 config
-
-`configs/litellm-staging/config.yaml`을 자기 값으로 바꾼 최소형:
-
-```yaml
-model_list:
-  - model_name: main            # 게이트웨이가 부르는 alias (자기 이름으로 바꿔도 된다)
-    litellm_params:
-      model: <provider>/<model-id>
-      api_key: os.environ/<YOUR_PROVIDER_KEY_ENV>
-    model_info:
-      tags: ["default"]
-
-general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
-```
-
-가상 키에 월 예산을 건다(권장: soft alert < hard cap, `duration: 30d`). 상세 절차와 검증
-항목은 `configs/routing-policy.md` §3·§5.
-
-### 2.4 예시 — Hermes 쪽 배선
-
-`~/.hermes/config.yaml`의 provider를 자기 엔드포인트로 맞춘다:
-
-```yaml
-custom_providers:
-  - name: litellm
-    base_url: http://127.0.0.1:4000/v1     # 자기 엔드포인트
-    key_env: LITELLM_<ACCOUNT>_KEY          # 계정명 대문자, 하이픈은 _
-default_model: main                         # §2.3의 alias
-```
-
-바꾼 뒤 `systemctl --user restart hermes-gateway.service`.
-
-### 2.5 확인
-
-```bash
-curl -sf -H "Authorization: Bearer $YOUR_KEY" http://127.0.0.1:4000/v1/models | head -c 200
-```
-
-모델 목록이 오면 전제 충족이다. 401이면 키, 연결 거부면 엔드포인트 문제다.
-
-### 2.6 이 저장소의 값은 cha 노드의 값이다
-
-`configs/routing-policy.md`는 **정책 구조(일반)** 와 **이 설치의 현재 바인딩(예시)** 을 분리해
-적어 두었다. 모델 id·예산 액수·키 이름·게이트웨이 경로는 전부 후자에 속하며 **자기 값으로
-교체하는 것이 정상**이다. 정책 구조(단일 alias·태그 필터·fail-closed 예산·민감 태그 사전 차단)는
-그대로 두는 것을 권한다 — 안전 속성이 거기에 걸려 있다.
+2026-10-19 소유자 "이거 아예 삭제해 litellm" 결정으로 LiteLLM 설치 권고·예시 설정·
+가상 키·포트 4000 조회 절차를 폐기했다. 일일 비용 보고도 "이것도 이제 없애라" 결정으로
+제거했다. 예전 스테이징 자산을 다시 배포하거나 관련 키를 추가하지 않는다.
+[제거와 원장 복구](../기능소개/litellm-지우기.md)를 참고한다.
+현재 호출 정책의 정본은 `configs/routing-policy.md`다.
 
 ---
 

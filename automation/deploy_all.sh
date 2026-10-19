@@ -58,6 +58,7 @@ dori_mode=off
 [[ -z "$dori_bot_id" ]] || dori_mode=on
 peer_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.peer_retired --release-switch)" || exit 4
 product_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_product --release-switch)" || exit 4
+retirement_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.gateway_retirement --release-switch)" || exit 4
 if ! gateway_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.hermes_gateways --release-switch)"; then
   echo "GATEWAY-STOP-REFUSED: invalid release-host switch ~/.hermes/release-flags/hermes-gateways-stopped" >&2
   exit 4
@@ -126,6 +127,18 @@ retire_hermes_product() {
   "$repo_root/automation/release_approval_remote.sh" authorize-hermes-product --head "$node_sha" \
     || { log "HERMES-PRODUCT-UNAUTHORIZED: 승인 HEAD에 제품 제거 표면 없음"; return 4; }
   ssh "$host" "sudo -n -u $NODE_AGENT_ACCOUNT -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.hermes_product --remove --head $node_sha" </dev/null
+}
+
+retire_spend_gateway() {
+  "$repo_root/automation/release_approval_remote.sh" authorize-gateway-retirement --head "$node_sha" \
+    || { log "GATEWAY-RETIRE-UNAUTHORIZED: 승인 HEAD에 제거 표면 없음"; return 4; }
+  local acct role
+  for role in ops agent; do
+    acct="$NODE_OPS_ACCOUNT"
+    [[ "$role" != agent ]] || acct="$NODE_AGENT_ACCOUNT"
+    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.gateway_retirement --remove --role $role --head $node_sha" </dev/null \
+      || return 4
+  done
 }
 
 converge_auto_write() {
@@ -355,6 +368,9 @@ case "$mode" in
         log "already fully deployed"
       fi
       # The account's routing transaction is already checked by the probe.
+      if [[ "$retirement_mode" == retired ]]; then
+        retire_spend_gateway || exit 4
+      fi
       refresh_wrappers
       refresh_rag_mcp
       write_receipt
@@ -448,6 +464,9 @@ case "$mode" in
     fi
     if [[ "$product_mode" == retired ]]; then
       retire_hermes_product || exit 4
+    fi
+    if [[ "$retirement_mode" == retired ]]; then
+      retire_spend_gateway || exit 4
     fi
     # 실행 성공 뒤에도 전량 재판정은 필수다. digest 일치가 실행 실패를 덮지는 않는다.
     if probe report; then

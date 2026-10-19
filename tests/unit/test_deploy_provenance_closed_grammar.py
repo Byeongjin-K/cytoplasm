@@ -96,8 +96,8 @@ def test_every_dispatch_form_is_reported(tmp_path: Path, form: str, kind: str) -
     assert _reported(problems(tmp_path, script, listed_helpers(_REPO)), kind)
 
 
-def _cost_report(root: Path, extra: str) -> Path:
-    deployer = "automation/cost-report/deploy.sh"
+def _effect_request(root: Path, extra: str) -> Path:
+    deployer = "automation/effect_request/deploy.sh"
     for relative, text in ((deployer, (_REPO / deployer).read_text(encoding="utf-8") + extra),
                            ("automation/gate_extra.sh", "extra_remote() { :; }\n"),
                            *((helper, (_REPO / helper).read_text(encoding="utf-8")) for helper in listed_helpers(_REPO))):
@@ -106,8 +106,8 @@ def _cost_report(root: Path, extra: str) -> Path:
     return root / deployer
 
 
-def test_the_unmodified_real_cost_report_is_clean(tmp_path: Path) -> None:
-    assert problems(tmp_path, _cost_report(tmp_path, ""), listed_helpers(_REPO)) == []
+def test_the_unmodified_real_effect_request_is_clean(tmp_path: Path) -> None:
+    assert problems(tmp_path, _effect_request(tmp_path, ""), listed_helpers(_REPO)) == []
 
 
 @pytest.mark.parametrize(("line", "kind"), [
@@ -119,8 +119,8 @@ def test_the_unmodified_real_cost_report_is_clean(tmp_path: Path) -> None:
     *((f"env {shell} -c 'source \"$1\"' _ \"$repo_root/automation/gate_extra.sh\"", kind)
       for shell, kind in (("$'bash'", "quoting:ansi-c"), ("$'\\142ash'", "quoting:ansi-c"), ('$"bash"', "quoting:locale"))),
 ])
-def test_the_verifier_real_cost_report_counterexamples_fail(tmp_path: Path, line: str, kind: str) -> None:
-    script = _cost_report(tmp_path, f'{line}\nrun_agent "$(declare -f extra_remote); extra_remote"\n')
+def test_the_verifier_real_effect_request_counterexamples_fail(tmp_path: Path, line: str, kind: str) -> None:
+    script = _effect_request(tmp_path, f'{line}\nrun_agent "$(declare -f extra_remote); extra_remote"\n')
 
     assert _reported(problems(tmp_path, script, listed_helpers(_REPO)), kind)
 

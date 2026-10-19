@@ -32,7 +32,7 @@
 
 ### 코어 시스템 (Wave 1)
 
-- **LiteLLM 게이트웨이 (W1-1)** — `glm-main` 별칭 + agent/peer 가상키,
+- **LiteLLM 게이트웨이 (W1-1, 과거 기록)** — 2026-10-19 소유자 "이거 아예 삭제해 litellm" 결정으로 폐기. 아래는 당시 구현: `glm-main` 별칭 + agent/peer 가상키,
   월 `<monthly-soft-cap>`/`<monthly-hard-cap>`, patent-sensitive 태그 GLM 차단 라우팅.
 - **내 Hermes 에이전트 (W1-2)** — Discord DM 한국어 왕복(≤10s), 메인=LiteLLM glm-main,
   승급=openai-codex(ChatGPT 구독 OAuth) 라우팅 실증.

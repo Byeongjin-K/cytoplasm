@@ -208,6 +208,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
     from automation.hermes_product_policy import CARD_LINES as PRODUCT_LINES, SURFACE as PRODUCT_SURFACE
+    from automation.gateway_retirement_policy import CARD_LINES as RETIREMENT_LINES, SURFACE as RETIREMENT_SURFACE
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -216,6 +217,8 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     ]
 
     return [
+        *([*RETIREMENT_LINES]
+          if any(name == RETIREMENT_SURFACE for name, _digest in spec.surface_digests) else []),
         *([*PRODUCT_LINES]
           if any(name == PRODUCT_SURFACE for name, _digest in spec.surface_digests) else []),
         *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),

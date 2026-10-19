@@ -23,7 +23,7 @@ _HELPERS: Final = (
     "automation/deploy_cron.sh", "automation/deploy_push.sh", "automation/deploy_tree.sh",
     "automation/deploy_tree_remote.sh", "automation/deploy_provenance.sh",
 )
-_DEPLOYERS: Final = ("automation/cost-report", "automation/rag_ingest", "automation/repair")
+_DEPLOYERS: Final = ("automation/effect_request", "automation/rag_ingest", "automation/repair")
 _PROBE: Final = "automation/closure_probe.sh"
 
 
