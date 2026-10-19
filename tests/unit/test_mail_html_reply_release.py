@@ -113,12 +113,11 @@ def _deployment(tmp_path: Path, *, approval: int = 0, pointer: str = "a" * 40):
     automation = repo / "automation"
     package = automation / "mail_html_reply"
     package.mkdir(parents=True)
-    for name in ("__init__.py", "mail_html_reply.py", "deploy_push.sh"):
+    for name in ("__init__.py", "mail_html_reply.py", "node_config.py", "deploy_push.sh"):
         (automation / name).symlink_to(REPO / "automation" / name)
     # The transport/provenance seams are local fakes; push_file's write + read-back is real.
     (package / "deploy.sh").symlink_to(REPO / "automation/mail_html_reply/deploy.sh")
     (automation / "deploy_provenance.sh").write_text("deploy_provenance_check() { return 0; }\n")
-    (automation / "node_config_sh.py").write_text('print("NODE_AGENT_ACCOUNT=agent")\n')
     _executable(automation / "release_approval_remote.sh",
                 f'#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\nexit {approval}\n')
     bin_dir = tmp_path / "bin"
