@@ -12,12 +12,17 @@ from typing import Final
 STOP_MARKER: Final = ".hermes/gateway-stopped-by-release"
 
 
-def stopped_in_receipt(path: Path, accounts: Sequence[str]) -> bool:
+def stopped_in_receipt(path: Path, accounts: Sequence[str], marker: Path | None = None) -> bool:
     """Retain the last fully applied mode; ops can read this outside protected homes."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return False  # Legacy installations before their first deploy-all receipt.
+        # No receipt yet: an approved stop leaves an ops marker (PR #104 gap 8). Without one this
+        # is a legacy installation before its first deploy-all receipt.
+        try:
+            return marker is not None and marker.read_bytes() == b"stopped"
+        except FileNotFoundError:
+            return False
     if not isinstance(raw, dict):
         raise ValueError("GATEWAY-RECEIPT-INVALID: expected an object")
     sha = raw.get("release_sha")
