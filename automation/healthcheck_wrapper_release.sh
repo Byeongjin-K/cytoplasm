@@ -31,6 +31,10 @@ read -r -a scp_cmd <<< "${WRAPPER_RELEASE_SCP:-scp -q -o BatchMode=yes}"
 read -r -a authorize_cmd <<< "${WRAPPER_RELEASE_AUTHORIZE_CMD:-$SCRIPT_DIR/release_approval_remote.sh}"
 provisioner="${WRAPPER_RELEASE_PROVISIONER:-$SCRIPT_DIR/provision-healthcheck-probe.sh}"
 readonly WRAPPER_FILE='$HOME/.local/libexec/autophagy-healthcheck-probe'
+# The generator runs as the healthcheck account: the drift probe judges with that account's
+# view (it alone reads the retirement marker under the private root), so a wrapper the operator
+# generated would list rows the probe no longer sends and never match (2026-10-19 node drift).
+ops_bash="sudo -n -u '${NODE_OPS_ACCOUNT:-ops}' -H"
 
 log() { printf '[wrapper-release] %s\n' "$*" >&2; }
 
@@ -74,7 +78,7 @@ plan() { # plan <head>
   fi
   if "${scp_cmd[@]}" "$archive" "$host:$dir/tree.tar"; then
     # 새 트리의 생성기를 그 트리 자신의 파일로 돌린다 — 프로브가 읽는 매니페스트·스킬 원본도 그 트리 것이다.
-    out="$("${ssh_cmd[@]}" -n "$host" "cd '$dir' && mkdir tree && tar -xf tree.tar -C tree && for n in $(nodes | tr '\n' ' '); do d=\$(HEALTHCHECK_RELEASE_SOURCE_ROOT='$dir/tree' bash '$dir/tree/automation/healthcheck_probe_wrapper.sh' --inputs-digest \"\$n\" 2>/dev/null) || exit 1; printf '%s %s\n' \"\$n\" \"\$d\"; done")" || rc=1
+    out="$("${ssh_cmd[@]}" -n "$host" "cd '$dir' && mkdir tree && tar -xf tree.tar -C tree && chmod 0755 '$dir' && for n in $(nodes | tr '\n' ' '); do d=\$($ops_bash env HEALTHCHECK_RELEASE_SOURCE_ROOT='$dir/tree' bash '$dir/tree/automation/healthcheck_probe_wrapper.sh' --inputs-digest \"\$n\" 2>/dev/null) || exit 1; printf '%s %s\n' \"\$n\" \"\$d\"; done")" || rc=1
   else
     rc=1
   fi
@@ -94,28 +98,26 @@ plan() { # plan <head>
 }
 
 install_on() { # install_on <node>
-  local node="$1" wrapper dir rc=0
-  if [[ "$node" == "${NODE_PRIMARY_NODE_NAME:-}" ]]; then
-    "${ssh_cmd[@]}" -n "$host" "bash '$runtime_root/automation/healthcheck_probe_wrapper.sh' --install '$node'" >&2
-    return
-  fi
-  # 릴리스 트리가 없는 노드(RAG): 주 노드 릴리스가 생성한 래퍼를 파일로 받아 같은 설치기로 놓는다.
+  local node="$1" wrapper dir rc=0 remote="$1"
+  # Every node, the primary included, gets the wrapper the healthcheck account generated from the
+  # primary release, placed by the same installer (atomic swap and read-back).
+  [[ "$node" != "${NODE_PRIMARY_NODE_NAME:-}" ]] || remote="$host"
   wrapper="$(mktemp)" || return 1
-  if ! "${ssh_cmd[@]}" -n "$host" "bash '$runtime_root/automation/healthcheck_probe_wrapper.sh' --print '$node'" > "$wrapper"; then
+  if ! "${ssh_cmd[@]}" -n "$host" "$ops_bash bash '$runtime_root/automation/healthcheck_probe_wrapper.sh' --print '$node'" > "$wrapper"; then
     rm -f -- "$wrapper"; return 1
   fi
   if [[ "$node" == "$local_node" ]]; then
     bash "$provisioner" --from-file "$wrapper" "$node" >&2 || rc=1
   else
-    dir="$("${ssh_cmd[@]}" -n "$node" 'mktemp -d /tmp/autophagy-wrapper-install.XXXXXX')"
+    dir="$("${ssh_cmd[@]}" -n "$remote" 'mktemp -d /tmp/autophagy-wrapper-install.XXXXXX')"
     dir="${dir//[[:space:]]/}"
     if [[ "$dir" =~ ^/tmp/autophagy-wrapper-install\.[A-Za-z0-9]+$ ]] \
-      && "${scp_cmd[@]}" "$provisioner" "$wrapper" "$node:$dir/"; then
-      "${ssh_cmd[@]}" -n "$node" "bash '$dir/$(basename "$provisioner")' --from-file '$dir/$(basename "$wrapper")' '$node'" >&2 || rc=1
+      && "${scp_cmd[@]}" "$provisioner" "$wrapper" "$remote:$dir/"; then
+      "${ssh_cmd[@]}" -n "$remote" "bash '$dir/$(basename "$provisioner")' --from-file '$dir/$(basename "$wrapper")' '$node'" >&2 || rc=1
     else
       rc=1
     fi
-    [[ -z "$dir" ]] || "${ssh_cmd[@]}" -n "$node" "rm -rf -- '$dir'" || true
+    [[ -z "$dir" ]] || "${ssh_cmd[@]}" -n "$remote" "rm -rf -- '$dir'" || true
   fi
   rm -f -- "$wrapper"
   return "$rc"
@@ -125,7 +127,7 @@ refresh() { # refresh <head>
   local head="$1" node expected installed after rc
   [[ "$head" =~ ^[0-9a-f]{40}$ ]] || { log "WRAPPER-REFRESH-UNKNOWN: bad head"; return 1; }
   while read -r node; do
-    expected="$("${ssh_cmd[@]}" -n "$host" "bash '$runtime_root/automation/healthcheck_probe_wrapper.sh' --inputs-digest '$node'" 2>/dev/null)"
+    expected="$("${ssh_cmd[@]}" -n "$host" "$ops_bash bash '$runtime_root/automation/healthcheck_probe_wrapper.sh' --inputs-digest '$node'" 2>/dev/null)"
     expected="${expected//[[:space:]]/}"
     if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
       printf 'WRAPPER-REFRESH|%s|failed|expected-unknown\n' "$node"; continue

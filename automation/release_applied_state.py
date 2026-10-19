@@ -72,6 +72,7 @@ class Sweep:
     pointer_sha: str | None
     receipt_sha: str | None
     pending: tuple[str, ...] = ()
+    owner_pending: tuple[str, ...] = ()
 
     def handle(self, sha: str) -> None:
         from automation import release_applied_notice as notice
@@ -101,9 +102,14 @@ class Sweep:
         return is_ancestor(self.repo, sha, self.pointer_sha)
 
     def _notify(self, sha: str, version: str) -> None:
+        from automation.release_applied_notice import release_summary
+
         pending = ("--pending", json.dumps(list(self.pending))) if self.pending else ()
+        owner = ("--owner-pending", json.dumps(list(self.owner_pending))) if self.owner_pending else ()
+        summary = release_summary(sha)
+        said = ("--summary", summary) if summary else ()
         completed = subprocess.run(
-            (*send_command(self.repo), "send", "--version", version, "--head", sha, *pending),
+            (*send_command(self.repo), "send", "--version", version, "--head", sha, *pending, *owner, *said),
             env={**os.environ, "RELEASE_APPROVAL_MODULE": MODULE},
             check=False,
         )

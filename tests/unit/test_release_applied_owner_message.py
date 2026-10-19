@@ -9,7 +9,7 @@ import pytest
 from automation import owner_notice, release_applied_notice as release
 from automation.interop.owner_message import Action, OwnerMessage, Ref, Result
 
-RELEASE = '릴리스 v1.2.4 가 적용되었습니다. (HEAD aaaaaaaaaaaa)'
+RELEASE = '✅ v1.2.4 적용됨'
 HEAD = 'aaaaaaaaaaaaaaaa'
 
 
@@ -26,7 +26,7 @@ def test_legacy_bytes_when_runtime_is_old(
 ) -> None:
     # Given
     sent: list[str] = []
-    monkeypatch.setattr(owner_notice, 'notify_owner', lambda content: sent.append(content) or True)
+    monkeypatch.setattr(owner_notice, 'notify_owner', lambda content, **_kw: sent.append(content) or True)
     if legacy == 'missing_module':
         monkeypatch.setitem(sys.modules, 'automation.interop.owner_message', None)
     else:
@@ -44,7 +44,7 @@ def test_envelope_identifies_release_when_pointer_matches(
     # Given
     sent: list[OwnerMessage | None] = []
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         sent.append(message)
         return True
 
@@ -63,7 +63,7 @@ def test_envelope_identifies_release_when_pointer_matches(
                      message_id=None, url=None, search=('릴리스 검색', 'v1.2.4 aaaaaaaaaaaaaaaa')),
         owner=Action(verb='none', target=None, argument=None),
         agent_next='추가 실행 없음', recovery='not_applicable', detail=Result(outcome='executed'),
-        render_version='owner-ko-v2',
+        render_version='owner-ko-v5',
     )
 
 
@@ -84,12 +84,4 @@ def test_notice_destination_is_used_when_notice_channel_is_configured(
     assert len(sent) == 1
     channel, body = sent[0]
     assert channel == '111'
-    assert body == (
-        '**✅ 릴리스 v1.2.4**\n'
-        '> 릴리스 v1.2.4 가 적용되었습니다. (HEAD aaaaaaaaaaaa)\n'
-        '\n'
-        '**결과:** 실행 완료 · 조치 없음\n'
-        '위치: 링크 없음 (주소 없음); 검색: 릴리스 검색 / v1.2.4 aaaaaaaaaaaaaaaa\n'
-        '다음: 추가 실행 없음\n'
-        '-# 참조: `aaaaaaaa`'
-    )
+    assert body == '✅ v1.2.4 적용됨'
