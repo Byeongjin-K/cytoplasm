@@ -269,7 +269,7 @@ def patch_body(request: ParsedRequest | None, summary: str) -> dict[str, str | d
 
 
 def external_effect_action_hash(argv: tuple[str, ...]) -> str:
-    """Hash-parity with automation.interop.external_effect_gate._action_hash.
+    """Hash-parity with automation.interop.effect_approval.action_hash.
 
     Canonical ToolCall: tool_name="gws", arguments={"command": shlex.join(argv)}
     — the same binding the deployed pre_tool_call gate computes for this call.

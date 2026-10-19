@@ -220,7 +220,7 @@
 
 - Drive에 올려 누군가와 공유하는 일은 메일 `compose --drive-share <파일> --share-with <이메일>` 로만 한다. 업로드·권한·링크 메일이 카드 하나의 ✅ 로 함께 실행되고 한 단계라도 실패하면 메일은 나가지 않는다. 새 카드·워처 없음.
 - 권한은 `type=user, role=reader` 만, 링크 공개 없음. 부여 전후 권한이 소유자+지정 사람이 아니면 멈춘다. 파일은 `autophagy/공유/` 아래.
-- `gws drive permissions create|update` 직접 공유 금지(`gws_drive_permission_grant`). 강제 `tests/unit/test_mail_drive_share.py`. 절차 `skills/mail/SKILL.md` §4-2.
+- `gws drive permissions create|update` 직접 공유 금지. 유돌의 직접 공유 시도는 dori-gate가 바깥 공유로 판정해 카드 없이 나가지 않는다(Hermes 규칙 `gws_drive_permission_grant`는 2026-10-19 은퇴). 강제 `tests/unit/test_mail_drive_share.py`(메일 경로). 절차 `skills/mail/SKILL.md` §4-2.
 원문: [RULES.md](RULES.md) 「Drive 업로드·공유 승인 규칙」 · 장부 `cyto-drive-share-via-mail`
 
 ## 모든 요청 승인 경로 규칙 (cha 지시, 2026-10-17)

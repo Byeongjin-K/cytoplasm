@@ -304,7 +304,7 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 - **왜**: 2026-10-14 대리 요청(약 192 MB 실행 파일을 보기 전용으로 공유하고 링크를 메일로 회신)에서 메일 승인은 있었지만 Drive 업로드·공유 승인 경로가 없어 에이전트가 멈췄다.
 - **무엇이 묶이나**: 파일 sha256·크기, Drive 폴더·파일명(`autophagy/공유/` 아래), 공유받는 사람, 역할 `reader` 가 compose 초안의 승인 해시(`triage_core.draft_sha256` 의 `drive_share`)에 들어간다. 새 카드·새 워처는 없다(「단일 게이트 절차 재사용」).
-- **링크 공개는 없다**: 권한은 `type=user, role=reader` 만 만들고, 부여 전·후에 파일 권한이 "소유자 + 지정한 사람" 이 아니면(anyone·domain·group·writer·다른 사람) 멈춘다. 에이전트가 터미널에서 `gws drive permissions create|update` 로 직접 공유하는 것은 외부효과 규칙 `gws_drive_permission_grant` 가 막는다.
+- **링크 공개는 없다**: 권한은 `type=user, role=reader` 만 만들고, 부여 전·후에 파일 권한이 "소유자 + 지정한 사람" 이 아니면(anyone·domain·group·writer·다른 사람) 멈춘다. 에이전트가 터미널에서 `gws drive permissions create|update` 로 직접 공유하지 않는다. 유돌의 직접 공유 시도는 dori-gate 가 바깥 공유로 판정해 카드 없이 나가지 않는다(Hermes 외부효과 규칙 `gws_drive_permission_grant` 는 2026-10-19 은퇴).
 - **강제**: `tests/unit/test_mail_drive_share.py`(해시 바인딩·공개 권한 거부·실패 시 미발송·✅ 없으면 무동작), `tests/unit/test_gated_effect_paths_conformance.py`(규칙 → 카드 생산자). 절차는 `skills/mail/SKILL.md` §4-2, [소개](docs/기능소개/메일-Drive-공유-링크.md).
 
 ## 모든 요청 승인 경로 규칙 (cha 지시, 2026-10-17)
