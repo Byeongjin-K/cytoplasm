@@ -487,6 +487,8 @@ sudo runuser -u ops -- ssh-keyscan github.com >> /home/ops/.ssh/known_hosts   # 
 
 ## 7. 끝났는지 어떻게 아는가
 
+설치 뒤 새 릴리스를 노드 전체에 반영하는 순서는 [소비 노드 갱신 가이드](소비-노드-갱신.md)에 있다.
+
 설치기의 마지막 두 액션이 종료 게이트다.
 
 ### `check update-trust`
