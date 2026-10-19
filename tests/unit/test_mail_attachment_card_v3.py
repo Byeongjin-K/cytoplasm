@@ -30,7 +30,7 @@ def test_summary_v3_when_new_long_mail_is_posted(attachment_wire: AttachmentWire
     message_id = mail.triage_approval.post_for_approval(draft)
     # Then the new presentation and original attachment contract coexist.
     stored = mail.triage_gate.load_draft(draft["id"])
-    assert stored["render_version"] == "4"
+    assert stored["render_version"] == "5"
     assert stored["approval_format"] == "attachment-v1"
     assert fake.contents[message_id].startswith("📨 **메일 발송 승인**")
     assert str(draft["body"]) not in fake.contents[message_id]

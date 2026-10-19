@@ -48,7 +48,7 @@ def test_v4_card_hides_draft_and_hash_yet_owner_approval_still_resolves(owner_th
     stored = _post(_compose("첫 초안"))
     content = fake.contents[stored["message_id"]]
     # Then: Discord shows who, subject, body and the reaction line only.
-    assert stored["render_version"] == "4" and stored["channel_id"] == THREAD
+    assert stored["render_version"] == "5" and stored["channel_id"] == THREAD
     for hidden in (stored["id"], stored["sha256"], "취소 시", "되돌리기", "참조"):
         assert hidden not in content
     assert "peer@example.invalid" in content and "점심 약속" in content and "첫 초안" in content

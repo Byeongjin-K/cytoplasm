@@ -89,7 +89,7 @@ def test_card_version_and_probe_when_request_posts(producer: str, available: boo
             fake.contents[bound.message_id] = fake.contents[bound.message_id].replace(bound.action_hash, "wrong-binding")
     probe = gate.probe(bound)
     # Then the actual consumer accepts only intact wire, including legacy fallback cards.
-    expected_version = "4" if producer in ("calendar", "mail") else ("3" if available else "1")
+    expected_version = {"calendar": "4", "mail": "5"}.get(producer, "3" if available else "1")
     assert version == expected_version
     assert probe is (Probe.BOUND_PENDING if binding_intact else Probe.BINDING_MISMATCH)
     assert fake.posts == 1
