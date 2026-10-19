@@ -209,6 +209,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
     from automation.hermes_product_policy import CARD_LINES as PRODUCT_LINES, SURFACE as PRODUCT_SURFACE
     from automation.gateway_retirement_policy import CARD_LINES as RETIREMENT_LINES, SURFACE as RETIREMENT_SURFACE
+    from automation.owner_timers_policy import PREFIX as OWNER_TIMER_PREFIX
 
     wrapper_hosts = [
         name.removeprefix(WRAPPER_SURFACE_PREFIX)
@@ -217,6 +218,13 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     ]
 
     return [
+        *(
+            ["형이 끈 정기 작업 유지: " + ", ".join(
+                name.removeprefix(OWNER_TIMER_PREFIX) for name, _digest in spec.surface_digests
+                if name.startswith(OWNER_TIMER_PREFIX)
+            )]
+            if any(name.startswith(OWNER_TIMER_PREFIX) for name, _digest in spec.surface_digests) else []
+        ),
         *([*RETIREMENT_LINES]
           if any(name == RETIREMENT_SURFACE for name, _digest in spec.surface_digests) else []),
         *([*PRODUCT_LINES]

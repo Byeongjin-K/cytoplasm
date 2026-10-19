@@ -96,6 +96,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
         return 4
     surfaces = list(plan.surface_digests)
+    from automation.owner_timers import decode as decode_timers, surfaces as timer_surfaces
+
+    try:
+        surfaces.extend(timer_surfaces(decode_timers(getattr(args, "owner_timers_off", "off"), Path(args.repo))))
+    except (OSError, ValueError) as error:
+        print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+        return 4
     if getattr(args, "ledger", None) == "on":
         from automation.ledger_policy import surface as ledger_surface
         surfaces.append(ledger_surface())
@@ -335,6 +342,24 @@ def cmd_authorize_legacy_service(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_authorize_owner_timers(args: argparse.Namespace) -> int:
+    from automation.owner_timers import decode, surfaces
+
+    try:
+        names = decode(args.jobs)
+    except (OSError, ValueError):
+        return 4
+    if not names:
+        return 4
+    for name, digest in surfaces(names):
+        result = skill_gate.cmd_release_authorize(
+            argparse.Namespace(skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="")
+        )
+        if result:
+            return result
+    return 0
+
+
 def cmd_authorize_peer_retired(args: argparse.Namespace) -> int:
     from automation.peer_retired import surface
 
@@ -398,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
+    plan.add_argument("--owner-timers-off", default="off")
     plan.add_argument(
         "--healthcheck-wrapper",
         action="append",
@@ -454,6 +480,10 @@ def main(argv: list[str] | None = None) -> int:
     legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard", "hermes-memory"), required=True)
     legacy.add_argument("--head", required=True)
     legacy.set_defaults(run=cmd_authorize_legacy_service)
+    timers = commands.add_parser("authorize-owner-timers-off")
+    timers.add_argument("--jobs", required=True)
+    timers.add_argument("--head", required=True)
+    timers.set_defaults(run=cmd_authorize_owner_timers)
     retired = commands.add_parser("authorize-peer-retired")
     retired.add_argument("--head", required=True)
     retired.set_defaults(run=cmd_authorize_peer_retired)

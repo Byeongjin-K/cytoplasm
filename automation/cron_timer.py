@@ -200,13 +200,26 @@ def _pause_hermes(node: Node, job: Job) -> str:
 
 def converge(node: Node, job: Job, *, root: str) -> str:
     from automation.legacy_services import memory_timer_off
+    from automation.owner_timers import released_off
 
+    job.check()
+    if released_off(node.home, job.name):
+        fd = _lock(node.home)
+        try:
+            _pause_hermes(node, job)
+            if node.unit("disable", "--now", unit_names(job.name)[1])[0] != 0:
+                raise TimerError(5, f"could not disable owner-off timer {job.name}")
+            state, detail = check(node, job, root=root)
+            if state != "ok":
+                raise TimerError(5, f"owner-off timer drift: {detail}")
+        finally:
+            os.close(fd)
+        return f"CRON-TIMER-OK name={job.name} released-off"
     if memory_timer_off(node.home, job.name):
         state, detail = check(node, job, root=root)
         if state != "ok":
             raise TimerError(5, f"released-off memory timer drift: {detail}")
         return f"CRON-TIMER-UNCHANGED name={job.name} released-off"
-    job.check()
     if not (node.home / ".hermes" / "scripts" / job.script).is_file():
         raise TimerError(7, f"script {job.script} is not deployed; timer not started")
     service, timer = render(job, root=root, timezone=hermes_timezone(node.home))
@@ -254,8 +267,9 @@ def check(node: Node, job: Job, *, root: str) -> tuple[str, str]:
     """(state, detail) — ok · absent · stale · unknown. 릴리스 관측과 doctor 가 같은 판정을 쓴다."""
     job.check()
     from automation.legacy_services import memory_timer_off
+    from automation.owner_timers import released_off
 
-    if memory_timer_off(node.home, job.name):
+    if memory_timer_off(node.home, job.name) or released_off(node.home, job.name):
         timer_name = unit_names(job.name)[1]
         disabled = node.unit("is-enabled", timer_name)[1].strip()
         active = node.unit("is-active", timer_name)[1].strip()
