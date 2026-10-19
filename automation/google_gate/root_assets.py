@@ -13,6 +13,8 @@ from automation.google_gate.token_client import GateError
 FORK_DIR: Final = Path("skills/dori-mode/setups/egress-gate")
 PYTHON_FILES: Final = ("gate.py", "gatectl.py", "summary.py")
 UNITS: Final = ("dori-gate.service", "dori-gate-summary.service", "dori-gate-summary.timer")
+# A pinned gate older than forward mode and job grants would ignore `grants`, `token_clients` and null ports.
+GATE_FEATURES: Final = (b"google_forward", b"token_clients", b"/_gate/access-token")
 
 
 def command(argv: tuple[str, ...]) -> bytes:
@@ -36,6 +38,8 @@ def pinned_assets(checkout: Path, destination: Path) -> None:
                 ast.parse(content, filename=name)
             except (SyntaxError, ValueError):
                 raise GateError("fork-python-invalid") from None
+        if name == "gate.py" and not all(feature in content for feature in GATE_FEATURES):
+            raise GateError("fork-gate-too-old")
         (destination / name).write_bytes(content)
 
 

@@ -42,6 +42,7 @@ def inputs(tmp: Path) -> tuple[Path, list[str]]:
     (assets / "systemd").mkdir(parents=True)
     for name in ("gate.py", "gatectl.py", "summary.py"):
         (assets / name).write_text("# synthetic fork asset\n")
+    (assets / "gate.py").write_text("# synthetic fork asset: google_forward token_clients /_gate/access-token\n")
     for name, script in (("dori-gate", "gate"), ("dori-gate-summary", "summary")):
         (assets / "systemd" / f"{name}.service").write_text(
             f"[Service]\nUser=dori-gate\nGroup=dori-gate\nStateDirectory=dori-gate\n"
@@ -108,7 +109,7 @@ def test_google_gate_root_when_vault_enabled_grants_service_write_path(tmp_path:
         assert shlex.split(unit["Service"]["ReadWritePaths"]) == [str(p) for p in writable]
 
 
-@pytest.mark.parametrize("invalid", ["head", "ip", "secret", "vault-key", "state", "vault-parent"])
+@pytest.mark.parametrize("invalid", ["head", "ip", "secret", "vault-key", "state", "vault-parent", "old-gate"])
 def test_google_gate_root_when_invalid_refuses_before_writes(tmp_path: Path, invalid: str) -> None:
     # Given
     repo, args = inputs(tmp_path)
@@ -123,6 +124,13 @@ def test_google_gate_root_when_invalid_refuses_before_writes(tmp_path: Path, inv
                  "--vault-remote", "git@example.org:archive.git", "--vault-prefix", "notes"]
     elif invalid == "state":
         args += ["--state", "/"]
+    elif invalid == "old-gate":
+        # A pin that still names a fork commit without forward mode and job grants.
+        fork = tmp_path / "fork"
+        (fork / "skills/dori-mode/setups/egress-gate/gate.py").write_text("# synthetic gate before #116\n")
+        git(fork, "commit", "-qam", "old gate")
+        (repo / "dori/pin.toml").write_text(
+            f'schema = 1\nrepo = "{fork}"\ncommit = "{git(fork, "rev-parse", "HEAD")}"\n')
     else:
         args += ["--vault-dir", "/srv/..", "--vault-key", str(tmp_path / "bot-input"),
                  "--vault-remote", "git@example.org:archive.git", "--vault-prefix", "notes"]
