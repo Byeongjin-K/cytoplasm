@@ -107,12 +107,27 @@ def main() -> int:
                 raise GateError("arguments-required")
         if args.gate_user == args.relay_user:
             raise GateError("users-must-differ")
-        for path in (Path(args.bot_token_file), args.client_secret_file):
+        secret_paths = [Path(args.bot_token_file), args.client_secret_file]
+        if args.vault_key:
+            secret_paths.append(Path(args.vault_key))
+        for path in secret_paths:
             if not path.is_file() or path.stat().st_size == 0:
                 raise GateError("secret-file-required")
         for path in (args.state, args.vault_dir, args.vault_key):
             if path is not None and any(c.isspace() for c in path):
                 raise GateError("path-invalid")
+        state = Path(args.state)
+        if state.parent != Path("/var/lib") or state.name != args.gate_user:
+            raise GateError("state-must-be-gate-home")
+        writable = (state,)
+        if args.vault_dir:
+            directory = Path(args.vault_dir)
+            if (len(directory.parts) < 3 or directory.parts[1] in {"home", "root"}
+                    or directory in state.parents):
+                raise GateError("vault-directory-invalid")
+            writable = (*writable, directory)
+        if any(path != path.resolve() for path in writable):
+            raise GateError("directory-must-be-canonical")
         values = vars(args).copy()
         values["bot_token_file"] = str(Path(args.state) / "owner-bot-token")
         if args.vault_key:
@@ -123,7 +138,7 @@ def main() -> int:
             staging = Path(temporary)
             os.chmod(staging, 0o700)
             pinned_assets(args.fork_checkout, staging)
-            node_units(staging, args.gate_user, Path(args.state))
+            node_units(staging, args.gate_user, writable)
             (staging / "config.json").write_text(rendered, encoding="utf-8")
             (staging / "authorized_keys").write_text(line, encoding="ascii")
             if args.apply:

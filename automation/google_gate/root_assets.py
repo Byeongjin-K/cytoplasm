@@ -57,7 +57,7 @@ def authorized_key(path: Path, pc_ip: str) -> str:
     )
 
 
-def node_units(staging: Path, gate_user: str, state: Path) -> None:
+def node_units(staging: Path, gate_user: str, writable: tuple[Path, ...]) -> None:
     for name in UNITS:
         path = staging / name
         text = path.read_text(encoding="utf-8")
@@ -68,7 +68,9 @@ def node_units(staging: Path, gate_user: str, state: Path) -> None:
                 raise GateError("fork-unit-layout")
             text = text.replace("User=dori-gate\n", f"User={gate_user}\n")
             text = text.replace("Group=dori-gate\n", f"Group={gate_user}\n")
-            text = text.replace("StateDirectory=dori-gate\n", f"ReadWritePaths={state}\n")
+            paths = " ".join('"' + str(p).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+                             for p in writable)
+            text = text.replace("StateDirectory=dori-gate\n", f"ReadWritePaths={paths}\n")
             if "/opt/dori-gate/" not in text or "--config /etc/dori-gate/config.json" not in text:
                 raise GateError("fork-unit-layout")
         path.write_text(text, encoding="utf-8")

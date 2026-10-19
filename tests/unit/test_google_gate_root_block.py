@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import configparser
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -10,6 +12,7 @@ import pytest
 
 from google_gate_helpers import REPO
 from test_google_gate import render_args
+from automation.google_gate.root_assets import node_units
 
 
 def git(path: Path, *args: str) -> str:
@@ -91,7 +94,21 @@ def test_google_gate_root_when_default_dryrun_never_writes_outside_temp(tmp_path
     assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
 
 
-@pytest.mark.parametrize("invalid", ["head", "ip", "secret"])
+def test_google_gate_root_when_vault_enabled_grants_service_write_path(tmp_path: Path) -> None:
+    # Given
+    inputs(tmp_path)
+    staging = tmp_path / "fork/skills/dori-mode/setups/egress-gate/systemd"
+    writable = (Path("/var/lib/dori-gate"), Path("/srv/gate-vault"))
+    # When
+    node_units(staging, "dori-gate", writable)
+    # Then
+    for name in ("dori-gate", "dori-gate-summary"):
+        unit = configparser.ConfigParser(interpolation=None)
+        unit.read(staging / f"{name}.service")
+        assert shlex.split(unit["Service"]["ReadWritePaths"]) == [str(p) for p in writable]
+
+
+@pytest.mark.parametrize("invalid", ["head", "ip", "secret", "vault-key", "state", "vault-parent"])
 def test_google_gate_root_when_invalid_refuses_before_writes(tmp_path: Path, invalid: str) -> None:
     # Given
     repo, args = inputs(tmp_path)
@@ -99,8 +116,16 @@ def test_google_gate_root_when_invalid_refuses_before_writes(tmp_path: Path, inv
         git(tmp_path / "fork", "commit", "--allow-empty", "-qm", "different HEAD")
     elif invalid == "ip":
         args[-1] = '192.0.2.10",no-port-forwarding'
-    else:
+    elif invalid == "secret":
         (tmp_path / "bot-input").write_text("")
+    elif invalid == "vault-key":
+        args += ["--vault-dir", "/var/lib/dori-gate/vault", "--vault-key", str(tmp_path / "missing"),
+                 "--vault-remote", "git@example.org:archive.git", "--vault-prefix", "notes"]
+    elif invalid == "state":
+        args += ["--state", "/"]
+    else:
+        args += ["--vault-dir", "/srv/..", "--vault-key", str(tmp_path / "bot-input"),
+                 "--vault-remote", "git@example.org:archive.git", "--vault-prefix", "notes"]
     before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     # When
     result = sandbox(repo, tmp_path, ["--dry-run", *args])

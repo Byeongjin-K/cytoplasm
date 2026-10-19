@@ -2,8 +2,8 @@
 
 비밀 값은 들고 나오지 않는다: `~/.env.secrets` 는 "비어 있지 않은 키 이름" 집합으로만,
 경로 설정은 "그 경로가 있다/없다"로만 옮긴다. Discord 토큰만 온라인 검사 동안 메모리에서
-쓰이고 Facts 에는 실리지 않는다. 네트워크를 부르는 것은 `online=True` 일 때의 두 가지
-(`gws auth status`, Discord GET 전용 검사)뿐이다.
+쓰이고 Facts 에는 실리지 않는다. `online=True`일 때만 `gws auth status`와 Discord GET을
+검사한다. 명시적 Google 게이트 표식이 있으면 gws 대신 루프백 jobs 토큰을 확인하며 값은 버린다.
 """
 from __future__ import annotations
 
