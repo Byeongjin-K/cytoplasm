@@ -160,9 +160,14 @@ def _pack_dict(pack: _Pack) -> dict[str, object]:
 
 
 def _report(args: argparse.Namespace, evidence_pack: object | None = None) -> int:
-    notes = report_core.select_notes(
-        Path(args.notes_root).expanduser(), limit=args.limit, query=args.query
-    )
+    material_files = getattr(args, "material_file", None) or []
+    if material_files:
+        notes = report_core.load_material(tuple(Path(p).expanduser() for p in material_files))
+    else:
+        notes = report_core.select_notes(
+            Path(args.notes_root).expanduser(), limit=args.limit, query=args.query
+        )
+    notes, cuts = report_core.fit_budget(notes)
     if not notes:
         print("자료 부족: 선택 조건에 맞는 노트가 없습니다.")
         return 0
@@ -183,7 +188,7 @@ def _report(args: argparse.Namespace, evidence_pack: object | None = None) -> in
     output = _output_path(
         _private_directory(Path(args.outputs_root).expanduser()), "report", ".md"
     )
-    _write_private(output, report_core.assemble_report(title, notes, draft, sources))
+    _write_private(output, report_core.assemble_report(title, notes, draft, sources, cuts))
     if pack is not None:
         _write_private(
             output.with_suffix(".evidence.json"),
@@ -252,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--notes-root", default="~/notes")
     report.add_argument("--outputs-root", default="~/outputs")
     report.add_argument("--query", default="")
+    report.add_argument("--material-file", action="append", default=[],
+                        help="note file to use as material (repeatable); replaces the notes folder")
     report.add_argument("--limit", type=int, default=12)
     report.add_argument("--title", default="")
     report.add_argument("--response-file", default="")
@@ -292,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 3
         return int(args.func(args))
     except (OSError, report_llm.LlmInvocationError) as error:
-        print(f"REPORT-REFUSED {error.__class__.__name__}", file=sys.stderr)
+        print(f"REPORT-REFUSED {error.__class__.__name__}: {error}"[:400], file=sys.stderr)
         return 1
 
 
