@@ -15,6 +15,11 @@ GWS_SCOPES: Final = ",".join((
 ))
 
 _STEPS: Final[Mapping[str, tuple[str, ...]]] = {
+    "google-gate": (
+        "노드 운영자 계정에서 python3 -I /opt/dori-gate/gatectl.py status 로 게이트·jobs 동의를 확인한다",
+        "jobs 동의가 없으면 gatectl.py auth-url --grant jobs 와 auth-finish --grant jobs 로 소유자가 동의한다",
+        "gws의 옛 자격증명으로 우회하지 않는다. shim 켜기·끄기: docs/guide/연결-승인-점검.md 「노드 Google 게이트」",
+    ),
     "yoodori-bot": (
         "유돌 봇의 개인 서버 초대·Message Content Intent와 대화·통지 채널 읽기/쓰기 권한을 확인한다",
         "릴리스·공급망 카드도 발신 봇 채널을 따른다(Q236). notice-bot override의 채널 id와 유돌 봇 접근 권한을 확인한다",
