@@ -5,8 +5,12 @@
 브랜치를 push 하려면 **그 트리가 로컬 CI 를 통과한 영수증**이 있어야 한다. 없으면 `git push` 가 훅에서 거부되고, 무엇을 실행해야 하는지 그 자리에서 알려준다.
 
 스킬 시나리오의 프로세스 격리에는 Linux `bubblewrap`이 필요하다. Ubuntu에서는
-`sudo apt-get install bubblewrap`으로 준비한다. GitHub 러너는 검증 전에 설치하지만,
+`sudo apt-get install bubblewrap`으로 준비한다. GitHub 러너는 검증 전에 설치하지만(sha256 을
+고정한 `.deb` 내려받기, 실패하면 원래 `apt-get` 경로),
 로컬 CI는 개발 환경을 임의로 바꾸지 않고 `bwrap`이 없으면 안내와 함께 중단한다.
+단위 시험은 CI 와 같이 `-n auto`(pytest-xdist)로 모든 코어에서 돈다. 로컬 CI 를 돌리는 `python3` 에
+`requirements-dev.txt` 의 `pytest-xdist` 고정판이 없으면 단계를 시작하기 전에 설치 명령 한 줄을
+알려 주고 중단한다(예: `uv pip install --python "$(command -v python3)" pytest-xdist==3.6.1`).
 격리를 끄거나 시나리오를 건너뛰어 영수증을 발급하지 않는다.
 Ubuntu 24.04에서 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`가
 나면 AppArmor의 사용자 네임스페이스 정책도 확인해야 한다. CI는 배포판의
@@ -33,7 +37,7 @@ $ git push -u origin cxsess/my-work
 **정상 경로** — 커밋한 뒤 한 번 돌리고 push 한다.
 
 ```
-automation/local_ci.sh run      # lint → unit tests → clean-host 컨테이너 검사
+automation/local_ci.sh run      # lint → unit tests(-n auto) → public-gate → clean-host 컨테이너 검사
 git push -u origin <branch>     # 영수증이 있으므로 통과
 ```
 
