@@ -8,6 +8,9 @@ from typing import Literal
 from automation.knowledge.pack import CitationReport, EvidenceItem, EvidencePack
 
 _CITATION = re.compile(r"\[E\d+\]")
+_CITATION_NOUN = re.compile(r"\[(E\d+)\](으로|은|는|이|가|을|를|의|과|와|에서|에|로|도|만)(?![가-힣])")
+_UNSUPPORTED_NOUN = "해당 자료"
+_VOWEL_PARTICLE = {"은": "는", "이": "가", "을": "를", "과": "와", "으로": "로"}
 _NO_EVIDENCE = "EVIDENCE: none — write '근거 없음' for any factual claim about the owner's past/notes"
 _SOURCE_NAMES = {"meeting": "회의", "conversation": "대화", "team-chat": "팀", "peer-report": "동료보고"}
 
@@ -69,7 +72,18 @@ def validate_citations(text: str, pack: EvidencePack) -> CitationReport:
             target.append(item_id)
         return citation if item_id in allowed else ""
 
-    cleaned = _CITATION.sub(replace, text)
+    def as_noun(match: re.Match[str]) -> str:
+        # A marker used as the sentence's noun ("[E3]은 …") would leave a subjectless
+        # sentence when deleted (2026-10-19 weekly report); keep a neutral noun instead.
+        if match.group(1) in allowed:
+            return match.group(0)
+        if match.group(1) not in stripped:
+            stripped.append(match.group(1))
+        return _UNSUPPORTED_NOUN + _VOWEL_PARTICLE.get(match.group(2), match.group(2))
+
+    cleaned = _CITATION_NOUN.sub(as_noun, text)
+    cleaned = _CITATION.sub(replace, cleaned)
     cleaned = re.sub(r"[ \t]+(?=\n|$)", "", cleaned)
-    cleaned = re.sub(r" {2,}", " ", cleaned).strip()
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    cleaned = re.sub(r" +(?=[.,!?。])", "", cleaned).strip()
     return CitationReport(cleaned, tuple(cited), tuple(stripped), bool(cited))
