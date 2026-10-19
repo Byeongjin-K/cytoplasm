@@ -26,6 +26,7 @@ version: 1
 id: w2-personal-memory
 title: "W2 personal-memory chain E2E bank (happy + 3 failure injections)"
 driver: tests/e2e/drivers/w2_personal_memory.sh
+retired_when: hermes-memory-off=off  # retired by this release switch (2026-10-19); remove the switch file to run it again
 remote_host: <primary-node>
 remote_account: agent
 

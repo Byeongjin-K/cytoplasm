@@ -19,6 +19,7 @@ version: 1
 id: w3-report-hub
 title: "W3 report-hub collect + dashboard E2E bank (with full cleanup)"
 driver: tests/e2e/drivers/w3_report_hub.sh
+retired_when: report-hub-off=off  # retired by this release switch (2026-10-19); remove the switch file to run it again
 remote_host: <primary-node>
 remote_account: ops
 
