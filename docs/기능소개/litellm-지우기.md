@@ -30,7 +30,8 @@ LiteLLM 스테이징 자산과 `automation/cost-report/` 전체, 09:00 비용 �
   정지 컨테이너라도 사용 중이면 남긴다. Docker는 기존 `sg docker -c` 경로다.
 - **agent**: `~/.env.secrets`의 `LITELLM_*` 정의 줄만 제거한다.
   `~/.hermes/config.yaml`의 `providers.litellm`과 `custom_providers`의 `name: litellm` 항목만
-  지운다. 두 블록은 `base_url`·`key_env` 두 필드만 허용하며, 예상 밖 구조나 다른 참조가
+  지운다. 두 블록의 필수 필드는 `base_url`·`key_env`다. 매핑은 `name`·`default_model`·`api_mode`,
+  목록 항목은 `api_mode`도 허용한다. 그 밖의 필드·중복·중첩 구조나 다른 참조가
   있으면 설정을 바꾸기 전에 거부한다. 나머지 바이트·권한은 보존하고 원자 교체 후 재조회한다.
   유일한 항목이었다면 부모는 `providers: {}`·`custom_providers: []`로 남겨 `null`이 되지 않게 한다.
   `send_cost_report.py`와 비활성 `autophagy-cron-daily-cost-report.{timer,service}`도 제거한다.
