@@ -25,13 +25,15 @@ class Wire:
         self.found = True
         self.archived = False
         self.fail_patch = False
+        self.others: list[dict[str, JsonValue]] = []
 
     def api(self, method: str, path: str, payload: dict[str, JsonValue] | None = None) -> JsonValue:
         if method == "GET":
             if "/threads/" in path:
                 archived = "/archived/" in path
-                return {"threads": [{"id": THREAD, "parent_id": PARENT, "name": NAME}]
-                        if self.found and self.archived == archived else []}
+                own: list[dict[str, JsonValue]] = [{"id": THREAD, "parent_id": PARENT, "name": NAME}]
+                return {"threads": (own if self.found and self.archived == archived else [])
+                        + ([] if archived else self.others)}
             return {"id": path.rsplit("/", 1)[-1], "name": NAME, "guild_id": "111",
                     "type": 11 if path == f"/channels/{THREAD}" else 0, "parent_id": PARENT}
         self.effects.append((method, path, payload or {}))
@@ -108,6 +110,28 @@ def test_abandon_reply_precedes_archive_when_superseded(wire: Wire, tmp_path: Pa
         ("POST", f"/channels/{THREAD}/messages"), ("PATCH", f"/channels/{THREAD}"),
     ]
     assert wire.effects[-1][2] == {"name": f"⌛ 만료 · {NAME}", "archived": True}
+
+
+def test_applied_notice_closes_older_open_release_threads(wire: Wire) -> None:
+    # Given: older versions whose own deploy never sent an applied notice (blocked, rc=10),
+    # next to a decided older thread, a newer card, and another channel's thread.
+    wire.others = [
+        {"id": "601", "parent_id": PARENT, "name": "🏷️ 릴리스 v1.2.2"},
+        {"id": "602", "parent_id": PARENT, "name": "🏷️ 릴리스 v1.1.10"},
+        {"id": "603", "parent_id": PARENT, "name": "⛔ 취소 · 🏷️ 릴리스 v1.2.1"},
+        {"id": "604", "parent_id": PARENT, "name": "🏷️ 릴리스 v1.2.10"},
+        {"id": "605", "parent_id": "999", "name": "🏷️ 릴리스 v1.2.0"},
+    ]
+    # When: v1.2.3, whose tree contains them, is applied.
+    rc = release_applied_notice.send("v1.2.3", HEAD)
+    # Then: only the older undecided threads in this channel close as done, after its own thread.
+    assert rc == 0
+    assert wire.effects == [
+        ("NOTICE", "", {}),
+        ("PATCH", f"/channels/{THREAD}", {"name": f"✅ 완료 · {NAME}", "archived": True}),
+        ("PATCH", "/channels/601", {"name": "✅ 완료 · 🏷️ 릴리스 v1.2.2", "archived": True}),
+        ("PATCH", "/channels/602", {"name": "✅ 완료 · 🏷️ 릴리스 v1.1.10", "archived": True}),
+    ]
 
 
 def test_applied_notice_succeeds_when_thread_is_absent(wire: Wire) -> None:
