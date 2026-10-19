@@ -9,9 +9,12 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from automation.gateway_retirement import Runner, checked, run, safe_path, stopped
+
+if TYPE_CHECKING:
+    from automation.node_config import NodeConfig
 
 JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends", "wiki-confirm-watch")
 ALGORITHM: Final = "retired-job-v1"
@@ -197,13 +200,29 @@ def deploy(host: str, runtime: str, head: str) -> int:
         result = subprocess.run(("ssh", host, command), check=False, timeout=150)
         if result.returncode:
             return 5
-    for account in (config.agent_account, config.peer_account):
+    accounts = [config.agent_account]
+    if not _peer_removed(host, config):
+        accounts.append(config.peer_account)
+    for account in accounts:
         command = shlex.join(("sudo", "-n", "-u", account, "-H", "env",
                               f"PYTHONPATH={runtime}", "python3", "-B", "-m",
                               "automation.retired_jobs", "install", "--name", "interop-plugin"))
         if subprocess.run(("ssh", host, command), check=False, timeout=150).returncode:
             return 5
     return 0
+
+
+def _peer_removed(host: str, config: NodeConfig) -> bool:
+    """P5 retired peer and the owner's root block then deleted the account: no plugin is left.
+
+    Same probe as deploy_all.sh retire_peer; the marker is ops 0600, so only ops reads it.
+    An absent account without the marker still runs the cleanup and fails closed.
+    """
+    marker = shlex.quote(str(config.private_root / "peer-retired"))
+    probe = (f"sudo -n -u {shlex.quote(config.ops_account)} -H bash -c "
+             + shlex.quote(f"cmp -s {marker} <(printf retired)")
+             + f" && ! getent passwd {shlex.quote(config.peer_account)} >/dev/null")
+    return subprocess.run(("ssh", host, probe), check=False, timeout=30).returncode == 0
 
 
 def main(argv: list[str] | None = None) -> int:

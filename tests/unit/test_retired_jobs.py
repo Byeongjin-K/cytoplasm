@@ -240,22 +240,58 @@ def test_deployer_requires_the_active_release_before_cleanup(
 
     head = "a" * 40
     calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(node_config, "load_node_config", lambda: SimpleNamespace(agent_account="agent", peer_account="peer"))
+    monkeypatch.setattr(node_config, "load_node_config", lambda: _config())
 
     def run(argv: tuple[str, ...], **_kwargs) -> subprocess.CompletedProcess[str]:
         calls.append(argv)
         target = head if matches else "b" * 40
         output = f"/srv/releases/{target}\n" if len(calls) == 1 else ""
-        return subprocess.CompletedProcess(argv, 0, output, "")
+        # The peer account still exists, so its plugin cleanup runs as before.
+        return subprocess.CompletedProcess(argv, 1 if "getent passwd" in argv[2] else 0, output, "")
 
     monkeypatch.setattr(retired_jobs.subprocess, "run", run)
     result = retired_jobs.deploy("test-node", "/srv/current", head)
     assert result == (0 if matches else 4)
-    assert len(calls) == (len(retired_jobs.JOBS) + 3 if matches else 1)
+    assert len(calls) == (len(retired_jobs.JOBS) + 4 if matches else 1)
+    if matches:
+        assert "sudo -n -u peer " in calls[-1][2]
     assert calls[0] == ("ssh", "test-node", "readlink /srv/current")
     if matches:
         assert all("automation.retired_jobs install --name " + name in command[2]
                    for name, command in zip(retired_jobs.JOBS, calls[1:1 + len(retired_jobs.JOBS)], strict=True))
+
+
+def _config() -> SimpleNamespace:
+    return SimpleNamespace(agent_account="agent", peer_account="peer", ops_account="ops",
+                           private_root=Path("/srv/private"))
+
+
+@pytest.mark.parametrize("removed", [True, False])
+def test_deployer_skips_a_peer_account_the_owner_already_removed(
+    monkeypatch: pytest.MonkeyPatch, removed: bool,
+) -> None:
+    # v2.6.7 stopped at `sudo: unknown user peer`: P5 retired peer and the owner's root
+    # block deleted the account, so there is no peer plugin left to remove.
+    from automation import node_config
+
+    head = "a" * 40
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(node_config, "load_node_config", _config)
+
+    def run(argv: tuple[str, ...], **_kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        if "getent passwd" in argv[2]:
+            assert "sudo -n -u ops -H bash -c 'cmp -s /srv/private/peer-retired <(printf retired)'" in argv[2]
+            return subprocess.CompletedProcess(argv, 0 if removed else 1, "", "")
+        if "sudo -n -u peer " in argv[2]:
+            return subprocess.CompletedProcess(argv, 1, "", "sudo: unknown user peer")
+        output = f"/srv/releases/{head}\n" if len(calls) == 1 else ""
+        return subprocess.CompletedProcess(argv, 0, output, "")
+
+    monkeypatch.setattr(retired_jobs.subprocess, "run", run)
+    assert retired_jobs.deploy("test-node", "/srv/current", head) == (0 if removed else 5)
+    assert any("sudo -n -u agent " in c[2] and "interop-plugin" in c[2] for c in calls)
+    assert any("sudo -n -u peer " in c[2] for c in calls) is not removed
 
 
 def test_research_timer_release_cleanup_preserves_reports_and_topic_state(tmp_path: Path) -> None:
