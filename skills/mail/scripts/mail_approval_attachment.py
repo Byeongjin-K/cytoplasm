@@ -47,8 +47,8 @@ def body_attachment(draft: Mapping[str, JsonValue]) -> BodyAttachment:
 def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     """Replay old summary bytes or select the new version over attachment-v1."""
     from automation.interop.approval_card import CardRenderError
-    if draft.get("render_version") == "4":
-        return _summary_v4(draft, instruction)
+    if draft.get("render_version") in ("4", "5"):
+        return _summary_v4(draft, instruction, share=draft.get("render_version") == "5")
     if draft.get("bcc"):
         return _summary_v3(draft, instruction)
 
@@ -73,7 +73,7 @@ def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     ))
 
 
-def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
+def _summary_v4(draft: Mapping[str, JsonValue], instruction: str, *, share: bool = False) -> str:
     recipients = f"- To: {draft['to']}\n- Cc: {draft.get('cc') or '-'}"
     if draft.get("bcc"):
         from mail_bcc import summary as bcc_summary
@@ -81,8 +81,14 @@ def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
         recipients = bcc_summary(str(draft["to"]), str(draft.get("cc") or ""),
                                  tuple(str(address) for address in draft["bcc"]))
     size = body_attachment(draft).metadata["size"]
-    return "\n".join(("📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
-                      f"- 본문: 첨부 파일 참조 ({size} bytes)", instruction))
+    lines = ["📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
+             f"- 본문: 첨부 파일 참조 ({size} bytes)"]
+    spec = draft.get("drive_share")
+    if share and isinstance(spec, dict):  # v5: the long-body card showed no share at all
+        from mail_card_compact import share_line
+
+        lines.append(share_line(spec))
+    return "\n".join((*lines, instruction))
 
 
 def _summary_v3(draft: Mapping[str, JsonValue], instruction: str) -> str:

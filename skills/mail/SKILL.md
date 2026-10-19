@@ -258,6 +258,7 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py compose --to <주�
 ```
 
 - **본문에 `<Drive 링크>` 를 정확히 한 번** 쓴다. ✅ 뒤 그 자리가 실제 Drive 링크로 바뀜다. 없거나 두 번 이상이면 exit 2 로 초안을 만들지 않는다.
+- 반대로 `--drive-share` 없이 본문에 `<Drive 링크>` 를 쓰면 카드를 올리지 않고 exit 2 로 거절된다. 공유할 파일이 있으면 `--drive-share` 로 주고, 없으면 그 자리를 지운다.
 - **공유는 사람별 보기 권한(reader)뿐**이다. 링크 공개(anyone)·도메인 공유·편집 권한을 만드는 옵션은 없고, 파일에 소유자와 `--share-with` 사람 말고 다른 권한이 보이면 메일을 보내지 않는다. Drive 는 별도 알림 메일을 보내지 않는다(링크는 우리 메일이 전한다).
 - **올리는 곳**은 `autophagy/공유/<연도>/<날짜>_<파일명>`, `--drive-folder <이름>` 을 주면 `autophagy/공유/<이름>/<연도>/` 다. 요청 시점에 정해져 카드에 보이고 승인에 묶인다.
 - **승인에 묶이는 것**: 파일 sha256·크기, Drive 폴더·파일명, 공유받는 사람, 역할 reader, 본문(자리 포함). 파일은 요청 때 비공개 폴더(`~/.hermes/mail-triage/drive-share/`, 0700)에 복사되고, ✅ 뒤 복사본이 한 바이트라도 다르면 올리지 않는다.
