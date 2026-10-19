@@ -51,6 +51,41 @@ def select_notes(root: Path, *, limit: int, query: str = "") -> tuple[Note, ...]
     return tuple(ranked[:limit])
 
 
+# The model relay refuses input over 256 KiB (live QA 4, 2026-10-19: twelve whole notes were
+# 262,145 bytes); the material fits a budget below it and every cut is listed in the report.
+MATERIAL_BUDGET: Final = 200 * 1024
+_MIN_PART: Final = 2000
+
+
+def load_material(paths: tuple[Path, ...]) -> tuple[Note, ...]:
+    """Notes given as files (a staged Obsidian note, for example), in the order given."""
+    notes = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        notes.append(Note(path, _title(text, path.stem), text, path.stat().st_mtime))
+    return tuple(notes)
+
+
+def fit_budget(notes: tuple[Note, ...], budget: int = MATERIAL_BUDGET) -> tuple[tuple[Note, ...], tuple[str, ...]]:
+    """Keep notes whole while they fit, cut the first that does not, drop the rest; say what went."""
+    kept: list[Note] = []
+    cuts: list[str] = []
+    left = budget
+    for note in notes:
+        size = len(note.body.encode("utf-8"))
+        if size <= left:
+            kept.append(note)
+            left -= size
+        elif left >= _MIN_PART:
+            body = note.body.encode("utf-8")[:left].decode("utf-8", errors="ignore")
+            kept.append(Note(note.path, note.title, body, note.modified_at))
+            cuts.append(f"{note.title}: {size:,}바이트 중 앞 {len(body.encode('utf-8')):,}바이트만 씀")
+            left = 0
+        else:
+            cuts.append(f"{note.title}: 뺌({size:,}바이트)")
+    return tuple(kept), tuple(cuts)
+
+
 def build_prompt(notes: tuple[Note, ...], title: str, evidence: str = "") -> str:
     material = "\n\n".join(
         f"[노트 {index}: {note.title}]\n{note.body}"
@@ -70,10 +105,13 @@ def build_prompt(notes: tuple[Note, ...], title: str, evidence: str = "") -> str
 
 
 def assemble_report(
-    title: str, notes: tuple[Note, ...], draft: str, evidence_sources: str = ""
+    title: str, notes: tuple[Note, ...], draft: str, evidence_sources: str = "",
+    cuts: tuple[str, ...] = (),
 ) -> str:
     note_titles = "\n".join(f"- {note.title}" for note in notes)
     evidence = f"\n\n## 근거\n\n{evidence_sources}" if evidence_sources else ""
+    if cuts:
+        evidence += "\n\n자료 줄임(모델 입력 한도): " + "; ".join(cuts)
     return (
         f"# {title}\n\n"
         "## 자료 범위\n\n"
