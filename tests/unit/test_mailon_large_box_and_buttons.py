@@ -127,7 +127,7 @@ def _project(tmp_path):
     return root, att, StateDB(root / "data/state.db")
 
 
-def _save(db, root, att, uid, files, *, body="본문", date=None, status="ok", folder="inbox"):
+def _save(db, root, att, uid, files, *, body="본문", date=None, real_file_status="ok", folder="inbox"):
     date = date or datetime.now() - timedelta(days=1)
     attachments = []
     for name in files:
@@ -136,7 +136,7 @@ def _save(db, root, att, uid, files, *, body="본문", date=None, status="ok", f
         p.write_bytes(name.encode())
         attachments.append(Attachment(name, p, size=len(name)))
         db.record_attachment(uid, filename=name, href=f"https://mailon.kr/d?{name}",
-                             status="ok" if name in scraper_mod.BUTTON_NAMES else status,
+                             status="ok" if name in scraper_mod.BUTTON_NAMES else real_file_status,
                              local_path=str(p))
     mail = Mail(uid=uid, folder="inbox", subject=f"s{uid}", sender="a@b", date=date,
                 body_text=body, attachments=attachments)
@@ -162,7 +162,7 @@ def test_earlier_button_rows_leave_the_list_the_markdown_and_the_disk(tmp_path):
 
 def test_the_zip_stays_on_disk_when_a_real_file_was_not_saved(tmp_path):
     root, att, db = _project(tmp_path)
-    _save(db, root, att, "8", ["Download all", "b.hwpx"], status="fail")
+    _save(db, root, att, "8", ["Download all", "b.hwpx"], real_file_status="fail")
 
     heal.prune_buttons(db, root, att)
 
