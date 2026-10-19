@@ -169,7 +169,7 @@ def reminder_message(content: str, context: ReminderContext | None) -> OwnerMess
         subject_key=context.key, subject="리마인더", fact=content,
         location=Ref(scope="resource", url=context.url, search=context.source),
         owner=Action(verb="none"), agent_next="다음 틱에 새 대상 확인",
-        recovery="not_applicable", detail=detail,
+        recovery="not_applicable", detail=detail, render_version="owner-ko-v5",
     )
 
 
