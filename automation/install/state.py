@@ -203,7 +203,13 @@ def _peer_attest_key_ready(
 
 
 def _repository_origin(path: Path) -> str | None:
-    if not (path / ".git").is_dir():
+    # A dry run by the operator on an installed node cannot read the ops-owned checkout;
+    # unreadable is "not converged" like any other path the planner cannot inspect,
+    # not an INSTALL-BLOCK (2026-10-19, the release host became the primary node).
+    try:
+        if not (path / ".git").is_dir():
+            return None
+    except PermissionError:
         return None
     # Scoped to this one path, never `--system`: the installer runs as root over
     # checkouts owned by the ops account, and git's dubious-ownership refusal made this

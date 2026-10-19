@@ -53,8 +53,11 @@ def append_binding(existing: str, public_key: str, wrapper: Path) -> str:
 def inspect_probe(action: ProvisionHealthcheckProbe) -> bool:
     if not action.source_dir.is_dir():
         return False
-    result = subprocess.run(generator_command(action, '--inputs-digest'), cwd=action.source_dir,
-                            check=False, capture_output=True, text=True)
+    try:
+        result = subprocess.run(generator_command(action, '--inputs-digest'), cwd=action.source_dir,
+                                check=False, capture_output=True, text=True)
+    except PermissionError:  # the operator's dry run on a node cannot enter the ops checkout
+        return False
     expected = result.stdout.strip() if result.returncode == 0 else None
     if expected is None or re.fullmatch('[0-9a-f]{64}', expected) is None:
         return False
