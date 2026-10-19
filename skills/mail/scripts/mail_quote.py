@@ -228,6 +228,45 @@ class _Sanitizer(HTMLParser):
             self._out.append(html.escape(data, quote=False))
 
 
+# Owner Q275 (2026-10-19): keep the original's look, but nothing that hides or moves text. Only
+# these display properties survive; display, position, visibility, overflow, z-index, opacity,
+# offsets, transforms and everything else are dropped.
+_STYLE_ALLOWED: Final = frozenset({
+    "font", "font-family", "font-size", "font-weight", "font-style", "font-variant", "color",
+    "background-color", "text-align", "text-decoration", "text-indent", "line-height",
+    "letter-spacing", "word-spacing", "white-space", "vertical-align", "width", "height",
+    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+    "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+    "border", "border-top", "border-right", "border-bottom", "border-left", "border-color",
+    "border-style", "border-width", "border-collapse", "border-spacing",
+})
+
+
+def _safe_style(value: str) -> str:
+    kept: list[str] = []
+    for part in value.split(";"):
+        name, separator, raw = part.partition(":")
+        prop, val = name.strip().lower(), raw.strip()
+        if not separator or prop not in _STYLE_ALLOWED or not val or _UNSAFE_STYLE.search(part):
+            continue
+        if "transparent" in val.lower():
+            continue
+        if prop in ("font-size", "line-height", "font") and _too_small(val):
+            continue
+        kept.append(f"{prop}:{val}")
+    return ";".join(kept)
+
+
+def _too_small(value: str) -> bool:
+    """A size that makes text unreadable (0, or under 6px/5pt/0.4em) hides it."""
+    match = re.match(r"^\s*(\d*\.?\d+)\s*(px|pt|em|rem|%)?", value, re.I)
+    if match is None:
+        return False
+    number, unit = float(match.group(1)), (match.group(2) or "px").lower()
+    floor = {"px": 6.0, "pt": 5.0, "em": 0.4, "rem": 0.4, "%": 40.0}[unit]
+    return number < floor
+
+
 def _safe_attributes(tag: str, attrs: list[tuple[str, str | None]]) -> list[tuple[str, str]] | None:
     """The attributes to keep, or ``None`` for an image without an inline source."""
     kept: list[tuple[str, str]] = []
@@ -245,9 +284,7 @@ def _safe_attributes(tag: str, attrs: list[tuple[str, str | None]]) -> list[tupl
                 continue
             has_inline_image = True
         elif name == "style":
-            value = ";".join(
-                part for part in value.split(";") if part.strip() and not _UNSAFE_STYLE.search(part)
-            )
+            value = _safe_style(value)
             if not value:
                 continue
         kept.append((name, value))
