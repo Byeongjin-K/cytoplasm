@@ -205,6 +205,9 @@ sudo runuser -u agent -- python3 -m automation.managed_sync sync
 `personal_approvals_channel_id`(명시적 배포 핀은 `deploy_approvals_channel_id`),
 통지 채널 ID는 `owner_notice_channel_id`로 정한다. 같은 ID를 유지하면 Discord에서
 이름을 바꿀 수 있다. 설정 없는 레거시 승인 조회만 이름 검색을 사용한다.
+릴리스 승인을 재사용하는 스킬 배포(`--release-approval`)의 peer 증명은 이 부모 채널
+설정 대신 `pending/release.json`에 바인딩된 `channel_id`(릴리스 카드 스레드)를 쓴다.
+증명 갱신도 같은 채널에 묶이며, 레코드에 채널이 없으면 배포를 거부한다.
 후자가 채널인 이유는 내 설치의 두 번째 주체(peer 봇)가 같은 메시지를 봐야 하기
 때문이며, 그래서 DM으로 옮길 수 없다.
 

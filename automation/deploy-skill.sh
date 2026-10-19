@@ -1012,6 +1012,8 @@ if [[ "$RELEASE_APPROVAL" == 1 ]]; then
   [[ "$DEPLOY_NONCE" =~ ^[0-9a-f]{32}$ ]] \
     || die "RELEASE-APPROVAL-BLOCK: release record carries no usable nonce"
   log "release approval covers $SKILL@${DIGEST:0:12} — per-skill owner ✅ replaced (VA-2)"
+  # Release cards bind their own thread, not the configured deploy parent channel.
+  DEPLOY_APPROVALS_CHANNEL_ID=""
 elif [[ -n "${APPROVAL_MESSAGE_ID:-}" ]]; then
   MESSAGE_ID="$APPROVAL_MESSAGE_ID"
   DEPLOY_NONCE="${DEPLOY_NONCE:-}"
@@ -1025,12 +1027,14 @@ else
   MESSAGE_ID="${REQUEST_FIELDS[0]}"
   DEPLOY_NONCE="${REQUEST_FIELDS[1]}"
 fi
-# No deploy_approvals_channel_id pin: the gate resolved the surface itself and stored the
-# channel it posted to on the bound record. Signed mode signs (and the gate verifies) that
-# exact channel, so read it from there rather than leave peer_attest without --channel-id.
+# Releases ignore the deploy parent pin above; unpinned per-skill requests also use
+# the channel stored on the bound record. Sign the exact channel the gate verifies.
 if [[ -z "$DEPLOY_APPROVALS_CHANNEL_ID" ]]; then
   BOUND_RECORD="$SKILL"; [[ "$RELEASE_APPROVAL" == 1 ]] && BOUND_RECORD="release"
   DEPLOY_APPROVALS_CHANNEL_ID="$(run_as "$NODE_AGENT_ACCOUNT" "python3 -c 'import json,pathlib; print(json.loads(pathlib.Path(\"~/.hermes/skill-gate/pending/$BOUND_RECORD.json\").expanduser().read_text()).get(\"channel_id\") or \"\")'" 2>/dev/null || true)"
+fi
+if [[ "$RELEASE_APPROVAL" == 1 && -z "$DEPLOY_APPROVALS_CHANNEL_ID" ]]; then
+  die "RELEASE-APPROVAL-BLOCK: release record carries no usable channel" 4
 fi
 if [[ "$PEER_RETIRED" != retired ]]; then
 log "approval request posted; peer attestation required"

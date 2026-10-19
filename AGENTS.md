@@ -39,6 +39,9 @@ Discord의 `#approvals`·`#notifications`는 아래 표와 예시의 관례 이�
 `personal_approvals_channel_id` 또는 명시적 `deploy_approvals_channel_id`와
 type 0을 검증하고, 통지는 `owner_notice_channel_id`를 쓴다.
 설정 없는 레거시 공급망 조회에만 캐시·이름 검색이 남는다.
+`deploy-skill.sh --release-approval`의 peer 증명·TTL 갱신은 부모 채널 핀과 무관하게
+`pending/release.json`의 `channel_id`(릴리스 카드 스레드)에 바인딩한다.
+레코드나 채널이 없으면 peer 호출 전에 거부한다. 일반 스킬 배포의 명시적 핀은 유지한다.
 peer 차단 프로브는 이름으로 한 번 찾은 id를 ops 메모에 남겨 이름이 바뀐 뒤에도 같은 id를 요구한다([기능 소개](docs/기능소개/Discord-승인-통지-채널-ID.md)).
 | 작업 | 위치 | 비고 |
 |------|------|------|
