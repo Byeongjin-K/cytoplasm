@@ -61,8 +61,10 @@ pressure critical 에 닿았고, 재귀로 망가진 기대 지문 때문에 허
 바뀐다. 노드에서 한 번 재생성해야 래퍼 드리프트 체크가 PASS 로 돌아온다(root 불필요).
 
 ```bash
-bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --install <primary-node>
+f=$(mktemp) && sudo -n -u ops -H bash /srv/autophagy-agent-current/automation/healthcheck_probe_wrapper.sh --print <primary-node> > "$f" && bash /srv/autophagy-agent-current/automation/provision-healthcheck-probe.sh --from-file "$f" <primary-node>; rm -f "$f"
 ```
+
+헬스체크 계정(`ops`)이 생성한다 — 드리프트 프로브는 그 계정의 시야로 판정하고, 비공개 루트의 은퇴 표식은 그 계정만 읽는다. 운영자가 `--install` 로 만들면 은퇴한 행이 남아 지문이 영영 맞지 않는다(2026-10-19 노드 실측).
 
 **틱이 조용히 넘어간다(happy path)** — 긴 sweep 이 도는 동안 다음 틱이 뜨면 그 틱은 즉시
 끝난다. 확인은 lock 소유자 쪽 로그가 **하나만** 늘어나는 것으로 한다.

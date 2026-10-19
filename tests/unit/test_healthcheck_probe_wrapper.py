@@ -178,7 +178,7 @@ def test_a_wrapper_built_from_an_older_check_list_fails(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "WRAPPER-DRIFT" in result.stderr
-    assert "--install" in result.stderr, "재생성 명령이 함께 나와야 한다"
+    assert "--from-file" in result.stderr, "재생성 명령이 함께 나와야 한다"
 
 
 def test_a_hand_maintained_wrapper_without_provenance_fails(tmp_path: Path) -> None:
@@ -187,7 +187,7 @@ def test_a_hand_maintained_wrapper_without_provenance_fails(tmp_path: Path) -> N
 
     assert result.returncode != 0
     assert "no provenance header" in result.stderr
-    assert "--install" in result.stderr
+    assert "--from-file" in result.stderr
 
 
 def test_a_wrapper_that_rejects_the_probe_is_itself_the_answer(tmp_path: Path) -> None:
@@ -196,7 +196,7 @@ def test_a_wrapper_that_rejects_the_probe_is_itself_the_answer(tmp_path: Path) -
 
     assert result.returncode != 0
     assert "WRAPPER-DRIFT" in result.stderr
-    assert "--install" in result.stderr
+    assert "--from-file" in result.stderr
 
 
 # --- 배선 -----------------------------------------------------------------------

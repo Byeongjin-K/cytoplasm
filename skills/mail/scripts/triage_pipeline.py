@@ -64,7 +64,8 @@ def compose_and_post(
         **({"format_test": format_test} if format_test else {}),
     )
     recipients = ", ".join(item for item in (to, cc) if item)
-    gap = triage_recipient.related_recipient_gap(
+    # A forward is not a reply: the earlier thread's recipients are not expected here (live QA 1).
+    gap = [] if forward else triage_recipient.related_recipient_gap(
         recipients, subject, triage_gate.list_drafts(), now_utc=triage_core.utc_now())
     notice = ""
     if gap:

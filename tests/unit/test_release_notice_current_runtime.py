@@ -25,7 +25,7 @@ def test_applied_notice_ignores_gateway_models_and_only_lists_real_owner_actions
     }
     facts: list[str] = []
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         assert message is not None
         facts.append(message.fact)
         return True
@@ -42,11 +42,10 @@ def test_applied_notice_ignores_gateway_models_and_only_lists_real_owner_actions
     ])
     # Then: neither obsolete model facts nor intentional retirement become owner work.
     assert rc == 0
-    assert len(facts) == 1
-    assert facts[0] == (
-        f"릴리스 v2.0.1 가 적용되었습니다. (HEAD {head[:12]})\n"
-        "남은 소유자 조치:\n- 보류 1건 — owner-pending"
-    )
+    assert facts == [
+        f"릴리스 v2.0.1 적용 뒤 운영자 조치 (HEAD {head[:12]})\n운영자가 고칠 것:\n- 보류 1건 — owner-pending",
+        "✅ v2.0.1 적용됨",
+    ]
 
 
 def test_workstation_sender_does_not_probe_or_forward_gateway_settings(
