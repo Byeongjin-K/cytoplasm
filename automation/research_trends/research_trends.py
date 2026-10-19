@@ -74,6 +74,11 @@ WEEK_WATERMARK = "delivered-week"
 # 모두 공유 Codex OAuth 클라이언트 하나로만 나간다.
 _STAGE_SYNTHESIS = "glm"
 _STAGE_KOREAN = "codex"
+_STAGE_PROSE = "prose"
+# 형 2026-10-19 10:10 KST: "왜 주어가 다 빠진 걸로 돼 있어?" — 보고서는 주어 있는 온전한 문장.
+# 개조식(문장이 ~함/~임/~음/~됨 으로 끊김)이 이 비율을 넘으면 같은 내용을 문장으로 한 번 다시 쓰게 한다.
+_NOUN_ENDINGS = ("필요", "가능", "중요", "예정", "부족", "확인")
+_TERSE_RATIO = 0.3
 LLM_TIMEOUT_S = 240.0
 ARXIV_MAX_ATTEMPTS = int(os.environ.get("RESEARCH_TRENDS_ARXIV_ATTEMPTS", "4"))
 ARXIV_MIN_INTERVAL_S = float(os.environ.get("RESEARCH_TRENDS_ARXIV_INTERVAL_S", "5.0"))
@@ -247,7 +252,8 @@ def _prompt(
 ) -> str:
     template = PROMPT_PATH.read_text(encoding="utf-8")
     papers_text = "\n".join(
-        f"- {paper.title}\n  abstract: {paper.abstract}\n  link: {paper.url}" for paper in papers
+        f"- [P{index}] {paper.title}\n  abstract: {paper.abstract}\n  link: {paper.url}"
+        for index, paper in enumerate(papers, 1)
     )
     evidence_block = f"\n{evidence}\nUse only MATERIAL/EVIDENCE, cite [En], do not invent." if evidence else ""
     return (
@@ -299,11 +305,43 @@ def _synthesis(topic: str, papers: tuple[Paper, ...], evidence: str = "") -> str
     )
 
 
+def terse_ratio(text: str) -> float:
+    """Share of Korean prose lines that stop in the clipped ~함/~임 style (headings and links ignored)."""
+    lines = [line.strip().lstrip("-*0123456789. ").strip() for line in text.splitlines()]
+    prose = [line for line in lines if line and not line.startswith(("#", "http", "[", "|"))
+             and re.search(r"[가-힣][.。]?$", line)]
+    if len(prose) < 3:
+        return 0.0
+    return sum(_clipped(line) for line in prose) / len(prose)
+
+
+def _clipped(line: str) -> bool:
+    """Does the line stop on a nominal ending (final consonant ㅁ: 함·임·음·됨·남…) or a bare noun?"""
+    word = line.rstrip(".。 ")
+    last = word[-1:]
+    if not last or not "가" <= last <= "힣":
+        return False
+    return (ord(last) - 0xAC00) % 28 == 16 or word.endswith(_NOUN_ENDINGS)
+
+
 def _korean(topic: str, papers: tuple[Paper, ...], draft: str, evidence: str = "") -> str:
-    return _run_llm(
+    text = _run_llm(
         _STAGE_KOREAN, topic,
         _prompt(_STAGE_KOREAN, topic, papers, draft, evidence),
     )
+    if terse_ratio(text) > _TERSE_RATIO:
+        text = _run_llm(_STAGE_PROSE, topic, _prompt(_STAGE_PROSE, topic, papers, text, evidence))
+    return name_papers(text, papers)
+
+
+def name_papers(text: str, papers: tuple[Paper, ...]) -> str:
+    """Turn a leftover [Pn] lookup id into that paper's short title, so no sentence loses its subject."""
+    def short(index: int) -> str:
+        title = papers[index - 1].title
+        return title.split(":")[0].strip()[:60] or title[:60]
+
+    return re.sub(r"\[P(\d+)\]",
+                  lambda m: short(int(m.group(1))) if 0 < int(m.group(1)) <= len(papers) else m.group(0), text)
 
 
 def _bot_token() -> str:
