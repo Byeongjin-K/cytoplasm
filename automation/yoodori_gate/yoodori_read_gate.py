@@ -673,8 +673,8 @@ def main() -> int:
                     sys.stdout.buffer.write(chunk)
             rc = 0
         elif name == "stage":
-            _path, digest, size = stage_file(STAGING, argv[0], sys.stdin.buffer)
-            print(f"STAGED {argv[0]} sha256={digest} bytes={size}")
+            path, digest, size = stage_file(STAGING, argv[0], sys.stdin.buffer)
+            print(f"STAGED {argv[0]} sha256={digest} bytes={size} path={path}")
             rc = 0
         else:
             env = card_env(HOME, RELEASE, ENV) if name in CARD_COMMANDS else ENV
