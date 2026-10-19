@@ -4,9 +4,26 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Final
 
 from automation.deploy_declarations import all_declarations
 from automation.watcher_manifest import ManifestError
+
+
+# The kernel hides a non-dumpable process's cwd and fds even from its own uid (seen on the node
+# 2026-10-19: systemd --user, (sd-pam), gpg-agent, and the "sshd: agent@notty" side of an
+# inbound session). These helpers never hold Hermes product files; any other process we
+# cannot read still makes the whole check refuse.
+OPAQUE_HELPERS: Final = frozenset({"systemd", "(sd-pam)", "gpg-agent", "ssh-agent", "ssh", "sshd"})
+
+
+def _opaque_helper(entry: Path) -> bool:
+    try:
+        argv0 = (entry / "cmdline").read_bytes().split(b"\0", 1)[0].decode()
+    except (OSError, UnicodeError):
+        return False
+    # sshd rewrites its argv0 to "sshd: <user>@<tty>"; the first word names the program.
+    return Path(argv0.split(" ", 1)[0].rstrip(":")).name in OPAQUE_HELPERS
 
 
 def process_paths(proc: Path = Path("/proc")) -> tuple[Path, ...]:
@@ -28,6 +45,10 @@ def process_paths(proc: Path = Path("/proc")) -> tuple[Path, ...]:
                     paths.append(Path(value))
         except FileNotFoundError:
             continue
+        except PermissionError:
+            if _opaque_helper(entry):
+                continue
+            raise
     return tuple(paths)
 
 
