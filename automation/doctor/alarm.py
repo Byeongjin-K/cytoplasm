@@ -72,8 +72,10 @@ def envelope(account: str, body: str, start: datetime, end: datetime) -> OwnerMe
         from automation.interop.owner_message import Action, OwnerMessage, Periodic, Ref
     except ImportError:
         return None
+    findings = body.partition("\n")[2]
     return OwnerMessage(
-        subject_key=account, subject="[doctor 연결·동작 점검]", fact=body.partition("\n")[2],
+        subject_key=account, subject="[doctor 연결·동작 점검]",
+        fact=f"doctor 점검에서 {account} 연결·동작 결과가 바뀌었다\n{findings}",
         location=Ref(scope="none"),
         owner=Action(verb="open", target=Ref(scope="self"), argument="— 본문의 조치 절차 명령으로 확인한다"),
         agent_next="매시 다시 점검해 바뀔 때만 알린다", recovery="not_applicable",

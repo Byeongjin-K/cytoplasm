@@ -12,7 +12,7 @@ def notify_restart(before: str, after: str) -> bool:
     message = OwnerMessage(
         subject_key="meeting-plugin-restart",
         subject="meeting 게이트웨이 플러그인 갱신",
-        fact=f"PLUGIN-CHANGED: {before[:12]} -> {after[:12]}. 파일은 갱신됐지만 재시동 전에는 실행 코드가 다릅니다.",
+        fact=f"meeting 게이트웨이 플러그인 파일이 바뀌었습니다({before[:12]} → {after[:12]}). 재시동 전까지는 이전 코드가 돕니다",
         location=Ref(scope="resource", search=(
             "agent 홈", ".hermes/plugins/00-meeting-gate/__init__.py",
         )),

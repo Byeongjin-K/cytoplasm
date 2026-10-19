@@ -17,7 +17,7 @@ from .owner_message_text import (
 )
 
 __all__: Final = (
-    "Ref", "Action", "Approval", "Result", "Periodic", "OwnerMessage", "render",
+    "Ref", "Action", "Approval", "Result", "Periodic", "OwnerMessage", "render", "render_report",
     "discord_link", "LinkStatus", "LinkResult", "OwnerMessageError", "Space",
 )
 
@@ -204,6 +204,59 @@ def _action(action: Action, location: str, destination: Ref) -> str:
         target = "위 위치"
     argument = "" if action.argument is None else f" {action.argument}"
     return f"{target} · {verb}{argument}"
+
+
+def _report_fact(fact: str) -> str:
+    text = ""
+    for raw in fact.splitlines():
+        line = " ".join(raw.split()).removeprefix("- ")
+        if line:
+            text = line if not text else f"{text}{' ' if text.endswith(':') else '; '}{line}"
+    return f"{text.rstrip(' .;')}."
+
+
+def _report_evidence(location: Ref, destination: Ref, what: str) -> str | None:
+    if location.scope in ("none", "self"):
+        return None
+    reference = _reference(location, destination)
+    if reference.startswith("https://"):
+        return f"<{reference}>"
+    if reference == "여기" or location.search is None:
+        return None
+    label, key = location.search
+    if all(part.strip() in what for part in key.split(",")):
+        return None
+    return f"{label} {key}"
+
+
+def _report_left(message: OwnerMessage) -> str:
+    action = message.owner
+    argument = (action.argument or "").strip().lstrip("—-").strip().rstrip(" .")
+    match action.verb:
+        case "none":
+            return (message.agent_next or "없음").rstrip(" .")
+        case "react":
+            return argument or "반응"
+        case "reply":
+            return argument or "답글"
+        case "open":
+            return argument or "확인"
+        case _:
+            assert_never(action.verb)
+
+
+def render_report(message: OwnerMessage, *, destination: Ref) -> str:
+    """Pair-channel report shape (lead Q304): one headless line, not a render version.
+
+    What happened, one place to check, and what is left. The header, field rows and reference footer
+    stay in the record, and the owner-facing render versions keep their bytes (append-only).
+    """
+    _validate(message, destination)
+    what = _report_fact(message.fact)
+    evidence = _report_evidence(message.location, destination, what)
+    left = _report_left(message)
+    tail = f"확인할 곳은 {evidence}, 남은 일은 {left}" if evidence else f"남은 일은 {left}"
+    return f"{what} {tail}."
 
 
 def render(message: OwnerMessage, *, destination: Ref) -> str:

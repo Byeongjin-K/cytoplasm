@@ -37,23 +37,23 @@ CACHE_REF: Final = Ref(scope="resource", space="unknown", guild_id=None,
 MIXED_REF: Final = Ref(scope="resource", space="unknown", guild_id=None,
     channel_id=None, message_id=None, url=None, search=("헬스체크", "cache, db"))
 OPEN_MESSAGE: Final = OwnerMessage(
-    subject_key="cache", subject="헬스체크 관측", fact="신규 실패: cache; 회복: 없음",
+    subject_key="cache", subject="헬스체크 관측", fact="헬스체크 「cache」 점검이 새로 실패했습니다",
     location=CACHE_REF, owner=Action("open", CACHE_REF, "원인 확인; 확인 전 재시작·설정변경·키 재발급 금지"),
     agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
     render_version="owner-ko-v2")
 CLOSED_MESSAGE: Final = OwnerMessage(
-    subject_key="cache", subject="헬스체크 관측", fact="신규 실패: 없음; 회복: cache",
+    subject_key="cache", subject="헬스체크 관측", fact="헬스체크 「cache」 점검이 회복됐습니다",
     location=CACHE_REF, owner=Action("none", None, None),
     agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
     render_version="owner-ko-v2")
 MIXED_MESSAGE: Final = OwnerMessage(
-    subject_key="cache, db", subject="헬스체크 관측", fact="신규 실패: cache; 회복: db",
+    subject_key="cache, db", subject="헬스체크 관측", fact="헬스체크 「cache」 점검이 새로 실패했고 「db」 점검은 회복됐습니다",
     location=MIXED_REF, owner=Action("open", MIXED_REF, "원인 확인; 확인 전 재시작·설정변경·키 재발급 금지"),
     agent_next="다음 스윕에서 상태 관측", recovery="not_applicable", detail=Result("executed"),
     render_version="owner-ko-v2")
-OPEN_WIRE: Final = '**✅ 헬스체크 관측**\n> 신규 실패: cache; 회복: 없음\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache`'
-CLOSED_WIRE: Final = '대상: 헬스체크 관측 (cache)\n사실: 신규 실패: 없음; 회복: cache (실행 완료)\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n인계: 소유자: 조치 없음; 다음: 다음 스윕에서 상태 관측\n되돌리기: 해당 없음'
-MIXED_WIRE: Final = '**✅ 헬스체크 관측**\n> 신규 실패: cache; 회복: db\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache, db\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache, d`'
+OPEN_WIRE: Final = '**✅ 헬스체크 관측**\n> 헬스체크 「cache」 점검이 새로 실패했습니다\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache`'
+CLOSED_WIRE: Final = '대상: 헬스체크 관측 (cache)\n사실: 헬스체크 「cache」 점검이 회복됐습니다 (실행 완료)\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache\n인계: 소유자: 조치 없음; 다음: 다음 스윕에서 상태 관측\n되돌리기: 해당 없음'
+MIXED_WIRE: Final = '**✅ 헬스체크 관측**\n> 헬스체크 「cache」 점검이 새로 실패했고 「db」 점검은 회복됐습니다\n\n**결과:** 실행 완료 · 위 위치 · 열기 원인 확인; 확인 전 재시작·설정변경·키 재발급 금지\n위치: 링크 없음 (주소 없음); 검색: 헬스체크 / cache, db\n다음: 다음 스윕에서 상태 관측\n-# 참조: `cache, d`'
 TRANSITIONS: Final = {
     "open": ((), ("cache|http_200|node|ops|resource",), OPEN_MESSAGE, OPEN_WIRE),
     "closed": (("cache",), (), CLOSED_MESSAGE, CLOSED_WIRE),

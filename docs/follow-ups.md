@@ -386,6 +386,5 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 ## v2.6.7 배포 중단에서 남긴 것 (2026-10-20)
 
 - **승인 대기 중 main 이 앞서가면 그 릴리스의 스킬 배포가 전부 막힌다** — `deploy-skill.sh` 가 자기 파일을 `origin/main` 과 대조하므로, v2.6.7(59e22c6) ✅ 대기 중 #144 가 `deploy-skill.sh` 한 줄을 바꾸자 여덟 스킬이 `DEPLOY-BLOCK` 으로 멈췄다. 노드 릴리스 트리는 수렴했고 스킬 마운트만 옛 판이다 → `deploy_all` 이 서명 태그가 `origin/main` 의 조상일 때 provenance 기준을 그 릴리스 SHA 로 넘길지 판단한다(공개 main 에 있는 코드만 배포한다는 불변식은 유지). 영향: ✅ 대기가 길수록 스킬 갱신 누락 · 심각도 중.
-- **페어 채널 장애 통지는 아직 다섯 칸 봉투(`대상:`·`사실:`·`위치:`·`인계:`·`되돌리기:`)로 나간다** — #144 는 형 채널 글만 걸렀고 `notify_owner(..., fault=True)` 경로는 봉투를 자르지 않는다. 생산자는 `healthcheck_notify`·`doctor/alarm`·`deploy_reconcile_notice`·`supply_chain_shadow_watch`·`managed_sync_watch`·`release_applied_notice` 다. 형이 2026-10-20 05:57 KST meeting 플러그인 글을 보고 "이렇게 출력되는 거 없앤 거 아니었어?" 라고 물었다. 그 글 자체는 P5 노드에서 나가지 않게 고쳤다 → 페어 채널도 형 정기 알림(`owner-ko-v5`)처럼 한 줄 판본으로 옮길지 정한다(저장된 판본·해시 불변). 영향: 페어 채널 가독성 · 심각도 중.
 - **meeting 재시동 통지와 루트 AGENTS.md 가 없는 문서 `docs/guide/operations.md §2` 를 가리킨다** — 파일이 리포에 없다 → 실제 게이트웨이 재시동 절차 문서로 바꾸거나 절을 되살린다. 영향: 안내 링크가 막힘 · 심각도 낮음.
 - **v2.6.8 이 P5 노드에 meeting 플러그인을 다시 밀었다** — 은퇴 목적지인 `~/.hermes/plugins/00-meeting-gate/` 에 2f3e8b845308 판이 남아 있다. 읽는 게이트웨이가 없어 동작 영향은 없다 → 다음 P5 정리에서 지울지 판단한다. 심각도 낮음.

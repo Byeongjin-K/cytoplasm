@@ -2803,3 +2803,8 @@ runtime-package 프로브의 `cron/` 오탐을 고쳤다. 그 과정에서 드�
 
 - **수리 push 의 누출 게이트가 노드에서는 금칙어 없이 돈다** — `RepairWorkClone.push_branch` 는 `public_gate range` 를 돌리지만 노드에는 ops 저장소가 없어 금칙어 목록이 없고 경로·토폴로지 검사만 돈다(`PUBLIC-GATE-DENYLIST-UNSET`). 실명·과제명이 섞인 수리 패치는 막지 못한다 → 금칙어 목록 사본을 노드 비공개 루트(`/srv/autophagy-private/`)에 두고 수리 유닛 환경에 `PUBLIC_GATE_DENYLIST` 를 선언한다(목록 갱신 경로 포함). **영향: 노드 관찰 유래 패치의 실명 누출 가능성 · 심각도 중(노드 전환 F 전에 닫을 것)**.
   ↳ 처리(2026-10-07 · 해소): 노드 비공개 루트에 금칙어 목록 사본을 두고 수리 유닛 환경에 `PUBLIC_GATE_DENYLIST` 를 선언했다. 실제 id 를 담은 시험 커밋이 수리 push 경로에서 REFUSED 되는 것을 확인했다. 목록 갱신은 아직 손으로 한다(운영 저장소의 목록을 고치면 CI 비밀과 노드 사본을 함께 갱신).
+
+## v2.6.7 배포 중단에서 남긴 것 (2026-10-20)
+
+- **페어 채널 장애 통지는 아직 다섯 칸 봉투(`대상:`·`사실:`·`위치:`·`인계:`·`되돌리기:`)로 나간다** — #144 는 형 채널 글만 걸렀고 `notify_owner(..., fault=True)` 경로는 봉투를 자르지 않는다. 생산자는 `healthcheck_notify`·`doctor/alarm`·`deploy_reconcile_notice`·`supply_chain_shadow_watch`·`managed_sync_watch`·`release_applied_notice` 다. 형이 2026-10-20 05:57 KST meeting 플러그인 글을 보고 "이렇게 출력되는 거 없앤 거 아니었어?" 라고 물었다. 그 글 자체는 P5 노드에서 나가지 않게 고쳤다 → 페어 채널도 형 정기 알림(`owner-ko-v5`)처럼 한 줄 판본으로 옮길지 정한다(저장된 판본·해시 불변). 영향: 페어 채널 가독성 · 심각도 중.
+  ↳ 처리(2026-10-20 · 해소, RESOLVED-SOURCE): 리드 Q304 로 페어 채널 봉투는 `owner_message.render_report` 한 줄(무엇이 됐나·확인할 곳·남은 일)이 되고, 헬스체크·meeting 플러그인·doctor 의 `fact` 를 문장으로 고쳤다. 형 채널 판본·저장 봉투는 불변. 강제 `tests/unit/test_pair_report_shape.py`. 배포 증거 아님 — 실제 페어 알림 한 건 확인은 다음 릴리스 장부.
