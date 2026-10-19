@@ -219,6 +219,7 @@ def build_send_argv(
     attachments: tuple[str | Path, ...] = (),
     cc: str = "",
     bcc: tuple[str, ...] = (),
+    body_html: str = "",
 ) -> tuple[str, ...]:
     """The exact mailon send argv frozen into a draft (W0-7b contract)."""
     argv = (python, "-m", "mailon.main", "send", "--to", to)
@@ -227,6 +228,8 @@ def build_send_argv(
     if bcc:
         argv += ("--bcc", ",".join(bcc))
     argv += ("--subject", subject, "--body", body)
+    if body_html:  # the reply in the owner's font + the quote (mail_quote.html_body)
+        argv += ("--body-html", body_html)
     for path in attachments:
         argv += ("--attachment", str(path))
     return argv + ("--confirm-send", "--json")
@@ -259,6 +262,9 @@ def draft_sha256(record: dict) -> str:
         bound["bcc"] = record["bcc"]
     if "quote" in record:  # the answered mail sent below the body (mail_quote)
         bound["quote"] = record["quote"]
+    for key in ("quote_html", "quote_format"):  # the HTML quote and whether it kept the format
+        if key in record:
+            bound[key] = record[key]
     if "forward" in record:  # a forward's source marker (mail_forward)
         bound["forward"] = record["forward"]
     if "drive_share" in record:  # file sha256, Drive folder, people, role (mail_drive_share)

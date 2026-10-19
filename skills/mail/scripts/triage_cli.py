@@ -184,10 +184,13 @@ def _compose(
             args.to, subject, body,
         )
     in_reply_to = str(getattr(args, "in_reply_to", "") or "")
+    quote_html = None
     if forward is not None:
         quote = forward.quote
     elif in_reply_to:
-        quote = mail_quote.render_quote(mail_quote.parse_original(_get_mail(in_reply_to)))
+        original = mail_quote.parse_original(_get_mail(in_reply_to))
+        quote = mail_quote.render_quote(original)
+        quote_html = mail_quote.render_quote_html(original)
     else:
         quote = ""
     extra = tuple(getattr(args, "attachment", ()) or ())
@@ -198,6 +201,7 @@ def _compose(
         origin_channel_id=str(getattr(args, "origin_channel_id", "") or ""),
         origin_message_id=str(getattr(args, "origin_message_id", "") or ""),
         quote=quote,
+        quote_html=quote_html,
         forward=forward.record() if forward else None,
         drive_share=share,
         **({"bcc": args.bcc_addresses} if getattr(args, "bcc_addresses", ()) else {}),

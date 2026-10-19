@@ -83,6 +83,10 @@ def render_approvals_message(
             f"- 전달 원문: {source} 원문(헤더+본문)이 발송 본문 하단에, "
             f"원 첨부 {forward.get('attachment_count', 0)}개가 바이트 그대로 붙습니다"
         )
+    elif draft.get("quote_format") == "original":
+        lines.append("- 원문 인용: 원본 서식 유지")
+    elif draft.get("quote_format") == "text":
+        lines.append("- 원문 인용: 포함 (원본 서식 없이 글자만)")
     elif draft.get("quote"):
         lines.append("- 원문 인용: 포함 (수신 메일 원문이 발송 본문 하단에 붙습니다)")
     attachments = draft.get("attachments") or []
