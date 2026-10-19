@@ -40,9 +40,5 @@ push_file "$repo_root/skills/mail/scripts/watch_failure_streak.py" \
 push_file "$repo_root/automation/research_trends/research_trends.py" '.hermes/scripts/research_trends.py'
 push_file "$repo_root/prompts/research-trends-v1.md" '.hermes/research-trends/research-trends-v1.md'
 
-run_agent 'grep -qx "timezone: Asia/Seoul" "$HOME/.hermes/config.yaml"'
-# Weekday catch-up and owner-visible incident delivery converge in one in-place edit.
-run_agent 'PATH="$HOME/.local/bin:$PATH"; job_id=$(hermes cron list --all | awk "/^  [0-9a-f]+ \[/{id=\$1} /Name:[[:space:]]+research-trends\$/{print id; exit}"); if [ -n "$job_id" ]; then hermes cron edit "$job_id" --schedule "0 9 * * 1-5" --deliver discord --no-agent --script research_trends.py; else hermes cron create "0 9 * * 1-5" --name research-trends --no-agent --script research_trends.py --deliver discord; fi'
-source "$repo_root/automation/deploy_timer.sh"
-converge_timer research-trends "0 9 * * 1-5" research_trends.py discord
-run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all'
+# The weekly report moved outside cytoplasm. Keep the runtime available, but
+# never register a schedule; retired_jobs removes the live timer in the release.

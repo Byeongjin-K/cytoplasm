@@ -2,5 +2,6 @@
 agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-memory-curator-watch.timer|v2:derived;algorithm=retired-job-v1
 agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-memory-relocate-watch.timer|v2:derived;algorithm=retired-job-v1
 agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-reminder-poller.timer|v2:derived;algorithm=retired-job-v1
+agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-research-trends.timer|v2:derived;algorithm=retired-job-v1
 agent|automation/retired_jobs|state/reminders.db|v2:derived;algorithm=retired-reminder-data-v1
 agent|automation/retired_jobs|state/milestones.yaml|v2:derived;algorithm=retired-reminder-data-v1

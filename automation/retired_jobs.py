@@ -1,4 +1,4 @@
-"""Declared removal of the three owner-retired agent timers and reminder data."""
+"""Declared removal of owner-retired agent timers and reminder data."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ from typing import Final
 
 from automation.gateway_retirement import Runner, checked, run, safe_path, stopped
 
-JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller")
+JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends")
 ALGORITHM: Final = "retired-job-v1"
 DATA: Final = ("state/reminders.db", "state/milestones.yaml")
 

@@ -179,15 +179,17 @@ def test_garbage_streak_state_does_not_crash_tick(
     assert (root / "research-trends.json").read_text(encoding="utf-8") == "{garbage"
 
 
-def test_deploy_ships_helper_and_converges_weekday_schedule() -> None:
+def test_deploy_ships_helper_without_registering_the_retired_schedule() -> None:
     deploy = _DEPLOY.read_text(encoding="utf-8")
     helper = "$repo_root/skills/mail/scripts/watch_failure_streak.py"
     provenance = deploy.split("deploy_provenance_check", 1)[1].split("|| exit", 1)[0]
 
     assert helper in provenance
     assert f'push_file "{helper}"' in deploy
-    assert 'hermes cron edit "$job_id" --schedule "0 9 * * 1-5"' in deploy
-    assert "--deliver discord --no-agent --script research_trends.py" in deploy
+    assert "hermes cron edit" not in deploy
+    assert "hermes cron create" not in deploy
+    assert not any(line.lstrip().startswith(("converge_timer ", "converge_cron "))
+                   for line in deploy.splitlines())
 
 
 @pytest.mark.parametrize("run_ok", [False, True])

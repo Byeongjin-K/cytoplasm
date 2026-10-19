@@ -1,7 +1,7 @@
 ---
 name: report
 description: "내 노트로 보고서·발표 슬라이드·대본을 만들라고 할 때 사용. 개인 노트로 보고서·reveal.js 슬라이드·발표 대본을 생성한다. 모든 입력은 같은 모델·발행 경로를 사용한다. W5-3."
-version: 1.1.2
+version: 1.1.3
 author: autophagy-agents
 license: MIT
 metadata:
@@ -12,6 +12,11 @@ prerequisites:
 ---
 
 # report — 노트 → 보고서 → 슬라이드 → 대본
+
+이 스킬은 요청받은 노트 보고서를 만든다. 주간 연구 보고서와 그 키워드는
+cytoplasm 밖 별도 연구 에이전트 공도리가 관리하므로 공도리 채널에서 요청한다.
+유돌은 노드 `research-trends` 예약이나 `topics` 목록 변경으로 주간 보고서가
+생성·갱신된다고 안내하지 않는다.
 
 모든 입력은 `~/notes/`(700)에서만 읽고, 모든 산출물은 `~/outputs/`(700)에만
 쓴다. 공유(Drive/repo 이동)는 자동으로 하지 않으며, cha의 명시적 공유 결정 후에만
@@ -65,7 +70,7 @@ python3 /srv/autophagy-skills/live/report/scripts/report_cli.py script \
 근거·0600 사이드카를 검증한다.
 
 ## Drive 게시 (최종본)
-최종 산출물은 `DRIVE_PUBLISH_ENABLED=1`일 때 cha 본인 Drive의 `autophagy/주간동향/<YYYY>/<YYYY-Www>_주간연구동향/`에 생성 즉시 자동 업로드된다(초안 제외, 리뷰용, 게이트 없음). 보고서·슬라이드·대본 3종이 그 주간 번들 폴더 한 곳에 모이며, 같은 주에 다시 만들면 새 파일이 생기지 않고 기존 파일이 갱신된다. 발행은 공용 파사드 `automation.drive_outputs`만 쓴다. 상세: `docs/guide/drive-publish.md`.
+최종 산출물은 `DRIVE_PUBLISH_ENABLED=1`일 때 cha 본인 Drive의 `autophagy/주간동향/<YYYY>/<YYYY-Www>_주간연구동향/`에 생성 즉시 자동 업로드된다(초안 제외, 리뷰용, 게이트 없음). 이 경로명은 요청형 보고서의 기존 저장 규약이며 노드 주간 보고 예약을 뜻하지 않는다. 공도리의 보고서·키워드 목록과 자동 연동하지 않는다. 보고서·슬라이드·대본 3종이 그 주간 번들 폴더 한 곳에 모이며, 같은 주에 다시 만들면 새 파일이 생기지 않고 기존 파일이 갱신된다. 발행은 공용 파사드 `automation.drive_outputs`만 쓴다. 상세: `docs/guide/drive-publish.md`.
 
 ## 재료 파일과 입력 한도 (2026-10-19)
 
