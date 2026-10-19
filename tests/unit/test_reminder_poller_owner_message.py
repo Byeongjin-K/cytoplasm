@@ -35,6 +35,7 @@ def poll_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('REMINDER_MILESTONES_FILE', str(milestones))
     monkeypatch.setenv('REMINDER_DB', str(tmp_path / 'reminders.db'))
     monkeypatch.setenv('REMINDER_NOW', NOW.isoformat())
+    monkeypatch.setenv('REMINDER_CALENDAR_EVENTS', '1')  # the node calendar leg is off by default (Q276)
     monkeypatch.setenv('DISCORD_BOT_TOKEN', 'test-token')
     monkeypatch.delenv('REMINDER_DRY_RUN', raising=False)
 
