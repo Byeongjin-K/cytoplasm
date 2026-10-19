@@ -236,6 +236,12 @@ _NODE_READ_EXEMPT: dict[str, str] = {
 
 @pytest.fixture(autouse=True)
 def _no_real_node_reads(request: pytest.FixtureRequest) -> Iterator[None]:
+    # hermes_compat_boot merges an installed runtime into automation.__path__; drop it
+    # before each test as sys.path does, so package imports never scan the node's copy.
+    package = sys.modules.get("automation")
+    search = getattr(package, "__path__", None)
+    if isinstance(search, list):
+        search[:] = [entry for entry in search if not _node_path(str(entry))]
     _node_reads.clear()
     yield
     key = f"{Path(str(request.node.path)).name}::{request.node.originalname}"
