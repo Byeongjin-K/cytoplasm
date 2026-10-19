@@ -9,6 +9,9 @@ Drive 만 폴링한다 — Discord 메시지·첨부를 수신하지 않으므�
 
 **stdout 이 곧 통지다.** `--no-agent` cron 은 빈 stdout 을 침묵으로 다루므로, 만들 회의록이
 없는 밤에는 아무 말도 하지 않는다. 매일 도는 작업의 "할 일 없음" 한 줄은 1년이면 365번이다.
+그래서 자식 `meeting_cli.py ingest` 의 stdout(결과 JSON)은 잡아서 stderr(내부 로그)로 넘기고, 형에게는
+"회의록 하나 만들었어 — 10/19 stt-56" + Drive 링크만 낸다(형 지시 2026-10-20 00:10 KST — 맨 위에 원시 JSON 이
+붙은 글을 형이 가리켰다).
 
 `!meeting` 대화형 경로는 미처리가 여러 건이면 고르지 않고 멈춘다 — 소유자가 즉시 보고
 고를 수 있기 때문이다. 야간 배치는 그럴 수 없어 상한까지 순차 처리한다. 매일 밤 같은
@@ -17,10 +20,13 @@ Drive 만 폴링한다 — Discord 메시지·첨부를 수신하지 않으므�
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
@@ -40,7 +46,53 @@ SECRET_KEYS: Final = (
     "DRIVE_GWS_BIN",
 )
 
-Runner = Callable[[list[str], dict[str, str]], int]
+#: 자식 하나를 돌려 (종료코드, stdout) 을 돌려준다.
+Runner = Callable[[list[str], dict[str, str]], tuple[int, str]]
+_DATED: Final = re.compile(r"(\d{4})-(\d{2})-(\d{2})_(.+?)(?:\.md)?")
+
+
+@dataclass(frozen=True, slots=True)
+class Made:
+    name: str
+    project: str
+    link: str
+
+    @property
+    def label(self) -> str:
+        match = _DATED.fullmatch(self.name)
+        if match is None:
+            return self.project or Path(self.name).stem
+        _, month, day, rest = match.groups()
+        return f"{int(month)}/{int(day)} {self.project or rest}"
+
+
+def made_from(name: str, stdout: str) -> Made:
+    """자식의 마지막 JSON 줄에서 과제명·링크만 읽는다. 못 읽으면 전사본 이름으로 쓴다."""
+    for line in reversed(stdout.splitlines()):
+        if not line.startswith("{"):
+            continue
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(result, dict):
+            return Made(name, str(result.get("project") or ""), str(result.get("link") or ""))
+    return Made(name, "", "")
+
+
+def owner_text(made: Sequence[Made], failed: Sequence[str], remaining: int) -> str:
+    """형 채널 글 — 무엇이 됐나 + 링크. 파일명·JSON 은 싣지 않는다."""
+    lines: list[str] = []
+    if len(made) == 1:
+        lines += [f"회의록 하나 만들었어 — {made[0].label}", *([made[0].link] if made[0].link else [])]
+    elif made:
+        lines.append(f"회의록 {len(made)}개 만들었어")
+        lines += [f"- {item.label}" + (f" {item.link}" if item.link else "") for item in made]
+    if failed:
+        lines.append(f"{len(failed)}건은 못 만들어서 다음 밤에 다시 해 볼게: {', '.join(failed)}")
+    if remaining > 0:
+        lines.append(f"남은 {remaining}건은 다음 밤에 이어서 할게.")
+    return "\n".join(lines)
 
 
 def read_secrets(env: Mapping[str, str]) -> dict[str, str]:
@@ -101,11 +153,14 @@ def load_pending(scripts: Path, env: Mapping[str, str]) -> Sequence[Any]:
     return meeting_project.pending_transcripts()
 
 
-def spawn(argv: list[str], environment: dict[str, str]) -> int:
+def spawn(argv: list[str], environment: dict[str, str]) -> tuple[int, str]:
     completed = subprocess.run(  # noqa: S603
-        argv, env=environment, check=False, timeout=CHILD_TIMEOUT
+        argv, env=environment, check=False, timeout=CHILD_TIMEOUT,
+        stdout=subprocess.PIPE, text=True, errors="replace",
     )
-    return completed.returncode
+    if completed.stdout:
+        sys.stderr.write(completed.stdout)
+    return completed.returncode, completed.stdout or ""
 
 
 def _limit(env: Mapping[str, str]) -> int:
@@ -145,26 +200,22 @@ def run_once(
     child_env = child_environment(environment)
     call = runner if runner is not None else spawn
     cli = str(resolved_scripts / "meeting_cli.py")
-    done: list[str] = []
+    done: list[Made] = []
     failed: list[str] = []
     for item in candidates[:limit]:
         argv = [sys.executable, cli, "ingest", "--pending-name", item.name]
         try:
-            code = call(argv, child_env)
+            code, stdout = call(argv, child_env)
         except Exception as failure:  # noqa: BLE001 - 전사본은 서로 독립이다
-            code = -1
+            code, stdout = -1, ""
             print(f"  자식 예외 {item.name}: {type(failure).__name__}", file=sys.stderr)
-        (done if code == 0 else failed).append(item.name)
+        if code == 0:
+            done.append(made_from(item.name, stdout))
+        else:
+            failed.append(item.name)
 
     remaining = len(candidates) - len(done) - len(failed)
-    lines = [f"미처리 전사본 {len(candidates)}건 중 {len(done)}건을 회의록으로 만들었습니다."]
-    lines += [f"- {name}" for name in done]
-    if failed:
-        lines.append(f"실패 {len(failed)}건 — 다음 밤에 다시 시도합니다:")
-        lines += [f"- {name}" for name in failed]
-    if remaining > 0:
-        lines.append(f"이번 틱 상한({limit})을 넘은 {remaining}건은 다음 밤으로 넘깁니다.")
-    print("\n".join(lines))
+    print(owner_text(done, failed, remaining))
     return 1 if failed else 0
 
 
