@@ -46,8 +46,14 @@ def config_without_gateway(data: bytes) -> bytes:
         block_end = next((i for i in range(index + 1, end)
                           if not lines[i].startswith(indent)), end)
         body = [line.rstrip(b"\r\n") for line in lines[index + 1:block_end]]
-        if (len(body) != 2 or set(row.split(b":", 1)[0] for row in body) !=
-                {indent + b"base_url", indent + b"key_env"}):
+        # The node's real blocks (2026-10-19) carry name/default_model/api_mode beside the two
+        # fields we check; any other field, a repeat or a nested line still refuses.
+        optional = {b"name", b"default_model", b"api_mode"} if heading == b"providers:" else {b"api_mode"}
+        keys = [row.split(b":", 1)[0] for row in body]
+        names = [key.removeprefix(indent) for key in keys]
+        if (any(b":" not in row for row in body) or any(name[:1] in (b" ", b"-", b"") for name in names)
+                or len(set(names)) != len(names)
+                or not {b"base_url", b"key_env"} <= set(names) <= {b"base_url", b"key_env"} | optional):
             raise ValueError("GATEWAY-RETIRE-REFUSED: 제공자 설정 필드 불일치")
         values = {row.split(b":", 1)[0].strip(): row.split(b":", 1)[1].strip() for row in body}
         if values[b"base_url"].strip(b"'\"") not in (

@@ -230,3 +230,23 @@ def test_symlinks_are_never_followed(tmp_path: Path, relative: str) -> None:
         retirement.remove(home, role, HEAD, runner=_runner([]))
     assert original.exists()
     assert not (home / retirement.MARKER).exists()
+
+
+def test_the_nodes_real_block_shape_is_removed_and_an_unknown_field_still_refuses() -> None:
+    # Shape read from the node's agent config on 2026-10-19 (keys only): providers.litellm has
+    # five fields, the custom_providers entry three; each is the only entry under its heading.
+    real = (
+        b"model:\n  provider: openai-codex\nproviders:\n  litellm:\n    name: LiteLLM\n"
+        b"    base_url: http://127.0.0.1:4000/v1\n    key_env: LITELLM_AGENT_KEY\n"
+        b"    default_model: some-model\n    api_mode: chat_completions\n"
+        b"custom_providers:\n- name: litellm\n  base_url: http://127.0.0.1:4000/v1\n"
+        b"  key_env: LITELLM_AGENT_KEY\n  api_mode: chat_completions\n"
+        b"fallback_providers:\n  - provider: xai-oauth\n"
+    )
+    assert retirement.config_without_gateway(real) == (
+        b"model:\n  provider: openai-codex\nproviders: {}\ncustom_providers: []\n"
+        b"fallback_providers:\n  - provider: xai-oauth\n"
+    )
+    with pytest.raises(ValueError, match="필드 불일치"):
+        retirement.config_without_gateway(real.replace(b"    api_mode: chat_completions\n",
+                                                   b"    api_mode: chat_completions\n    extra: x\n"))
