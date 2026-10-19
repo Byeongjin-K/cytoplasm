@@ -278,12 +278,12 @@ class DiscordChannelDirectory:
         a second one. Anything that is not such a thread keeps the announcement path.
         """
         try:
-            facts = self.describe(origin_channel_id)
+            facts = self.describe(origin_channel_id, resolve_guild=True)
         except ApprovalSurfaceError:
             return None
         if facts.channel_type not in (11, 12) or facts.parent_id != channel_id:
             return None
-        object.__setattr__(self, "_approval_guild_id", self._cached_guild())
+        self._remember_guild(facts.guild_id or self._cached_guild())
         return origin_channel_id
 
     def _post_title(self, thread_id: str, kind: ApprovalKind, request: RequestThread) -> None:
@@ -314,7 +314,7 @@ class DiscordChannelDirectory:
         )
         return _required_string(_json_object(posted, "request notice"), "id", "request notice")
 
-    def describe(self, channel_id: str) -> ChannelFacts:
+    def describe(self, channel_id: str, *, resolve_guild: bool = False) -> ChannelFacts:
         """Return parsed channel facts or refuse an unverifiable Discord response."""
         body = _json_object(self._request("GET", f"/channels/{channel_id}"), "channel description")
         channel_type = body.get("type")
@@ -338,8 +338,8 @@ class DiscordChannelDirectory:
         if parent is not None and not isinstance(parent, str):
             raise ApprovalSurfaceError("channel description has an invalid parent")
         guild_id = _optional_guild_id(body.get("guild_id"))
-        if channel_type in (11, 12) and parent == _configured_agent_chat_channel():
-            # 좌표는 생성 응답 또는 계정 캐시에서만 온다. 검증 GET은 표면만 검증한다.
+        if channel_type in (11, 12) and parent == _configured_agent_chat_channel() and not resolve_guild:
+            # Only a newly reused owner thread adopts live coordinates, never stored bindings.
             guild_id = self._approval_guild_id
         return ChannelFacts(channel_type, channel_name, recipient_ids, parent, guild_id)
 

@@ -43,6 +43,7 @@ def supersede_older(draft: dict) -> list[str]:
 
 
 def _close(record: dict) -> bool:
+    """Expire only the old card, never the thread holding the newer pending card."""
     approval = import_module("triage_approval")
     gate_module = import_module("triage_approval_gate")
     key = approval.approval_key(record)
