@@ -98,7 +98,7 @@ _RAW_CONTENT_EXEMPT: dict[str, str] = {}
 # Permanent means structural, not unchecked: every row must still be raw and live.
 _PERMANENT_RAW_CONTENT_EXEMPT: dict[str, str] = {
     "automation/auto_write_summary.py::summarize": "Q233의 고정 제목과 종류별 목록을 한 메시지로 보내는 일일 영수증 요약 — 소유자 지시 형식이며 내용은 원장의 시간·경로뿐, 목적지와 발신 봇은 owner_notice가 해석",
-    "automation/cron_timer_run.py::_execute": "Hermes deliver=discord와 똑같이 정기 작업 stdout을 홈 채널로 그대로 전달하는 경계 — 문구는 작업 스크립트가 소유하며 추가 텍스트는 실패 안내 한 줄뿐이다. Hermes 전달을 퇴역한 뒤 봉투 이관을 후속 처리한다",
+    "automation/cron_timer_run.py::_execute": "Hermes deliver=discord와 같은 자리로 정기 작업 stdout을 전달하는 경계 — 문구는 작업 스크립트가 소유하고, 형 채널로 가기 전 owner_text 규칙이 JSON 줄은 출력 기록에, 진단 줄은 페어 채널로 돌린다(2026-10-20). 추가 텍스트는 실패 안내 한 줄뿐이다. Hermes 전달을 퇴역한 뒤 봉투 이관을 후속 처리한다",
     "automation/interop/approval_directory.py::DiscordChannelDirectory._post_title": "영구 스레드 제목 — 새 요청 스레드 첫 줄 `## <아이콘> <라벨> · <제목>` 은 봉투(사실·위치·인계)가 없는 머리글이고 스레드 이름의 마스킹된 낱말만 되풀이한다(2026-10-16 소유자 지시)",
     "automation/interop/origin_notice.py::_post_title": "영구 스레드 제목 — 새 결과 스레드 첫 줄 `## <아이콘> <이름>` 은 봉투가 없는 머리글이고 호출자가 준 스레드 이름만 되풀이한다; 통지 본문은 뒤따르는 deliver 가 봉투로 렌더한다(2026-10-16 소유자 지시)",
     "automation/interop/approval_reminder.py::_PointerSender.send": "영구 최소정보 포인터 — 대기시간·공용 정의 카드 링크 한 줄만 전송",

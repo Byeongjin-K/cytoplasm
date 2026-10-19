@@ -249,14 +249,17 @@ def _discord_home(tmp_path: Path, script: str) -> tuple[Path, cron_timer.Job]:
 
 
 def test_discord_delivery_posts_stdout_to_the_hermes_home_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, job = _discord_home(tmp_path, "print('DIGEST-FAIL stage=deliver retry_safe=false code=x')\n")
+    home, job = _discord_home(
+        tmp_path, "print('새 메일 1통: 회의 안내')\nprint('DIGEST-FAIL stage=deliver retry_safe=false code=x')\n")
     sent: list[tuple[str, str, str]] = []
     monkeypatch.setattr(cron_timer_run, "_discord_send", lambda *a: sent.append(a))
+    monkeypatch.setattr("automation.notice_bot.fault_channel", lambda home=None: "333")
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
 
     assert cron_timer_run.run(home, job) == 0
 
-    assert sent == [("fixture-token", "222", "DIGEST-FAIL stage=deliver retry_safe=false code=x")]
+    assert ("fixture-token", "222", "새 메일 1통: 회의 안내") in sent, "사람 말 줄은 홈 스레드로"
+    assert [target for _, target, body in sent if "DIGEST-FAIL" in body] == ["333"], "표식 코드는 페어 채널로만"
     kept = list((home / ".hermes" / "cron-timers" / "output" / "d-watch").glob("*.txt"))
     assert len(kept) == 1 and "DIGEST-FAIL" in kept[0].read_text()
 
@@ -276,8 +279,10 @@ def test_a_failed_run_delivers_a_korean_failure_line_and_counts_the_failure(tmp_
     sent: list[tuple[str, str, str]] = []
     monkeypatch.setattr(cron_timer_run, "_discord_send", lambda *a: sent.append(a))
 
+    monkeypatch.setattr("automation.notice_bot.fault_channel", lambda home=None: "333")
+
     assert cron_timer_run.run(home, job) == 2
-    assert sent and sent[0][2].startswith("⚠️ 정기 작업 'd-watch' 실패(종료코드 2)")
+    assert sent and sent[0][1] == "333" and sent[0][2].startswith("⚠️ 정기 작업 'd-watch' 실패(종료코드 2)")
     state = json.loads((home / ".hermes" / "cron-timers" / "d-watch.json").read_text())
     assert (state["last_status"], state["failure_streak"]) == ("error", 1)
 
