@@ -67,7 +67,7 @@ def _sent_mails(limit: int) -> list[dict]:
 
 
 def _get_mail(uid: str) -> dict:
-    rc, payload = _wrapper_json(["get", uid, "--body"])
+    rc, payload = _wrapper_json(["get", uid, "--body", "--with-html"])
     if rc != 0:
         raise triage_gate.GateError(f"wrapper get 실패 rc={rc} uid(불투명)={triage_core.mask_value(uid)}", 4)
     return dict(payload.get("mail") or {})

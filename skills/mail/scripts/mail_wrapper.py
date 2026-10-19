@@ -148,6 +148,9 @@ def cmd_get(args) -> int:
                 mail["body_bytes"] = len(body.encode("utf-8"))
             else:
                 mail["body"] = body
+                html_path = md_path.with_suffix(".html")  # mailon writer: the original's HTML
+                if getattr(args, "with_html", False) and html_path.is_file():
+                    mail["body_html"] = html_path.read_text(encoding="utf-8")
     payload = {"wrapper": WRAPPER_VERSION, "command": "get", "status": "ok",
                "masked": args.masked, "mail": mail}
     return _emit(payload, 0)
@@ -258,6 +261,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("get", help="one mail by uid")
     s.add_argument("uid")
     s.add_argument("--body", action="store_true", default=False)
+    s.add_argument("--with-html", action="store_true", default=False,
+                   help="with --body: also the stored original HTML (reply quotes)")
     s.add_argument("--masked", action="store_true", default=False)
     s.set_defaults(fn=cmd_get)
 

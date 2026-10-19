@@ -44,6 +44,7 @@ def compose_and_post(
     forward: dict | None = None,
     drive_share: dict | None = None,
     bcc: tuple[str, ...] = (),
+    quote_html: mail_quote.QuoteHtml | None = None,
 ) -> dict:
     recipient_body = (
         mail_evidence.sanitize_draft_body(body, evidence_pack)
@@ -58,6 +59,7 @@ def compose_and_post(
         origin_channel_id=origin_channel_id, origin_message_id=origin_message_id,
         quote=quote, forward=forward, drive_share=drive_share,
         **({"bcc": bcc} if bcc else {}),
+        quote_html=quote_html,
     )
     recipients = ", ".join(item for item in (to, cc) if item)
     gap = triage_recipient.related_recipient_gap(
@@ -117,6 +119,7 @@ def _draft_and_post(
         mail_subject=detail.get("subject") or "", to=to, subject=subject, body=body,
          category=cls.category, flags=cls.flags(),
         attachment_paths=attachments, cc=cc, quote=mail_quote.render_quote(original),
+        quote_html=mail_quote.render_quote_html(original),
         origin_channel_id=str(card.get("channel_id") or ""),
         origin_message_id=str(card.get("message_id") or ""),
     )

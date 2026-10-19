@@ -145,5 +145,7 @@ def write_mail(mail: Mail, mails_dir: Path, project_root: Path) -> Path:
     md_path = path_for(mail, mails_dir)
     content = build_markdown(mail, project_root=project_root, md_path=md_path)
     md_path.write_text(content, encoding="utf-8")
+    if mail.body_html.strip():  # the original's formatting, for reply quotes (2026-10-19)
+        md_path.with_suffix(".html").write_text(mail.body_html, encoding="utf-8")
     log.info("wrote markdown: %s", md_path.relative_to(project_root))
     return md_path

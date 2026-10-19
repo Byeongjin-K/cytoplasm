@@ -383,6 +383,7 @@ def _perform_send(args, cfg) -> int:
             bcc=_split_addresses(getattr(args, "bcc", [])),
             subject=args.subject,
             body=args.body,
+            body_html=args.body_html,
             attachments=tuple(Path(item) for item in args.attachment),
         )
         login(browser, cfg)
@@ -534,6 +535,8 @@ def build_parser() -> argparse.ArgumentParser:
     s_send.add_argument("--bcc", action="append", default=[])
     s_send.add_argument("--subject", required=True)
     s_send.add_argument("--body", required=True)
+    s_send.add_argument("--body-html", default="",
+                        help="HTML put in the editor instead of --body (the gate still checks --body)")
     s_send.add_argument("--attachment", action="append", default=[])
     s_send.add_argument("--dry-run", action="store_true")
     s_send.add_argument("--confirm-send", action="store_true")

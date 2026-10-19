@@ -17,6 +17,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "skills" / "mail" / "scripts"))
 
+import mail_quote  # noqa: E402
 import triage_cli  # noqa: E402
 import triage_approval  # noqa: E402
 import triage_binding  # noqa: E402
@@ -179,7 +180,10 @@ def test_compose_draft_record_binds_kind_channel_and_frozen_argv(
     assert record["category"] == "compose"
     assert record["uid"].startswith("compose:")
     assert record["argv"] == list(
-        triage_core.build_send_argv("python3", COMPOSE_TO, COMPOSE_SUBJECT, COMPOSE_BODY)
+        triage_core.build_send_argv(
+            "python3", COMPOSE_TO, COMPOSE_SUBJECT, COMPOSE_BODY,
+            body_html=mail_quote.html_body(COMPOSE_BODY, ""),
+        )
     )
     assert record["sha256"] == triage_core.draft_sha256(record)
 

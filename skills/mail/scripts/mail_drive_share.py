@@ -21,6 +21,7 @@ send that fails after a good share reuses that upload on the next attempt.
 from __future__ import annotations
 
 import hashlib
+import html
 import os
 import re
 import secrets
@@ -123,6 +124,13 @@ def with_link(draft: dict, link: str) -> dict:
     if argv[index].count(PLACEHOLDER) != 1:
         raise triage_gate.GateError("발송 본문에 Drive 링크 자리가 정확히 한 번 있지 않습니다", 2)
     argv[index] = argv[index].replace(PLACEHOLDER, link)
+    if "--body-html" in argv:  # the same placeholder, HTML-escaped by mail_quote.html_body
+        html_index = argv.index("--body-html") + 1
+        escaped = html.escape(PLACEHOLDER, quote=False)
+        if argv[html_index].count(escaped) != 1:
+            raise triage_gate.GateError("HTML 본문에 Drive 링크 자리가 정확히 한 번 있지 않습니다", 2)
+        anchor = f'<a href="{html.escape(link, quote=True)}">{html.escape(link, quote=False)}</a>'
+        argv[html_index] = argv[html_index].replace(escaped, anchor)
     return {**draft, "send_argv": argv}
 
 

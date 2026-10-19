@@ -151,9 +151,12 @@ def _draft_with_payload(draft: Mapping[str, JsonValue], payload: Mapping[str, Js
     # (2026-09-03). The quote is the answered mail — never entity-normalized — so it is
     # re-attached below whatever reply text the preflight returns.
     quote = str(draft.get("quote") or "")
-    updated["argv"] = list(
-        _argv_with_payload(_argv(draft), to, cc, subject, mail_quote.with_quote(body, quote))
-    )
+    argv = _argv_with_payload(_argv(draft), to, cc, subject, mail_quote.with_quote(body, quote))
+    # The HTML body is rebuilt the same way: reviewed reply text + the frozen quote.
+    updated["argv"] = list(_argv_with_payload(
+        argv, to, cc, subject, body,
+        body_html=mail_quote.html_body(body, str(draft.get("quote_html") or "")),
+    ) if "--body-html" in argv else argv)
     updated["to"] = to
     # Only a draft that already ships a ``cc`` field gets one back: adding the key to a
     # record persisted without it would change its sha256 out from under the approval
@@ -204,9 +207,13 @@ def _refresh_gmail_snapshot(
     draft["gmail_approval_snapshot"] = normalized.record()
 
 
-def _argv_with_payload(argv: tuple[str, ...], to: str, cc: str, subject: str, body: str) -> tuple[str, ...]:
+def _argv_with_payload(
+    argv: tuple[str, ...], to: str, cc: str, subject: str, body: str, *, body_html: str | None = None,
+) -> tuple[str, ...]:
     updated = list(argv)
-    for option, value in (("--to", to), ("--cc", cc), ("--subject", subject), ("--body", body)):
+    pairs = (("--to", to), ("--cc", cc), ("--subject", subject))
+    pairs += (("--body-html", body_html),) if body_html is not None else (("--body", body),)
+    for option, value in pairs:
         if option in updated:
             index = updated.index(option) + 1
             if index >= len(updated):

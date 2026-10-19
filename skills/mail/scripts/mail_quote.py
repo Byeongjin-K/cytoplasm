@@ -9,13 +9,21 @@ returns, and computes the reply-all Cc set. Pure: no I/O, stdlib only.
 The quote goes into the SENT body (the frozen argv) only. A draft's ``body``
 stays the owner-reviewed reply text and the approval message notes the quote in
 one line — dumping it would blow the Discord 2,000-char post limit.
+
+HTML body (owner request 2026-10-19): the same argv also carries ``--body-html`` —
+the reply text in 맑은 고딕 10.5pt / line-height 160%, then the quote. The quote
+keeps the original's stored HTML after ``sanitize_html`` drops scripts, event
+handlers and everything that would load by itself; without stored HTML, or past
+``MAX_QUOTE_HTML_BYTES``, it is the text quote with its line breaks kept.
 """
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 from typing import Final
 
@@ -28,6 +36,14 @@ _FRONTMATTER_KEYS: Final = frozenset({"from", "to", "cc", "date", "subject"})
 _ADDR: Final = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _YAML_ESCAPE: Final = re.compile(r"\\(.)")
 
+REPLY_STYLE: Final = (
+    "font-family:'맑은 고딕','Malgun Gothic',sans-serif;"
+    "font-size:10.5pt;line-height:160%;white-space:pre-wrap"
+)
+# One argv string may not exceed 128 KiB on Linux (MAX_ARG_STRLEN); the reply and
+# the header block share the --body-html argument with the quoted original.
+MAX_QUOTE_HTML_BYTES: Final = 100_000
+
 
 @dataclass(frozen=True, slots=True)
 class Original:
@@ -39,6 +55,15 @@ class Original:
     date: str
     subject: str
     body: str
+    body_html: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class QuoteHtml:
+    """The HTML quote and whether it carries the original's own formatting."""
+
+    html: str
+    keeps_format: bool
 
 
 def parse_original(detail: Mapping[str, object]) -> Original:
@@ -59,6 +84,7 @@ def parse_original(detail: Mapping[str, object]) -> Original:
         date=fields.get("date") or _text(detail.get("date")),
         subject=fields.get("subject") or _text(detail.get("subject")),
         body=_body_text(remainder),
+        body_html=_text(detail.get("body_html")),
     )
 
 
@@ -80,6 +106,154 @@ def render_quote(original: Original) -> str:
 def with_quote(body: str, quote: str) -> str:
     """The text that is actually sent: the reply text, a blank line, the quote."""
     return body if not quote else f"{body}\n\n{quote}"
+
+
+def render_quote_html(original: Original) -> QuoteHtml:
+    """The header block plus the original's sanitized HTML, or the text quote."""
+    cleaned = sanitize_html(original.body_html) if original.body_html.strip() else ""
+    if cleaned.strip() and len(cleaned.encode("utf-8")) <= MAX_QUOTE_HTML_BYTES:
+        header = _text_html(render_quote(Original(
+            sender=original.sender, to=original.to, cc=original.cc,
+            date=original.date, subject=original.subject, body="",
+        )).rstrip("\n"))
+        return QuoteHtml(f'<div style="{REPLY_STYLE}">{header}</div><br><div>{cleaned}</div>', True)
+    return QuoteHtml(text_quote_html(render_quote(original)), False)
+
+
+def text_quote_html(quote: str) -> str:
+    """A text quote as HTML that keeps its line breaks and spacing."""
+    return f'<div style="white-space:pre-wrap">{_text_html(quote)}</div>'
+
+
+def html_body(body: str, quote_html: str) -> str:
+    """The HTML that is actually sent: the reply in the reply font, then the quote."""
+    reply = f'<div style="{REPLY_STYLE}">{_text_html(body)}</div>'
+    return reply if not quote_html else f"{reply}<br>{quote_html}"
+
+
+def sanitize_html(fragment: str) -> str:
+    """Keep the original's formatting; drop scripts, handlers and self-loading content.
+
+    Allow-list: unknown elements are unwrapped (their text kept), dropped elements
+    lose their whole content, attributes outside the list and every ``on*`` handler
+    go, links keep only http(s)/mailto, images keep only inline ``data:image/``
+    sources (a remote or ``cid:`` image becomes its alt text), and a style
+    declaration that could fetch anything (``url(``, ``@import``, ``expression``)
+    is removed.
+    """
+    parser = _Sanitizer()
+    parser.feed(fragment)
+    parser.close()
+    return parser.result()
+
+
+def _text_html(text: str) -> str:
+    return html.escape(text, quote=False).replace("\n", "<br>")
+
+
+_DROP_WITH_CONTENT: Final = frozenset({
+    "script", "style", "iframe", "frame", "frameset", "object", "embed", "applet",
+    "form", "noscript", "template", "svg", "math", "audio", "video", "head", "title",
+    "textarea", "select", "button",
+})
+_VOID: Final = frozenset({"br", "hr", "img", "col", "wbr"})
+_ALLOWED: Final = frozenset({
+    "a", "abbr", "b", "bdo", "big", "blockquote", "br", "caption", "center", "cite",
+    "code", "col", "colgroup", "dd", "del", "dfn", "div", "dl", "dt", "em", "font",
+    "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "mark",
+    "ol", "p", "pre", "q", "s", "samp", "small", "span", "strike", "strong", "sub",
+    "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "tt", "u", "ul", "wbr",
+})
+_ATTRIBUTES: Final = frozenset({
+    "align", "alt", "bgcolor", "border", "cellpadding", "cellspacing", "color", "cols",
+    "colspan", "dir", "face", "height", "href", "lang", "rowspan", "size", "span",
+    "src", "start", "style", "title", "type", "valign", "width",
+})
+_UNSAFE_STYLE: Final = re.compile(r"url\s*\(|@import|expression\s*\(|behavior\s*:|-moz-binding|javascript:", re.I)
+_SAFE_HREF: Final = re.compile(r"(?:https?:|mailto:)", re.I)
+_INLINE_IMAGE: Final = re.compile(r"data:image/(?:png|gif|jpe?g|webp|bmp);base64,[A-Za-z0-9+/=\s]+\Z", re.I)
+
+
+class _Sanitizer(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._out: list[str] = []
+        self._open: list[str] = []
+        self._dropping: list[str] = []
+
+    def result(self) -> str:
+        return "".join(self._out) + "".join(f"</{tag}>" for tag in reversed(self._open))
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._dropping:
+            if tag in _DROP_WITH_CONTENT and tag not in _VOID:
+                self._dropping.append(tag)
+            return
+        if tag in _DROP_WITH_CONTENT:
+            self._dropping.append(tag)
+            return
+        if tag not in _ALLOWED:
+            return
+        kept = _safe_attributes(tag, attrs)
+        if kept is None:  # an image that would load from elsewhere
+            alt = dict(attrs).get("alt") or ""
+            if alt.strip():
+                self._out.append(html.escape(f"[{alt.strip()}]", quote=False))
+            return
+        rendered = "".join(f' {name}="{html.escape(value, quote=True)}"' for name, value in kept)
+        self._out.append(f"<{tag}{rendered}>")
+        if tag not in _VOID:
+            self._open.append(tag)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag not in _VOID and self._open and self._open[-1] == tag and not self._dropping:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._dropping:
+            if tag == self._dropping[-1]:
+                self._dropping.pop()
+            return
+        if tag in _VOID or tag not in self._open:
+            return
+        while self._open:
+            current = self._open.pop()
+            self._out.append(f"</{current}>")
+            if current == tag:
+                return
+
+    def handle_data(self, data: str) -> None:
+        if not self._dropping:
+            self._out.append(html.escape(data, quote=False))
+
+
+def _safe_attributes(tag: str, attrs: list[tuple[str, str | None]]) -> list[tuple[str, str]] | None:
+    """The attributes to keep, or ``None`` for an image without an inline source."""
+    kept: list[tuple[str, str]] = []
+    has_inline_image = False
+    for raw_name, raw_value in attrs:
+        name = raw_name.lower()
+        value = (raw_value or "").strip()
+        if name not in _ATTRIBUTES:
+            continue
+        if name == "href":
+            if tag != "a" or not _SAFE_HREF.match(value):
+                continue
+        elif name == "src":
+            if tag != "img" or not _INLINE_IMAGE.match(value):
+                continue
+            has_inline_image = True
+        elif name == "style":
+            value = ";".join(
+                part for part in value.split(";") if part.strip() and not _UNSAFE_STYLE.search(part)
+            )
+            if not value:
+                continue
+        kept.append((name, value))
+    if tag == "img" and not has_inline_image:
+        return None
+    return kept
 
 
 def reply_all_cc(original: Original, *, to: str, owner: str) -> str:
