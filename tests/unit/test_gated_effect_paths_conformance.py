@@ -36,7 +36,6 @@ GATED_RULES: Final[dict[str, tuple[str, ...] | str]] = {
     "obsidian_write_note_push": (
         "automation/obsidian_write/note_request_cli.py::cmd_request",
         "automation/plaud_sync/approval_gate.py::request_approval",
-        "automation/memory_relocate/approval_gate.py::request_approval",
     ),
     "patent_draft_drive_upload": ("skills/patent-prep/scripts/patent_export.py::prepare_export",),
     "gws_drive_permission_grant": ("skills/mail/scripts/triage_approval.py::request_approval",),
@@ -76,8 +75,6 @@ PRODUCER_WATCHERS: Final[dict[str, tuple[str, str]]] = {
         "cron:obsidian-note-watch", "tests/unit/test_obsidian_note_request.py"),
     "automation/project_board/cli.py::post_card": (
         "cron:project-board-watch", "tests/unit/test_project_board_approval.py"),
-    "automation/memory_relocate/approval_gate.py::request_approval": (
-        "cron:memory-relocate-watch", "tests/unit/test_memory_relocate_approval_gate.py"),
     "automation/plaud_sync/approval_gate.py::request_approval": (
         "cron:plaud-sync-watch", "tests/unit/test_plaud_sync_watch_step.py"),
     "skills/todo/scripts/todo_cli.py::_cmd_request": (

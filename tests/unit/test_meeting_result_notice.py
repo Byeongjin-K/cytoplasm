@@ -19,7 +19,6 @@ import meeting_cli  # noqa: E402
 PUBLIC: Final = (
     "회의록 처리 완료: 합성 회의\n"
     "- 내 액션아이템 카드: 0건 (Kanban)\n"
-    "- 마일스톤 갱신: 0건 (milestones.yaml)\n"
     "- 과제 미지정 — 관리번호 없이 표만 그렸습니다(원장 미갱신). "
     "`--project <과제명>` 을 주거나 파일명에 과제명을 넣으세요.\n"
     "- 노트: ~/notes/meetings/2026-09-01-meeting-f5f76d7f.md"
@@ -30,7 +29,6 @@ PUBLIC: Final = (
 THREAD_PUBLIC: Final = (
     "대상: 합성 회의 (f5f76d7f)\n"
     "사실: 회의록 처리 완료: 합성 회의 - 내 액션아이템 카드: 0건 (Kanban) "
-    "- 마일스톤 갱신: 0건 (milestones.yaml) "
     "- 과제 미지정 — 관리번호 없이 표만 그렸습니다(원장 미갱신). "
     "`--project <과제명>` 을 주거나 파일명에 과제명을 넣으세요. "
     "- 노트: ~/notes/meetings/2026-09-01-meeting-f5f76d7f.md (실행 완료)\n"
@@ -41,7 +39,6 @@ THREAD_PUBLIC: Final = (
 FALLBACK_PUBLIC: Final = (
     "대상: 합성 회의 (f5f76d7f)\n"
     "사실: 회의록 처리 완료: 합성 회의 - 내 액션아이템 카드: 0건 (Kanban) "
-    "- 마일스톤 갱신: 0건 (milestones.yaml) "
     "- 과제 미지정 — 관리번호 없이 표만 그렸습니다(원장 미갱신). "
     "`--project <과제명>` 을 주거나 파일명에 과제명을 넣으세요. "
     "- 노트: ~/notes/meetings/2026-09-01-meeting-f5f76d7f.md (실행 완료)\n"
@@ -69,7 +66,7 @@ def ingest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ingest:
     monkeypatch.chdir(tmp_path)
     for key, value in {
         "MEETING_CONFIG": "absent.json", "MEETING_NOTES_DIR": "notes",
-        "MEETING_LOG_DIR": "logs", "MEETING_STATE_FILE": "state/milestones.yaml",
+        "MEETING_LOG_DIR": "logs",
         "MEETING_PLAN_DIR": "plan", "DRIVE_PUBLISH_ENABLED": "0",
         "MEETING_PROMPT_FILE": str(ROOT / "skills/meeting/prompts/meeting-extraction-v6.md"),
         "AUTOPHAGY_RUNTIME_ROOT": str(ROOT),

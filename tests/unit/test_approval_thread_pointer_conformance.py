@@ -45,7 +45,6 @@ _EXEMPT: Final[dict[str, str]] = {
     "automation/release_approval.py::cmd_request": _SUPPLY_CHAIN,
     "automation/repair/repair_ops_posting.py::PostingOwnerApproval.permits": _NO_AGENT,
     "automation/obsidian_write/gate_binding.py::request_approval": _NO_AGENT,
-    "automation/memory_relocate/approval_gate.py::request_approval": _NO_AGENT,
     "automation/plaud_sync/approval_gate.py::request_approval": _NO_AGENT,
     "skills/wiki/scripts/wiki_gate.py::post_confirm_message":
         "위키는 좌표도 소유자 DM 밖으로 싣지 않는다(소유자 메시지 계약 마스킹) + wiki_gate.py 수정 동결",

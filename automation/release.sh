@@ -68,7 +68,7 @@ owner_timers="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.owner_timer
   || die "OWNER-TIMERS-REFUSED: invalid release-host switch" 4
 owner_timer_args=()
 [[ "$owner_timers" == off ]] || owner_timer_args=(--owner-timers-off "$owner_timers")
-for service in report-hub hermes-dashboard hermes-memory; do
+for service in report-hub hermes-dashboard; do
   legacy_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.legacy_services switch --name "$service")" \
     || die "LEGACY-SERVICE-REFUSED: invalid release-host switch" 4
   [[ "$legacy_mode" != off ]] || legacy_args+=(--legacy-service-off "$service")

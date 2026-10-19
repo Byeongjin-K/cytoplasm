@@ -1,4 +1,4 @@
-"""Meeting ingest CLI (W2-3): file/body -> LLM -> Kanban/milestones/#team.
+"""Meeting ingest CLI (W2-3): file/body -> LLM -> Kanban/minutes/#team.
 
 Deterministic pipeline wrapper. All content stays out of argv/logs; the
 routing log records metadata only (filenames, counts, provider), never text.
@@ -496,13 +496,6 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
     else:
         card_ids = [_run_kanban(card) for card in cards]
 
-    milestones_added = meeting_actions.update_milestones(
-        _env_path("MEETING_STATE_FILE", "~/state/milestones.yaml"),
-        extraction.milestones,
-        note_name=note_path.name,
-        ref=ref,
-        now=now,
-    )
 
     team_posted = False
     team_post = meeting_actions.format_team_post(
@@ -520,7 +513,6 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
     notice = meeting_actions.format_notify(
         label=label,
         cards=len(cards),
-        milestones_added=milestones_added,
         others=len(extraction.others),
         note_name=note_path.name,
         team_posted=team_posted,
@@ -536,7 +528,7 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
     record.update(
         {"exit": 0, "todos": len(extraction.todos), "milestones": len(extraction.milestones),
          "others": len(extraction.others), "cards": len(cards), "card_ids": card_ids,
-         "milestones_added": milestones_added, "note": note_path.name,
+          "note": note_path.name,
          "team_posted": team_posted, "elapsed_s": round(time.monotonic() - started, 1),
          "evidence_count": len(getattr(pack, "items", ())) if pack is not None else 0,
          "layers": getattr(pack, "layers", {}) if pack is not None else {},
@@ -547,7 +539,7 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
     _log(record)
     output = {key: record[key] for key in
               ("exit", "ref", "provider", "codex_called", "todos",
-               "milestones", "others", "cards", "milestones_added", "note", "team_posted",
+                "milestones", "others", "cards", "note", "team_posted",
                "evidence_count", "layers", "slides", "actions_new", "actions_open",
                "actions_closed", "project")}
     # 화자 이름은 회의 내용이다 — 결과 JSON(호출자에게 돌려주는 값)에만 싣고

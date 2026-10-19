@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# automation/memory_relocate/deploy.sh — deploy the memory-relocation reaction watcher.
-#
-# Unlike the curator (an isolated top-level runtime package), the relocation watcher
-# imports automation.memory_relocate.* / automation.obsidian_write.* / automation.interop.*
-# from the repo root, so it RUNS FROM THE OPS CHECKOUT (/srv/autophagy-agents). Deploy =
-# (1) provenance-check the local package matches origin/main, (2) ff-pull the ops checkout
-# to origin/main so it holds this code, (3) push the no-agent watcher wrapper to
-# ~/.hermes/scripts/, (4) idempotently register the reaction cron.
+# automation/memory_relocate/deploy.sh — retained recall and peer-choice configuration.
+# The agent relocation schedule and wrapper were deleted on 2026-10-19.
 #
 # Order is enforced by the provenance guard: commit -> push -> deploy.
 set -euo pipefail
@@ -39,18 +33,7 @@ source "$repo_root/automation/deploy_push.sh"
 source "$repo_root/automation/deploy_provenance.sh"
 deploy_provenance_check "$repo_root" "$repo_root/automation/memory_relocate" || exit 4
 
-# The watcher runs from the ops checkout — align it to origin/main (read-only ff-pull).
-ssh "$host" 'sudo -n -u ops -H git -C /srv/autophagy-agents pull --ff-only'
-
-# No-agent reaction watcher wrapper.
-push_file "$repo_root/automation/memory_relocate/cron/memory_relocate_watch.py" '.hermes/scripts/memory_relocate_watch.py'
 push_file "$repo_root/automation/memory_relocate/peer-mode.json" '.hermes/memory-relocate/peer-mode.json'
-
-# Reactions every 2m; expensive idle discovery retains its internal 30m cadence.
-source "$repo_root/automation/deploy_cron.sh"
-source "$repo_root/automation/deploy_timer.sh"
-converge_timer memory-relocate-watch "every 2m" memory_relocate_watch.py local
-run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-relocate-watch || true'
 
 # Moved people facts are no longer in every prompt (owner decision Q138 ②): the agent's SOUL.md
 # carries one recall line. Only that line is ensured; the rest of the owner-editable file stays.

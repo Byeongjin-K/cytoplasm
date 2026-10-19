@@ -504,11 +504,10 @@ def test_a_proxy_bot_request_with_a_failed_origin_still_needs_an_owner_approval_
 
 
 def test_a_proxy_bot_reaction_is_never_an_owner_decision() -> None:
-    from automation.memory_relocate.approval_gate import _owner_reacted as relocate_owner_reacted
     from automation.plaud_sync.approval_gate import _owner_reacted as plaud_owner_reacted
     from automation.repair.repair_ops_approval_gate import owner_reacted as repair_owner_reacted
 
-    for owner_reacted in (plaud_owner_reacted, relocate_owner_reacted, repair_owner_reacted):
+    for owner_reacted in (plaud_owner_reacted, repair_owner_reacted):
         assert owner_reacted(((PROXY_BOT, True),), OWNER) is False
         assert owner_reacted(((PROXY_BOT, False),), OWNER) is False
         assert owner_reacted(((OWNER, False),), OWNER) is True

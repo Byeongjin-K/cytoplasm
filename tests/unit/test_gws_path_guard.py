@@ -23,7 +23,6 @@ _RESOLVERS = (
     ("todo_cli", "skills/todo/scripts", "TODO_GWS_BIN"),
     ("calendar_gate", "skills/calendar/scripts", "CALENDAR_GWS_BIN"),
     ("budget_gate", "skills/budget/scripts", "BUDGET_GWS_BIN"),
-    ("automation.reminder_poller.poll_reminders", "", "REMINDER_GWS_BIN"),
 )
 
 

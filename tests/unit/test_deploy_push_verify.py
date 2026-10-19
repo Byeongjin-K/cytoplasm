@@ -27,7 +27,6 @@ _DEPLOY_SCRIPTS = (
     "automation/memory_relocate/deploy.sh",
     "automation/notes_organize/deploy.sh",
     "automation/rag_ingest/deploy.sh",
-    "automation/reminder_poller/deploy.sh",
     "automation/repair/deploy.sh",
     "automation/research_trends/deploy.sh",
     "automation/selfskill_audit/deploy.sh",

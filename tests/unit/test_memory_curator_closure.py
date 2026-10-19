@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
 import sys
@@ -252,16 +251,3 @@ def test_reaction_after_settlement_is_noop_with_journal_only(tmp_path: Path) -> 
 def test_v3_state_remains_loadable_after_closure_feature() -> None:
     state = empty_state()
     assert state.version == 3
-
-
-def test_existing_curator_tick_runs_closure_before_pending_reminder() -> None:
-    path = _REPO / "automation" / "memory_curator" / "cron" / "memory_curator_watch.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    calls = [
-        node.func.attr
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"close_terminal_promotions", "send_pending_reminder"}
-    ]
-    assert calls == ["close_terminal_promotions", "send_pending_reminder"]

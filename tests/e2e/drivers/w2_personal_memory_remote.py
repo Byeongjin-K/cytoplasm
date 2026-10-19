@@ -72,7 +72,6 @@ def meeting_env(work: Path) -> dict[str, str]:
     return {
         "MEETING_CONFIG": str(config),
         "MEETING_NOTES_DIR": str(work / "notes" / "meetings"),
-        "MEETING_STATE_FILE": str(work / "state" / "milestones.yaml"),
         "MEETING_LOG_DIR": str(work / "logs" / "meeting"),
     }
 
@@ -158,16 +157,14 @@ def case_happy_path(work: Path, fixtures: Path) -> dict:
     obs["codex_called"] = summary.get("codex_called")
     obs["team_posted"] = summary.get("team_posted")
     obs["cards_created"] = summary.get("cards")
-    obs["milestones_added"] = summary.get("milestones_added")
+    obs["milestones_in_minutes"] = summary.get("milestones")
     card_ids = [str(i) for r in meeting_log_records(work) for i in r.get("card_ids", [])]
     obs["card_ids_count"] = len(card_ids)
     code, out = run(["hermes", "kanban", "show", card_ids[0], "--json"], {}) \
         if card_ids else (1, "")
     obs["kanban_card_visible"] = code == 0 and MEETING_TOKEN in out
-    milestones = work / "state" / "milestones.yaml"
-    obs["milestones_file_has_token"] = (
-        milestones.exists() and MEETING_TOKEN in milestones.read_text(encoding="utf-8")
-    )
+    notes = list((work / "notes/meetings").glob("*.md"))
+    obs["minutes_has_milestone_token"] = any(MEETING_TOKEN in note.read_text(encoding="utf-8") for note in notes)
 
     wiki_env = {**env, "WIKI_ROOT": str(work / "wiki"),
                 "WIKI_GATE_DIR": str(work / "wiki-gate"),

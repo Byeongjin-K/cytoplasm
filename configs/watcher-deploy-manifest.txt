@@ -24,12 +24,6 @@ agent|automation/effect_request/cron/effect_request_watch.py|.hermes/scripts/eff
 # --- automation/managed_sync/deploy-manifest.txt ---
 agent|automation/managed_sync/cron/managed_sync_watch.py|.hermes/scripts/managed_sync_watch.py|optional:구독자 전용 opt-in 컴포넌트라 그룹 스킬을 구독하지 않는 설치에는 없는 것이 정상이다(D3)
 
-# --- automation/memory_curator/deploy-manifest.txt ---
-agent|automation/memory_curator/cron/memory_curator_watch.py|.hermes/scripts/memory_curator_watch.py|required
-
-# --- automation/memory_relocate/deploy-manifest.txt ---
-agent|automation/memory_relocate/cron/memory_relocate_watch.py|.hermes/scripts/memory_relocate_watch.py|required
-
 # --- automation/notes_organize/deploy-manifest.txt ---
 agent|automation/notes_organize/notes_organize.py|.hermes/scripts/notes_organize.py|required
 
@@ -45,9 +39,6 @@ agent|automation/project_board/cron/project_board_analyze.py|.hermes/scripts/pro
 
 # --- automation/rag_ingest/deploy-manifest.txt ---
 agent|automation/rag_ingest/cron/rag_ingest_watch.py|.hermes/scripts/rag_ingest_watch.py|required
-
-# --- automation/reminder_poller/deploy-manifest.txt ---
-agent|automation/reminder_poller/poll_reminders.py|.hermes/scripts/poll_reminders.py|required
 
 # --- automation/repair/deploy-manifest.txt ---
 agent|automation/repair/cron/repair_report_consume_watch.py|.hermes/scripts/repair_report_consume_watch.py|required

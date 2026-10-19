@@ -9,7 +9,6 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 _WRITERS = (
     ("automation/plaud_sync/effects_live.py", "post"),
-    ("automation/memory_relocate/effects_live.py", "post"),
     ("automation/repair/repair_ops_posting.py", "permits"),
     ("skills/mail/scripts/triage_approval.py", "confirm_intent"),
     ("skills/budget/scripts/budget_gate.py", "_binding_fields"),

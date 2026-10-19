@@ -22,7 +22,6 @@ import meeting_slides  # noqa: E402
 
 def _offline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v4.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))

@@ -2,31 +2,20 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import os
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
 UNITS: Final = {
     "report-hub": ("report-hub-collector.service", "report-hub-dashboard.service"),
     "hermes-dashboard": ("hermes-dashboard.service",),
-    "hermes-memory": (
-        "autophagy-cron-memory-curator-watch.timer",
-        "autophagy-cron-memory-relocate-watch.timer",
-    ),
 }
 ALGORITHM: Final = "legacy-service-v1"
 Run = Callable[[tuple[str, ...]], tuple[int, str]]
-
-
-def memory_timer_off(home: Path, name: str) -> bool:
-    """Only the deployed release marker changes the two memory timers' expected state."""
-    return name in ("memory-curator-watch", "memory-relocate-watch") and released_off(home, "hermes-memory")
 
 
 def release_mode(home: Path, name: str) -> str:
@@ -69,10 +58,6 @@ def check(home: Path, name: str, mode: str, run: Run = _run) -> str:
     if marked != b"off" or mode != "off":
         return "stale"
     for unit in UNITS[name]:
-        if name == "hermes-memory":
-            code, output = run(("systemctl", "--user", "is-enabled", unit))
-            if output.strip() != "disabled":
-                return "unknown" if code not in (0, 1, 3, 4) else "stale"
         code, output = run(("systemctl", "--user", "is-active", unit))
         if output.strip() != "inactive":
             return "unknown" if code not in (0, 3, 4) else "stale"
@@ -80,46 +65,12 @@ def check(home: Path, name: str, mode: str, run: Run = _run) -> str:
 
 
 def install(home: Path, name: str, mode: str, run: Run = _run) -> int:
-    """Refuse unresolved choices before stopping either memory timer, under its watcher lock."""
-    if name == "hermes-memory" and mode == "off":
-        with memory_stop_guard(home):
-            return _install(home, name, mode, run)
-    return _install(home, name, mode, run)
-
-
-@contextmanager
-def memory_stop_guard(home: Path) -> Iterator[None]:
-    """Both release switches retain the same pending-choice check and watcher lock."""
-    from automation.memory_relocate.model import RelocationError
-    from automation.memory_relocate.relocation_store import RelocationStore
-
-    lock = home / ".hermes/memory-relocate/watch.lock"
-    lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with lock.open("a", encoding="utf-8") as handle:
-        try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise ValueError("MEMORY-OFF-REFUSED: 메모리 이동 실행 중, 타이머 무변경") from error
-        try:
-            pending = RelocationStore(home / ".hermes/memory-curator/relocations.json").pending()
-        except RelocationError as error:
-            raise ValueError("MEMORY-OFF-REFUSED: 메모리 선택 상태 판독 불가, 타이머 무변경") from error
-        if pending:
-            raise ValueError(
-                f"MEMORY-OFF-REFUSED: 미결 메모리 선택 {len(pending)}건을 먼저 종결하세요. 타이머 무변경"
-            )
-        yield
-
-
-def _install(home: Path, name: str, mode: str, run: Run) -> int:
-    """Preserve all files; memory uses disable/enable on timers, views use stop/start."""
+    """Preserve all files; views use stop/start."""
     marker = marker_path(home, name)
     if mode == "on" and not marker.exists():
         return 0
     for unit in UNITS[name]:
-        command = ("disable" if mode == "off" else "enable", "--now") if name == "hermes-memory" else (
-            "stop" if mode == "off" else "start",
-        )
+        command = ("stop" if mode == "off" else "start",)
         code, _ = run(("systemctl", "--user", *command, unit))
         if code:
             loaded = run(("systemctl", "--user", "show", unit, "--property=LoadState", "--value"))[1]
@@ -127,11 +78,6 @@ def _install(home: Path, name: str, mode: str, run: Run) -> int:
                 continue  # Never installed on this node, so nothing to stop (PR #104 gap 7).
             print(f"LEGACY-SERVICE-FAIL unit={unit} step={command[0]} rc={code}", file=sys.stderr)
             return 5
-        if name == "hermes-memory":
-            code, output = run(("systemctl", "--user", "is-enabled", unit))
-            if output.strip() != ("disabled" if mode == "off" else "enabled") or code not in (0, 1, 3):
-                print(f"LEGACY-SERVICE-FAIL unit={unit} step=is-enabled state={output.strip()}", file=sys.stderr)
-                return 5
         code, output = run(("systemctl", "--user", "is-active", unit))
         if output.strip() != ("inactive" if mode == "off" else "active") or code not in (0, 3):
             print(f"LEGACY-SERVICE-FAIL unit={unit} step=is-active state={output.strip()}", file=sys.stderr)
@@ -165,8 +111,7 @@ def deploy(repo: Path, host: str, runtime: str, head: str) -> int:
             )
             if result.returncode:
                 return 4
-    for name in sorted(modes, key=lambda item: item != "hermes-memory"):
-        mode = modes[name]
+    for name, mode in modes.items():
         account = config.ops_account if name == "report-hub" else config.agent_account
         command = shlex.join(("sudo", "-n", "-u", account, "-H", "env", f"PYTHONPATH={runtime}",
                               "python3", "-B", "-m", "automation.legacy_services",
@@ -202,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         return install(Path.home(), args.name, args.mode)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        message = str(error) if str(error).startswith("MEMORY-OFF-REFUSED:") else type(error).__name__
+        message = type(error).__name__
         print(f"LEGACY-SERVICE-REFUSED reason={message}", file=sys.stderr)
         return 4
 

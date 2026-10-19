@@ -15,13 +15,8 @@ from automation.interop.approval_lease import FileKeyLease, PostingJournal
 from automation.interop.approval_lifecycle import Outcome, Probe
 from automation.interop.approval_surface import ApprovalBinding, ApprovalKind, ApprovalSurface
 from automation.plaud_sync import approval_gate as pg, store as ps
-from automation.memory_relocate import approval_gate as mg
-from automation.memory_relocate.relocation_store import RelocationStore
-from automation.memory_relocate.store import save_state as save_memory
-from automation.memory_relocate.model import RelocationState, record_key
-from tests.unit.test_plaud_sync_owner_cards import PLAUD_RECORD, memory_record, ENTRY, PREVIEW
+from tests.unit.test_plaud_sync_owner_cards import PLAUD_RECORD, PREVIEW
 from tests.unit.test_plaud_sync_approval_gate import FakeTransport as PlaudTransport
-from tests.unit.test_memory_relocate_approval_gate import FakeTransport as MemoryTransport
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +33,7 @@ def synthetic_todo_coordinates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fixtures.FakeTransport, "post_message", post_message)
 
 
-@pytest.mark.parametrize("producer", ["plaud", "memory"])
+@pytest.mark.parametrize("producer", ["plaud"])
 @pytest.mark.parametrize("fallback", [False, True])
 def test_selected_version_persists_when_posted_and_the_real_probe_accepts(
     producer: str, fallback: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -63,18 +58,6 @@ def test_selected_version_persists_when_posted_and_the_real_probe_accepts(
         gate = pg.PlaudApprovalGate(persisted, store, transport)
         expected_version = "plaud-sync-render-v4" if fallback else "plaud-sync-render-v7"
         key = record.recording_id
-    else:
-        record = memory_record()
-        key = record_key(record.source_kind, record.entry_sha256)
-        save_memory(tmp_path / "state.json", RelocationState(1, {key: record}))
-        store = RelocationStore(tmp_path / "state.json")
-        transport = MemoryTransport()
-        # When the new card is posted.
-        verdict = mg.request_approval(record, ENTRY, store=store, transport=transport,
-                                      binding=binding, lease=lease, journal=journal)
-        persisted = store.pending()[0]
-        gate = mg.RelocateApprovalGate(persisted, ENTRY, store, transport)
-        expected_version = "mc-reloc-render-v1" if fallback else "mc-reloc-render-v3"
     # Then persisted presentation is separate from binding; probe itself accepts the card.
     assert verdict.outcome is Outcome.POSTED
     assert persisted.render_version == expected_version
@@ -83,7 +66,7 @@ def test_selected_version_persists_when_posted_and_the_real_probe_accepts(
     assert gate.probe(gate.outstanding(key)[0]) is Probe.BOUND_PENDING
 
 
-@pytest.mark.parametrize("producer", ["plaud", "memory", "todo"])
+@pytest.mark.parametrize("producer", ["plaud", "todo"])
 def test_oversized_card_is_refused_before_request_thread_creation(
     producer: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -101,15 +84,6 @@ def test_oversized_card_is_refused_before_request_thread_creation(
             calls.append("thread")
             return ApprovalBinding(ApprovalKind.OBSIDIAN_WRITE, ApprovalSurface.AGENT_CHAT_THREAD, "222", 8)
         monkeypatch.setattr("automation.plaud_sync.effects_live.resolve_new_binding", resolve)
-        # When rendered through the live effect surface.
-        result = effects.post_approval(record)
-    elif producer == "memory":
-        from tests.unit.test_memory_relocate_effects_live import _effects_with_verdict, _save
-        from automation.interop.approval_lifecycle import Verdict
-        record = replace(memory_record(), note_relpath="제" * 1901)
-        _save(tmp_path / "relocations.json", record)
-        calls = []
-        effects = _effects_with_verdict(Verdict(Outcome.PENDING), monkeypatch, tmp_path, calls)
         # When rendered through the live effect surface.
         result = effects.post_approval(record)
     else:
@@ -132,14 +106,14 @@ def test_oversized_card_is_refused_before_request_thread_creation(
     assert calls == []
 
 
-@pytest.mark.parametrize("producer", ["plaud", "memory", "todo"])
+@pytest.mark.parametrize("producer", ["plaud", "todo"])
 @pytest.mark.parametrize("intact", [True, False])
 def test_producer_probe_checks_the_wire_when_a_published_card_is_read(
     producer: str, intact: bool, tmp_path: Path,
 ) -> None:
     # Given independently pinned card bytes on a published message, with an unknown
     # stored render version: the live probe must never need to replay the renderer.
-    from tests.unit.test_plaud_sync_owner_card_versions import PLAUD_V5, MEMORY_V2, TODO_V2
+    from tests.unit.test_plaud_sync_owner_card_versions import PLAUD_V5, TODO_V2
     if producer == "plaud":
         record = replace(PLAUD_RECORD, message_id="333", channel_id="222", render_version="unknown")
         ps.save_state(tmp_path / "state.json", ps.PlaudSyncState(1, None, {"rec-001": record}))
@@ -148,15 +122,6 @@ def test_producer_probe_checks_the_wire_when_a_published_card_is_read(
         transport = PlaudTransport(content=content)
         gate = pg.PlaudApprovalGate(record, store, transport)
         request = gate.outstanding("rec-001")[0]
-    elif producer == "memory":
-        record = replace(memory_record(), message_id="333", channel_id="222", render_version="unknown")
-        key = record_key(record.source_kind, record.entry_sha256)
-        save_memory(tmp_path / "state.json", RelocationState(1, {key: record}))
-        store = RelocationStore(tmp_path / "state.json")
-        transport = MemoryTransport()
-        transport.messages[("222", "333")] = MEMORY_V2 if intact else MEMORY_V2.replace(record.action_hash, "sha256:wrong")
-        gate = mg.RelocateApprovalGate(record, ENTRY, store, transport)
-        request = gate.outstanding(key)[0]
     else:
         from tests.unit.test_todo_approval_producer import _runtime, FakeDirectory, FakeTransport
         if TYPE_CHECKING:
@@ -214,7 +179,7 @@ def test_todo_selected_card_is_bound_when_the_real_cli_requests_it(
     assert gate.probe(gate.outstanding(record.key)[0]) is Probe.BOUND_PENDING
 
 
-@pytest.mark.parametrize("producer", ["plaud", "memory"])
+@pytest.mark.parametrize("producer", ["plaud"])
 @pytest.mark.parametrize("surface", ["request", "effects"])
 def test_bound_request_reuses_without_renderer_calls(
     producer: str, surface: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -244,23 +209,6 @@ def test_bound_request_reuses_without_renderer_calls(
             return plaud_transport.content
         posts, deleted = transport.posted, transport.deleted
         module = import_module("automation.plaud_sync.effects_live")
-    else:
-        record = replace(memory_record(), message_id="333", channel_id="222", approval_thread_id="222")
-        path = tmp_path / "state.json"
-        save_memory(path, RelocationState(1, {record_key(record.source_kind, record.entry_sha256): record}))
-        store = memory_store = RelocationStore(path)
-        transport = memory_transport = MemoryTransport()
-        transport.messages[("222", "333")] = versions.MEMORY_V2
-        def request():
-            return mg.request_approval(memory_store.pending()[0], ENTRY, store=memory_store,
-                                       transport=memory_transport, binding=binding, lease=lease, journal=journal)
-        def unknown_version():
-            memory_store.update(replace(memory_store.pending()[0], render_version="unknown"))
-        def wire():
-            return memory_transport.messages[("222", "333")]
-        posts, deleted = transport.posts, transport.deleted
-        module = import_module("automation.memory_relocate.effects_live")
-        monkeypatch.setattr(module, "recover_entry_text", lambda *args: ENTRY)
     if surface == "effects":
         monkeypatch.setattr(transport, "api", lambda *args: None, raising=False)
         directory = SimpleNamespace(describe=lambda channel: ChannelFacts(11, "synthetic request", (), "111"),
@@ -268,7 +216,7 @@ def test_bound_request_reuses_without_renderer_calls(
         monkeypatch.setattr(module, "DiscordTransport", lambda *args: transport)
         monkeypatch.setattr(module, "DiscordChannelDirectory", lambda *args: directory)
         monkeypatch.setattr(module, "load_config", lambda: ObsidianWriteConfig("git@example.invalid:owner/vault.git", tmp_path / "clone"))
-        extra = {} if producer == "plaud" else dict(memory_dir=tmp_path, rag_state_path=tmp_path / "rag.json")
+        extra = {}
         effects = module.build_effects(state_path=path, token="synthetic", owner_id=transport.owner_id,
                                        now=datetime(2026, 9, 11, 12, tzinfo=UTC), **extra)
         def request():

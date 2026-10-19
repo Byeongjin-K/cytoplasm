@@ -96,7 +96,6 @@ def _board() -> meeting_project.Board:
 
 def _run(tmp_path, monkeypatch, capsys, board=None, project=PROJECT, label="8월 기술회의") -> dict:
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(SKILL / "prompts/meeting-extraction-v5.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -178,7 +177,6 @@ def test_ingest_without_a_project_still_gets_the_tail_without_numbers(tmp_path, 
         lambda project, *, client=None: meeting_project.empty_board(),
     )
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(SKILL / "prompts/meeting-extraction-v5.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -245,7 +243,7 @@ def test_ingest_without_the_flag_detects_the_project_from_the_label(tmp_path, mo
 
 def test_completion_notice_explains_exhausted_action_ids() -> None:
     notice = meeting_actions.format_notify(
-        label="x", cards=1, milestones_added=0, others=0,
+        label="x", cards=1, others=0,
         note_name="n.md", team_posted=False, project=PROJECT, action_id_exhausted=True,
     )
 
@@ -267,7 +265,7 @@ def test_summary_and_notice_say_when_no_project_was_resolved(tmp_path, monkeypat
     assert result["actions_new"] == 0 and result["actions_open"] == 0
     assert "| — |" in _note(tmp_path), "번호 없이라도 항목은 실린다"
     notice = meeting_actions.format_notify(
-        label="x", cards=1, milestones_added=0, others=0,
+        label="x", cards=1, others=0,
         note_name="n.md", team_posted=False, project="",
     )
     assert "과제 미지정" in notice and "--project" in notice
@@ -291,7 +289,7 @@ def _run_pending(tmp_path, monkeypatch, capsys, candidates, source=()):
         lambda project, *, client=None: _board() if project else meeting_project.empty_board(),
     )
     for name, value in (
-        ("MEETING_NOTES_DIR", tmp_path / "notes"), ("MEETING_STATE_FILE", tmp_path / "state/m.yaml"),
+        ("MEETING_NOTES_DIR", tmp_path / "notes"),
         ("MEETING_PROMPT_FILE", SKILL / "prompts/meeting-extraction-v5.md"),
         ("MEETING_LOG_DIR", tmp_path / "logs"), ("MEETING_PLAN_DIR", tmp_path / "plan"),
         ("MEETING_CONFIG", tmp_path / "absent.json"),

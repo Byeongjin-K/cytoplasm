@@ -1,11 +1,10 @@
-# W3-6 scenario bank: the Wave-3 calendar chain (W3-1 register + W3-2 remind),
+# W3-6 scenario bank: the Wave-3 calendar chain (W3-1 register/delete),
 # plus the calendar-API 401 failure injection required by the W3-6 QA gate.
 #
 # Chain under test (unattended, deterministic, E2E mode only on the actuator
 # process tree — production units keep refusing E2E_TEST_MODE at boot):
 #   W3-1 gated create: draft -> HMAC signed injection (W1-6 adapter) -> owner
 #   confirm -> real gws insert (audited in the real approvals.jsonl) ->
-#   W3-2 deployed reminder poller dry-run at T-60min composes the reminder ->
 #   W3-1 gated delete restores the exact baseline (idempotent bank).
 #
 # Failure injection (plan W3-6 QA line): CALENDAR_GWS_BIN aimed at a 401 shim
@@ -23,19 +22,18 @@
 #     far outside the production poller's 55-65min window (no stray DM).
 version: 1
 id: w3-calendar
-title: "W3 calendar register/remind E2E bank (happy + 401 failure injection)"
+title: "W3 calendar register/delete E2E bank (happy + 401 failure injection)"
 driver: tests/e2e/drivers/w3_calendar.sh
 remote_host: <primary-node>
 remote_account: agent
 
 cases:
-  - id: register_remind
+  - id: register_delete
     kind: happy
     steps:
       - "baseline: real gws list for the W36-BANK marker (expect 0) + approvals.jsonl line count"
       - "W3-1 register: draft-create -> sign (HMAC injection) -> confirm -> EXECUTED, real event visible via list"
       - "audit: real approvals.jsonl grows by exactly 2 records (approval + executed audit)"
-      - "W3-2 remind: deployed poll_reminders.py dry-run with REMINDER_NOW=T-60min sees the event (DRY-RUN line)"
       - "cleanup: gated draft-delete -> sign -> confirm -> event gone, baseline restored (+2 more audit records)"
     expect:
       baseline_events: 0
@@ -44,8 +42,6 @@ cases:
       executed_create: true
       events_delta_after_create: 1
       approvals_delta_after_create: 2
-      poller_exit: 0
-      remind_dry_run_hit: true
       confirm_delete_exit: 0
       events_after_cleanup_equals_baseline: true
       approvals_total_delta: 4

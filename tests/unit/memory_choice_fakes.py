@@ -9,7 +9,6 @@ from urllib.error import HTTPError
 from automation.interop.reaction_approval import DiscordTransport, JsonValue
 from automation.memory_curator.binding import entry_digest
 from automation.memory_relocate.model import RelocationRecord
-from automation.memory_relocate.choice_verify import Verifier
 from automation.memory_relocate.propose import build_batch, build_proposed_record
 
 NOW: Final = datetime(2026, 10, 14, tzinfo=UTC)
@@ -88,8 +87,3 @@ class MessageSink:
     def send(self, body: str) -> tuple[Sent, ...]:
         self.deliveries.append((self.channel_id, body))
         return (Sent("9005"),)
-
-
-@dataclass(frozen=True, slots=True)
-class OfflineVerifier(Verifier):
-    transport: Reactions

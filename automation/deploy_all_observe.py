@@ -60,6 +60,7 @@ case "$1" in
     if [[ -d "$d/mailon" ]]; then mailon_vendor_digest "$d/mailon" || exit 44; else echo -; fi
     [[ ! -e "$d/runtime-manifest.json" ]] || cat -- "$d/runtime-manifest.json" || exit 44 ;;
   legacy-service) PYTHONPATH="$2" python3 -B -m automation.legacy_services check --name "$3" --mode "$4" ;;
+  retired-job) PYTHONPATH="$2" python3 -B -m automation.retired_jobs check --name "$3" ;;
   owner-timers) PYTHONPATH="$2" python3 -B -m automation.owner_timers check --jobs "$3" ;;
   config) PYTHONPATH="$2" python3 -B -m "$3" --show "${@:4}" ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
@@ -183,6 +184,13 @@ def _file(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]
 
 
 def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
+    if decl.attr("algorithm") in ("retired-job-v1", "retired-reminder-data-v1"):
+        name = ("reminder-poller" if decl.attr("algorithm") == "retired-reminder-data-v1" else
+                Path(decl.destination).name.removeprefix("autophagy-cron-").removesuffix(".timer"))
+        rc, out = call(decl.account, ("retired-job", str(root), name))
+        state = out.strip() if rc == 0 and out.strip() in ("ok", "stale") else "unknown"
+        want = _sha_text("retired")
+        return _Seen(want, want if state == "ok" else "?" if state == "unknown" else "-", state)
     if decl.attr("algorithm") == "mail-html-reply-v1":
         mode = _cache.get("mail_html_reply", "off")
         if mode not in ("on", "off"):
@@ -328,7 +336,6 @@ def collect(
     mail_html_reply: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
-    hermes_memory: str = "on",
     owner_timers_off: str = "off",
     peer_retired: bool = False,
 ) -> list[str]:
@@ -352,7 +359,7 @@ def collect(
     own = {a: "roster-unverified" if rc in _ROSTER_NOT_RUN else "roster-required" for a, rc in roster_rc.items() if rc}
     held = {d.owner for d in gated if d.account in own}  # 한 계정이라도 실패하면 소유 선언 묶음 전체가 보류된다
     cache: dict[str, object] = {"dori_agent_chat": dori_agent_chat, "agent_chat_channel": agent_chat_channel}
-    cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard, "hermes-memory": hermes_memory})
+    cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard})
     cache["omo_relay_mode"] = omo_relay_mode
     cache["mail_html_reply"] = mail_html_reply
     cache["owner_timers_off"] = owner_timers_off
@@ -363,10 +370,6 @@ def collect(
                 and decl.destination in owner_timers_off.split("/")):
             # The owner-timers derived declaration verifies marker and disabled units,
             # including before the new list has been installed on the node.
-            continue
-        if (hermes_memory == "off" and decl.kind == "cron" and decl.account == "agent"
-                and decl.destination in ("memory-curator-watch", "memory-relocate-watch")):
-            # The derived declaration verifies both disabled timers instead of re-enabling them.
             continue
         seen = _OBSERVERS[decl.kind](decl, runtime_root, call, cache)
         # 계정의 사유는 그 계정 자신의 검증 결과다. 통과한 계정은 다른 계정 때문에 보류됐다고만 적는다 —
@@ -404,7 +407,6 @@ def observe_node(
     mail_html_reply: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
-    hermes_memory: str = "on",
     owner_timers_off: str = "off",
     peer_retired: bool = False,
 ) -> list[str]:
@@ -416,6 +418,6 @@ def observe_node(
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
-                    hermes_memory=hermes_memory, owner_timers_off=owner_timers_off,
+                   owner_timers_off=owner_timers_off,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
                    omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply)

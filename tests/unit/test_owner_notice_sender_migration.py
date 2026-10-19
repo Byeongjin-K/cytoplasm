@@ -15,7 +15,6 @@ from automation import owner_notice
 from automation.interop import gate_driver
 from automation.interop.hermes_plugin import _send_direct_result
 from automation.memory_curator.effects import alert_owner
-from automation.reminder_poller import poll_reminders
 
 Sender = Callable[[str], object]
 _INTEROP_RECEIPT = (
@@ -37,10 +36,6 @@ _CURATOR_BODY = (
 
 def _interop_sender(correlation_id: str) -> None:
     _send_direct_result(correlation_id)
-
-
-def _reminder_sender(body: str) -> None:
-    poll_reminders.DmSender().send(body)
 
 
 def _curator_sender(body: str) -> bool:
@@ -82,7 +77,6 @@ def notice_attempts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     ("sender", "input_body", "delivered_body"),
     (
         (_interop_sender, "corr-1", _INTEROP_RECEIPT),
-        (_reminder_sender, "reminder body", "reminder body"),
         (_curator_sender, "near-cap body", _CURATOR_BODY),
     ),
 )
@@ -94,7 +88,6 @@ def test_notice_senders_attempt_configured_channel(
     delivered_body: str,
 ) -> None:
     monkeypatch.setattr(owner_notice, "owner_notice_channel", _configured_channel)
-    monkeypatch.setattr(poll_reminders, "_release_runtime_root", Path.cwd)
 
     _ = sender(input_body)
 
@@ -105,7 +98,6 @@ def test_notice_senders_attempt_configured_channel(
     ("sender", "input_body", "delivered_body"),
     (
         (_interop_sender, "corr-1", _INTEROP_RECEIPT),
-        (_reminder_sender, "reminder body", "reminder body"),
         (_curator_sender, "near-cap body", _CURATOR_BODY),
     ),
 )
@@ -117,7 +109,6 @@ def test_notice_senders_fall_back_to_owner_dm_when_channel_is_absent(
     delivered_body: str,
 ) -> None:
     monkeypatch.setattr(owner_notice, "owner_notice_channel", _absent_channel)
-    monkeypatch.setattr(poll_reminders, "_release_runtime_root", Path.cwd)
 
     _ = sender(input_body)
 

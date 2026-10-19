@@ -3,19 +3,13 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
-from automation.interop.approval_lifecycle import ApprovalIntent
-from automation.memory_relocate.approval_gate import RelocateApprovalGate
 from automation.memory_relocate.binding import batch_action_hash
 from automation.memory_relocate.choices import Choice, ROW_REACTIONS, batch_choices_hash, read_choices
-from automation.memory_relocate.model import RelocationState, record_key
-from automation.memory_relocate.relocation_store import RelocationStore
 from automation.memory_relocate.render import prepare_batch_card
-from automation.memory_relocate.store import save_state
-from memory_choice_fakes import CHANNEL, OWNER, Reactions, members
+from memory_choice_fakes import OWNER, members
 
 
 @pytest.mark.parametrize("users,expected", [
@@ -42,21 +36,6 @@ def test_choice_when_owner_selects_multiple_options_keeps_entry() -> None:
     result = read_choices(lambda emoji: ((OWNER, False),) if emoji in reactions else (), OWNER, 1)
     # Then: the conservative conflict rule keeps the entry.
     assert result == (Choice.KEEP,)
-
-
-def test_post_when_five_rows_seeds_all_options_before_final_decision(tmp_path: Path) -> None:
-    # Given: five bound proposals, a real local store and offline Discord.
-    batch = tuple((replace(record, message_id=None, status="proposed"), text) for record, text in members(5))
-    store = RelocationStore(tmp_path / "state.json")
-    save_state(store.state_path, RelocationState(1, {record_key(r.source_kind, r.entry_sha256): r for r, _ in batch}))
-    transport = Reactions()
-    record, text = batch[0]
-    gate = RelocateApprovalGate(record, text, store, transport, card=prepare_batch_card(batch), members=batch)
-    # When: the existing lifecycle adapter posts the card.
-    gate.post(ApprovalIntent("batch", record.batch_hash or "", CHANNEL))
-    # Then: every row choice is already clickable and final decisions come last.
-    assert transport.seeded == [emoji for row in ROW_REACTIONS for emoji in row] + ["✅", "⛔"]
-    assert len(set(transport.seeded)) == 17
 
 
 def test_card_when_maximum_rows_stays_within_transport_budget() -> None:

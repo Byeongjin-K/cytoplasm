@@ -87,7 +87,6 @@ _CARD_RENDER_ROOTS: Final = {
     "automation/obsidian_write/note_request_cli.py::cmd_request": "automation/obsidian_write/note_request_render.py::render_note_approval",
     "automation/effect_request/cli.py::cmd_request": "automation/effect_request/render.py::render_effect_approval",
     "automation/project_board/cli.py::post_card": "automation/project_board/proposal_render.py::render_proposal_card",
-    "automation/memory_relocate/approval_gate.py::request_approval": "automation/memory_relocate/render.py::render_relocation_approval",
     "automation/plaud_sync/approval_gate.py::request_approval": "automation/plaud_sync/render.py::render_plaud_approval",
     "skills/todo/scripts/todo_cli.py::_cmd_request": "skills/todo/scripts/todo_approval_render.py::render_todo_approval",
     "automation/release_approval.py::cmd_request": "automation/release_spec_message.py::render_v6",

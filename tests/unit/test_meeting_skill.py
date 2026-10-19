@@ -88,7 +88,6 @@ def test_recorded_extraction_meets_thresholds():
 
 def test_full_offline_pipeline_on_fixture(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -108,8 +107,9 @@ def test_full_offline_pipeline_on_fixture(tmp_path, monkeypatch, capsys):
     assert result["codex_called"] is False and result["provider"] == "recorded"
     cards = (tmp_path / "plan/kanban-plan.jsonl").read_text().splitlines()
     assert len(cards) >= 3
-    state = (tmp_path / "state/milestones.yaml").read_text()
-    assert state.count("  - title: ") >= 2
+    note = next((tmp_path / "notes").glob("*.md")).read_text()
+    assert "## 마일스톤" in note
+    assert not (tmp_path / "state/milestones.yaml").exists()
     assert (tmp_path / "plan/team-post.txt").read_text().startswith("```json")
 
 
@@ -230,7 +230,6 @@ def test_ingest_fails_visibly_when_the_codex_tier_is_unavailable(tmp_path, monke
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("AUTOPHAGY_HERMES_BIN", str(hermes))
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -257,7 +256,6 @@ def test_patent_keyword_meeting_publishes_cards_milestones_and_team_post(
 ):
     """특허 낱말이 든 회의도 카드·마일스톤·#team 게시가 일반 회의와 똑같다."""
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -273,8 +271,8 @@ def test_patent_keyword_meeting_publishes_cards_milestones_and_team_post(
     cards = (tmp_path / "plan/kanban-plan.jsonl").read_text(encoding="utf-8")
     assert "청구항(claim) 초안 작성 (마감 2026-07-28)" in cards
     assert "[민감" not in cards
-    state = (tmp_path / "state/milestones.yaml").read_text(encoding="utf-8")
-    assert "특허 출원서 제출" in state
+    note = next((tmp_path / "notes").glob("*.md")).read_text(encoding="utf-8")
+    assert "특허 출원서 제출" in note
     assert "선행기술 조사" in (tmp_path / "plan/team-post.txt").read_text(encoding="utf-8")
     notify = (tmp_path / "plan/notify.txt").read_text(encoding="utf-8")
     assert "회의록 처리 완료: meeting-patent" in notify
@@ -396,21 +394,6 @@ def test_parse_extraction_with_fences_and_junk():
 def test_parse_extraction_rejects_garbage():
     with pytest.raises(meeting_llm.ExtractionParseError):
         meeting_llm.parse_extraction("no json here")
-
-
-def test_milestones_dedupe(tmp_path):
-    state = tmp_path / "m.yaml"
-    items = meeting_llm.parse_extraction(
-        (FIXTURES / "recorded-clean.json").read_text(encoding="utf-8")
-    ).milestones
-    first = meeting_actions.update_milestones(
-        state, items, note_name="n.md", ref="r1", now=NOW
-    )
-    second = meeting_actions.update_milestones(
-        state, items, note_name="n.md", ref="r1", now=NOW
-    )
-    assert first == len(items) and second == 0
-    assert state.read_text().count("  - title: ") == len(items)
 
 
 # --- plugin trigger logic --------------------------------------------------------
@@ -579,12 +562,10 @@ def test_nonmeeting_gate_has_zero_meeting_side_effects(tmp_path, monkeypatch):
 # --- t_f409f47b: artifact producers must be call-counted, not merely absent ----
 
 # Every function that materializes a meeting artifact. `plan_cards` builds the
-# Kanban cards, `write_note` the meeting note, `update_milestones` the
-# milestones.yaml rows, `format_team_post` the #team action items.
+# Kanban cards, `write_note` the meeting note, `format_team_post` the #team action items.
 _ARTIFACT_PRODUCERS = (
     "write_note",
     "plan_cards",
-    "update_milestones",
     "format_team_post",
 )
 
@@ -643,7 +624,6 @@ def test_explicit_meeting_command_calls_every_artifact_producer(tmp_path, monkey
     assertions above would hold even if the spies were never wired up.
     """
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -678,7 +658,6 @@ def test_explicit_meeting_command_still_creates_offline_outputs(tmp_path, monkey
     plugin = _load_plugin()
     monkeypatch.setattr(plugin, "_config", lambda: {"owner_id": "OWNER1"})
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -713,7 +692,7 @@ def test_explicit_meeting_command_still_creates_offline_outputs(tmp_path, monkey
     assert result["todos"] >= 3 and result["milestones"] >= 2
     assert len((tmp_path / "plan/kanban-plan.jsonl").read_text().splitlines()) >= 3
     assert len(list((tmp_path / "notes").glob("*.md"))) == 1
-    assert (tmp_path / "state/milestones.yaml").exists()
+    assert not (tmp_path / "state/milestones.yaml").exists()
     assert (tmp_path / "plan/team-post.txt").exists()
     assert posts == [("C1", plugin.ACK_MESSAGE)]
 
@@ -766,7 +745,6 @@ def test_plugin_fail_closed_after_trigger(monkeypatch):
 
 def _meeting_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -940,7 +918,6 @@ def test_cli_notify_falls_back_to_the_channel_when_helper_is_unavailable(monkeyp
 
 def _run_meeting_ingest(tmp_path, monkeypatch, fixture, response, *, publish=None):
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -1227,7 +1204,6 @@ def test_the_minutes_body_is_corrected_and_the_appendix_transcript_is_not(
     monkeypatch.setenv("TERM_GLOSSARY_FILE", str(glossary))
     monkeypatch.setenv("TERM_CORRECTION_LOG", str(log))
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))
@@ -1275,7 +1251,6 @@ def test_the_transcript_handed_to_the_note_is_the_uncorrected_one(tmp_path, monk
     monkeypatch.setenv("TERM_GLOSSARY_FILE", str(glossary))
     monkeypatch.setenv("TERM_CORRECTION_LOG", str(tmp_path / "corrections.jsonl"))
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(REPO / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))

@@ -1,9 +1,0 @@
-# 알림 폴러는 agent no-agent cron이 계정 홈 스크립트를 직접 실행한다.
-agent|automation/reminder_poller/poll_reminders.py|.hermes/scripts/poll_reminders.py|required
-# 런타임 두 파일은 한 세대(.current.d/<세대>)로 놓이고 링크 .current 가 그 세대를 가리킨다.
-agent|automation/reminder_poller|.hermes/reminder_poller_runtime/.current|v2:tree;files=poller_core.py,reminder_store.py
-# 옛 래퍼가 읽던 평면 사본 — 실행 경로에서 빠졌고 배포기는 건드리지 않는다(격리 후보).
-agent|automation/reminder_poller/poller_core.py|.hermes/reminder_poller_runtime/poller_core.py|v2:file;policy=retired;reason=the-wrapper-imports-the-generation-link-.current
-agent|automation/reminder_poller/reminder_store.py|.hermes/reminder_poller_runtime/reminder_store.py|v2:file;policy=retired;reason=the-wrapper-imports-the-generation-link-.current
-agent|automation/reminder_poller/poll_reminders.py|.hermes/reminder_poller_runtime/poll_reminders.py|v2:file;policy=retired;reason=superseded-by-the-wrapper-in-.hermes/scripts
-agent|automation/reminder_poller/poll_reminders.py|reminder-poller|v2:cron;schedule=*/5 * * * *;script=poll_reminders.py;deliver=local;mode=no-agent;runner=systemd

@@ -146,7 +146,7 @@ def test_v5_keeps_all_seven_full_preview_lines_when_metadata_is_realistic() -> N
     assert sum(line.startswith(("대상:", "사실:", "위치:", "인계:", "되돌리기:")) for line in card.splitlines()) == 5
 
 
-@pytest.mark.parametrize("producer", ["plaud", "memory"])
+@pytest.mark.parametrize("producer", ["plaud"])
 def test_selected_version_survives_when_cron_merges_effect_persistence(producer: str) -> None:
     # Given a pure FSM result based on the old snapshot and a mid-tick committed card.
     if producer == "plaud":
@@ -162,18 +162,5 @@ def test_selected_version_survives_when_cron_merges_effect_persistence(producer:
         merged = _merge_effect_bindings(before, result, persisted)
         version = merged.state.records["rec-001"].render_version
         expected = "plaud-sync-render-v5"
-    else:
-        from automation.memory_relocate.cron.memory_relocate_watch import _merge_effect_bindings
-        from automation.memory_relocate.model import RelocationState
-        from automation.memory_relocate.watch_step import ResolveResult
-        record = memory_record()
-        before = RelocationState(1, {"key": record})
-        result = ResolveResult(before, (), (), (), ())
-        current = replace(record, message_id="333", channel_id="222", render_version="mc-reloc-render-v2")
-        persisted = RelocationState(1, {"key": current})
-        # When the real cron reconciles the local effect's durable state.
-        merged = _merge_effect_bindings(before, result, persisted)
-        version = merged.state.relocations["key"].render_version
-        expected = "mc-reloc-render-v2"
     # Then the final cron save keeps the version actually posted.
     assert version == expected

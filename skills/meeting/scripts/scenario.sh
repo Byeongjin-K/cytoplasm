@@ -11,7 +11,6 @@ export PYTHONPYCACHEPREFIX="$work/pycache"
 cd "$work"
 
 export MEETING_NOTES_DIR="$work/notes"
-export MEETING_STATE_FILE="$work/state/milestones.yaml"
 export MEETING_PROMPT_FILE="$skill_dir/prompts/meeting-extraction-v4.md"
 export MEETING_LOG_DIR="$work/logs"
 export MEETING_PLAN_DIR="$work/plan"
@@ -27,25 +26,23 @@ export KNOWLEDGE_FAKE_PACK="$work/evidence-pack.json"
 echo "[1] compile"
 python3 -m py_compile "$skill_dir"/scripts/*.py "$skill_dir"/plugin/__init__.py
 
-echo "[2] clean md ingest (recorded LLM) -> cards>=3, milestones>=2, team post"
+echo "[2] clean md ingest (recorded LLM) -> cards>=3, minutes, team post"
 python3 "$cli" ingest --file "$fx/meeting-clean.md" --with-evidence \
   --recorded-response "$fx/recorded-clean.json" --offline --notify-channel SANDBOX
 card_lines=$(wc -l < "$work/plan/kanban-plan.jsonl")
 [ "$card_lines" -ge 3 ] || { echo "FAIL cards=$card_lines"; exit 1; }
-milestone_count=$(grep -c '^  - title: ' "$work/state/milestones.yaml")
-[ "$milestone_count" -ge 2 ] || { echo "FAIL milestones=$milestone_count"; exit 1; }
+grep -q '^## 마일스톤' "$work/notes/"*.md || { echo "FAIL milestones missing from minutes"; exit 1; }
 head -1 "$work/plan/team-post.txt" | grep -q '```json' || { echo "FAIL team post"; exit 1; }
 grep -q '회의록 처리 완료' "$work/plan/notify.txt" || { echo "FAIL notify"; exit 1; }
 grep -q '"verdict": "hit"' "$work/notes/"*.evidence.json || { echo "FAIL evidence sidecar"; exit 1; }
 
 echo "[3] patent-keyword md ingest -> handled like any meeting (cards, milestones, team post)"
 rm -rf "$work/plan" && mkdir -p "$work/plan"
-rm -f "$work/state/milestones.yaml"
 out=$(python3 "$cli" ingest --file "$fx/meeting-patent.md" \
   --recorded-response "$fx/recorded-patent.json" --offline --notify-channel SANDBOX)
 echo "$out" | tail -1 | grep -q '"sensitive"' && { echo "FAIL sensitivity verdict still reported"; exit 1; }
 grep -q '청구항(claim) 초안 작성' "$work/plan/kanban-plan.jsonl" || { echo "FAIL card title masked"; exit 1; }
-grep -q '특허 출원서 제출' "$work/state/milestones.yaml" || { echo "FAIL milestone masked"; exit 1; }
+grep -q '특허 출원서 제출' "$work/notes/"*.md || { echo "FAIL milestone masked"; exit 1; }
 head -1 "$work/plan/team-post.txt" | grep -q '```json' || { echo "FAIL team post suppressed"; exit 1; }
 untagged=$(grep -L '^tags: \[meeting, w2-3\]$' "$work/notes/"*.md || true)
 [ -z "$untagged" ] || { echo "FAIL extra tag on note"; exit 1; }
