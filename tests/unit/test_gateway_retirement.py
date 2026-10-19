@@ -201,6 +201,23 @@ def test_partial_agent_failure_resumes_after_atomic_edit(tmp_path: Path) -> None
     assert (home / retirement.MARKER).exists()
 
 
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_singleton_provider_collections_remain_typed_and_retryable(newline: bytes) -> None:
+    data = (
+        b"model:\n  provider: openai-codex\n"
+        b"providers:\n  litellm:\n    base_url: http://127.0.0.1:4000\n    key_env: LITELLM_AGENT_KEY\n"
+        b"custom_providers:\n- name: litellm\n  base_url: http://127.0.0.1:4000/v1\n  key_env: LITELLM_AGENT_KEY\n"
+        b"fallback_providers:\n  - provider: xai-oauth\n"
+    ).replace(b"\n", newline)
+    expected = (
+        b"model:\n  provider: openai-codex\nproviders: {}\ncustom_providers: []\n"
+        b"fallback_providers:\n  - provider: xai-oauth\n"
+    ).replace(b"\n", newline)
+    result = retirement.config_without_gateway(data)
+    assert result == expected
+    assert retirement.config_without_gateway(result) == expected
+
+
 @pytest.mark.parametrize("relative", [".env.secrets", ".hermes", "litellm-gateway", retirement.BACKUP])
 def test_symlinks_are_never_followed(tmp_path: Path, relative: str) -> None:
     home = _home(tmp_path / "home")

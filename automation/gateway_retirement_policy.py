@@ -19,9 +19,10 @@ def config_without_gateway(data: bytes) -> bytes:
     """Remove only the two known YAML blocks, retaining surrounding bytes."""
     lines = data.splitlines(keepends=True)
     selected: set[int] = set()
+    replacements: dict[int, bytes] = {}
     blocks = 0
-    for heading in (b"providers:", b"custom_providers:"):
-        starts = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == heading]
+    for heading, empty in ((b"providers:", b"providers: {}"), (b"custom_providers:", b"custom_providers: []")):
+        starts = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") in (heading, empty)]
         if len(starts) != 1:
             raise ValueError("GATEWAY-RETIRE-REFUSED: 제공자 설정 구조 불일치")
         start = starts[0] + 1
@@ -32,6 +33,9 @@ def config_without_gateway(data: bytes) -> bytes:
             b"  - name: litellm", b"- name: litellm",
         )
         candidates = [i for i in range(start, end) if lines[i].rstrip(b"\r\n") in prefixes]
+        if lines[starts[0]].rstrip(b"\r\n") == empty:
+            if any(line.strip() and not line.lstrip().startswith(b"#") for line in lines[start:end]):
+                raise ValueError("GATEWAY-RETIRE-REFUSED: 빈 제공자 설정에 하위 항목 존재")
         if len(candidates) > 1:
             raise ValueError("GATEWAY-RETIRE-REFUSED: 제공자 설정 중복")
         if not candidates:
@@ -51,9 +55,13 @@ def config_without_gateway(data: bytes) -> bytes:
                     rb"LITELLM_[A-Z0-9_]+", values[b"key_env"].strip(b"'\"")):
             raise ValueError("GATEWAY-RETIRE-REFUSED: 제공자 설정 값 불일치")
         selected.update(range(index, block_end))
+        if not any(i not in selected and lines[i].strip() and not lines[i].lstrip().startswith(b"#")
+                   for i in range(start, end)):
+            ending = lines[starts[0]][len(heading):]
+            replacements[starts[0]] = empty + ending
     if blocks == 1:
         raise ValueError("GATEWAY-RETIRE-REFUSED: 제공자 설정 한 쪽만 존재")
-    result = b"".join(line for i, line in enumerate(lines) if i not in selected)
+    result = b"".join(replacements.get(i, line) for i, line in enumerate(lines) if i not in selected)
     if re.search(rb"(?i)litellm|(?:127\.0\.0\.1|localhost):4000", result):
         raise ValueError("GATEWAY-RETIRE-REFUSED: 예상 밖 제공자 참조 잔존")
     return result
