@@ -42,6 +42,8 @@ jobs:
       # 고정본도 dpkg -i 가 아니라 apt-get 으로 넣는다: dpkg -i 는 의존성이 빠지면 패키지를 반쯤 풀어 둔 채
       # 실패하고, 그 뒤 apt 경로까지 "Unmet dependencies" 로 깨진다(2026-10-19 컨테이너 실측). apt-get 은
       # 의존성을 먼저 풀어 보고 안 되면 아무것도 건드리지 않은 채 거절한다.
+      # 내려받기는 파일당 최악 약 1분(연결 10초·전체 30초, 재시도 1회)에서 끊는다 — 주소가 멈춰도 폴백이
+      # 원래 경로(약 105초)보다 크게 늦지 않게 한다. 파일은 50KB 안팎이다.
       - name: Install scenario process sandbox
         run: |
           set -euo pipefail
@@ -50,7 +52,7 @@ jobs:
             local base=https://launchpad.net/ubuntu/+archive/primary/+files
             mkdir -p "$pinned" || return 1
             while read -r digest name; do
-              curl -fsSL --retry 2 --max-time 60 -o "$pinned/$name" "$base/$name" || return 1
+              curl -fsSL --connect-timeout 10 --max-time 30 --retry 1 -o "$pinned/$name" "$base/$name" || return 1
               echo "$digest  $pinned/$name" | sha256sum -c - || return 1
             done <<'PINS'
           2461f1beee9cb04c8942739fe1a2b37e7b7c2a3d518f0779dc75f9245baa3094 bubblewrap_0.9.0-1ubuntu0.3_amd64.deb
