@@ -21,7 +21,7 @@ from typing import cast
 
 from automation.drive_client_cache import _folder_alive as folder_alive
 from automation.drive_client_cache import ensure_folder_path as resolve_folder_path
-from automation.interop.external_effect_gate import JsonValue
+from automation.interop.approval_types import JsonValue
 
 _JsonResult = dict[str, JsonValue] | list[JsonValue]
 CommandRunner = Callable[[list[str]], _JsonResult]

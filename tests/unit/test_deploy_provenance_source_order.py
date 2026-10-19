@@ -44,14 +44,14 @@ _SCRIPT_DIRECTORY: Final = (
 _NODE_ENV_LINE: Final = 'eval "$(python3 "$repo_root/automation/node_config_sh.py" --print-env)"'
 _NODE_ENV_DEPLOYERS: Final = (
     "automation/retired_jobs",
-    "automation/doctor", "automation/effect_request", "automation/interop", "automation/legacy_services", "automation/managed_sync",
+    "automation/doctor", "automation/effect_request", "automation/legacy_services", "automation/managed_sync",
     "automation/memory_curator", "automation/memory_provider", "automation/memory_relocate",
     "automation/notes_organize", "automation/obsidian_write", "automation/omo_relay", "automation/owner_timers",
     "automation/plaud_sync", "automation/project_board",
     "automation/rag_ingest", "automation/rag_stack", "automation/regression_bank",
     "automation/repair", "automation/research_trends", "automation/selfskill_audit", "automation/skill_generation",
     "automation/state_backup", "automation/stt_eval", "automation/voice_catalog", "automation/yoodori_gate", "skills/budget", "skills/calendar",
-    "skills/coordination", "skills/mail", "skills/meeting", "skills/speechtotext", "skills/todo", "skills/wiki",
+    "skills/coordination", "skills/mail", "skills/meeting", "skills/speechtotext", "skills/todo",
 )
 _NODE_ENV: Final = "evaluates NAME=value exports printed from node.toml by node_config_sh.py; it sources no file"
 _NEWLINE: Final = ("the ANSI-C quote is only a `$'\\n'` newline joining, splitting or testing text for a newline; "

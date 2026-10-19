@@ -186,9 +186,9 @@ def main() -> int:
     parser.add_argument("--root", required=True)
     root = Path(parser.parse_args().root).resolve()
     sys.path.insert(0, str(root))
-    from automation.interop.external_effect_gate import (
+    from automation.interop.effect_approval import (
         ApprovalBinding, ApprovalContext, SignedApprovalEvent, ToolCall,
-        approval_challenge, evaluate_tool_call, load_denylist, record_signed_e2e_approval,
+        approval_challenge, validate_approval, record_signed_e2e_approval,
     )
     from automation.interop.injection_adapter import InboundEvent, sign_event
 
@@ -199,7 +199,7 @@ def main() -> int:
         e2e = {"E2E_TEST_MODE": "1", "INTEROP_E2E_SECRET": e2e_secret}
         approval_log = work / "approvals.jsonl"
         send_log = work / "mailon-send-calls.log"
-        rules = load_denylist(root / "configs" / "external-effect-tools.yaml")
+        target_id = "tool:mailon_send:python3"
         obs: dict[str, dict[str, Any]] = {}
 
         # --- case 1: triage tick -> drafts only, common routing, 0 send ----
@@ -250,7 +250,7 @@ def main() -> int:
         call = ToolCall("python3", {"command": shlex.join(draft["argv"])})
         ctx_e2e = ApprovalContext(approval_log=approval_log, owner_id=OWNER, e2e_test_mode=True)
         ctx_prod = ApprovalContext(approval_log=approval_log, owner_id=OWNER, e2e_test_mode=False)
-        allowed = evaluate_tool_call(call, rules, ctx_e2e)
+        allowed = validate_approval(call, target_id, ctx_e2e)
         double = _cli(root, env, "confirm", "--draft", pub_id, "--injection-file", str(work / "ok.json"), e2e=e2e)
         send_log_text = (work / "triage-gate" / "send-log.jsonl").read_text(encoding="utf-8")
         obs["approved_send"] = {
@@ -266,7 +266,7 @@ def main() -> int:
             "approval_owner_bound": bool(gate_recs) and gate_recs[0]["approval"].get("owner_id") == OWNER,
             "gate_hash_matches_record": bool(gate_recs) and allowed.action_hash == gate_recs[0]["hash"],
             "gate_allows_approved_hash_e2e": allowed.external_effect and allowed.allowed,
-            "production_rejects_e2e_record": not evaluate_tool_call(call, rules, ctx_prod).allowed,
+            "production_rejects_e2e_record": not validate_approval(call, target_id, ctx_prod).allowed,
             "double_confirm_rejected": double.returncode != 0,
             "sends_after_double_confirm": _count(send_log),
             "send_log_sent": '"status":"sent"' in send_log_text,
@@ -276,7 +276,7 @@ def main() -> int:
 
         # --- case 3: gate bypass — external effect with NO approval record -----
         bypass_call = ToolCall("python3", {"command": "python3 -m mailon.main send --to bypass@example.invalid --subject x --body y"})
-        bypass = evaluate_tool_call(bypass_call, rules, ctx_e2e)
+        bypass = validate_approval(bypass_call, target_id, ctx_e2e)
         no_approval = _cli(root, env, "confirm", "--draft", sens_id)
         watch = _cli(root, env, "watch", e2e=e2e)
         obs["gate_bypass"] = {

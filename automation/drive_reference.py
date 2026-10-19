@@ -27,7 +27,7 @@ from typing import Final, Protocol
 
 from automation import reference_rank
 from automation.document_text import GOOGLE_EXPORTS, Extracted, extract_document
-from automation.interop.external_effect_gate import JsonValue
+from automation.interop.approval_types import JsonValue
 
 ROOT_ENV: Final = "DRIVE_REFERENCE_ROOT"
 DEFAULT_ROOT: Final = "KIMM"

@@ -14,7 +14,7 @@ guild scan and from nothing else — no caller can name an environment variable 
 point one somewhere. The exemption is intentionally narrower than the whole
 repository: five non-approval DM senders remain outside this directory —
 ``procure_review.send_review``,
-``interop.gate_driver.main``, ``interop.hermes_plugin._send_direct_result``,
+``interop.gate_driver.main``,
 and ``research_trends._send_dm``.
 """
 from __future__ import annotations

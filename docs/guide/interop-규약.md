@@ -7,6 +7,8 @@
 
 ---
 
+2026-10-19 현재 Hermes 전용 플러그인과 외부효과 denylist 분류기는 폐기했다. 이 문서의 봉투·보고 형식은 공용 라이브러리 계약으로 보존하며, Hermes 훅 등록·재활성화를 뜻하지 않는다. 기존 카드의 정확한 대상·인자·소유자 검증은 `automation.interop.effect_approval.validate_approval`이 담당하고 새 도구 분류는 하지 않는다. 계정의 플러그인·규칙·드롭인은 릴리스의 `retired_jobs` 필수 부재 수렴으로 정리한다.
+
 ## 1. 업무 보고 규약 (`#agents-log`)
 
 모든 에이전트는 자신의 주요 작업 상태 변화를 `#agents-log` 채널에 규격화된 포맷으로 보고해야 합니다. 보고는 각 설치의 개인 RAG 인제스트가 소비하며, 그룹 관리자가 선택한 경우 선택적 `Autophagy-Hub` 콜렉터(W3-4)가 대시보드에도 시각화합니다.
@@ -91,7 +93,7 @@ v1/v2 바이트·승인 해시를 재작성하지 않으며, 너무 긴 카드�
 - ❌ `blocked: review-required: Code fix for remove_completed bug — 2 source files changed (calendar_cli.py, confirm_reaction_watch.py) + 1 new test file. All 44 tests pass.`
 - ✅ `blocked: calendar 스킬 버그 수정 — 소스 2건·테스트 1건 변경, 전체 통과, 사람 리뷰 대기`
 
-작성 측 에이전트는 보고 생성 시 이 가이드라인을 준수해야 하며(MUST), 이 중 결정론적 마스킹은 **코드로 강제된다**: 단일 write 초크포인트인 `automation/interop/report.py`의 `format_report()`가 직렬화 직전 `mask_summary()`를 강제 적용하므로, 모든 전송 경로(hermes_plugin·gate_driver)가 자동 커버된다. 마스킹 대상: 파일 경로·소스 식별자(`[MASKED_PATH]`), secret/token(`[MASKED_KEY]`·`[MASKED_TOKEN]`·`[MASKED_AUTH]`), 이메일(`[MASKED_EMAIL]`), snowflake 모양 id(`[MASKED_ID]`). 활동 수준 문장은 그대로 통과한다. 콜렉터(`Autophagy-Hub`)는 여전히 형식만 검증하며 마스킹은 작성 측 초크포인트에서 끝난다 — 가드가 없는 경로로 작성된 과거 리포트만 원문이 남을 수 있다(재수집 시 upsert로 갱신 가능). 회귀 고정: `tests/unit/test_interop_protocol.py`.
+작성 측 에이전트는 보고 생성 시 이 가이드라인을 준수해야 하며(MUST), 이 중 결정론적 마스킹은 **코드로 강제된다**: 단일 write 초크포인트인 `automation/interop/report.py`의 `format_report()`가 직렬화 직전 `mask_summary()`를 강제 적용하므로, 해당 형식을 사용하는 전송 경로가 자동 커버된다. 마스킹 대상: 파일 경로·소스 식별자(`[MASKED_PATH]`), secret/token(`[MASKED_KEY]`·`[MASKED_TOKEN]`·`[MASKED_AUTH]`), 이메일(`[MASKED_EMAIL]`), snowflake 모양 id(`[MASKED_ID]`). 활동 수준 문장은 그대로 통과한다. 콜렉터(`Autophagy-Hub`)는 여전히 형식만 검증하며 마스킹은 작성 측 초크포인트에서 끝난다 — 가드가 없는 경로로 작성된 과거 리포트만 원문이 남을 수 있다(재수집 시 upsert로 갱신 가능). 회귀 고정: `tests/unit/test_interop_protocol.py`.
 
 ---
 

@@ -25,7 +25,7 @@ tests/
 - **버그 수리는 RED→GREEN 회귀 고정 선행.** 특히 no-agent cron의 자식 subprocess 자격증명 전파는
   회귀로 못박는다 — 선례: `test_calendar_confirm_watch_subprocess.py`,
   `test_coordination_confirm_watch_subprocess.py` (부모 env에 토큰 없고 accessor만 해석 가능한 상황에서 자식이 토큰을 받는지 검증).
-- 게이트/보안 경계(`external_effect_gate`, 승인 판정, deadlock/재협상)는 mutation 로직 변경 시 반드시 단위 테스트 동반.
+- 게이트/보안 경계(dori-gate, `effect_approval` 카드 검증, deadlock/재협상)는 mutation 로직 변경 시 반드시 단위 테스트 동반. Hermes 도구 분류기의 회귀는 은퇴했으며 저장된 카드의 해시·소유자 검증은 유지한다.
 - 테스트는 실시크릿·실외부효과를 유발하지 않는다 — 격리(`E2E_TEST_MODE`/DUMMY 시크릿/서명 주입) 경로만 사용.
 - **워크스테이션 PATH 의 `gws` 는 소유자 실 자격증명이다 — 워처 테스트는 실행 seam 을 반드시 가짜로 바꾼다.**
   `shutil.which("gws")` 로 바이너리를 찾는 스킬(todo·calendar·budget)의 승인 워처는 ✅ 뒤 쓰기까지

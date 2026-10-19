@@ -1,9 +1,12 @@
-"""Generic effect requests: a Drive save or any other action gets a card, ✅ runs it once.
+"""Generic outbound effect cards execute once on the owner's approval.
 
 Regression for 2026-10-17: a result file's Drive save and other actions without a
 dedicated CLI ended with "이 작업은 승인 경로가 없다". These tests pin the replacement:
 the card names what will happen, only the owner's ✅ on that card runs it, the frozen
 payload is re-hashed before it runs, and owner-only actions are refused with a reason.
+Owner-account-internal writes are not card requests: they use dori-gate, initiated
+only by an owner Discord command. The legacy Drive-card fixtures exercise stored
+approval compatibility, not the routing policy for new owner-internal writes.
 """
 
 from __future__ import annotations

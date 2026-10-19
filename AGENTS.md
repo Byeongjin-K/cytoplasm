@@ -211,9 +211,9 @@
 
 ## 승인 경로 완결 규칙 (cha 지시, 2026-10-07)
 
-- 게이트 대상 외부효과는 카드 생산자(`approval_lifecycle` 경유 요청 명령)+✅ 워처(no-agent cron/systemd, 사람 실행은 `manual:` 사유)+테스트+실행 영수증을 한 벌로 갖는다. `configs/external-effect-tools.yaml` 규칙 추가 시 함께 만들고, `GATED_RULES`에 생산자(또는 사유), `PRODUCER_WATCHERS`에 워처·테스트 파일을 등록한다(`tests/unit/test_gated_effect_paths_conformance.py`).
+- 현재 카드 대상은 「모든 요청 승인 경로 규칙」의 릴리스·계정 밖 경로다. 외부효과 카드는 생산자(`approval_lifecycle` 경유 요청 명령)+✅ 워처(no-agent cron/systemd, 사람 실행은 `manual:` 사유)+테스트+실행 영수증을 한 벌로 갖는다. `GATED_RULES`에 외부효과 생산자(또는 사유), `PRODUCER_WATCHERS`에 워처·테스트 파일을 등록한다(`tests/unit/test_gated_effect_paths_conformance.py`). 계정 내부 쓰기에 카드 생산자를 요구하지 않는다. Hermes 전용 denylist·플러그인은 은퇴했다.
 - 즉석 초안·채팅 메시지 ✅ 요청 금지. 승인은 해시에 묶인 카드 ✅ 만. 전용 명령 없으면 `python3 -m automation.effect_request request`.
-- 실행 뒤 원격 재확인, `origin_notice` 로 같은 스레드에. SKILL.md는 요청 명령만, `실행 <id>` fallback은 먼저 제안·요청 금지.
+- 카드 실행 뒤 원격 재확인, `origin_notice` 로 같은 스레드에. 카드 대상 SKILL.md는 요청 명령만, `실행 <id>` fallback은 먼저 제안·요청 금지. 내부 쓰기는 소유자 Discord 명령에서 시작해 dori-gate로 바로 처리한다.
 원문: [RULES.md](RULES.md) 「승인 경로 완결 규칙」 · 장부 `cyto-approval-path-complete`
 
 ## Drive 업로드·공유 승인 규칙 (cha 지시, 2026-10-14)

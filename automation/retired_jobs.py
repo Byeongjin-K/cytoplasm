@@ -1,9 +1,10 @@
-"""Declared removal of owner-retired agent timers and reminder data."""
+"""Declared removal of retired timers, derived data and stopped Hermes hooks."""
 from __future__ import annotations
 
 import argparse
 import os
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -12,14 +13,46 @@ from typing import Final
 
 from automation.gateway_retirement import Runner, checked, run, safe_path, stopped
 
-JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends")
+JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends", "wiki-confirm-watch")
 ALGORITHM: Final = "retired-job-v1"
 DATA: Final = ("state/reminders.db", "state/milestones.yaml")
+WIKI_SCRIPT: Final = ".hermes/scripts/wiki_confirm_reaction_watch.py"
 SCRIPTS: Final = {
     "memory-curator-watch": ".hermes/scripts/memory_curator_watch.py",
     "memory-relocate-watch": ".hermes/scripts/memory_relocate_watch.py",
     "reminder-poller": ".hermes/scripts/poll_reminders.py",
+    "wiki-confirm-watch": WIKI_SCRIPT,
 }
+INTEROP_FILES: Final = (
+    ".hermes/interop/external-effect-tools.yaml",
+    ".config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf",
+    ".hermes/interop/production_guard.sh",
+    ".hermes/interop/pin_import_root.sh",
+    ".hermes/interop/gate_driver.py",
+    ".hermes/interop_runtime/automation/interop/external_effect_gate.py",
+    ".hermes/interop_runtime/automation/interop/external_effect_gate_e2e.py",
+    ".hermes/interop_runtime/automation/interop/hook_boundary_e2e.py",
+    ".hermes/interop_runtime/automation/interop/policy_paths.py",
+    ".hermes/interop_runtime/automation/interop/gateway_preflight.py",
+)
+INTEROP_TREES: Final = (
+    ".hermes/plugins/interop-protocol",
+    ".hermes/interop_runtime/automation/interop/hermes_plugin",
+    ".hermes/interop_runtime/automation/interop/plugin_shim",
+)
+
+
+def interop_paths(home: Path) -> tuple[Path, ...]:
+    """Validate the exact retired files and trees before observing or deleting anything."""
+    paths = tuple(safe_path(home, relative) for relative in (*INTEROP_FILES, *INTEROP_TREES))
+    for path in paths:
+        if path.exists() and ((str(path.relative_to(home)) in INTEROP_FILES and not path.is_file())
+                              or (str(path.relative_to(home)) in INTEROP_TREES and not path.is_dir())):
+            raise ValueError("RETIRED-JOB-REFUSED: interop path type mismatch")
+        if path.is_dir():
+            for child in path.rglob("*"):
+                safe_path(home, str(child.relative_to(home)))
+    return paths
 
 
 def unit_paths(home: Path, name: str) -> tuple[Path, Path]:
@@ -54,6 +87,8 @@ def running(unit: str, runner: Runner) -> bool:
 def check(home: Path, name: str, runner: Runner = run) -> str:
     """Observe actual units and exact paths; unreadable is never absent."""
     try:
+        if name == "interop-plugin":
+            return "stale" if any(path.exists() for path in interop_paths(home)) else "ok"
         units = unit_paths(home, name)
         scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
         live = [running(path.name, runner) for path in units]
@@ -81,6 +116,21 @@ def quiesce(unit: str, runner: Runner) -> None:
 
 def install(home: Path, name: str, runner: Runner = run) -> None:
     """Stop the retired job, then remove data only after unit removal read-back."""
+    if name == "interop-plugin":
+        paths = interop_paths(home)
+        if not any(path.exists() for path in paths):
+            return
+        stopped("hermes-gateway.service", runner)
+        for path in paths:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+        checked(("systemctl", "--user", "daemon-reload"), runner)
+        stopped("hermes-gateway.service", runner)
+        if check(home, name, runner) != "ok":
+            raise ValueError("RETIRED-JOB-REFUSED: interop removal not confirmed")
+        return
     units = unit_paths(home, name)
     # research-trends keeps its script: topics imports and retained data still use it.
     scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
@@ -147,13 +197,19 @@ def deploy(host: str, runtime: str, head: str) -> int:
         result = subprocess.run(("ssh", host, command), check=False, timeout=150)
         if result.returncode:
             return 5
+    for account in (config.agent_account, config.peer_account):
+        command = shlex.join(("sudo", "-n", "-u", account, "-H", "env",
+                              f"PYTHONPATH={runtime}", "python3", "-B", "-m",
+                              "automation.retired_jobs", "install", "--name", "interop-plugin"))
+        if subprocess.run(("ssh", host, command), check=False, timeout=150).returncode:
+            return 5
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("check", "install", "deploy"))
-    parser.add_argument("--name", choices=JOBS)
+    parser.add_argument("--name", choices=(*JOBS, "interop-plugin"))
     parser.add_argument("--host")
     parser.add_argument("--runtime", default="/srv/autophagy-agent-current")
     parser.add_argument("--head")

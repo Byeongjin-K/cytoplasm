@@ -10,7 +10,7 @@ import pytest
 
 from automation.drive_client import DriveClient
 from automation.drive_taxonomy import artifact_name
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 from automation.stt_eval import model
 from automation.stt_eval.cron import capture
 from tests.unit.test_speechtotext_drive_watch_manifest import FakeDrive, NOW, environment

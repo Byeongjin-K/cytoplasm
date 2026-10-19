@@ -17,7 +17,7 @@ sys.path.insert(0, str(_REPO / "skills" / "calendar" / "scripts"))
 calendar_core = import_module("calendar_core")
 calendar_cli = import_module("calendar_cli")
 calendar_gate = import_module("calendar_gate")
-from automation.interop import external_effect_gate  # noqa: E402
+from automation.interop import effect_approval  # noqa: E402
 
 NOW = datetime(2026, 7, 15, 12, 0, tzinfo=calendar_core.KST)  # Wednesday
 
@@ -129,12 +129,12 @@ def test_change_summary_renders_korean_fields() -> None:
 
 # --- gate parity: action hash + approval record contract -----------------------
 
-def test_action_hash_parity_with_external_effect_gate() -> None:
+def test_action_hash_parity_with_effect_approval() -> None:
     import shlex
 
     argv = _create_argv()
-    call = external_effect_gate.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
-    expected = external_effect_gate._action_hash(call, calendar_core.EXTERNAL_EFFECT_TARGET_ID)
+    call = effect_approval.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
+    expected = effect_approval.action_hash(call, calendar_core.EXTERNAL_EFFECT_TARGET_ID)
     assert calendar_core.external_effect_action_hash(argv) == expected
 
 
@@ -151,11 +151,10 @@ def test_confirmed_mutation_passes_deployed_gate_in_e2e_mode(tmp_path, monkeypat
 
     argv = _create_argv()
     log = _approved_context(tmp_path, monkeypatch, argv)
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    call = external_effect_gate.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
-    decision = external_effect_gate.evaluate_tool_call(
-        call, rules,
-        external_effect_gate.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=True),
+    call = effect_approval.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
+    decision = effect_approval.validate_approval(
+        call, calendar_core.EXTERNAL_EFFECT_TARGET_ID,
+        effect_approval.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=True),
     )
     assert decision.external_effect and decision.allowed
 
@@ -165,18 +164,17 @@ def test_unconfirmed_or_production_e2e_record_stays_blocked(tmp_path, monkeypatc
 
     argv = _create_argv()
     log = _approved_context(tmp_path, monkeypatch, argv)
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    call = external_effect_gate.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
-    production = external_effect_gate.evaluate_tool_call(
-        call, rules,
-        external_effect_gate.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=False),
+    call = effect_approval.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
+    production = effect_approval.validate_approval(
+        call, calendar_core.EXTERNAL_EFFECT_TARGET_ID,
+        effect_approval.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=False),
     )
     assert production.external_effect and not production.allowed  # e2e record refused in production
     other = calendar_core.build_delete_argv("primary", "unapproved-evt")
-    unapproved = external_effect_gate.evaluate_tool_call(
-        external_effect_gate.ToolCall(tool_name="gws", arguments={"command": shlex.join(other)}),
-        rules,
-        external_effect_gate.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=True),
+    unapproved = effect_approval.validate_approval(
+        effect_approval.ToolCall(tool_name="gws", arguments={"command": shlex.join(other)}),
+        calendar_core.EXTERNAL_EFFECT_TARGET_ID,
+        effect_approval.ApprovalContext(approval_log=log, owner_id="owner-1", e2e_test_mode=True),
     )
     assert unapproved.external_effect and not unapproved.allowed
 

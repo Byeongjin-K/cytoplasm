@@ -1,27 +1,26 @@
-# 인터롭 게이트웨이 묶음(automation/interop/deploy.sh). agent·peer 두 계정이 같은 바이트를 받는다.
-# 규칙 파일은 항상 수렴한다. requires=roster 행은 두 계정 모두 roster 가 유효할 때만 놓이고,
-# activation=gateway 행은 게이트웨이가 다시 시작해야 효력이 생긴다(배포기는 재시동하지 않는다).
-agent|configs/external-effect-tools.yaml|.hermes/interop/external-effect-tools.yaml|v2:file
-agent|automation/interop/plugin_shim/__init__.py|.hermes/plugins/interop-protocol/__init__.py|v2:file;requires=roster;activation=gateway
-agent|automation/interop/hermes_plugin/plugin.yaml|.hermes/plugins/interop-protocol/plugin.yaml|v2:file;requires=roster;activation=gateway
-agent|automation/interop/production_guard.sh|.hermes/interop/production_guard.sh|v2:file;requires=roster;activation=gateway
-agent|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v2:file;requires=roster;activation=gateway
-agent|automation/interop/gateway-dropin.conf|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;requires=roster;activation=gateway
-agent|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;requires=roster
-agent|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;requires=roster
-agent|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;requires=roster
-agent|automation/notice_bot.py|.hermes/interop_runtime/automation/notice_bot.py|v2:file;requires=roster
-agent|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;requires=roster
-agent|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;requires=roster
-peer|configs/external-effect-tools.yaml|.hermes/interop/external-effect-tools.yaml|v2:file
-peer|automation/interop/plugin_shim/__init__.py|.hermes/plugins/interop-protocol/__init__.py|v2:file;requires=roster;activation=gateway
-peer|automation/interop/hermes_plugin/plugin.yaml|.hermes/plugins/interop-protocol/plugin.yaml|v2:file;requires=roster;activation=gateway
-peer|automation/interop/production_guard.sh|.hermes/interop/production_guard.sh|v2:file;requires=roster;activation=gateway
-peer|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v2:file;requires=roster;activation=gateway
-peer|automation/interop/gateway-dropin.conf|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;requires=roster;activation=gateway
-peer|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;requires=roster
-peer|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;requires=roster
-peer|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;requires=roster
-peer|automation/notice_bot.py|.hermes/interop_runtime/automation/notice_bot.py|v2:file;requires=roster
-peer|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;requires=roster
-peer|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;requires=roster
+# Retired Hermes interop bundle: observed only. Required absence cleanup belongs to retired_jobs.
+# Removed sources refer to this tombstone declaration, never to an installable copy.
+agent|automation/interop/deploy-manifest.txt|.hermes/interop/external-effect-tools.yaml|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/deploy-manifest.txt|.hermes/plugins/interop-protocol/__init__.py|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/deploy-manifest.txt|.hermes/plugins/interop-protocol/plugin.yaml|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/production_guard.sh|.hermes/interop/production_guard.sh|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/deploy-manifest.txt|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/notice_bot.py|.hermes/interop_runtime/automation/notice_bot.py|v2:file;policy=retired;reason=hermes-interop-retired
+agent|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;policy=retired;reason=hermes-interop-retired
+agent|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/deploy-manifest.txt|.hermes/interop/external-effect-tools.yaml|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/deploy-manifest.txt|.hermes/plugins/interop-protocol/__init__.py|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/deploy-manifest.txt|.hermes/plugins/interop-protocol/plugin.yaml|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/production_guard.sh|.hermes/interop/production_guard.sh|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/pin_import_root.sh|.hermes/interop/pin_import_root.sh|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/deploy-manifest.txt|.config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop/gate_driver.py|.hermes/interop/gate_driver.py|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/__init__.py|.hermes/interop_runtime/automation/__init__.py|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/node_config.py|.hermes/interop_runtime/automation/node_config.py|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/notice_bot.py|.hermes/interop_runtime/automation/notice_bot.py|v2:file;policy=retired;reason=hermes-interop-retired
+peer|configs/node.example.toml|.hermes/interop_runtime/automation/node.example.toml|v2:file;policy=retired;reason=hermes-interop-retired
+peer|automation/interop|.hermes/interop_runtime/automation/interop|v2:tree;policy=retired;reason=hermes-interop-retired

@@ -1,16 +1,15 @@
-# automation/interop/ — 외부효과 게이트 + 봇간 인터롭 코어
+# automation/interop/ — 승인 레코드·프로토콜 공용 코어
 
-프로젝트에서 가장 안전-임계인 경계. 규약 단일 진실은 [docs/guide/interop-규약.md](../../docs/guide/interop-규약.md).
-모든 mutating 툴콜은 여기를 통과해야 하며, 원칙은 **fail-closed + 해시 바인딩**.
+승인 레코드·카드·원문 통지와 프로토콜 값 형식을 공유한다. 규약은 [docs/guide/interop-규약.md](../../docs/guide/interop-규약.md).
+Hermes 외부효과 평가기·플러그인·규칙 파일은 폐기했다. `deploy.sh`는 기존 `retired_jobs` 정리 경로만 호출하며 Hermes를 설치·활성화·재시동하지 않는다. `policy=retired`는 잔존 관측만 하고, 양 계정의 실제 파일 정리는 `retired-interop-v1` 필수 derived 선언이 맡는다. 게이트웨이가 정지·비활성임을 확인하지 못하면 삭제하지 않는다.
+메일·예산·릴리스·외부 참석자 초대 카드와 기존 승인 저장 형식은 유지한다. 아래 소유자 대리 요청·음성·import-farm 도우미는 레거시 소비자·진단용이며 Hermes 훅으로 등록하지 않는다.
 
 ## 파일 지도
 | 파일 | 역할 |
 |------|------|
 | `channel_move.py` · `approval_directory.channel_override` | 삭제 전 미결 승인 조회(GET·파일 읽기만)와 ops 채널 override 판정. 노드 설정 `private_root/channel-override.json`은 ops 소유·0600 일반 파일·17~20자리 두 채널 ID일 때만 기존 설정보다 우선한다. 홈 경로는 `ProtectHome` 수리 유닛에서 보이지 않아 쓰지 않는다. 부재는 기존 경로, 오류는 값 없는 경고 후 기존 경로다. 승인 판정·lifecycle은 바꾸지 않는다 |
-| `external_effect_gate.py` | `evaluate_tool_call` — denylist(`configs/external-effect-tools.yaml`) 매칭. 미매칭=읽기 허용. 매칭(mutation)=owner 승인 레코드 필요. `action_hash=sha256(정규화 payload)`, method는 `manual_reaction` 또는 `signed_injection_e2e`만 |
-| `approval_types.py` · `approval_reminder.py` · `approval_lease.ReminderJournal` | 기존 승인 레코드의 key·원문 message id·실제 게시 시각에 고정된 리마인더 계산. 기존 key lease 안에서 lifecycle 관찰→영속 claim→최소정보 원문 링크 전송하며 catch-up은 최신 due 구간 1건만 시도한다. 별도 승인 상태머신이 아니다 |
-| `external_effect_gate_e2e.py` · `injection_adapter.py` | E2E 서명(HMAC) 승인 경로. `E2E_TEST_MODE=1`에서만 동작 |
-| `hermes_plugin/` · `hook_boundary_e2e.py` | Hermes 플러그인 경계 — 게이트가 실제로 강제되는 지점. **게이트웨이가 부르는 훅은 `register()` 가 등록하는 여섯뿐이다**(`pre_gateway_dispatch`·`pre_tool_call`·`transform_llm_output`·`kanban_task_{claimed,completed,blocked}`) — "에러를 동반한 라이프사이클 실패" 훅은 벤더에 없다. 그래서 **라이프사이클 실패 → 수리 티켓 경로는 만들지 않는다(2026-09-09 결정)**: 붙일 훅이 없고, `#agents-log` 보고는 이미 `kanban_task_*` → `_send_kanban_report` 가 하며, 티켓 쪽을 지금 형태로 켜면 `record_lifecycle_failure` 의 90초 subprocess 가 async 훅 안에서 턴을 세우고 dedup location 이 `task_id` 라 실패한 task 마다 새 카드가 열리며 수리 카드가 blocked 로 생성되므로 `kanban_task_blocked` 에 걸면 자기 루프가 된다. 그 자리를 메우던 대체된 선행 구현 `hermes_hook.py` 는 같은 날 삭제했다 — 인프라 실패는 healthcheck detect 가, 소유자가 눈치챈 실패는 `!repair` 가 덮는다. `coord-` 질의 응답은 config의 `interop_channel_id` 채널(#autophagy-agents)로 라우팅되며, 미설정 시 소스 채널로 폴백. 승인 표면은 `approval_surface.py`가 결정하고 `approval_directory.py`가 해석한다 — 설정 키(`personal_approvals_channel_id` / `deploy_approvals_channel_id`)는 그 디렉터리 내부에서만 읽힌다 |
+| `effect_approval.py` | 카드 생산자가 고정한 `target_id`·도구 인자·소유자·방법에 묶인 기존 승인 JSONL 검증과 격리 E2E 서명 기록. 해시·챌린지·저장 형식은 그대로며 도구 분류·denylist 평가·Hermes 등록은 없다 |
+| `approval_types.py` · `approval_reminder.py` · `approval_lease.ReminderJournal` | `approval_types`에는 레거시 저장용 `ApprovalContext`·결과 값 `ExternalEffectDecision`·`JsonValue`만 두며 승인 평가 구현은 없다. 기존 승인 레코드의 key·원문 message id·실제 게시 시각에 고정된 리마인더 계산. 기존 key lease 안에서 lifecycle 관찰→영속 claim→최소정보 원문 링크 전송하며 catch-up은 최신 due 구간 1건만 시도한다. 별도 승인 상태머신이 아니다 |
 | `digest_thread.py` | 아침 다이제스트의 하루 한 표준 승인 스레드(2026-10-16 Q187) — 날짜별 바인딩 파일(0600, flock)을 메일·캘린더가 공유하고, `settle` 이 미결 카드 수로 🔔 / ✅ 완료 표시를 맞춘다(이름 변경은 `origin_notice.rename_thread`·`close_thread`). 승인 판정은 없다 |
 | `approval_reminder_config.py` | `config.yaml`의 `approval_reminders`를 검증된 enabled·initial/repeat 모델로 로드(기본 true·3h·1h, 간격 오류 fail-fast) |
 | `thread_pointer.py` | 승인 요청 CLI 가 게시 직후 내는 `APPROVAL-THREAD <키>=<값> url=<링크>` 줄의 단일 정의. 좌표는 레코드의 `approval_guild_id`·`approval_thread_id`, 링크는 `owner_message.discord_link`, 좌표 결손은 `url=unavailable search=<값>`(추측 금지). I/O 없음 |
@@ -19,18 +18,17 @@
 | `delegation.py` · `report.py` | 위임 봉투 / `#agents-log` 보고 포맷 |
 | `killswitch.py` | `!pause-agents`/`!resume-agents` (소유자만, 영속) |
 | `owner_proxy.py` | 소유자 대리 요청 — `interop_bot_prose` 의 유일한 예외. 사설 설정 `owner_proxy_bot_id`·`owner_proxy_origin_channel_id` 의 봇 하나가 `#agent-chat`(스레드 포함)에 옮겨 쓴 글을, 링크한 원문을 Discord API 로 읽어 소유자 작성·같은 guild·원문 채널(스레드)·24시간·1회(원장)를 모두 확인한 뒤에만 받는다. 확인 불가는 거부. 선택 키 `owner_proxy_origin_webhook_ids` 의 소유자 웹훅이 원문 채널 자체에 쓴 글도 원문으로 받는다(`via=owner-webhook`). 원문 검증이 실패해도 대리 봇의 접두어·본문 있는 글은 `admit` 이 대리 봇 요청(`via=dori`)으로 받는다(2026-10-10 소유자 지시). 다른 봇은 그대로 버린다. 접두어 이름은 `도리`(`PROXY_NAME`, 2026-10-11)이고 옛 `오모냥` 은 비권장으로 계속 받으며 수락 로그 `prefix=current|legacy|other` 로 구분한다. 승인 게이트·✅ 판정은 불변. I/O 어댑터(원장·원문 조회)는 `owner_proxy_io.py`. 규약 [interop §3.5](../../docs/guide/interop-규약.md) |
-| `owner_proxy_watch.py` | 대리 요청 누락 안전망 — 거부된 대리 요청은 즉시, 받았는데 3분 안에 이 봇의 글이 없는 요청은 기한 뒤에 대리 글 스레드에 통지한다(게이트웨이 ✅ 는 버린 글에도 붙는 영수증이다). 대기 목록은 파일이라 재시동 뒤 `register()` 가 다시 무장한다. 게이트웨이 주 프로세스에서만 동작하고 아무것도 실행하지 않는다 |
-| `voice_transcript.py` | 소유자 음성 메시지(2026-10-12 소유자 지시) — `pre_gateway_dispatch` 가 일시정지 확인 직후 부른다. 봇이 아닌 `owner_id` 작성자의 음성만 노드 whisper.cpp(`SPEECHTOTEXT_WHISPER_BIN`·`_MODEL`, env → `~/.env.secrets`, `-l ko`)로 전사해 `[음성 메시지 · 로컬 전사] <전사문>` 으로 rewrite 하고, 음성은 이벤트에서 제자리 제거해 Hermes 기본 STT(faster-whisper `base`) 가 다시 돌지 않게 한다. 실패는 `skip`(`voice_transcription_failed`) + 메시지 스레드·DM 통지. wav·캐시 원본 삭제, 전사문 비로깅, 끄기 `AUTOPHAGY_VOICE_TRANSCRIBE=0`. 훅은 동기라 전사 시간만큼(3.7초 음성 ≈ 1초) 이벤트 루프를 묶는다 — 그래서 10분 상한·단계별 120초 제한을 둔다. 규약 [interop §3.6](../../docs/guide/interop-규약.md) |
-| `digest_reaction_listener.py` | 다이제스트 카드 📄/✍️ 를 누른 즉시 처리(2026-10-17 소유자 "반응이 너무 느려") — 훅이 아니다: Hermes 는 Discord 반응을 플러그인에 넘기지 않으므로 `register()` 가 데몬 스레드로 게이트웨이 러너(`gateway.run._gateway_runner_ref`)의 Discord 클라이언트에 `on_raw_reaction_add` 를 한 번 붙이고(재연결로 클라이언트가 바뀌면 다시 붙임) 소유자의 📄/✍️ 만 `~/.hermes/scripts/mail_triage_watch.py --digest-card <id>` 자식으로 넘긴 뒤 바로 돌아온다(이벤트 루프를 기다리게 하지 않음). 반응 재확인·소유자만·카드·동작당 한 번은 메일 스킬(`digest_reaction_actions.run_card`)이 2분 틱과 같은 claim 으로 지킨다. 게이트웨이 주 프로세스이고 메일 워처 파일이 있는 계정(agent)에서만 무장, 끄기 `DIGEST_REACTION_LISTENER=0`, 처리마다 `~/.hermes/mail-triage/logs/digest-reaction-events.jsonl` 한 줄 |
+| `owner_proxy_watch.py` | 레거시 대리 요청의 미응답 감시·중복 통지 방지 도우미. Hermes 플러그인 등록은 폐기했으며 새 감시 스레드를 자동으로 시작하지 않는다 |
+| `voice_transcript.py` | 레거시 소유자 음성의 로컬 전사·캐시 정리 도우미. Hermes 훅 호출은 폐기했고 독립 변환 계약만 보존한다 |
+| `digest_reaction_listener.py` | 레거시 Hermes 반응 리스너 도우미. 플러그인의 자동 install 호출은 폐기했다. 메일 워처의 카드 판정·2분 틱은 별도 경로로 보존한다 |
 | `loop_guard.py` | 봇 연쇄 분당 5회 상한 + 본문 해시 dedup |
-| `gate_driver.py` · `live_peer_driver.py` | 게이트/피어 드라이버 |
+| `gate_driver.py` · `live_peer_driver.py` | 레거시 프로토콜 진단 드라이버(자동 배포하지 않음) |
 | `production_guard.sh` | 프로덕션 게이트웨이에서 `E2E_TEST_MODE` 거부(부팅 차단) |
-| `free_response.py` | 게이트웨이 드롭인 `ExecStartPre=-…` 가 매 시작마다 `agent_chat_channel_id` 를 같은 계정 `config.yaml` 의 `discord.free_response_channels` 에 정확히 한 번 맞춘다(빠졌을 때만 한 줄 수정, 백업·원자 교체, ignored 우선, 키 없는 peer 는 무동작). doctor 「agent-chat 채널 무멘션 응답」이 같은 `decide`/`configured_channels` 를 읽기 전용으로 쓴다 |
+| `free_response.py` | 계정 free-response 설정의 순수 판정·레거시 수리 도우미. doctor가 같은 판정을 읽으며 interop 드롭인의 부팅 적용은 폐기했다 |
 
 ## 불변식 (변경 전 반드시 확인)
 - 노드 발신 토큰은 `automation.notice_bot.resolve_token`이 단독 해석한다. 활성 릴리스 override는 agent·peer 홈 또는 ops `private_root`의 계정 소유 0600 파일이며, 새 승인 목적지는 같은 override의 유돌 채널이다. `approval_lifecycle`·`origin_notice`의 주입 계약에는 토큰·파일 I/O를 넣지 않는다. 저장된 승인 좌표·결정은 전환 때문에 다시 쓰지 않는다.
 - 공급망 승인 채널은 type 0이고 이름이 `approvals`이거나 설정 ID(또는 명시적 공급망 핀)와 같을 때 받는다 — 이름 변경을 받는 쪽으로만 넓혔고 예전 기록의 의미는 그대로다. `approvals`·`notifications`는 표시 이름 예시이며 변경할 수 있다. 설정 없는 레거시 공급망 조회만 이름 검색을 쓴다. 정책 버전·저장 형식은 불변이다.
-- **mutation은 owner 승인 레코드 없이는 절대 실행 안 됨.** 승인 판정 로직(`_has_valid_approval`) 변경은 보안 회귀.
 - **`coordination.py`는 부수효과 없는 순수 상태머신** — 캘린더 쓰기/전송은 드라이버(coordination 스킬)가 소유. deadlock 10분·재협상 정확히 1회 규칙은 회귀 테스트로 고정.
 - `DiscordTransport` 호출부는 저장소 전반에 흩어져 있다(`grep -rl 'DiscordTransport(' --include=*.py`) — 시그니처를 바꾸면 그 목록 전체를 동반 갱신한다. 세어 둔 숫자는 금방 낡으므로 적지 않는다.
 - 게이트/커버리지 부족 파일이 많음 — 로직 수정 시 RED→GREEN 단위 테스트 선행(`tests/unit/`).

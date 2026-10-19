@@ -17,7 +17,9 @@ CLI = SCRIPTS / "todo_cli.py"
 def _run(script: Path, live: Path, command: str) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ, AUTOPHAGY_SKILL_LIVE_ROOT=str(live))
     return subprocess.run(
-        [sys.executable, str(script), command, "--title", "x"],
+        [sys.executable, str(script), command, "--title", "x",
+         "--origin-channel-id", "123456789012345678",
+         "--origin-message-id", "123456789012345679"],
         capture_output=True, text=True, env=env, check=False,
     )
 

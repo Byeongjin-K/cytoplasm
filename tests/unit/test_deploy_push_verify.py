@@ -21,7 +21,6 @@ _REPO = Path(__file__).resolve().parents[2]
 _HELPER = _REPO / "automation" / "deploy_push.sh"
 _DEPLOY_SCRIPTS = (
     "automation/doctor/deploy.sh",
-    "automation/interop/deploy.sh",
     "automation/managed_sync/deploy.sh",
     "automation/memory_curator/deploy.sh",
     "automation/memory_relocate/deploy.sh",
@@ -39,7 +38,6 @@ _DEPLOY_SCRIPTS = (
     "skills/coordination/deploy.sh",
     "skills/mail/deploy.sh",
     "skills/todo/deploy.sh",
-    "skills/wiki/deploy.sh",
 )
 
 

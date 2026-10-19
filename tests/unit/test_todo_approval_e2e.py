@@ -109,7 +109,6 @@ def test_command_chain_replay_and_second_generation_cycle(
     monkeypatch.setenv("TODO_OWNER_ID", _OWNER)
     monkeypatch.setenv("TODO_APPROVAL_ROOT", str(root))
     monkeypatch.setenv("TODO_APPROVAL_LOG", str(log))
-    monkeypatch.setenv("TODO_DENYLIST", str(_REPO / "configs" / "external-effect-tools.yaml"))
     monkeypatch.setattr(
         approval,
         "request_cli_approval",
@@ -118,7 +117,13 @@ def test_command_chain_replay_and_second_generation_cycle(
     fake_gws = FakeGws()
     monkeypatch.setattr(todo, "run_gws", fake_gws)
 
-    assert todo.main(["request", "--title", _TITLE]) == 0
+    request = todo.TaskRequest("@default", _TITLE)
+    decision = todo.evaluate(todo.insert_argv(request), context=todo.approval_context())
+    intent = approval.TodoApprovalIntent(
+        decision.action_hash, decision.target_id,
+        approval.masked_argv_summary(todo.insert_argv(request)), _TITLE, None,
+    )
+    assert approval.request_approval(intent, runtime).outcome.value == "posted"
     first = store.all_outstanding()[0]
     transport.reactions[first.message_id] = {"✅": ((_OWNER, False),)}
     watch.run_once(
@@ -129,10 +134,11 @@ def test_command_chain_replay_and_second_generation_cycle(
     # create path is now a refusal rather than the step that makes the task exist. Repair
     # ticket t_e3243dc5 recorded the old behaviour as occurrences 2 and 4.
     assert fake_gws.calls == ["insert", "get"]
-    assert todo.main(["create", "--title", _TITLE]) == 4
+    with pytest.raises(todo.ApprovalRequiredError):
+        todo.create_task(request)
     assert fake_gws.calls == ["insert", "get"]
 
-    assert todo.main(["request", "--title", _TITLE]) == 0
+    assert approval.request_approval(intent, runtime).outcome.value == "posted"
     second = store.all_outstanding()[0]
     transport.reactions[second.message_id] = {"✅": ((_OWNER, False),)}
     watch.run_once(
@@ -140,7 +146,8 @@ def test_command_chain_replay_and_second_generation_cycle(
         approval_log=log, lease=lease, now=now,
     )
     assert fake_gws.calls == ["insert", "get", "insert", "get"]
-    assert todo.main(["create", "--title", _TITLE]) == 4
+    with pytest.raises(todo.ApprovalRequiredError):
+        todo.create_task(request)
 
 
 def test_offline_scenario_reports_full_approval_matrix(tmp_path: Path) -> None:

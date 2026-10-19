@@ -1,2 +1,2 @@
-agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|.hermes/scripts/wiki_confirm_reaction_watch.py|required
-agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|wiki-confirm-watch|v2:cron;schedule=*/1 * * * *;script=wiki_confirm_reaction_watch.py;deliver=local;mode=no-agent;runner=systemd
+agent|skills/wiki|.hermes/skills/wiki|v2:tree;policy=retired;reason=wiki-skill-retired
+agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|wiki-confirm-watch|v2:cron;policy=retired;reason=owner-internal-notes-use-dori-gate;schedule=*/1 * * * *;script=wiki_confirm_reaction_watch.py;deliver=local;mode=no-agent;runner=systemd

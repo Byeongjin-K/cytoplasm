@@ -26,9 +26,6 @@ automation/hermes_compat/deploy-public-message-policy.sh|raw|tar -xzf - -C \"\$H
 automation/hermes_compat/deploy-public-message-policy.sh|raw|tar -xzf - -C \"\$HOME/$compat/staging\"|vendor patch apply is an owner action — carrier declared held
 automation/hermes_compat/deploy-public-message-policy.sh|raw|xargs -r rm -rf|vendor patch apply is an owner action — carrier declared held
 automation/hermes_compat/deploy.sh|raw|tar -xzf - -C \"\$HOME/$dest\"|vendor patch apply is an owner action — carrier declared held
-automation/interop/deploy.sh|raw|cat > "$t" || { rm -f "$t"; exit 1; }|rule-file read check: the running gate code must load the new file from a node mktemp copy before push_file replaces it (permanent)
-automation/interop/deploy.sh|raw|cp -p "$HOME/$f" "$b/$f"|rollback copy of the current drop-in, plugin files and guard to ~/.hermes/interop/rollback/<UTC> before the bundle moves (permanent)
-automation/interop/deploy.sh|raw|cp -p "$f" "$b/.hermes/interop/external-effect-tools.yaml"|rollback copy of a differing home rule file to ~/.hermes/interop/rollback/<UTC> before push_file replaces it, also on roster-held runs (permanent)
 automation/notes_organize/deploy.sh|raw|--name notes-weekly-organize --no-agent|FS3-pinned test tests/unit/test_watcher_deploy_coverage.py fixes this registration text
 automation/rag_stack/deploy_runtime.sh|raw|run_ops "rm -rf -- '$remote'"|private ops staging cleanup only, never the active source or image
 automation/rag_stack/deploy_runtime.sh|raw|scp -q "${payload[@]}"|RAG node mixed source/secret tree: explicit files in fresh ops staging, exchange preserves node-only secrets; helpers cannot preserve them

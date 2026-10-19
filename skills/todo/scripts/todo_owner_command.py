@@ -1,4 +1,4 @@
-"""Cardless writes after the YooDori gate verifies the owner origin and switch."""
+"""Cardless writes after dori-gate verifies the initiating Discord owner message."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,7 +19,7 @@ from todo_cli_model import TaskRequest, TodoError, TodoReconciliationRequiredErr
 from todo_execution_claim import JsonValue
 
 if TYPE_CHECKING:
-    from automation.interop.external_effect_gate import ApprovalContext, ExternalEffectDecision
+    from automation.interop.approval_types import ApprovalContext, ExternalEffectDecision
 
 
 def write_now(args: argparse.Namespace) -> int:
@@ -28,7 +28,14 @@ def write_now(args: argparse.Namespace) -> int:
     if not channel.isascii() or not channel.isdecimal() or not message.isascii() or not message.isdecimal():
         raise TodoError("owner command requires numeric origin coordinates", 3)
     request = TaskRequest(args.tasklist, args.title, args.notes, args.due)
-    context = todo.gate_module().ApprovalContext(None, todo.owner_id(), False)
+    runtime = todo.repo_root()
+    if str(runtime) not in sys.path:
+        sys.path.insert(0, str(runtime))
+    try:
+        from automation.interop.approval_types import ApprovalContext, ExternalEffectDecision
+    except ImportError as error:
+        raise TodoError("owner-command approval types are unavailable", 3) from error
+    context = ApprovalContext(None, todo.owner_id(), False)
     identity = json.dumps([channel, message, todo.insert_argv(request)], separators=(",", ":"))
     root = Path(os.environ.get("TODO_APPROVAL_ROOT", "~/.hermes/todo-approvals")).expanduser()
     path = root / "owner-command" / f"{hashlib.sha256(identity.encode()).hexdigest()}.json"
@@ -40,10 +47,15 @@ def write_now(args: argparse.Namespace) -> int:
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
-    def authorized(argv: Sequence[str], bound: ApprovalContext) -> ExternalEffectDecision:
-        # The caller's gate already authenticated the owner message and release switch.
-        # Retain the canonical argv hash without fabricating a manual-reaction approval.
-        return replace(todo.evaluate(argv, context=bound), allowed=True, reason="owner_command")
+    def authorized(argv: Sequence[str], _bound: ApprovalContext) -> ExternalEffectDecision:
+        # dori-gate already authenticated the initiating Discord owner message.
+        # Hash the frozen action for the receipt, not a retired denylist decision.
+        action = json.dumps(list(argv), ensure_ascii=False, separators=(",", ":"))
+        return ExternalEffectDecision(
+            True, True, "owner_command",
+            f"sha256:{hashlib.sha256(action.encode()).hexdigest()}",
+            "google_tasks:owner_command",
+        )
 
     def claimed_execute(argv: list[str]) -> dict[str, JsonValue]:
         if argv[3] == "insert":

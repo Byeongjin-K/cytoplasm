@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from automation.interop import hermes_plugin, voice_transcript
+from automation.interop import voice_transcript
 
 OWNER = "100000000000000001"
 STRANGER = "100000000000000002"
@@ -107,33 +107,13 @@ def _voice(node: dict[str, Path], **source: object) -> Event:
     )
 
 
-@pytest.fixture
-def plugin(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    handled: list[str] = []
-
-    class Store:
-        def is_paused(self) -> bool:
-            return False
-
-        def handle(self, *, command: str, actor_id: str) -> object:
-            handled.append(command)
-            raise AssertionError("a transcript must never reach the kill switch")
-
-    monkeypatch.setattr(hermes_plugin, "_pause_store", Store)
-    monkeypatch.setattr(
-        hermes_plugin, "_config",
-        lambda: {"agent_id": "agent", "agents_log_channel_id": "1", "owner_id": OWNER, "interop_channel_id": ""},
-    )
-    return handled
-
-
-def test_owner_voice_becomes_a_marked_owner_message(node: dict[str, Path], plugin: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_owner_voice_becomes_a_marked_owner_message(node: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> None:
     tools = FakeTools()
     monkeypatch.setattr(voice_transcript, "_run", tools)
     event = _voice(node)
     urls = event.media_urls
 
-    result = hermes_plugin.pre_gateway_dispatch(event, None, None)
+    result = voice_transcript.gateway_voice(event, OWNER)
 
     assert result == {"action": "rewrite", "text": f"{voice_transcript.MARKER} 내일 오후 3시에 회의 일정을 잡아줘."}
     assert event.text == result["text"], "an earlier plugin's allow must not hide the transcript"
@@ -155,14 +135,13 @@ def test_the_owner_caption_follows_the_transcript(node: dict[str, Path], monkeyp
     assert result["text"] == f"{voice_transcript.MARKER} 회의 잡아줘\n\n참고로 장소는 본관"
 
 
-def test_a_spoken_kill_switch_is_only_text(node: dict[str, Path], plugin: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_spoken_kill_switch_is_only_text(node: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(voice_transcript, "_run", FakeTools(transcript="!pause-agents"))
 
-    result = hermes_plugin.pre_gateway_dispatch(_voice(node), None, None)
+    result = voice_transcript.gateway_voice(_voice(node), OWNER)
 
     assert result is not None and result["action"] == "rewrite"
     assert result["text"] == f"{voice_transcript.MARKER} !pause-agents"
-    assert plugin == []
 
 
 @pytest.mark.parametrize(
