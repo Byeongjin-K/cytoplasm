@@ -234,7 +234,7 @@ def test_every_registration_matches_its_declaration() -> None:
 
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
-    assert len(names["agent"]) == 32
+    assert len(names["agent"]) == 29
     assert names["peer"] == {"doctor-watch", "selfskill-audit-watch"}
     timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
     assert timers == {("agent", name) for name in names["agent"]}  # 바로 전환: agent 잡 전부가 타이머
@@ -249,7 +249,6 @@ def test_the_remaining_formerly_hand_registered_jobs_are_registered_by_their_dep
     by_key = {job.key: job for job in declared}
 
     for package, name in (
-        ("automation/reminder_poller", "reminder-poller"),
         ("automation/repair", "repair-report-consumer"),
     ):
         want = by_key[(package, "agent", name)]

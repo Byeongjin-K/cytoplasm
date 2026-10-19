@@ -48,7 +48,6 @@ def _args(tmp_path: Path, response: str) -> argparse.Namespace:
 
 def _environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEETING_NOTES_DIR", str(tmp_path / "notes"))
-    monkeypatch.setenv("MEETING_STATE_FILE", str(tmp_path / "state/milestones.yaml"))
     monkeypatch.setenv("MEETING_PROMPT_FILE", str(ROOT / "prompts/meeting-extraction-v3.md"))
     monkeypatch.setenv("MEETING_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("MEETING_PLAN_DIR", str(tmp_path / "plan"))

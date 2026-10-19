@@ -319,7 +319,6 @@ def _discord_channels(path: Path) -> tuple[tuple[str, ...], tuple[str, ...]] | N
 
 
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
-    from automation.legacy_services import memory_timer_off
     from automation.owner_timers import OwnerTimersError, read_list, MARKER
 
     try:
@@ -340,10 +339,6 @@ def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[Tim
             state = _gateway(timer, run, uid)
             found.append(TimerJob(name, "released-off" if enabled.strip() == "disabled"
                                  and state == "inactive" else "unknown", "", 0, ""))
-            continue
-        if memory_timer_off(home, name):
-            # Actual inactive/disabled read-back is reported by legacy_services below.
-            found.append(TimerJob(name, "released-off", "", 0, ""))
             continue
         raw = _json(home / ".hermes" / "cron-timers" / f"{name}.json")
         state = raw if isinstance(raw, dict) else {}

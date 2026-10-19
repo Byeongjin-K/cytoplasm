@@ -156,17 +156,3 @@ def test_host_list_projects_off_before_marker_exists(tmp_path: Path, monkeypatch
     assert any(line.startswith("OBS|artifact|derived|agent|.hermes/owner-timers/off|"
                                "automation/owner_timers|required|none|stale|") for line in lines)
     assert not any("|cron|agent|budget-watch|" in line for line in lines)
-
-
-def test_memory_list_cannot_bypass_unresolved_choice_guard(node: cron_timer.Node) -> None:
-    # Given
-    from automation import owner_timers
-    from tests.unit.test_hermes_memory_off import _state
-
-    _state(node.home, "posted")
-    # When
-    with pytest.raises(ValueError, match="MEMORY-OFF-REFUSED"):
-        owner_timers.install(node.home, ("memory-curator-watch",))
-    # Then
-    assert not (node.home / owner_timers.MARKER).exists()
-    assert not (node.home.parent / "calls.log").exists()

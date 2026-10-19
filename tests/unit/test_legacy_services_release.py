@@ -22,7 +22,7 @@ def test_plan_hash_and_card_cover_both_stops(monkeypatch, capsys):
     surfaces = [legacy_service_surface(name) for name in services.UNITS]
     assert all(list(item) in payload["surface_digests"] for item in surfaces)
     spec = _spec(*surfaces)
-    assert all(line in spec.render() for line in LEGACY_SERVICE_LINES.values())
+    assert all(LEGACY_SERVICE_LINES[name] in spec.render() for name in services.UNITS)
     assert spec.action_hash() != _spec().action_hash()
 
 

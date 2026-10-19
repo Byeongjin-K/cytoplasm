@@ -57,7 +57,7 @@ except ImportError:  # pragma: no cover - exercised only in the deployed layout
     # sys.path above). The `automation.*` spelling only resolves once the immutable
     # release has converged to origin/main, and that convergence is not synchronous
     # with this deploy — measured 2026-08-18, the release sat 3 commits behind and the
-    # watcher died with ModuleNotFoundError. Same fallback shape as poll_reminders.py.
+    # watcher died with ModuleNotFoundError. Flat sibling imports keep the deployed runtime independent.
     from topics_import import topics_import_location as _topics_import_location  # noqa: E402
 
 if TYPE_CHECKING:

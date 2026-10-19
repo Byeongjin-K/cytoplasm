@@ -16,7 +16,6 @@
 # deployer-derived list relative to the release subpath: it narrows the release snapshot
 # only, so a stale extra runtime file still fails. Only verified layouts belong here.
 # interop_runtime: reason=deploy-skill.sh stages GATE_HELPERS, GATE_INTEROP_HELPERS and the separate OWNER_NOTICE_HELPERS facade import closure into agent automation/ without pruning retained files, so a recursive source snapshot reports intentional omissions and extras; alternative=hash each helper named by those three deploy-skill.sh allowlists after staging.
-# reminder_poller_runtime: reason=the flat poller_core.py and reminder_store.py imports live in one generation behind the link .current that automation/reminder_poller/deploy.sh switches with deploy_tree_swap --link, and the standing probe's find does not follow a symlink root; alternative=at release time the observer judges the v2 tree row in automation/reminder_poller/deploy-manifest.txt by following that link.
 agent|automation/rag_ingest|.hermes/rag_ingest_runtime/rag_ingest|required
 agent|automation/regression_bank|.hermes/regression_bank_runtime|required|default|python|bank_state.py,weekly_bank.py
 agent|automation/research_trends|.hermes/research_trends_runtime|required|default|python|research_trends.py,research_trends_core.py,topics_import.py

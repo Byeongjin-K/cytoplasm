@@ -131,7 +131,7 @@ def test_kind_thread_exemptions_are_not_stale() -> None:
     assert all(reason.strip() for reason in _KIND_THREAD_EXEMPT.values())
 
 
-def test_inventory_covers_the_nine_owner_only_producers() -> None:
+def test_inventory_covers_the_owner_only_producers() -> None:
     # Given: the deployed call sites minus the supply-chain exemption
     owner_only = sorted(surface for surface in _sites() if surface not in _KIND_THREAD_EXEMPT)
     # Then: every owner-only producer known on 2026-09-01 is still in the inventory
@@ -144,6 +144,5 @@ def test_inventory_covers_the_nine_owner_only_producers() -> None:
         "skills/todo/scripts/todo_approval_runtime.py",
         "skills/wiki/scripts/wiki_binding.py",
         "skills/patent-prep/scripts/patent_export_binding.py",
-        "automation/memory_relocate/effects_live.py",
         "automation/repair/repair_ops_binding.py",
     } <= modules, modules

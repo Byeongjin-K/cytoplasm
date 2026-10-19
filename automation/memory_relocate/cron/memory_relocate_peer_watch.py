@@ -26,7 +26,7 @@ from automation.memory_relocate.choice_relay import AgentDecision  # noqa: E402
 from automation.memory_relocate.choice_request import parse_request  # noqa: E402
 from automation.memory_relocate.choice_snapshot import SnapshotStore  # noqa: E402
 from automation.memory_relocate.choices import ChoiceError  # noqa: E402
-from automation.memory_relocate.cron.memory_relocate_watch import (  # noqa: E402
+from automation.memory_relocate.peer_runtime import (  # noqa: E402
     load_env_secrets, acquire_single_instance_lock,
 )
 

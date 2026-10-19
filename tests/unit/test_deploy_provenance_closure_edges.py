@@ -14,7 +14,6 @@ from typing import Final
 
 import pytest
 
-from tests.unit.cron_fixture import declared_cron, listing_only_hermes
 from tests.unit.provenance_rig import PROBE_HELPER, SENTINEL_SSH, build_repo, deploy, dirty, git, removed
 
 _EXTDEBUG: Final = {
@@ -27,12 +26,31 @@ _UNLOCATABLE: Final = {
     "deleted-in-root": ('printf "ghost() { :; }\\n" > "$REPO/automation/ghost.sh"; '
                         'source "$REPO/automation/ghost.sh"; rm "$REPO/automation/ghost.sh"\n'),
 }
+_BOUNDARY_PACKAGE: Final = "automation/closure_boundary"
+_BOUNDARY_DEPLOYER: Final = '''#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$repo_root/automation/deploy_provenance.sh"
+deploy_provenance_check "$repo_root" "$repo_root/automation/closure_boundary/deploy.sh" "$repo_root/automation/deploy_push.sh" "$repo_root/automation/deploy_cron.sh" "$repo_root/automation/deploy_tree.sh" || exit 4
+source "$repo_root/automation/deploy_push.sh"
+ssh "$DEPLOY_SSH_HOST" true
+'''
 _EXTERNAL: Final = {"sorted-last": "zzzz_external() { :; }\n", "sorted-first": "aaaa_external() { :; }\n"}
+
+
+def _boundary(root: Path) -> Path:
+    caller = root / _BOUNDARY_PACKAGE / "deploy.sh"
+    caller.parent.mkdir()
+    caller.write_text(_BOUNDARY_DEPLOYER, encoding="utf-8")
+    git(root, "add", _BOUNDARY_PACKAGE)
+    git(root, "commit", "-qm", "test: normal guarded deployment caller")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return root
 
 
 @pytest.fixture(scope="module")
 def repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return build_repo(tmp_path_factory.mktemp("edges") / "repo")
+    return _boundary(build_repo(tmp_path_factory.mktemp("edges") / "repo"))
 
 
 def _probe(repo: Path, rig: Path, name: str, bash_env: str = "") -> tuple[int, str, list[str], bool]:
@@ -87,13 +105,12 @@ def test_a_relative_deployer_that_changes_directory_fails_closed(repo: Path, tmp
     assert (rc, calls, marker) == (4, [], False), stderr
 
 
-def test_a_real_deployer_run_by_relative_path_still_deploys(repo: Path, tmp_path: Path) -> None:
-    package = "automation/effect_request"
-    hermes = listing_only_hermes(declared_cron(package))
-    clean = deploy(repo, tmp_path / "clean", f"{package}/deploy.sh", hermes=hermes, cwd=repo)
-    bypass = deploy(repo, tmp_path / "bypass", f"{package}/deploy.sh", hermes=hermes, cwd=repo, bypass=True)
+def test_a_normal_deployer_run_by_relative_path_still_deploys(repo: Path, tmp_path: Path) -> None:
+    package = _BOUNDARY_PACKAGE
+    clean = deploy(repo, tmp_path / "clean", f"{package}/deploy.sh", cwd=repo)
+    bypass = deploy(repo, tmp_path / "bypass", f"{package}/deploy.sh", cwd=repo, bypass=True)
     with dirty(repo, f"{package}/deploy.sh"):
-        rc, stderr, calls, _ = deploy(repo, tmp_path / "dirty", f"{package}/deploy.sh", hermes=hermes, cwd=repo)
+        rc, stderr, calls, _ = deploy(repo, tmp_path / "dirty", f"{package}/deploy.sh", cwd=repo)
 
     assert clean[0] == 0, clean[1]
     assert clean[2] == bypass[2] != []
@@ -103,24 +120,22 @@ def test_a_real_deployer_run_by_relative_path_still_deploys(repo: Path, tmp_path
 @pytest.mark.parametrize("helper", ["automation/deploy_cron.sh", "automation/deploy_push.sh"])
 def test_a_deleted_tracked_shared_helper_is_refused_before_transport(repo: Path, tmp_path: Path,
                                                                       helper: str) -> None:
-    package = "automation/reminder_poller"
+    package = _BOUNDARY_PACKAGE
     with removed(repo, helper):
-        rc, stderr, calls, _ = deploy(repo, tmp_path, str(repo / package / "deploy.sh"),
-                                      hermes=listing_only_hermes(declared_cron(package)))
+        rc, stderr, calls, _ = deploy(repo, tmp_path, str(repo / package / "deploy.sh"))
 
     assert (rc, calls) == (4, []), stderr
 
 
 def test_a_shared_helper_absent_from_the_reference_is_skipped(tmp_path: Path) -> None:
-    repo = build_repo(tmp_path / "repo")
+    repo = _boundary(build_repo(tmp_path / "repo"))
     _ = git(repo, "rm", "-q", "automation/deploy_tree_remote.sh")
     _ = git(repo, "commit", "-q", "-m", "older tree")
     _ = git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    package = "automation/effect_request"
+    package = _BOUNDARY_PACKAGE
 
-    hermes = listing_only_hermes(declared_cron(package))
-    rc, stderr, calls, _ = deploy(repo, tmp_path / "rig", str(repo / package / "deploy.sh"), hermes=hermes)
-    bypass = deploy(repo, tmp_path / "bypass", str(repo / package / "deploy.sh"), hermes=hermes, bypass=True)
+    rc, stderr, calls, _ = deploy(repo, tmp_path / "rig", str(repo / package / "deploy.sh"))
+    bypass = deploy(repo, tmp_path / "bypass", str(repo / package / "deploy.sh"), bypass=True)
 
     assert rc == 0, stderr
     assert calls == bypass[2] != []

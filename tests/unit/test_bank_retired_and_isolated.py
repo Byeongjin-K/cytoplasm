@@ -16,8 +16,7 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
-RETIRED = {"w3-report-hub": "report-hub-off=off", "w3-coordination": "peer-retired=retired",
-           "w2-personal-memory": "hermes-memory-off=off"}
+RETIRED = {"w3-report-hub": "report-hub-off=off", "w3-coordination": "peer-retired=retired"}
 
 
 def _bank(tmp_path: Path) -> tuple[Path, Path]:
@@ -62,7 +61,7 @@ def test_without_the_switch_file_the_scenario_runs(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(("scenario", "retired_when"), sorted(RETIRED.items()))
-def test_the_three_retired_scenarios_name_their_switch(scenario: str, retired_when: str) -> None:
+def test_retired_scenarios_name_their_switch(scenario: str, retired_when: str) -> None:
     text = (_REPO / f"tests/e2e/scenarios/{scenario}.yaml").read_text(encoding="utf-8")
     assert f"\nretired_when: {retired_when}" in text
 

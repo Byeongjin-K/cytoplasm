@@ -26,7 +26,7 @@ version: 1
 id: w2-personal-memory
 title: "W2 personal-memory chain E2E bank (happy + 3 failure injections)"
 driver: tests/e2e/drivers/w2_personal_memory.sh
-retired_when: hermes-memory-off=off  # retired by this release switch (2026-10-19); remove the switch file to run it again
+# Archived: the legacy Hermes memory scenario is no longer scheduled (2026-10-19).
 remote_host: <primary-node>
 remote_account: agent
 
@@ -49,8 +49,8 @@ cases:
       cards_created: 2
       card_ids_count: 2
       kanban_card_visible: true
-      milestones_added: 2
-      milestones_file_has_token: true
+      milestones_in_minutes: 2
+      minutes_has_milestone_token: true
       wiki_saved: true
       wiki_method: "signed_injection_e2e"
       wiki_note_exists: true

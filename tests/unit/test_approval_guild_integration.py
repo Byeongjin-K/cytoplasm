@@ -138,53 +138,6 @@ def test_guild_survives_when_watch_merges_mid_tick_binding() -> None:
     assert merged.state.records[_BASE.recording_id].action_hash == _BASE.action_hash
 
 
-@pytest.mark.parametrize("cache_valid", [True, False])
-def test_guild_survives_final_save_when_memory_watch_posts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cache_valid: bool) -> None:
-    # Given: real cron state, live effects, lifecycle and transport; only external I/O is injected.
-    from automation.memory_relocate import effects_live as memory_effects
-    from automation.memory_relocate.binding import RelocationHashFields, relocation_action_hash
-    from automation.memory_relocate.cron import memory_relocate_watch as watch
-    from automation.memory_relocate.model import RelocationState, record_key
-    from automation.memory_relocate.store import load_state as load_memory, save_state as save_memory
-    from tests.unit.test_memory_relocate_effects_live import _record
-
-    config = tmp_path / "interop.json"
-    config.write_text(json.dumps({"agent_chat_channel_id": "222"}), encoding="utf-8")
-    monkeypatch.setenv("INTEROP_CONFIG", str(config))
-    monkeypatch.setenv("DISCORD_BOT_TOKEN", "identity-a")
-    monkeypatch.setattr(memory_effects, "load_config", lambda: ObsidianWriteConfig("git@example.invalid:owner/vault.git", tmp_path / "clone"))
-    monkeypatch.setattr(memory_effects, "recover_entry_text", lambda memory_dir, record: "synthetic memory")
-    monkeypatch.setattr(watch, "_owner_id", lambda: "333")
-    path = tmp_path / "state.json"
-    monkeypatch.setattr(watch, "STATE_PATH", path)
-    monkeypatch.setattr(watch, "MEMORY_DIR", tmp_path / "memories")
-    monkeypatch.setattr(watch, "RAG_STATE_PATH", tmp_path / "rag.json")
-    legacy = _record(entry_text="synthetic memory")
-    expected_hash = relocation_action_hash(RelocationHashFields(legacy.source_kind, legacy.entry_sha256, legacy.note_relpath, legacy.note_plan_sha256))
-    record = replace(legacy, channel_id="", message_id=None, action_hash=expected_hash)
-    key = record_key(record.source_kind, record.entry_sha256)
-    save_memory(path, RelocationState(1, {key: record}))
-    if not cache_valid:
-        (tmp_path / "approval-directory.json").write_text("{", encoding="utf-8")
-    api = FakeApi("identity-a", {
-        ("POST", "/channels/222/messages"): {"id": "666"},
-        ("POST", "/channels/222/messages/666/threads"): {"id": "444", "guild_id": "111"},
-        ("GET", "/channels/444"): {"type": 11, "name": "request", "parent_id": "222"},
-        ("POST", "/channels/444/messages"): {"id": "555"},
-        ("PUT", f"/channels/444/messages/555/reactions/{quote('✅', safe='')}/@me"): None,
-        ("PUT", f"/channels/444/messages/555/reactions/{quote('⛔', safe='')}/@me"): None,
-    })
-    monkeypatch.setattr(DiscordTransport, "api", staticmethod(api))
-    # When: the actual runnable cron entry point completes its final durable save.
-    result = watch.run_once(datetime(2026, 9, 1, tzinfo=UTC))
-    # Then: posting succeeds even without cache, and available guild metadata survives the tick.
-    stored = load_memory(path).relocations[key]
-    assert result.posted == (key,)
-    assert (stored.message_id, stored.channel_id, stored.approval_guild_id) == ("555", "444", "111" if cache_valid else None)
-    assert stored.action_hash == expected_hash
-    assert len(api.calls) == 6
-
-
 def test_guild_is_durable_when_coordination_commits(tmp_path: Path) -> None:
     # Given: a real coordination producer and JSONL store, not a pre-stamped record.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills/coordination/scripts"))

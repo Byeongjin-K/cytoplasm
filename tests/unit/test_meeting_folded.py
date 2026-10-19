@@ -54,7 +54,6 @@ def test_ingest_keeps_appendix_raw_when_extraction_excludes_fold(
     template.write_text("<<<PROMPT>>>\n{{MY_NAMES}}\n{{MEETING_TEXT}}", encoding="utf-8")
     for name, value in {
         "MEETING_NOTES_DIR": tmp_path / "notes",
-        "MEETING_STATE_FILE": tmp_path / "state/milestones.yaml",
         "MEETING_PROMPT_FILE": template,
         "MEETING_LOG_DIR": tmp_path / "logs",
         "MEETING_PLAN_DIR": tmp_path / "plan",

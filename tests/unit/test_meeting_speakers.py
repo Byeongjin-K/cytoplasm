@@ -140,7 +140,6 @@ def test_ingest_prints_speakers_in_the_final_json_line(tmp_path, monkeypatch, ca
     )
     for name, value in (
         ("MEETING_NOTES_DIR", tmp_path / "notes"),
-        ("MEETING_STATE_FILE", tmp_path / "state/milestones.yaml"),
         ("MEETING_PROMPT_FILE", SKILL / "prompts/meeting-extraction-v6.md"),
         ("MEETING_LOG_DIR", tmp_path / "logs"),
         ("MEETING_PLAN_DIR", tmp_path / "plan"),
@@ -170,7 +169,6 @@ def test_ingest_prints_an_empty_speaker_list_when_the_transcript_has_none(
 ):
     for name, value in (
         ("MEETING_NOTES_DIR", tmp_path / "notes"),
-        ("MEETING_STATE_FILE", tmp_path / "state/milestones.yaml"),
         ("MEETING_PROMPT_FILE", SKILL / "prompts/meeting-extraction-v6.md"),
         ("MEETING_LOG_DIR", tmp_path / "logs"),
         ("MEETING_PLAN_DIR", tmp_path / "plan"),

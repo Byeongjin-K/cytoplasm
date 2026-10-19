@@ -80,7 +80,6 @@ mail_html_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.mail_html_rep
 relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release switch)" || exit 4
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
-memory_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-memory)" || exit 4
 owner_timers="$(PYTHONPATH="$repo_root" python3 -B -m automation.owner_timers switch)" || exit 4
 if [[ "$peer_mode" == retired && "$gateway_mode" != stopped ]]; then
   echo "PEER-RETIRED-REFUSED: stopped gateways required before removal" >&2
@@ -104,7 +103,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --mail-html-reply $mail_html_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --mail-html-reply $mail_html_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_owner_timers() {

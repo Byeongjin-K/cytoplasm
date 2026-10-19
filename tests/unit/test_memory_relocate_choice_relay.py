@@ -9,7 +9,7 @@ import pytest
 from automation.memory_relocate.choice_snapshot import Snapshot, encode_snapshot
 from automation.memory_relocate.choices import Choice
 from memory_choice_fakes import NOW
-from test_memory_relocate_choice_execution import Execution, execution as execution
+from test_memory_peer_retained import Execution, execution as execution
 
 
 def test_decision_when_agent_file_is_missing_stays_pending(execution: Execution) -> None:

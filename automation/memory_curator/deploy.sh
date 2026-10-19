@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# automation/memory_curator/deploy.sh — deploy the memory-curator cron watcher.
+# automation/memory_curator/deploy.sh — converge retained memory and channel profiles.
 #
-# Only the wrapper is shipped: it imports `automation.memory_curator` from the release
-# tree it resolves at start, so the package follows every release by itself.  The old
-# account-home package copy is declared retired in deploy-manifest.txt and is left
-# in place (nothing deletes node files).
+# Scheduled curation was deleted by owner decision on 2026-10-19.
+# Existing memory files and the reusable CLI library remain.
 #
 # Order is enforced by the provenance guard: commit -> push -> deploy.  Only code that
 # origin/main already has may reach prod (see automation/deploy_provenance.sh).
@@ -73,16 +71,6 @@ if [[ -n "$dori_bot_id" ]]; then
   fi
   dori_mode=on
 fi
-
-# Cron watcher wrapper.
-push_file "$repo_root/automation/memory_curator/cron/memory_curator_watch.py" '.hermes/scripts/memory_curator_watch.py'
-
-# Idempotent cron registration (no-agent, LLM-free, every 30m). Use --all so a PAUSED
-# job is still seen — plain `cron list` hides paused jobs and would duplicate the job.
-source "$repo_root/automation/deploy_cron.sh"
-source "$repo_root/automation/deploy_timer.sh"
-converge_timer memory-curator-watch "every 30m" memory_curator_watch.py local
-run_agent 'PATH="$HOME/.local/bin:$PATH"; hermes cron list --all | grep -A3 memory-curator-watch || true'
 
 # Hermes memory caps (owner decision 2026-10-14): the curator's CAPS and both accounts'
 # config.yaml read the same automation.hermes_memory_config.LIMITS. Gateways load the

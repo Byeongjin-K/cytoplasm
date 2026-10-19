@@ -194,7 +194,6 @@ _BUILDERS = (
     ("automation.release_retire", "abandoned_message", ({}, "reason")),
     ("automation.interop.delegation", "result_message", ("key", None, None)),
     ("automation.memory_curator.notice", "build_notice", ("body",)),
-    ("automation.reminder_poller.poller_core", "reminder_message", ("body", None)),
     ("automation.research_trends.research_trends_core", "report_message", ("body",)),
     ("automation.managed_sync.cron.managed_sync_watch", "staged_message", ("body",)),
     ("automation.healthcheck_notify", "notice_message", (None, None)),

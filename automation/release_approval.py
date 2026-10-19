@@ -427,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--mail-html-reply", choices=("on",), help="기관메일 회신 새 서식 켜기")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
-    plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard", "hermes-memory"))
+    plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard"))
     plan.add_argument("--owner-timers-off", default="off")
     plan.add_argument(
         "--healthcheck-wrapper",
@@ -482,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
     stop.add_argument("--head", required=True)
     stop.set_defaults(run=cmd_authorize_gateway_stop)
     legacy = commands.add_parser("authorize-legacy-service")
-    legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard", "hermes-memory"), required=True)
+    legacy.add_argument("--name", choices=("report-hub", "hermes-dashboard"), required=True)
     legacy.add_argument("--head", required=True)
     legacy.set_defaults(run=cmd_authorize_legacy_service)
     timers = commands.add_parser("authorize-owner-timers-off")

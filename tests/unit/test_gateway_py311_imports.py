@@ -20,7 +20,6 @@ _PACKAGES: Final = (
     _REPO / "automation" / "memory_curator",
     _REPO / "automation" / "rag_ingest",
     _REPO / "automation" / "research_trends",
-    _REPO / "automation" / "reminder_poller",
     _REPO / "skills" / "meeting" / "plugin",
 )
 _MODULES: Final = (

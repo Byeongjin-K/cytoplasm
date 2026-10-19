@@ -2,9 +2,8 @@
 """W3-6 bank actuator for the w3-calendar scenario — runs ON agent@<primary-node>.
 
 Cases (observe-only; the local judge compares against the scenario YAML):
-  register_remind   W3-1 gated create (signed injection) -> real gws event ->
-                    W3-2 deployed poller dry-run at T-60min composes the
-                    reminder -> W3-1 gated delete restores the baseline.
+  register_delete   W3-1 gated create (signed injection) -> real gws event ->
+                    W3-1 gated delete restores the baseline.
   auth_401_error_report  CALENDAR_GWS_BIN points at a 401 shim: the owner-
                     confirmed execution fails, and the failure must surface on
                     the documented error path (exit 6 + GATE-REFUSED stderr +
@@ -30,12 +29,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-KST = timezone(timedelta(hours=9), "KST")
 CLI = "/srv/autophagy-skills/live/calendar/scripts/calendar_cli.py"
-POLLER = str(Path.home() / ".hermes/scripts/poll_reminders.py")
 REAL_APPROVALS = Path("/srv/autophagy-agents/logs/approvals.jsonl")
 MARKER = "W36-BANK"
 SUMMARY = f"{MARKER} 캘린더 리마인드 테스트"
@@ -85,7 +81,7 @@ def gated(
     return draft, confirm
 
 
-def case_register_remind(work: Path) -> dict:
+def case_register_delete(work: Path) -> dict:
     obs: dict[str, object] = {"error": None}
     gate_env = {"CALENDAR_GATE_DIR": str(work / "gate")}
     base_events = listed_count(MARKER)
@@ -102,21 +98,6 @@ def case_register_remind(work: Path) -> dict:
     obs["executed_create"] = bool(event_id and event_id != "-")
     obs["events_delta_after_create"] = listed_count(MARKER) - base_events
     obs["approvals_delta_after_create"] = approvals_lines() - base_appr
-
-    tomorrow = (datetime.now(KST) + timedelta(days=1)).date()
-    poll = run(
-        [sys.executable, POLLER],
-        {
-            "REMINDER_DB": str(work / "reminders.db"),
-            "REMINDER_DRY_RUN": "1",
-            "REMINDER_NOW": f"{tomorrow}T08:00:00+09:00",
-            "REMINDER_MILESTONES_FILE": str(work / "absent-milestones.yaml"),
-        },
-    )
-    dry_lines = [line for line in poll.stdout.splitlines() if line.startswith("DRY-RUN")]
-    obs["poller_exit"] = poll.returncode
-    obs["remind_dry_run_hit"] = any(MARKER in line for line in dry_lines)
-    print(f"W36 poller dry_lines={len(dry_lines)} marker_hit={obs['remind_dry_run_hit']}")
 
     _, delete_confirm = gated(
         ["draft-delete", "--event-id", event_id, "--label", SUMMARY], gate_env, work
@@ -188,7 +169,7 @@ def main() -> int:
     work = Path(tempfile.mkdtemp(prefix=".w36-calendar-", dir=Path.home()))
     try:
         for case_id, case_fn in (
-            ("register_remind", case_register_remind),
+            ("register_delete", case_register_delete),
             ("auth_401_error_report", case_auth_401),
         ):
             try:

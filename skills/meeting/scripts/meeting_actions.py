@@ -1,7 +1,6 @@
-"""Side-effect builders for meeting ingest: Kanban, milestones.yaml, note, #team.
+"""Side-effect builders for meeting ingest: Kanban, note, #team.
 
-Everything here is pure/deterministic except `write_note` and
-`update_milestones` (file writes under the agent home). Every meeting is
+Everything here is pure/deterministic except `write_note`. Every meeting is
 handled the same way — there is no sensitivity classification.
 """
 
@@ -17,10 +16,6 @@ from typing import Sequence
 import meeting_minutes
 import meeting_template
 from meeting_llm import ActionItem, Extraction
-from meeting_milestones import _emit_milestones as _emit_milestones
-from meeting_milestones import _parse_milestones as _parse_milestones
-from meeting_milestones import _yaml_str as _yaml_str
-from meeting_milestones import update_milestones as update_milestones
 
 _TITLE_MAX = 80
 
@@ -172,7 +167,6 @@ def format_notify(
     *,
     label: str,
     cards: int,
-    milestones_added: int,
     others: int,
     note_name: str,
     team_posted: bool,
@@ -182,7 +176,6 @@ def format_notify(
     """Completion notice for the originating DM/channel."""
     lines = [f"회의록 처리 완료: {label}"]
     lines.append(f"- 내 액션아이템 카드: {cards}건 (Kanban)")
-    lines.append(f"- 마일스톤 갱신: {milestones_added}건 (milestones.yaml)")
     if action_id_exhausted:
         lines.append("- 관리번호 소진 안내: 신규 Action Item은 관리번호 없이 회의록에 기록했습니다")
     if team_posted:

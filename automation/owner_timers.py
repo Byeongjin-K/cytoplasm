@@ -9,7 +9,6 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Final
 
@@ -41,9 +40,13 @@ def parse(raw: bytes, root: Path = ROOT) -> tuple[str, ...]:
         raise OwnerTimersError("expected sorted unique job names, one LF-terminated line each")
     known = {d.destination for d in all_declarations(root)
              if d.kind == "cron" and d.account == "agent" and d.attr("runner") == "systemd"}
-    if set(names) - known:
+    from automation.retired_jobs import JOBS
+
+    if set(names) - known - set(JOBS):
         raise OwnerTimersError("unknown agent systemd job")
-    return names
+    # Persisted owner-off lists can outlive the declarations they disabled. They
+    # must neither block other jobs nor recreate a deleted schedule.
+    return tuple(name for name in names if name not in JOBS)
 
 
 def read_list(path: Path, root: Path = ROOT) -> tuple[str, ...]:
@@ -94,12 +97,8 @@ def check(home: Path, names: tuple[str, ...], root: Path = ROOT) -> str:
 
 
 def install(home: Path, names: tuple[str, ...], root: Path = ROOT) -> None:
-    """The general list must not bypass the memory switch's unresolved-choice gate."""
-    from automation.legacy_services import memory_stop_guard
-
-    memory = {"memory-curator-watch", "memory-relocate-watch"}
-    with memory_stop_guard(home) if memory.intersection(names) else nullcontext():
-        _install(home, names, root)
+    """Apply the current owner-off list; retired jobs have no schedule to restore."""
+    _install(home, names, root)
 
 
 def _install(home: Path, names: tuple[str, ...], root: Path) -> None:
