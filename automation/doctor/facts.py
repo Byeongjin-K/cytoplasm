@@ -22,6 +22,9 @@ from typing import Final, Literal, TypeAlias
 from automation.deploy_declarations import all_declarations
 from automation.doctor.cron_env import Gap
 from automation.doctor.cron_env import observe as observe_cron_env
+from automation.doctor.google import GWS_FILES as GWS_FILES, GwsStatus as GwsStatus
+from automation.doctor.google import gate_status, legacy_status as _gws_status
+from automation.google_gate.mode import enabled as google_gate_enabled
 from automation.install.checks import CheckResult, Status
 from automation.watcher_manifest import ManifestError
 from automation.interop import free_response
@@ -33,7 +36,6 @@ DiscordProbe: TypeAlias = Callable[[str, Path | None], tuple[CheckResult, ...]]
 TOKEN_KEY: Final = "DISCORD_BOT_TOKEN"
 DRIVE_KEY: Final = "DRIVE_PUBLISH_ENABLED"
 PATH_KEYS: Final = ("SPEECHTOTEXT_WHISPER_BIN", "SPEECHTOTEXT_WHISPER_MODEL")
-GWS_FILES: Final = ("client_secret.json", "credentials.enc", ".encryption_key")
 _REPO: Final = Path(__file__).resolve().parents[2]
 _ERROR_LIMIT: Final = 120
 #: Hermes 가 자격 하나를 쉬게 하는 가장 긴 기본 쿨다운(429·기타 = 1시간). 공급자가 재개 시각을 주면 그것이 이긴다.
@@ -68,12 +70,6 @@ class JobCheck:
     name: str
     status: Status
     detail: str
-
-
-@dataclass(frozen=True, slots=True)
-class GwsStatus:
-    token_valid: bool
-    scopes: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +108,7 @@ class Facts:
     omo_relay: str = ""
     legacy_services: tuple[tuple[str, str], ...] = ()
     job_checks: tuple[JobCheck, ...] = ()
+    google_gate: bool = False
 
 
 def mask(text: str) -> str:
@@ -321,23 +318,6 @@ def _discord_channels(path: Path) -> tuple[tuple[str, ...], tuple[str, ...]] | N
     return free_response.configured_channels(text)
 
 
-def _gws_status(binary: str, run: Run) -> GwsStatus | str:
-    code, out = run((binary, "auth", "status"), {})
-    if code != 0:
-        return f"gws auth status rc={code}"
-    try:
-        raw = json.loads(out)
-    except ValueError:
-        return "gws auth status 응답을 해석하지 못했다"
-    if not isinstance(raw, dict):
-        return "gws auth status 응답을 해석하지 못했다"
-    scopes = raw.get("scopes")
-    return GwsStatus(
-        token_valid=raw.get("token_valid") is True,
-        scopes=tuple(str(scope) for scope in scopes) if isinstance(scopes, list) else (),
-    )
-
-
 def _timers(repo: Path, role: Role, home: Path, run: Run, uid: int) -> tuple[TimerJob, ...]:
     from automation.legacy_services import memory_timer_off
 
@@ -397,6 +377,7 @@ def gather(
     gws_local = home / ".local" / "bin" / "gws"
     gws_binary = str(gws_local) if gws_local.is_file() else shutil.which("gws")
     gws_files = frozenset(name for name in GWS_FILES if (home / ".config" / "gws" / name).is_file())
+    google_gate = google_gate_enabled(home)
     interop_path = hermes_dir / "interop" / "config.json"
     from automation.notice_bot import read_override, resolve_token
 
@@ -447,7 +428,9 @@ def gather(
         interop=_interop(interop_path),
         gws_installed=gws_binary is not None,
         gws_files=gws_files,
-        gws=_gws_status(gws_binary, run) if online and gws_binary and gws_files else None,
+        google_gate=google_gate,
+        gws=gate_status(home, online) if google_gate else (
+            _gws_status(gws_binary, run) if online and gws_binary and gws_files else None),
         cron=cron,
         timers=timers,
         channel_override=channel_override(home) is not None,

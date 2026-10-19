@@ -9,8 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-from automation.doctor import cron_env, guides
-from automation.doctor.facts import DRIVE_KEY, GWS_FILES, PATH_KEYS, TOKEN_KEY, CronJob, Facts, GwsStatus, Role
+from automation.doctor import cron_env, google, guides
+from automation.doctor.facts import DRIVE_KEY, PATH_KEYS, TOKEN_KEY, CronJob, Facts, Role
 from automation.install.checks import CheckResult, Status
 
 #: Hermes credential_pool 의 일시 쿨다운 상태(영구 인증 실패는 "dead").
@@ -24,16 +24,6 @@ MAILON_KEYS: Final = ("MAILON_ID", "MAILON_PW", "MAILON_TOTP_SECRET")
 STREAK_FAIL: Final = 3
 #: Hermes 가 모델 고정 없는 agent 모드 잡을 주 모델 변경 뒤 건너뛸 때 오류에 남기는 표식.
 DRIFT_SKIP: Final = "drift_skip"
-_G: Final = "https://www.googleapis.com/auth/"
-GWS_SERVICES: Final = (
-    ("캘린더", (f"{_G}calendar",)),
-    ("메일 발송", (f"{_G}gmail.send", "https://mail.google.com/")),
-    ("메일 읽기", (f"{_G}gmail.readonly", f"{_G}gmail.modify", "https://mail.google.com/")),
-    ("Drive", (f"{_G}drive",)),
-    ("과제비 시트", (f"{_G}spreadsheets",)),
-    ("할 일", (f"{_G}tasks",)),
-    ("회의 주소(Meet)", (f"{_G}meetings.space.created",)),
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,25 +212,7 @@ def _free_response(f: Facts) -> Verdict:
 
 
 def _gws(f: Facts) -> Verdict:
-    if not f.gws_files:
-        return _warn("미연결 — 메일 발송·캘린더·Drive·과제비·할 일 기능이 동작하지 않는다")
-    if not f.gws_installed:
-        return _fail("자격증명은 있으나 gws 실행 파일이 없다")
-    absent = tuple(name for name in GWS_FILES if name not in f.gws_files)
-    if absent:
-        return _fail(f"자격증명 파일 없음: {', '.join(absent)} — Google 승인을 다시 옮긴다", absent)
-    match f.gws:
-        case None:
-            return _ok("자격증명 파일 있음(토큰 검사 생략)")
-        case str() as reason:
-            return _fail(f"{reason} — 토큰을 확인하지 못했다")
-        case GwsStatus(token_valid=False):
-            return _fail("토큰이 유효하지 않다(만료·폐기) — Google 승인을 다시 한다")
-        case GwsStatus(scopes=scopes):
-            missing = tuple(name for name, accepted in GWS_SERVICES if not set(accepted) & set(scopes))
-            if missing:
-                return _warn(f"권한 없음: {', '.join(missing)} — 그 기능만 실패한다", missing)
-            return _ok(f"토큰 유효, {len(GWS_SERVICES)}개 서비스 권한")
+    return Verdict(*google.judge(f))
 
 
 def _drive(f: Facts) -> Verdict:
@@ -353,7 +325,8 @@ def evaluate(facts: Facts) -> tuple[Finding, ...]:
             continue
         verdict = capability.judge(facts)
         steps = () if verdict.status is Status.PASS else guides.steps(
-            "yoodori-bot" if capability.key == "discord-bot" and facts.notice_bot_override else capability.key,
+            "google-gate" if capability.key == "google-workspace" and facts.google_gate else (
+                "yoodori-bot" if capability.key == "discord-bot" and facts.notice_bot_override else capability.key),
             account=facts.account, home=home, unit=facts.gateway_unit,
         )
         findings.append(Finding(capability.key, capability.label, verdict.status, verdict.detail,
