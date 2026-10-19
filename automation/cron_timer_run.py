@@ -8,6 +8,10 @@ Hermes 가 하던 것(노드 `cron/scheduler.py::_run_job_script`)을 그대로 
 `--deliver discord` 면 Hermes 의 `deliver=discord` 와 같이 비어 있지 않은 stdout 을 Hermes 홈 채널
 (`~/.hermes/.env` 의 `DISCORD_HOME_CHANNEL_THREAD_ID` → `DISCORD_HOME_CHANNEL`)로 보내고, 실패하면 실패 한 줄을
 보낸다. 실패는 `notice_bot.fault_channel`이 있으면 페어 채널로 보낸다.
+성공한 실행의 stdout 은 형 채널로 가기 전에 `interop.owner_text` 규칙으로 가른다(형 지시 2026-10-20
+00:10 KST): JSON 결과 줄은 아래 출력 폴더(내부 로그)에만 남고, 진단·경고 줄(표식 코드·종료코드·경로)은
+페어 채널로 가며, 형에게는 사람 말 줄만 간다. 페어 채널이 없는 설치는 JSON 줄만 빼고 지금처럼 홈 채널로
+보낸다(목적지 없는 진단을 없애지 않는다).
 침묵 표식(`[SILENT]` 등)은 보내지 않는다. 비어 있지 않은 stdout 은 `~/.hermes/cron-timers/output/<이름>/` 에
 최근 20개까지 남는다(Hermes 의 잡 출력 폴더 자리 — N1 이 다이제스트 실패 표식을 거기서 읽는다).
 
@@ -103,10 +107,10 @@ def _keep_output(home: Path, name: str, text: str) -> None:
 
 def deliver(home: Path, job: Job, rc: int, text: str, send: Send | None = None) -> str:
     """Hermes `deliver=discord` 와 같은 자리로 보낸다. 보낸 것이 없으면 "", 보냈으면 "sent"."""
+    from automation.interop.owner_text import split
+
     body = text.strip()
-    if rc != 0:
-        body = f"⚠️ 정기 작업 '{job.name}' 실패(종료코드 {rc})" + (f"\n{body}" if body else "")
-    elif not body or body in SILENT:
+    if rc == 0 and (not body or body in SILENT):
         return ""
     names = ("DISCORD_BOT_TOKEN", "DISCORD_HOME_CHANNEL", "DISCORD_HOME_CHANNEL_THREAD_ID")
     found = {**_env_file(home / ".env.secrets", names), **_env_file(home / ".hermes" / ".env", names)}
@@ -115,12 +119,25 @@ def deliver(home: Path, job: Job, rc: int, text: str, send: Send | None = None) 
     token = resolve_token(home=home, environ={**found, **{key: value for key, value in os.environ.items() if value}})
     target = found.get("DISCORD_HOME_CHANNEL_THREAD_ID") or found.get("DISCORD_HOME_CHANNEL", "")
     target = notice_channel(home) or target
+    fault = fault_channel(home)
     if rc != 0:
-        target = fault_channel(home) or target
+        target = fault or target
     if not token or not target.isdigit():
         raise TimerError(4, "no Discord token or home channel for deliver=discord")
-    (send or _discord_send)(token, target, body)
-    return "sent"
+    post = send or _discord_send
+    if rc != 0:
+        post(token, target, f"⚠️ 정기 작업 '{job.name}' 실패(종료코드 {rc})" + (f"\n{body}" if body else ""))
+        return "sent"
+    view = split(body)
+    if not fault:
+        body = view.without_data
+    else:
+        body = view.owner
+        if view.diagnostics:
+            post(token, fault, f"⚠️ 정기 작업 '{job.name}' 경고\n" + "\n".join(view.diagnostics))
+    if body:
+        post(token, target, body)
+    return "sent" if body or (fault and view.diagnostics) else ""
 
 
 def run(home: Path, job: Job) -> int:

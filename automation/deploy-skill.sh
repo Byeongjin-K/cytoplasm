@@ -773,7 +773,7 @@ GATE_INTEROP_HELPERS=(interop/approval_lease.py interop/approval_lifecycle.py in
 # Notice facade import closure: separate from the gate and peer skill payload.
 # tests/unit/test_deploy_staging_owner_notice.py derives coverage from imports.
 OWNER_NOTICE_HELPERS=(owner_notice.py interop/origin_notice.py node_config.py notice_bot.py
-                      interop/owner_message.py interop/owner_message_text.py
+                      interop/owner_message.py interop/owner_message_text.py interop/owner_text.py
                       interop/discord_transport.py interop/chunker.py
                       interop/approval_directory.py interop/approval_surface.py)
 

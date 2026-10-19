@@ -219,6 +219,19 @@ def notify_owner(
             from automation.interop.owner_message import Ref, render
 
             body = render(message, destination=Ref(scope="channel", space="unknown", channel_id=channel_id))
+        if not fault_target:
+            # 형 채널에는 사람 말만(형 지시 2026-10-20 00:10 KST). 경고 코드가 든 통지는 형 할 일이
+            # 아니므로 통째 페어 채널로(봉투를 줄 단위로 자르지 않는다), JSON 결과 줄은 언제나 빼다.
+            from automation.interop.owner_text import split
+
+            view = split(body)
+            pair = fault_channel() if view.diagnostics else None
+            if view.data or pair:
+                print(f"[owner-notice] NOTIFY-TRIMMED: data={len(view.data)} to_pair={bool(pair)}", file=sys.stderr)
+            body = view.without_data if view.data else body
+            channel_id = pair or channel_id
+            if view.data and not body:
+                return False
         if attachments:
             send_notice_files(token, channel_id, body, attachments)
         else:

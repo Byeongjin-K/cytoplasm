@@ -56,8 +56,11 @@ def _drive_title(label: str) -> str:
 
 def _publish_note(
     note_path: Path, *, label: str, on: date, project: str = ""
-) -> None:
-    """Best-effort Drive publication — never touches the local note or the exit code."""
+) -> str:
+    """Best-effort Drive publication — never touches the local note or the exit code.
+
+    Returns the Drive link of the published note, or "" when nothing was published.
+    """
     root = str(runtime_root())
     if root not in sys.path:
         sys.path.insert(0, root)
@@ -65,11 +68,12 @@ def _publish_note(
         from automation.drive_outputs import publish_best_effort
     except ImportError:
         print(f"DRIVE-PUBLISH-SKIP reason=ImportError root={root}")
-        return
+        return ""
     title = _drive_title(label)
-    publish_best_effort(
+    published = publish_best_effort(
         "meeting", title, [(note_path, title)], on=on, project=project or None
     )
+    return published.links[0] if published is not None and published.links else ""
 
 
 def _correct_terms(
@@ -457,12 +461,13 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
         meeting_evidence.write_sidecar(note_path, pack)
 
     # Drive publication is strictly best-effort and must never affect the local note.
+    link = ""
     try:
         match = re.fullmatch(r"(\d{4}-\d{2}-\d{2})-meeting-(.+)\.md", note_path.name)
         if match is None:
             print("DRIVE-PUBLISH-SKIP reason=malformed-date")
         else:
-            _publish_note(
+            link = _publish_note(
                 note_path,
                 label=label,
                 on=date.fromisoformat(match.group(1)),
@@ -544,6 +549,7 @@ def cmd_ingest(args: argparse.Namespace, evidence_pack: object | None = None) ->
                "actions_closed", "project")}
     # 화자 이름은 회의 내용이다 — 결과 JSON(호출자에게 돌려주는 값)에만 싣고
     # 라우팅 로그에는 남기지 않는다(로그는 메타데이터만 적는다는 이 모듈의 계약).
+    output["link"] = link
     output["speakers"] = [
         {"label": speaker.label, "name": speaker.name, "basis": speaker.basis}
         for speaker in extraction.speakers

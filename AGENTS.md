@@ -200,6 +200,7 @@
 - 마스킹(캘린더·금액·위키·특허)이 링크를 이긴다: 못 낼 내용은 `fact`에서 빼고 좌표도 못 내면 위치 없음(위키·patent-prep 좌표 없음, calendar 결과·공유 출력 draft id만), 사유는 conformance 원장에. 예외는 `approval_surface`/directory 바인딩으로 게시 직전 검증한 소유자 전용 승인 스레드의 캘린더 카드 v3+ 상세뿐(공유·미상 표면 금지, 부모 안내·스레드 이름·결과 통지는 마스킹, v1~v3 바이트·해시 불변, 오류면 강등 없이 게시 거부, 저장 안 된 이전 값 생성 금지).
 - 신규 승인 생산자는 카드 판본 v2 명시, 저장된 판본은 엄격 재생, 파사드는 명시 판본을 바꾸지 않는다. `owner-ko-v5`는 형 채널 정기 알림용 한 줄 판본이다. `render_version` append-only, 게시된 문구 수정 금지. best-effort 불변(`origin_notice.deliver` 폴백 자체의 예외는 호출자가 처리). 강제 `tests/unit/test_owner_message_adoption_conformance.py`: 카드 렌더 경로는 `_CARD_RENDER_ROOTS`, 예외는 `_RAW_CONTENT_EXEMPT`·`_PERMANENT_RAW_CONTENT_EXEMPT`·`_LINK_LITERAL_ALLOWED`·`_NOT_OWNER_FACING`에 사유, 렌더 경로 이동 시 같은 커밋에 루트 수정.
 - 네이티브 답글이 이미 대상을 지목하면 작성 정책상 네 번째 링크를 생략할 수 있다(렌더러가 답글을 탐지하지는 않는다).
+- 형 채널 글에는 기계 출력(JSON·종료코드·ref·provider·경로·대문자 표식 코드·UTC 시각)을 싣지 않는다. 판정은 `automation/interop/owner_text.py` 하나. `cron_timer_run.deliver`는 JSON 줄을 출력 기록에만 두고 진단 줄은 페어 채널로, `owner_notice.notify_owner`는 JSON 줄을 빼고 진단이 든 통지는 통째로 페어 채널로 보낸다. 페어 채널 없는 설치는 JSON 만 빼고 기존 목적지(숨기지 않는다). no-agent 작업 stdout 은 사람 말 한두 줄+링크, 자식 CLI 결과 JSON 은 잡아 stderr 로. 강제 `tests/unit/test_owner_text.py`(2026-10-20 형 지시).
 원문: [RULES.md](RULES.md) 「소유자 메시지 계약 규칙」 · 장부 `cyto-skill-ux`
 
 ## 승인 요청 답장 링크 규칙 (cha 지시, 2026-09-23)

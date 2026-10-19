@@ -45,9 +45,9 @@ def _scripts(tmp_path: Path) -> Path:
 def _recorder():
     calls: list[tuple[list[str], dict[str, str]]] = []
 
-    def runner(argv: list[str], env: dict[str, str]) -> int:
+    def runner(argv: list[str], env: dict[str, str]) -> tuple[int, str]:
         calls.append((argv, env))
-        return 0
+        return 0, ""
 
     return calls, runner
 
@@ -66,7 +66,7 @@ def test_one_pending_transcript_is_handed_to_the_cli(tmp_path, capsys) -> None:
     argv = calls[0][0]
     assert "ingest" in argv
     assert argv[argv.index("--pending-name") + 1] == "2026-08-26_20260825_해양고신뢰성.md"
-    assert "2026-08-26_20260825_해양고신뢰성.md" in out
+    assert "8/26" in out and ".md" not in out, "만든 회의록은 날짜로 알리고 파일명은 형 글에 싣지 않는다"
 
 
 def test_default_backlog_limit_is_three_per_tick(tmp_path, capsys) -> None:
@@ -177,10 +177,10 @@ def test_a_failing_child_is_reported_without_stopping_the_rest(tmp_path, capsys)
     """전사본은 서로 독립이다 — 하나가 실패했다고 나머지를 버리지 않는다."""
     calls: list[str] = []
 
-    def runner(argv: list[str], env: dict[str, str]) -> int:
+    def runner(argv: list[str], env: dict[str, str]) -> tuple[int, str]:
         name = argv[argv.index("--pending-name") + 1]
         calls.append(name)
-        return 6 if name == "b.md" else 0
+        return (6 if name == "b.md" else 0), ""
 
     code = watch.run_once(
         env=_env(tmp_path), scripts=_scripts(tmp_path), runner=runner,
@@ -190,4 +190,26 @@ def test_a_failing_child_is_reported_without_stopping_the_rest(tmp_path, capsys)
 
     assert calls == ["a.md", "b.md", "c.md"]
     assert code == 1, "실패를 rc 0 으로 덮으면 cron 기록이 성공으로 남는다"
-    assert "b.md" in out and "실패" in out
+    assert "b.md" in out, "실패한 전사본은 이름을 남겨야 페어 채널에서 고칠 수 있다"
+
+
+def test_the_child_json_never_reaches_the_owner_post(tmp_path, capsys) -> None:
+    """형이 가리킨 글(2026-10-20): 자식 결과 JSON 이 맨 위에 붙었다 — 이제는 사람 말과 링크만."""
+    from automation.interop.owner_text import findings
+
+    child = json.dumps({
+        "exit": 0, "ref": "121921ba", "provider": "openai-codex", "codex_called": True,
+        "note": "2026-10-20-meeting-121921ba.md", "project": "stt-56",
+        "link": "https://drive.google.com/file/d/minutes/view",
+        "speakers": [{"label": "화자1", "name": None, "basis": "자기소개·호명 등 이름 근거 없음"}],
+    }, ensure_ascii=False)
+
+    code = watch.run_once(
+        env=_env(tmp_path), scripts=_scripts(tmp_path), runner=lambda argv, env: (0, child + "\n"),
+        pending=lambda: (_Pending("2026-10-19_stt-56_2.md"),),
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "10/19 stt-56" in out and "https://drive.google.com/file/d/minutes/view" in out
+    assert [line for line in out.splitlines() if findings(line)] == [], out
