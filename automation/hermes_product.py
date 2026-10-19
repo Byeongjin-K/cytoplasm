@@ -118,7 +118,7 @@ def backup(home: Path, folder: Path) -> dict[str, str]:
 
 def remove(home: Path, head: str, *, runtime: Path | None = None,
            proc_reader: Callable[[], tuple[Path, ...]] | None = None,
-           verify_migration: Callable[[], bool] = migration_verified) -> Path:
+           verify_migration: Callable[[], bool] = migration_verified, check_only: bool = False) -> Path:
     """Snapshot all targets, check all uses, verify Q248 backup, remove, mark last."""
     from automation.hermes_product_live import check, process_paths
     from automation.p5_backup import inventory
@@ -150,12 +150,19 @@ def remove(home: Path, head: str, *, runtime: Path | None = None,
     if marker.exists() and not selected:
         if not (folder / "sha256.json").is_file():
             raise ValueError("HERMES-PRODUCT-REFUSED: 완료 백업 없음")
+        if check_only:
+            print("HERMES-PRODUCT-CHECK: 이미 제거됨(변경 없음)")
+            return folder
         backup(home, folder)
         return folder
     expected = inventory(home, selected)
     if any(path.is_symlink() or os.path.ismount(path) for path in selected):
         raise ValueError("HERMES-PRODUCT-REFUSED: 제품 대상이 링크 또는 마운트")
     check(home, targets, runtime or Path(__file__).resolve().parents[1], proc_reader or process_paths)
+    if check_only:
+        # Rehearsal stops before the backup write and every deletion.
+        print(f"HERMES-PRODUCT-CHECK: 통과(대상 {len(selected)}개, 변경 없음)")
+        return folder
     checksums = backup(home, folder)
     for path in selected:
         if path.name in BACKUP_NAMES and checksums.get(path.name) != expected[path.relative_to(home).as_posix()]:
@@ -187,6 +194,7 @@ def main() -> int:
     modes.add_argument("--release-switch", action="store_true")
     modes.add_argument("--remove", action="store_true")
     parser.add_argument("--head")
+    parser.add_argument("--check", action="store_true", help="run every guard, change nothing")
     args = parser.parse_args()
     home = Path.home()
     if args.remove and (args.head is None or HEAD.fullmatch(args.head) is None):
@@ -199,6 +207,10 @@ def main() -> int:
 
         if (home / ".hermes").is_symlink():
             raise ValueError("HERMES-PRODUCT-REFUSED: 런타임 루트가 심볼릭 링크")
+        if args.check:
+            # Rehearsal writes nothing, not even the lock file.
+            remove(home, args.head, check_only=True)
+            return 0
         lock = home / ".hermes/retired/hermes-product.lock"
         lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with lock.open("a") as handle, command_lock():

@@ -100,7 +100,7 @@ def docker(args: tuple[str, ...], runner: Runner) -> str:
     return checked(("sg", "docker", "-c", shlex.join(("docker", *args))), runner)
 
 
-def remove_ops(home: Path, runner: Runner) -> None:
+def remove_ops(home: Path, runner: Runner, *, check: bool = False) -> None:
     folder = safe_path(home, BACKUP)
     index = safe_path(home, BACKUP + "/SHA256SUMS")
     entries = index.read_text(encoding="utf-8").splitlines()
@@ -122,6 +122,12 @@ def remove_ops(home: Path, runner: Runner) -> None:
     unit = safe_path(home, ".config/systemd/user/litellm-gateway.service")
     compose = safe_path(home, "litellm-gateway")
     print("GATEWAY-RETIRE: 정지 상태 확인 완료")
+    if check:
+        # Rehearsal: prove docker is reachable as this account, then stop before any change.
+        docker(("volume", "ls", "--format", "{{.Name}}"), runner)
+        docker(("image", "ls", "--format", "{{.Repository}}:{{.Tag}}"), runner)
+        print("GATEWAY-RETIRE-CHECK: ops 통과(변경 없음)")
+        return
     unit.unlink(missing_ok=True)
     checked(("systemctl", "--user", "daemon-reload"), runner)
     print("GATEWAY-RETIRE: ops 유닛 제거 완료")
@@ -143,7 +149,7 @@ def remove_ops(home: Path, runner: Runner) -> None:
     print("GATEWAY-RETIRE: 비밀 설정 폴더 제거 완료")
 
 
-def remove_agent(home: Path, runner: Runner) -> None:
+def remove_agent(home: Path, runner: Runner, *, check: bool = False) -> None:
     config = safe_path(home, ".hermes/config.yaml")
     secrets = safe_path(home, ".env.secrets")
     config_data = config.read_bytes()
@@ -157,6 +163,9 @@ def remove_agent(home: Path, runner: Runner) -> None:
     for unit in units:
         stopped(unit.name, runner)
     print("GATEWAY-RETIRE: agent 설정·유닛 검사 완료")
+    if check:
+        print("GATEWAY-RETIRE-CHECK: agent 통과(변경 없음)")
+        return
     for path, before, after in ((config, config_data, updated_config), (secrets, secret_data, updated_secrets)):
         if before != after:
             if path.read_bytes() != before:
@@ -170,7 +179,7 @@ def remove_agent(home: Path, runner: Runner) -> None:
     print("GATEWAY-RETIRE: agent 유닛 재조회 준비 완료")
 
 
-def remove(home: Path, role: str, head: str, *, runner: Runner = run) -> None:
+def remove(home: Path, role: str, head: str, *, runner: Runner = run, check: bool = False) -> None:
     if HEAD.fullmatch(head) is None or role not in ("ops", "agent"):
         raise ValueError("GATEWAY-RETIRE-REFUSED: 제거 인자 오류")
     marker = safe_path(home, MARKER)
@@ -181,9 +190,11 @@ def remove(home: Path, role: str, head: str, *, runner: Runner = run) -> None:
         return
     match role:
         case "ops":
-            remove_ops(home, runner)
+            remove_ops(home, runner, check=check)
         case "agent":
-            remove_agent(home, runner)
+            remove_agent(home, runner, check=check)
+    if check:
+        return
     marker.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     atomic_write(marker, head.encode("ascii"))
     print("GATEWAY-RETIRE: 제거 완료")
@@ -196,6 +207,7 @@ def main() -> int:
     modes.add_argument("--remove", action="store_true")
     parser.add_argument("--role", choices=("ops", "agent"))
     parser.add_argument("--head")
+    parser.add_argument("--check", action="store_true", help="run every guard, change nothing")
     args = parser.parse_args()
     if args.remove and (args.role is None or args.head is None):
         parser.error("--remove에는 --role과 --head 필요")
@@ -204,12 +216,16 @@ def main() -> int:
         if args.release_switch:
             print(release_switch(home))
             return 0
+        if args.check:
+            # Rehearsal writes nothing, not even the lock file.
+            remove(home, args.role, args.head, check=True)
+            return 0
         lock = safe_path(home, ".local/state/gateway-retirement.lock")
         lock.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         with lock.open("a") as handle:
             os.fchmod(handle.fileno(), 0o600)
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            remove(home, args.role, args.head)
+            remove(home, args.role, args.head, check=args.check)
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 4

@@ -8,7 +8,10 @@
 # 뿐이며(배포 로직 사본 0), 실행 성공과 마지막 **전량 재판정**을 모두 통과해야 영수증을 쓴다 —
 # 부분 성공은 성공으로 보고되지 않는다.
 #
-# Usage: deploy_all.sh [--plan|--verify|--apply [--wait-converge]]
+# Usage: deploy_all.sh [--plan|--verify|--rehearse|--apply [--wait-converge]]
+#   --rehearse 카드 전 읽기 전용 리허설: 이 체크아웃 HEAD 의 트리를 노드 임시 폴더에 놓고 전량 적용과
+#            같은 계정·sudo 모양으로 판정과 승인된 제거 단계의 검사(--check)만 돌린다. 인가·배포기·
+#            재시동·쓰기 없음. 마지막 줄 REHEARSAL-OK|REHEARSAL-REFUSED (rc 0|4)
 #   --plan   (기본) 판정 출력만. rc 0=전량 일치 · 1=할 일 있음 · 4=판정 불가
 #   --verify 판정 + 전량 일치면 영수증 기록(수렴 검증만, 배포 없음)
 #   --apply  선택적 --wait-converge 시 노드 릴리스 트리 수렴을 먼저 기다린 뒤
@@ -28,17 +31,17 @@ mode="${1:---plan}"
 wait_converge=0
 if [[ "$mode" == "--help" || "$mode" == "-h" ]]; then
   if (( $# > 1 )); then
-    echo "usage: deploy_all.sh [--plan|--verify|--apply [--wait-converge]]" >&2
+    echo "usage: deploy_all.sh [--plan|--verify|--rehearse|--apply [--wait-converge]]" >&2
     exit 2
   fi
-  echo "usage: deploy_all.sh [--plan|--verify|--apply [--wait-converge]]"
+  echo "usage: deploy_all.sh [--plan|--verify|--rehearse|--apply [--wait-converge]]"
   exit 0
 fi
 if (( $# > 1 )); then
   if [[ "$mode" == "--apply" && $# == 2 && "$2" == "--wait-converge" ]]; then
     wait_converge=1
   else
-    echo "usage: deploy_all.sh [--plan|--verify|--apply [--wait-converge]]" >&2
+    echo "usage: deploy_all.sh [--plan|--verify|--rehearse|--apply [--wait-converge]]" >&2
     exit 2
   fi
 fi
@@ -88,6 +91,10 @@ fi
 
 readonly RUNTIME_ROOT="${DEPLOY_ALL_RUNTIME_ROOT:-/srv/autophagy-agent-current}"
 readonly RECEIPT_DIR="${DEPLOY_ALL_RECEIPT_DIR:-/srv/autophagy-private/deploy-all}"
+# --rehearse points these at the staged candidate tree and turns every removal into its check.
+exec_root="$RUNTIME_ROOT"
+check_flag=""
+rehearse=0
 
 log() { printf '[deploy-all] %s\n' "$*" >&2; }
 
@@ -95,7 +102,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $RUNTIME_ROOT/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --hermes-memory $memory_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_ledger() {
@@ -105,7 +112,7 @@ converge_ledger() {
 
 retire_peer() {
   local acct role
-  "$repo_root/automation/release_approval_remote.sh" authorize-peer-retired --head "$node_sha" \
+  (( rehearse )) || "$repo_root/automation/release_approval_remote.sh" authorize-peer-retired --head "$node_sha" \
     || { log "PEER-RETIRED-UNAUTHORIZED: approved HEAD does not cover P5"; return 4; }
   # The private marker is deliberately written only after both account cleanups.
   # It does not delete the peer account or grant any new privilege.
@@ -117,26 +124,27 @@ retire_peer() {
     if [[ "$role" == peer ]] && ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)' && ! getent passwd $acct >/dev/null" </dev/null; then
       continue  # Owner root block removed the account after a completed non-root cleanup.
     fi
-    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.p5_remove --role $role --head $node_sha" </dev/null \
+    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$exec_root python3 -B -m automation.p5_remove --role $role --head $node_sha$check_flag" </dev/null \
       || return 4
   done
+  (( rehearse )) && return 0
   ssh "$host" "sudo -n -u $NODE_OPS_ACCOUNT -H bash -c 'umask 077; printf retired > $NODE_PRIVATE_ROOT/peer-retired; cmp -s $NODE_PRIVATE_ROOT/peer-retired <(printf retired)'" </dev/null
 }
 
 retire_hermes_product() {
-  "$repo_root/automation/release_approval_remote.sh" authorize-hermes-product --head "$node_sha" \
+  (( rehearse )) || "$repo_root/automation/release_approval_remote.sh" authorize-hermes-product --head "$node_sha" \
     || { log "HERMES-PRODUCT-UNAUTHORIZED: 승인 HEAD에 제품 제거 표면 없음"; return 4; }
-  ssh "$host" "sudo -n -u $NODE_AGENT_ACCOUNT -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.hermes_product --remove --head $node_sha" </dev/null
+  ssh "$host" "sudo -n -u $NODE_AGENT_ACCOUNT -H env PYTHONPATH=$exec_root python3 -B -m automation.hermes_product --remove --head $node_sha$check_flag" </dev/null
 }
 
 retire_spend_gateway() {
-  "$repo_root/automation/release_approval_remote.sh" authorize-gateway-retirement --head "$node_sha" \
+  (( rehearse )) || "$repo_root/automation/release_approval_remote.sh" authorize-gateway-retirement --head "$node_sha" \
     || { log "GATEWAY-RETIRE-UNAUTHORIZED: 승인 HEAD에 제거 표면 없음"; return 4; }
   local acct role
   for role in ops agent; do
     acct="$NODE_OPS_ACCOUNT"
     [[ "$role" != agent ]] || acct="$NODE_AGENT_ACCOUNT"
-    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$RUNTIME_ROOT python3 -B -m automation.gateway_retirement --remove --role $role --head $node_sha" </dev/null \
+    ssh "$host" "sudo -n -u $acct -H env PYTHONPATH=$exec_root python3 -B -m automation.gateway_retirement --remove --role $role --head $node_sha$check_flag" </dev/null \
       || return 4
   done
 }
@@ -281,6 +289,43 @@ case "$mode" in
     rc=$?
     (( rc == 1 )) && log "not fully deployed — no receipt (run --apply, or deploy the listed items)"
     exit "$rc"
+    ;;
+  --rehearse)
+    # 2026-10-19 리드 규칙(형이 ✅ 를 세 번 다시 눌렀다): 카드 전에 전량 적용의 노드 쪽 검사를
+    # 끝까지 통과시킨다. 노드는 아직 이전 릴리스이므로 후보 트리를 임시 폴더에 실어 그 코드로 돈다.
+    node_sha="$(git -C "$repo_root" rev-parse HEAD)" || exit 4
+    stage="/tmp/deploy-rehearse.${node_sha:0:12}.$$"
+    trap 'ssh "$host" "rm -rf $stage" </dev/null >/dev/null 2>&1 || true' EXIT
+    if ! git -C "$repo_root" archive "$node_sha" | ssh "$host" "umask 022; mkdir $stage && tar -xf - -C $stage"; then
+      echo "REHEARSAL-REFUSED step=stage rc=4"
+      exit 4
+    fi
+    exec_root="$stage"
+    check_flag=" --check"
+    rehearse=1
+    actions="$(probe actions)"
+    rc=$?
+    if (( rc == 4 )); then
+      echo "REHEARSAL-REFUSED step=plan rc=4"
+      exit 4
+    fi
+    grep -E '^ACT[|]' <<< "$actions" || true
+    steps="plan"
+    if [[ "$peer_mode" == retired ]]; then
+      retire_peer || { echo "REHEARSAL-REFUSED step=peer-retired rc=4"; exit 4; }
+      steps+=",peer-retired"
+    fi
+    if [[ "$product_mode" == retired ]]; then
+      retire_hermes_product || { echo "REHEARSAL-REFUSED step=hermes-product rc=4"; exit 4; }
+      steps+=",hermes-product"
+    fi
+    if [[ "$retirement_mode" == retired ]]; then
+      retire_spend_gateway || { echo "REHEARSAL-REFUSED step=litellm rc=4"; exit 4; }
+      steps+=",litellm"
+    fi
+    log "리허설 범위 밖: 카드 인가·배포기 실행·재시동·영수증(✅ 뒤 --apply 가 한다)"
+    echo "REHEARSAL-OK head=${node_sha:0:12} actions=$(grep -c '^ACT[|]' <<< "$actions") steps=$steps"
+    exit 0
     ;;
   --apply)
     # 배포기는 이 체크아웃의 파일을 밀므로, 체크아웃과 노드 릴리스가 같은 세대가
@@ -484,7 +529,7 @@ case "$mode" in
     exit 1
     ;;
   *)
-    echo "usage: deploy_all.sh [--plan|--verify|--apply [--wait-converge]]" >&2
+    echo "usage: deploy_all.sh [--plan|--verify|--rehearse|--apply [--wait-converge]]" >&2
     exit 2
     ;;
 esac
