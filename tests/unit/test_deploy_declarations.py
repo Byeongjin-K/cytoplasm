@@ -49,10 +49,10 @@ def _only(text: str, relative: str = _DECL) -> Declaration:
 
 def test_legacy_projection_is_byte_identical(tmp_path: Path) -> None:
     _copy_declarations(tmp_path)
-    existing = tmp_path / "automation" / "cost-report" / "deploy-manifest.txt"
+    existing = tmp_path / "automation" / "effect_request" / "deploy-manifest.txt"
     _ = existing.write_text(
         existing.read_text(encoding="utf-8")
-        + "agent|automation/cost-report|.hermes/cost-report-runtime|v2:tree;files=a.py,b.py\n",
+        + "agent|automation/effect_request|.hermes/example-runtime|v2:tree;files=a.py,b.py\n",
         encoding="utf-8",
     )
     only_v2 = tmp_path / "automation" / "zz_v2only" / "deploy-manifest.txt"
@@ -65,7 +65,7 @@ def test_legacy_projection_is_byte_identical(tmp_path: Path) -> None:
     assert derive_manifest(tmp_path) == central
     v2 = [d for d in all_declarations(tmp_path) if not d.legacy]
     assert {
-        ("tree", "automation/cost-report"),
+        ("tree", "automation/effect_request"),
         ("file", "automation/zz_v2only"),
     } <= {(d.kind, d.owner) for d in v2}
 

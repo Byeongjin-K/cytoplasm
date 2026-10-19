@@ -13,9 +13,6 @@ from automation.watcher_manifest import all_rows  # noqa: E402
 
 
 _EXPECTED: Final = {
-    ("agent", ".hermes/scripts/send_cost_report.py"): (
-        "automation/cost-report/send_cost_report.py"
-    ),
     ("agent", ".hermes/scripts/poll_reminders.py"): (
         "automation/reminder_poller/poll_reminders.py"
     ),

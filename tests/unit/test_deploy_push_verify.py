@@ -20,7 +20,6 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[2]
 _HELPER = _REPO / "automation" / "deploy_push.sh"
 _DEPLOY_SCRIPTS = (
-    "automation/cost-report/deploy.sh",
     "automation/doctor/deploy.sh",
     "automation/interop/deploy.sh",
     "automation/managed_sync/deploy.sh",

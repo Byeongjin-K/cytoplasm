@@ -77,7 +77,7 @@ _STEPS: Final[Mapping[str, tuple[str, ...]]] = {
     "cron-required-env": (
         "빠진 이름마다 {home}/.hermes/.env(0600, 소유자 {account}) 에 <이름>=<값> 한 줄을 둔다 — 값은 소유자가 정하고 채팅에 붙여넣지 않는다",
         "Hermes 가 no-agent 작업 직전에 그 파일을 다시 읽으므로 게이트웨이 재시동은 필요 없다",
-        "값의 뜻은 그 작업의 가이드가 정한다(예: COST_REPORT_SOFT_CAP = 월 누적 지출 경보 기준 USD, docs/guide/cost-report.md)",
+        "값의 뜻은 그 작업의 가이드가 정한다",
         "무엇을 요구하는지의 정본: 각 배포기 옆 deploy-manifest.txt 의 v2:cron 행 env= 값",
     ),
 }

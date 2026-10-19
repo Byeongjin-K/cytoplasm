@@ -12,8 +12,8 @@ producers' to write, inside the thread. AS-3.2 retired the per-flow ``*_APPROVAL
 branch, so an approval surface is now resolved from the config key, the cache or a
 guild scan and from nothing else — no caller can name an environment variable to
 point one somewhere. The exemption is intentionally narrower than the whole
-repository: six non-approval DM senders remain outside this directory —
-``procure_review.send_review``, ``cost-report.send_cost_report``,
+repository: five non-approval DM senders remain outside this directory —
+``procure_review.send_review``,
 ``interop.gate_driver.main``, ``interop.hermes_plugin._send_direct_result``,
 ``reminder_poller.DmSender.send``, and ``research_trends._send_dm``.
 """

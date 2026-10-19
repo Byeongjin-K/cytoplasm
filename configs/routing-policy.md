@@ -37,8 +37,8 @@ changed by card A. See [relay usage](../docs/기능소개/노드-배치-omo-중�
    the only place to add or remove a route is `fallback_providers`.
 4. **Content does not choose a route.** All text uses the same account configuration.
    External writes still require their existing owner approval, credentials and permissions.
-5. **Accounting.** Codex and SuperGrok are subscriptions outside the LiteLLM budget. A call that
-   falls back is served, and counted, by the xAI account.
+5. **회계.** 호출 비용·구독 사용량은 실제 응답한 공급자 계정에서 확인한다.
+   예전 비용 게이트웨이와 09:00 일일 비용 보고는 2026-10-19 소유자 "이것도 이제 없애라" 결정으로 폐기했다.
 6. **Logs name who answered.** Every masked routing log keeps `provider` and
    `model: hermes-config` (the config decided) and records the route that actually answered in `served_provider`/
    `served_model`, read from Hermes' `--usage-file` report (`automation.codex_llm.complete_served`).

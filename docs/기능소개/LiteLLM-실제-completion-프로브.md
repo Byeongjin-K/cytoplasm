@@ -1,5 +1,9 @@
 # LiteLLM 실제 completion 프로브
 
+> **과거 기록 · 폐기(2026-10-19)**: 소유자 "이거 아예 삭제해 litellm" 결정으로
+> 이 프로브·게이트웨이를 설치하거나 다시 켜지 않는다. 아래는 2026-09-03의 구현 이력이다.
+> 현재 제거·백업·원장 복구는 [LiteLLM 지우기](litellm-지우기.md)에 있다.
+
 ## 무엇을 확인하는가
 
 healthcheck는 기존 `/health/liveliness` 확인을 유지하면서, `glm-main` 별칭으로 실제 `/chat/completions` 요청을 한 번 더 보낸다. 요청은 사용자 메시지 `ping`과 `max_tokens: 1`로 제한된다. HTTP 200 응답에 `choices[0]`이 있을 때만 PASS이며, 그 밖의 HTTP 상태나 응답 형태는 FAIL이다. 실패 로그에는 HTTP 상태와 응답의 오류 type/code만 남고 응답 본문과 인증 키는 남지 않는다.
@@ -14,13 +18,9 @@ healthcheck는 기존 `/health/liveliness` 확인을 유지하면서, `glm-main`
 - 상위 제공자 429 또는 잔액 소진: liveliness는 PASS일 수 있지만 completion은 FAIL로 보고되고 수리 티켓이 생성된다.
 - HTTP 200이지만 `choices[0]`이 없음: completion은 FAIL로 보고된다.
 
-## 소유자 설치 단계
+## 과거 소유자 설치 단계
 
-저장소 변경만으로 이미 설치된 강제명령 래퍼가 자동 교체되지는 않는다. 소유자는 노드의 배포 릴리스에서 다음 스크립트를 실행해 재생성된 래퍼를 설치한다.
-
-```bash
-bash automation/provision-healthcheck-probe.sh
-```
+당시에는 강제명령 래퍼 갱신이 별도로 필요했다. 폐기 후에는 설치하지 않는다.
 
 ## 비용
 

@@ -88,7 +88,7 @@ def test_a_relative_deployer_that_changes_directory_fails_closed(repo: Path, tmp
 
 
 def test_a_real_deployer_run_by_relative_path_still_deploys(repo: Path, tmp_path: Path) -> None:
-    package = "automation/cost-report"
+    package = "automation/effect_request"
     hermes = listing_only_hermes(declared_cron(package))
     clean = deploy(repo, tmp_path / "clean", f"{package}/deploy.sh", hermes=hermes, cwd=repo)
     bypass = deploy(repo, tmp_path / "bypass", f"{package}/deploy.sh", hermes=hermes, cwd=repo, bypass=True)
@@ -103,7 +103,7 @@ def test_a_real_deployer_run_by_relative_path_still_deploys(repo: Path, tmp_path
 @pytest.mark.parametrize("helper", ["automation/deploy_cron.sh", "automation/deploy_push.sh"])
 def test_a_deleted_tracked_shared_helper_is_refused_before_transport(repo: Path, tmp_path: Path,
                                                                       helper: str) -> None:
-    package = "automation/cost-report"
+    package = "automation/reminder_poller"
     with removed(repo, helper):
         rc, stderr, calls, _ = deploy(repo, tmp_path, str(repo / package / "deploy.sh"),
                                       hermes=listing_only_hermes(declared_cron(package)))
@@ -116,7 +116,7 @@ def test_a_shared_helper_absent_from_the_reference_is_skipped(tmp_path: Path) ->
     _ = git(repo, "rm", "-q", "automation/deploy_tree_remote.sh")
     _ = git(repo, "commit", "-q", "-m", "older tree")
     _ = git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-    package = "automation/cost-report"
+    package = "automation/effect_request"
 
     hermes = listing_only_hermes(declared_cron(package))
     rc, stderr, calls, _ = deploy(repo, tmp_path / "rig", str(repo / package / "deploy.sh"), hermes=hermes)

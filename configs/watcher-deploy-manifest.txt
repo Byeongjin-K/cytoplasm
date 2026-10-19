@@ -14,9 +14,6 @@
 # 노드에서 `automation/healthcheck_probe_wrapper.sh --install` 을 다시 돌려야 하고, 그
 # 필요는 healthcheck_wrapper_current 프로브가 지문 대조로 알려준다(조용히 낡지 않는다).
 
-# --- automation/cost-report/deploy-manifest.txt ---
-agent|automation/cost-report/send_cost_report.py|.hermes/scripts/send_cost_report.py|required
-
 # --- automation/doctor/deploy-manifest.txt ---
 agent|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
 peer|automation/doctor/cron/doctor_watch.py|.hermes/scripts/doctor_watch.py|required
