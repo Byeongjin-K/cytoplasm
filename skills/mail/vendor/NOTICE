@@ -93,6 +93,19 @@ Local fixes
   HTML-escaped spelling. Recipient checks are unchanged. Regression:
   `tests/unit/test_mailon_body_html.py`.
 
+* 2026-10-19 — `mailon/scraper.py`, `mailon/state.py`, `mailon/main.py`, new
+  `mailon/heal.py`: MailOn's own "대용량 첨부파일" box links to
+  `mailon.kr/bigfileDownload/<token>/`; the case-sensitive `/download` selector
+  never matched it, so such mails were saved with no attachments. Those links
+  are now parsed and fetched directly like the Mailplug large-file host (public:
+  200 with the file and no cookies; an expired link answers an HTML page, which
+  now fails instead of being saved). The English webmail buttons "Save" and
+  "Download all" and the box's "PC에 저장" were recorded as attachments; they
+  are skipped, and each sync removes earlier button rows and Markdown entries
+  and re-reads mails of the last 30 days whose large-file links were missed
+  (each once, table `large_link_checked`). Regression:
+  `tests/unit/test_mailon_large_box_and_buttons.py`.
+
 The private development repository preserves those bytes. Public-history
 snapshots run `automation/public_export_redaction.py` against the materialized
 copy only, replacing identifying fixture/comment values without changing the
