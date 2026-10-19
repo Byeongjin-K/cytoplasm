@@ -236,7 +236,7 @@ def build_send_argv(
 
 
 def external_effect_action_hash(argv: tuple[str, ...]) -> str:
-    """Hash-parity with automation.interop.external_effect_gate._action_hash."""
+    """Hash-parity with automation.interop.effect_approval.action_hash."""
     payload = {
         "action": "external_effect.tool_call",
         "arguments": {"command": shlex.join(argv)},

@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Final, Protocol
 
 from automation.git_remote_url import GitRemoteUrlError, validate_remote_url
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 
 from .config import READ_ONLY_MIRROR_DIR, ObsidianWriteConfig, ObsidianWriteError
 from . import clone_lock, gate_binding

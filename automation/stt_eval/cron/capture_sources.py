@@ -14,7 +14,7 @@ from typing import Protocol, cast
 from automation.drive_client import DriveClient
 from automation.drive_outputs import client_from_environment
 from automation.drive_taxonomy import category_parts
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 from automation.plaud_sync.store import load_note_body, load_state
 # mirror 경로 해석의 단일 정의가 이 사설 함수뿐이라 사본을 만들지 않고 재사용한다.
 from automation.rag_ingest.config import ConfigError, _parse_obsidian

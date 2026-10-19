@@ -15,7 +15,7 @@ import pytest
 
 from automation import drive_reference
 from automation.drive_client import DriveClient
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 
 _FOLDER_MIME = "application/vnd.google-apps.folder"
 

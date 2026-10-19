@@ -92,6 +92,3 @@ agent|skills/speechtotext/scripts/speechtotext_drive_watch.py|.hermes/scripts/sp
 
 # --- skills/todo/deploy-manifest.txt ---
 agent|skills/todo/scripts/todo_confirm_reaction_watch.py|.hermes/scripts/todo_confirm_reaction_watch.py|required
-
-# --- skills/wiki/deploy-manifest.txt ---
-agent|skills/wiki/scripts/wiki_confirm_reaction_watch.py|.hermes/scripts/wiki_confirm_reaction_watch.py|required

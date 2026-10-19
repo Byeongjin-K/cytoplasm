@@ -17,7 +17,7 @@ sys.path.insert(0, str(_REPO / "skills" / "mail" / "scripts"))
 import gmail_approval_gate as gmail_gate  # noqa: E402
 import mail_gmail_send  # noqa: E402
 import triage_core  # noqa: E402
-from automation.interop import external_effect_gate  # noqa: E402
+from automation.interop import effect_approval  # noqa: E402
 
 NOW = datetime(2026, 7, 29, tzinfo=UTC)
 OWNER_ID = "owner-1"
@@ -140,12 +140,12 @@ def test_execution_when_owner_approval_matches_then_runs_exact_argv_once(tmp_pat
     assert calls == [snapshot.argv]
     assert tuple(record["argv"]) == snapshot.argv
     assert record["hash"] == snapshot.action_hash
-    decision = external_effect_gate.evaluate_tool_call(
-        external_effect_gate.ToolCall(
+    decision = effect_approval.validate_approval(
+        effect_approval.ToolCall(
             tool_name="gws", arguments={"command": shlex.join(snapshot.argv)}
         ),
-        external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml"),
-        external_effect_gate.ApprovalContext(approval_log, OWNER_ID, False),
+        gmail_gate.GMAIL_TARGET_ID,
+        effect_approval.ApprovalContext(approval_log, OWNER_ID, False),
     )
     assert decision.allowed and decision.action_hash == snapshot.action_hash
 

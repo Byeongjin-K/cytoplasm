@@ -25,6 +25,7 @@ def approval_thread_line(key: str, value: str, record: Mapping[str, object]) -> 
         space="guild",
         channel_id=_coordinate(record, "approval_thread_id"),
         guild_id=_coordinate(record, "approval_guild_id"),
+        message_id=_coordinate(record, "message_id"),
     )
     target = (
         f"url={link.url}" if link.status is LinkStatus.AVAILABLE

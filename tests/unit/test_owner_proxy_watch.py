@@ -13,9 +13,9 @@ from urllib.error import HTTPError
 
 import pytest
 
-from automation.interop import hermes_plugin, owner_proxy, owner_proxy_watch
+from automation.interop import owner_proxy, owner_proxy_watch
 from tests.unit.test_owner_proxy import (
-    AGENT_CHAT, GUILD, ORIGIN_CHANNEL, OTHER_BOT, OWNER, PROXY_BOT, _Event, _NeverPaused, _Source,
+    AGENT_CHAT, GUILD, ORIGIN_CHANNEL, OTHER_BOT, OWNER, PROXY_BOT,
     proxy_text, reader_with, snowflake,
 )
 
@@ -59,9 +59,8 @@ def gateway(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, object
     discord = FakeDiscord()
     armed: list[owner_proxy_watch.Pending] = []
     state: dict[str, object] = {"discord": discord, "armed": armed}
-    monkeypatch.setattr(hermes_plugin, "_pause_store", _NeverPaused)
-    monkeypatch.setattr(hermes_plugin, "_config_payload", lambda: dict(payload))
-    monkeypatch.setattr(hermes_plugin, "OWNER_PROXY_LEDGER", tmp_path / "ledger.json")
+    state["payload"] = payload
+    state["ledger"] = tmp_path / "ledger.json"
     monkeypatch.setattr(owner_proxy, "DiscordOriginReader", lambda token: state["reader"])
     monkeypatch.setattr(owner_proxy_watch, "PENDING_PATH", tmp_path / "pending.json")
     monkeypatch.setattr(owner_proxy_watch, "active", lambda: True)
@@ -71,8 +70,16 @@ def gateway(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, object
     return state
 
 
-def _dispatch(text: str, author: str = PROXY_BOT) -> object:
-    return hermes_plugin.pre_gateway_dispatch(_Event(text=text, source=_Source(user_id=author)), None, None)
+def _dispatch(gateway: dict[str, object], text: str, author: str = PROXY_BOT) -> object:
+    from types import SimpleNamespace
+
+    event = SimpleNamespace(text=text, message_id=PROXY_MESSAGE, source=SimpleNamespace(
+        user_id=author, chat_id=AGENT_CHAT, thread_id=None, guild_id=GUILD, is_bot=True,
+    ))
+    result = owner_proxy.gateway_text(event, text, author, lambda: gateway["payload"], gateway["ledger"])
+    return {"action": "rewrite", "text": result} if result is not None else {
+        "action": "skip", "reason": "interop_bot_prose",
+    }
 
 
 def _settle(gateway: dict[str, object]) -> list[str]:
@@ -88,7 +95,7 @@ def test_a_rejected_proxy_request_leaves_a_reason_in_its_thread(gateway: dict[st
     origin = snowflake(time.time() - 60)
     gateway["reader"] = reader_with(origin)
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin, body="")) == {"action": "skip", "reason": "interop_bot_prose"}
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin, body="")) == {"action": "skip", "reason": "interop_bot_prose"}
 
     discord: FakeDiscord = gateway["discord"]  # type: ignore[assignment]
     assert ("POST", f"/channels/{AGENT_CHAT}/messages/{PROXY_MESSAGE}/threads") in discord.calls
@@ -102,7 +109,7 @@ def test_a_proxy_bot_request_with_a_failed_origin_is_watched_too(gateway: dict[s
     origin = snowflake(time.time() - 60)
     gateway["reader"] = reader_with(origin, author=OTHER_BOT, bot=True)
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
 
     assert [item.via for item in gateway["armed"]] == ["dori"]  # type: ignore[union-attr]
     assert gateway["discord"].sent == []  # type: ignore[union-attr]
@@ -112,8 +119,8 @@ def test_a_proxy_bot_request_with_a_failed_origin_is_watched_too(gateway: dict[s
 def test_prose_that_is_not_a_proxy_request_gets_no_notice(gateway: dict[str, object]) -> None:
     gateway["reader"] = reader_with(snowflake(time.time() - 60))
 
-    assert _dispatch("안녕하세요") == {"action": "skip", "reason": "interop_bot_prose"}
-    assert _dispatch("안녕하세요", author=OTHER_BOT) == {"action": "skip", "reason": "interop_bot_prose"}
+    assert _dispatch(gateway, "안녕하세요") == {"action": "skip", "reason": "interop_bot_prose"}
+    assert _dispatch(gateway, "안녕하세요", author=OTHER_BOT) == {"action": "skip", "reason": "interop_bot_prose"}
     assert gateway["discord"].sent == []  # type: ignore[union-attr]
 
 
@@ -121,7 +128,7 @@ def test_an_accepted_request_with_no_answer_is_reported_after_the_deadline(gatew
     origin = snowflake(time.time() - 60)
     gateway["reader"] = reader_with(origin)
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
     armed: list[owner_proxy_watch.Pending] = gateway["armed"]  # type: ignore[assignment]
     assert [(item.message_id, item.via) for item in armed] == [(PROXY_MESSAGE, "owner")]
     assert armed[0].due_at - time.time() == pytest.approx(owner_proxy_watch.DEADLINE_SECONDS, abs=5)
@@ -145,7 +152,7 @@ def test_an_answered_request_is_not_reported(gateway: dict[str, object], pages: 
     gateway["reader"] = reader_with(origin)
     gateway["discord"].pages.update(pages)  # type: ignore[union-attr]
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
 
     assert _settle(gateway) == ["answered"]
     assert gateway["discord"].sent == []  # type: ignore[union-attr]
@@ -164,7 +171,7 @@ def test_other_messages_are_not_an_answer(gateway: dict[str, object], pages: dic
     gateway["reader"] = reader_with(origin)
     gateway["discord"].pages.update(pages)  # type: ignore[union-attr]
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
 
     assert _settle(gateway) == ["notified"]
 
@@ -172,7 +179,7 @@ def test_other_messages_are_not_an_answer(gateway: dict[str, object], pages: dic
 def test_pending_requests_survive_a_restart(gateway: dict[str, object]) -> None:
     origin = snowflake(time.time() - 60)
     gateway["reader"] = reader_with(origin)
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
     armed: list[owner_proxy_watch.Pending] = gateway["armed"]  # type: ignore[assignment]
     armed.clear()  # 재시동으로 메모리 안의 타이머가 사라졌다
 
@@ -185,7 +192,7 @@ def test_nothing_is_armed_outside_the_gateway_process(gateway: dict[str, object]
     origin = snowflake(time.time() - 60)
     gateway["reader"] = reader_with(origin)
 
-    assert _dispatch(proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
+    assert _dispatch(gateway, proxy_text(GUILD, ORIGIN_CHANNEL, origin))["action"] == "rewrite"  # type: ignore[index]
 
     assert gateway["armed"] == []
     assert owner_proxy_watch.resume() == 0

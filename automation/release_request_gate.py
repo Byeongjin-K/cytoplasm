@@ -14,6 +14,7 @@ from automation.interop.approval_lifecycle import (
 from automation.interop.approval_directory import DiscordApi
 from automation.interop.approval_types import ApprovalRequest, Probe
 from automation.interop.owner_message import LinkStatus, discord_link
+from automation.interop.origin_notice import ThreadOutcome
 from automation.release_card import CARD_REFUSED_PREFIX, finalize_card
 from automation.release_spec import ReleaseSpec
 from automation.skill_gate_approval import GateSurface, SkillApprovalGate
@@ -34,6 +35,39 @@ def _snowflake(value: JsonValue) -> str | None:
         and len(value) <= 20
         else None
     )
+
+
+def existing_thread(api: DiscordApi, channel_id: str, version: str) -> str | None:
+    """Find this release's thread under its approval channel, active or archived."""
+    try:
+        raw = api("GET", f"/channels/{channel_id}")
+    except _WIRE_ERRORS:
+        raw = None
+    guild_id = _snowflake(raw.get("guild_id")) if isinstance(raw, dict) else None
+    paths = ([f"/guilds/{guild_id}/threads/active"] if guild_id else []) + [
+        f"/channels/{channel_id}/threads/archived/public",
+    ]
+    failure: Exception | None = None
+    for path in paths:
+        try:
+            raw = api("GET", path)
+        except _WIRE_ERRORS as error:
+            failure = error
+            continue
+        threads = raw.get("threads") if isinstance(raw, dict) else None
+        for thread in threads if isinstance(threads, list) else []:
+            if not isinstance(thread, dict) or thread.get("parent_id") != channel_id:
+                continue
+            name = str(thread.get("name") or "")
+            for outcome in ThreadOutcome:
+                name = name.removeprefix(f"{outcome.value} · ")
+            if name == f"🏷️ 릴리스 {version}":
+                found = _snowflake(thread.get("id"))
+                if found is not None:
+                    return found
+    if failure is not None:
+        raise failure
+    return None
 
 
 @final
@@ -100,24 +134,10 @@ class ReleaseRequestGate:
         return f"🏷️ 릴리스 {self.spec.version}"
 
     def _existing_thread(self, channel_id: str) -> str | None:
-        """This version's thread under the approval channel, active or archived; None to open one."""
-        guild_id = self._guild_id(channel_id)
-        paths = ([f"/guilds/{guild_id}/threads/active"] if guild_id else []) + [
-            f"/channels/{channel_id}/threads/archived/public",
-        ]
-        for path in paths:
-            try:
-                raw = self._api("GET", path)
-            except _WIRE_ERRORS:
-                continue
-            threads = raw.get("threads") if isinstance(raw, dict) else None
-            for thread in threads if isinstance(threads, list) else []:
-                if (isinstance(thread, dict) and thread.get("parent_id") == channel_id
-                        and thread.get("name") == self._thread_name()):
-                    found = _snowflake(thread.get("id"))
-                    if found is not None:
-                        return found
-        return None
+        try:
+            return existing_thread(self._api, channel_id, self.spec.version)
+        except _WIRE_ERRORS:
+            return None
 
     def _open_thread(self, channel_id: str) -> str:
         payload: dict[str, JsonValue] = {

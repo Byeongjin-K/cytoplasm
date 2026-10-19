@@ -31,7 +31,7 @@ from automation.entity_preflight.gate import (
     guarded_write,
 )
 from automation.entity_preflight.resolver import DataSourceFailure
-from automation.interop.external_effect_gate import ApprovalContext, ExternalEffectDecision
+from automation.interop.effect_approval import ApprovalContext, ExternalEffectDecision
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 for _scripts in (_REPO / "skills" / "calendar" / "scripts", _REPO / "skills" / "todo" / "scripts"):

@@ -46,7 +46,9 @@ def open_for(kst_now: datetime, count: int) -> object:
             name=surface.request_thread_name(kind, request),
         )
 
-    return shared.open_thread(day, opener)
+    thread = shared.open_thread(day, opener)
+    settle()
+    return thread
 
 
 def _thread(channel_id: str) -> object | None:
@@ -116,12 +118,18 @@ def settle() -> None:
         if not threads:
             return
         counts = {thread.channel_id: 0 for thread in threads}
-        for draft in triage_gate.list_drafts():
+        try:
+            drafts = triage_gate.list_drafts()
+        except Exception:  # noqa: BLE001 — unreadable mail cards are unknown, never zero
+            shared.settle({}, triage_confirm._api)
+            raise
+        for draft in drafts:
             channel = str(draft.get("channel_id") or "")
             if draft.get("status") == "pending" and channel in counts:
                 counts[channel] += 1
         calendar = triage_transport._calendar_digest_pending(list(counts))
         if calendar is None:  # unknown calendar cards: closing on a guess could hide one
+            shared.settle({}, triage_confirm._api)
             return
         for channel, pending in calendar.items():
             if channel in counts:

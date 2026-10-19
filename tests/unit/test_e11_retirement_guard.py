@@ -79,8 +79,8 @@ def test_audit_flow_has_no_drive() -> None:
 
 
 def test_denylist_has_no_drive_archive_rule() -> None:
-    text = (_REPO / "configs" / "external-effect-tools.yaml").read_text(encoding="utf-8")
-    assert "drive_archive_batch_upload" not in text
+    # The entire Hermes denylist is retired, including the old archive rule.
+    assert not (_REPO / "configs" / "external-effect-tools.yaml").exists()
 
 
 # --- survival: the systems that MUST keep working -------------------------

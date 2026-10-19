@@ -1,27 +1,13 @@
-"""Approval-gated Google Tasks writer with a mandatory post-write re-read.
+"""Owner-internal Google Tasks writes with a mandatory post-write re-read.
 
-Before this module, Google Tasks had no repo-side code at all: the agent reached
-it by typing ``gws tasks tasks insert`` into a terminal tool, which matched no
-denylist rule and therefore looked like a *read* to the production gate. That is
-how a mis-transcribed personal name was written to an external system with no
-owner ✅.
+``create`` and ``write-now`` share the owner-command writer. Their caller is
+dori-gate, which verifies the initiating Discord owner message before execution.
+Owner-internal writes need no card. ``request`` stays only for callers that still
+post a todo card (the YooDori ``todo-request`` card command and Plaud-selected
+tasks); ``create_task`` drains those stored approval generations.
+Both writers reuse the personal-entity preflight and verify the inserted task.
 
-Two invariants close that hole, in this order:
-
-1. **No write without an owner approval record.** The exact argv that will run is
-   frozen first, canonicalized into a ``ToolCall``, and handed to the unmodified
-   ``automation.interop.external_effect_gate``. One ✅ authorizes one argv — a
-   different title yields a different ``action_hash`` and is refused. No new
-   approval surface, watcher or resolver is introduced here; the existing gate
-   record store is the only authority.
-2. **No success claim without proof.** After ``insert`` the task is RE-READ with
-   ``gws tasks tasks get`` and the stored title/id are compared to what was sent.
-   A mismatch, an empty response, or a failed re-read raises — never a silent OK.
-
-``create_task`` is deliberately the single write path so the personal-name
-preflight guard can wrap exactly one function.
-
-Env: TODO_APPROVAL_LOG, TODO_DENYLIST, TODO_OWNER_ID, TODO_GWS_BIN,
+Env: TODO_APPROVAL_LOG, TODO_OWNER_ID, TODO_GWS_BIN,
      AUTOPHAGY_REPO_ROOT, INTEROP_CONFIG, E2E_TEST_MODE.
 """
 
@@ -53,7 +39,7 @@ from todo_cli_model import (
 )
 
 if TYPE_CHECKING:
-    from automation.interop.external_effect_gate import ApprovalContext, ExternalEffectDecision
+    from automation.interop.approval_types import ApprovalContext, ExternalEffectDecision
 
 GWS_TIMEOUT_S = 120
 CommandRunner = Callable[[list[str]], dict[str, Any]]
@@ -68,23 +54,16 @@ def repo_root() -> Path:
 
 
 def gate_module() -> ModuleType:
-    """Import the production gate; refuse the write when it is unreachable."""
+    """Import exact stored-card validation for the legacy drain path."""
     root = repo_root()
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     try:
-        return import_module("automation.interop.external_effect_gate")
+        return import_module("automation.interop.effect_approval")
     except ImportError as error:
         raise TodoError(
             f"외부효과 게이트 모듈 불가 (AUTOPHAGY_REPO_ROOT={root}) — 쓰기 거부", 3
         ) from error
-
-
-def denylist_path() -> Path:
-    override = os.environ.get("TODO_DENYLIST")
-    if override:
-        return Path(override).expanduser()
-    return repo_root() / "configs" / "external-effect-tools.yaml"
 
 
 def approval_log() -> Path:
@@ -119,10 +98,10 @@ def build_tool_call(argv: Sequence[str]) -> Any:
 
 
 def evaluate(argv: Sequence[str], *, context: ApprovalContext) -> ExternalEffectDecision:
-    """Run the production gate over this exact argv (read-only; no side effects)."""
+    """Validate a previously issued task card, without classifying new writes."""
     module = gate_module()
-    return module.evaluate_tool_call(
-        build_tool_call(argv), module.load_denylist(denylist_path()), context
+    return module.validate_approval(
+        build_tool_call(argv), "tool:gws_tasks_mutation:gws", context
     )
 
 
@@ -284,13 +263,6 @@ def _print_thread_line(action_hash: str) -> None:
     print(approval_thread_line("hash", action_hash, record))
 
 
-def _cmd_create(args: argparse.Namespace) -> int:
-    created = create_task(TaskRequest(args.tasklist, args.title, args.notes, args.due))
-    print(f"CREATED id={created.task_id} tasklist={created.tasklist} hash={created.action_hash}")
-    print(f"VERIFIED reread=tasks.tasks.get id={created.task_id} title_match=true")
-    return 0
-
-
 def _cmd_write_now(args: argparse.Namespace) -> int:
     return import_module("todo_owner_command").write_now(args)
 
@@ -311,12 +283,12 @@ def _cmd_runtime_root(_args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="todo_cli", description="승인 게이트 경유 Google Tasks")
+    parser = argparse.ArgumentParser(prog="todo_cli", description="소유자 지시로 등록하는 Google Tasks")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, handler in (
         ("plan", _cmd_plan),
         ("request", _cmd_request),
-        ("create", _cmd_create),
+        ("create", _cmd_write_now),
         ("write-now", _cmd_write_now),
     ):
         sub = subparsers.add_parser(name)
@@ -325,12 +297,12 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--notes", default=None)
         sub.add_argument("--due", default=None)
         sub.add_argument(
-            "--origin-channel-id", default="", required=name == "write-now",
-            help="지시를 받은 원 채널 id — 등록/취소 결과를 이 채널의 스레드로 통지",
+            "--origin-channel-id", default="", required=name in {"create", "write-now"},
+            help="dori-gate가 확인한 소유자 지시의 Discord 채널 id",
         )
         sub.add_argument(
-            "--origin-message-id", default="", required=name == "write-now",
-            help="원 채널의 지시 메시지 id — 있으면 그 메시지에 결과 스레드를 앵커",
+            "--origin-message-id", default="", required=name in {"create", "write-now"},
+            help="dori-gate가 확인한 소유자 지시의 Discord 메시지 id",
         )
         sub.set_defaults(handler=handler)
     listing = subparsers.add_parser("list")

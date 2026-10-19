@@ -1,6 +1,6 @@
 """소유자 대리 요청 — 허용된 대리 봇 하나가 소유자 대화 채널에 옮겨 쓴 소유자 요청의 출처 검증.
 
-봇끼리는 프로토콜로만 말한다(`hermes_plugin` 의 `interop_bot_prose`). 그 규칙의 **유일한**
+봇끼리는 프로토콜로만 말한다(레거시 `interop_bot_prose`). 그 규칙의 **유일한**
 예외가 여기다: 소유자의 메신저 에이전트(대리 봇)가 소유자가 쓴 원문 메시지를 링크와 함께
 소유자 대화 채널(`agent_chat_channel_id`)에 옮겨 쓴 글. 받는 조건은 모두 fail-closed 이고, 하나라도 확인할 수 없으면
 버린다.
@@ -16,7 +16,7 @@
 - 같은 원문 id 로는 한 번만 받는다(재사용 원장). 소유자가 정정하면 새 메시지 = 새 id 다.
 
 받아도 **승인 게이트는 그대로다** — 이 모듈은 에이전트 턴을 열지 말지만 정하고, 외부효과는
-여전히 소유자 ✅ 기록이 있어야 실행된다(`external_effect_gate`). 대리 봇의 반응은 승인이 아니다.
+여전히 소유자 ✅ 기록이 있어야 실행된다(기존 카드의 정확한 바인딩 검증). 대리 봇의 반응은 승인이 아니다.
 """
 
 from __future__ import annotations
@@ -196,7 +196,7 @@ def _origin_via(origin: Mapping[str, object], channel_id: str, config: ProxyConf
     """원문 작성 주체 — 소유자 본인, 또는 원문 채널 **자체**에 쓴 등록 웹훅(스레드는 받지 않는다).
 
     웹훅 글은 URL 을 아는 누구나 쓸 수 있으므로 신뢰는 턴을 여는 데까지다 — 외부효과는 여전히
-    소유자 ✅ 카드가 있어야 실행된다(`external_effect_gate`).
+    소유자 ✅ 카드가 있어야 실행된다(기존 카드의 정확한 바인딩 검증).
     """
     author = origin.get("author")
     if not isinstance(author, Mapping):

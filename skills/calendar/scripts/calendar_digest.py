@@ -60,17 +60,28 @@ def daily_binding(draft: Mapping[str, object]) -> calendar_binding.ApprovalBindi
         if not owned:
             raise calendar_gate.GateError("다이제스트 승인 스레드를 여는 중 — 다음 틱에 재시도", 1)
         if path.exists():
-            return calendar_binding.stored_binding(json.loads(path.read_text(encoding="utf-8")))
+            binding = calendar_binding.stored_binding(json.loads(path.read_text(encoding="utf-8")))
+            _settle_daily_threads()
+            return binding
         surface = calendar_binding._surface()
+        request = surface.RequestThread(title=f"다이제스트 {day}")
         binding = surface.resolve_new_binding(
             surface.ApprovalKind.CALENDAR, calendar_binding.approval_directory(), calendar_confirm.owner_id(),
-            request=surface.RequestThread(title=f"다이제스트 {day}"),
+            request=request,
         )
         calendar_gate.write_json(path, {
             "approval_guild_id": binding.guild_id, "channel_id": binding.channel_id, "kind": str(binding.kind),
             "policy_version": binding.policy_version, "surface": str(binding.surface),
+            "name": surface.request_thread_name(surface.ApprovalKind.CALENDAR, request),
         })
+        _settle_daily_threads()
         return binding
+
+
+def _settle_daily_threads() -> None:
+    import calendar_digest_threads
+
+    calendar_digest_threads.settle()
 
 
 def _mail_digest_binding(day: str) -> calendar_binding.ApprovalBindingLike | None:

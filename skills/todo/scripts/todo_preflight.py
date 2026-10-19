@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from automation.entity_preflight.contracts import JsonValue, VerificationRecord, WriteReceipt
     from automation.entity_preflight.gate import GateDependencies, GuardRequest
-    from automation.interop.external_effect_gate import ApprovalContext, ExternalEffectDecision
+    from automation.interop.approval_types import ApprovalContext, ExternalEffectDecision
     from todo_cli import CommandRunner, TaskRequest
 
 

@@ -35,10 +35,38 @@ jobs:
       - name: Install pinned dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
 
+      # 러너 이미지에는 bubblewrap 이 없다. 매번 apt-get update + install 을 하면 102~111초가 걸렸다
+      # (2026-10-19 실측 5회). 그래서 Ubuntu 아카이브 색인(noble-updates·noble-security)의 sha256 으로
+      # 고정한 .deb 두 개를 받아 설치한다. 받기·대조·설치 중 하나라도 실패하면 원래 apt 경로로 돌아간다 —
+      # 빠른 길이 막혀도 검증은 그대로 돈다. 버전을 올릴 때는 아카이브 색인에서 이름과 sha256 을 함께 바꾼다.
+      # 고정본도 dpkg -i 가 아니라 apt-get 으로 넣는다: dpkg -i 는 의존성이 빠지면 패키지를 반쯤 풀어 둔 채
+      # 실패하고, 그 뒤 apt 경로까지 "Unmet dependencies" 로 깨진다(2026-10-19 컨테이너 실측). apt-get 은
+      # 의존성을 먼저 풀어 보고 안 되면 아무것도 건드리지 않은 채 거절한다.
+      # 내려받기는 파일당 최악 약 1분(연결 10초·전체 30초, 재시도 1회)에서 끊는다 — 주소가 멈춰도 폴백이
+      # 원래 경로(약 105초)보다 크게 늦지 않게 한다. 파일은 50KB 안팎이다.
       - name: Install scenario process sandbox
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bubblewrap apparmor-profiles
+          set -euo pipefail
+          pinned="$RUNNER_TEMP/sandbox-debs"
+          install_pinned() {
+            local base=https://launchpad.net/ubuntu/+archive/primary/+files
+            mkdir -p "$pinned" || return 1
+            while read -r digest name; do
+              curl -fsSL --connect-timeout 10 --max-time 30 --retry 1 -o "$pinned/$name" "$base/$name" || return 1
+              echo "$digest  $pinned/$name" | sha256sum -c - || return 1
+            done <<'PINS'
+          2461f1beee9cb04c8942739fe1a2b37e7b7c2a3d518f0779dc75f9245baa3094 bubblewrap_0.9.0-1ubuntu0.3_amd64.deb
+          90b02aa006eea7702cd4e851343e469e41365dda42145a3cb035de1d6c773b8c apparmor-profiles_4.0.1really4.0.1-0ubuntu0.24.04.9_all.deb
+          PINS
+            sudo apt-get install --yes --no-install-recommends "$pinned"/*.deb
+          }
+          if install_pinned; then
+            echo "sandbox: pinned bubblewrap and apparmor-profiles installed"
+          else
+            echo "::warning::pinned sandbox packages did not install; falling back to apt-get"
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends bubblewrap apparmor-profiles
+          fi
           sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/bwrap-userns-restrict
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
           bwrap --unshare-all --ro-bind / / /bin/true
@@ -49,7 +77,9 @@ jobs:
         run: ruff check . --exclude skills/mail/vendor
 
       - name: Unit tests
-        run: python -m pytest tests/unit -q
+        # -n auto: 러너의 코어(4개)를 모두 쓴다. 시험은 하나도 빼지 않는다 — 2026-10-19 실측으로 직렬과
+        # 병렬의 시험 id·상태 집합이 같았다. automation/local_ci.sh 가 같은 명령을 돈다.
+        run: python -m pytest tests/unit -q -n auto
         env:
           GH_TOKEN: ${{ github.token }}
 

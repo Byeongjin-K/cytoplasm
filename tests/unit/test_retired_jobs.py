@@ -164,8 +164,8 @@ def test_removed_jobs_have_no_schedule_and_cleanup_is_required() -> None:
                "daily-cost-report", "research-trends"}
     assert not any(row.kind == "cron" and row.destination in removed for row in rows)
     assert not any(row.source.startswith("automation/reminder_poller/") for row in rows)
-    cleanup = [row for row in rows if row.owner == "automation/retired_jobs"]
-    assert len(cleanup) == 6
+    cleanup = [row for row in rows if row.owner == "automation/retired_jobs" and row.kind == "derived"]
+    assert len(cleanup) == 10
     assert all(row.kind == "derived" and row.policy == "required" for row in cleanup)
     assert {row.destination for row in cleanup if row.destination.startswith("state/")} == set(retired_jobs.DATA)
 
@@ -212,11 +212,12 @@ def test_timer_reactivation_during_reload_preserves_both_data_files(tmp_path: Pa
 
 @pytest.mark.parametrize("status", ["stale", "ok", "unexpected"])
 def test_release_observer_dispatches_every_cleanup_declaration(status: str) -> None:
-    rows = [row for row in all_declarations(ROOT) if row.owner == "automation/retired_jobs"]
+    rows = [row for row in all_declarations(ROOT)
+            if row.owner == "automation/retired_jobs" and row.kind == "derived"]
     calls: list[tuple[str, ...]] = []
 
     def call(account: str, argv: tuple[str, ...]) -> tuple[int, str]:
-        assert account == "agent"
+        assert account in ("agent", "peer")
         calls.append(argv)
         return 0, status + "\n"
 
@@ -225,7 +226,8 @@ def test_release_observer_dispatches_every_cleanup_declaration(status: str) -> N
         assert result.state == ("unknown" if status == "unexpected" else status)
     assert [call[2] for call in calls] == [
         "memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends",
-        "reminder-poller", "reminder-poller",
+        "reminder-poller", "reminder-poller", "wiki-confirm-watch",
+        "wiki-confirm-watch", "interop-plugin", "interop-plugin",
     ]
     assert all(call[:2] == ("retired-job", str(ROOT)) for call in calls)
 
@@ -238,7 +240,7 @@ def test_deployer_requires_the_active_release_before_cleanup(
 
     head = "a" * 40
     calls: list[tuple[str, ...]] = []
-    monkeypatch.setattr(node_config, "load_node_config", lambda: SimpleNamespace(agent_account="agent"))
+    monkeypatch.setattr(node_config, "load_node_config", lambda: SimpleNamespace(agent_account="agent", peer_account="peer"))
 
     def run(argv: tuple[str, ...], **_kwargs) -> subprocess.CompletedProcess[str]:
         calls.append(argv)
@@ -249,11 +251,11 @@ def test_deployer_requires_the_active_release_before_cleanup(
     monkeypatch.setattr(retired_jobs.subprocess, "run", run)
     result = retired_jobs.deploy("test-node", "/srv/current", head)
     assert result == (0 if matches else 4)
-    assert len(calls) == (5 if matches else 1)
+    assert len(calls) == (len(retired_jobs.JOBS) + 3 if matches else 1)
     assert calls[0] == ("ssh", "test-node", "readlink /srv/current")
     if matches:
         assert all("automation.retired_jobs install --name " + name in command[2]
-                   for name, command in zip(retired_jobs.JOBS, calls[1:], strict=True))
+                   for name, command in zip(retired_jobs.JOBS, calls[1:1 + len(retired_jobs.JOBS)], strict=True))
 
 
 def test_research_timer_release_cleanup_preserves_reports_and_topic_state(tmp_path: Path) -> None:
@@ -274,3 +276,16 @@ def test_research_timer_release_cleanup_preserves_reports_and_topic_state(tmp_pa
     assert all(not path.exists() for path in units)
     assert all(path.read_bytes() == b"keep" for path in kept)
     assert retired_jobs.check(tmp_path, "research-trends", runner) == "ok"
+
+
+def test_retired_wiki_watcher_removes_only_its_script_and_units(tmp_path: Path) -> None:
+    units = retired_jobs.unit_paths(tmp_path, "wiki-confirm-watch")
+    script = tmp_path / retired_jobs.WIKI_SCRIPT
+    for path in (*units, script):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"retired")
+    other = script.with_name("mail_triage_watch.py")
+    other.write_bytes(b"keep")
+    retired_jobs.install(tmp_path, "wiki-confirm-watch", _runner(tmp_path, []))
+    assert all(not path.exists() for path in (*units, script))
+    assert other.read_bytes() == b"keep"

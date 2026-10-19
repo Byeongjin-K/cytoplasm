@@ -12,7 +12,7 @@ import pytest
 
 from automation import drive_outputs
 from automation.drive_client import DriveClient
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 from automation.plaud_sync import audio_archive
 from automation.plaud_sync.audio import AudioSource
 from automation.plaud_sync.audio_manifest import ManifestEntry, audio_digest, manifest_path, record_manifest, rows

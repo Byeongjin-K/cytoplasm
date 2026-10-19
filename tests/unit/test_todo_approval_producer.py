@@ -19,7 +19,7 @@ from automation.interop.approval_surface import (
     request_thread_name,
     resolve_new_binding,
 )
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 
 if TYPE_CHECKING:
     from automation.interop.approval_lifecycle import Verdict
@@ -244,7 +244,7 @@ def test_expired_request_archives_then_posts_new_generation_without_delete(tmp_p
     assert [(item.generation, item.state.value) for item in store.archives(f"todo:{intent.action_hash}")] == [(1, "expired")]
 
 
-def test_request_command_is_the_only_cli_entry_that_calls_producer(
+def test_plan_does_not_call_legacy_producer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -266,14 +266,13 @@ def test_request_command_is_the_only_cli_entry_that_calls_producer(
 
     monkeypatch.setattr(approval, "request_cli_approval", request_cli)
 
-    # When: request and the read-only plan command are invoked through the public parser.
-    assert todo.main(["request", "--title", "합성 요청"]) == 0
+    # When: the read-only plan command is invoked through the public parser.
     assert todo.main(["plan", "--title", "합성 요청"]) == 0
 
-    # Then: exactly request reached the approval producer.
-    assert len(calls) == 1
-    assert len(transport.messages) == 1
-    assert store.active(f"todo:{calls[0]}") is not None
+    # Then: no legacy approval card or pending generation was produced.
+    assert calls == []
+    assert transport.messages == {}
+    assert store.all_outstanding() == ()
 
 
 def _cli_producer(
@@ -361,18 +360,14 @@ def test_repeated_cli_requests_reuse_the_first_request_thread(
     assert (record.channel_id, record.approval_thread_id) == (_REQUEST_THREAD, _REQUEST_THREAD)
 
 
-def test_todo_producer_is_registered_in_every_conformance_inventory() -> None:
-    # Given / When: the shared conformance data is read as the mechanical producer registry.
+def test_legacy_todo_adapter_remains_registered_for_stored_approvals() -> None:
+    # Given / When: the shared inventory is read for the retained legacy adapter.
     inventory = import_module("approval_conformance_inventory")
-    producer = "skills/todo/scripts/todo_cli.py::_cmd_request"
     adapter = "skills/todo/scripts/todo_approval.py"
 
-    # Then: no exemption substitutes for any lifecycle, kind, poster, or writer entry.
-    assert inventory.APPROVAL_PRODUCERS[producer] == adapter
+    # Then: saved approvals still use the registered lifecycle and record store.
     assert inventory._LIFECYCLE_HOSTS[adapter] == adapter
-    assert inventory.APPROVAL_KINDS[producer] == "todo"
     assert "skills/todo/scripts/todo_approval.py::TodoApprovalGate.post" in inventory._ADAPTER_POSTERS
     assert inventory._RECORD_WRITERS[
         "skills/todo/scripts/todo_approval.py::TodoApprovalGate.commit"
     ] == "skills/todo/scripts/todo_approval_store.py"
-    assert producer not in inventory._EXEMPT

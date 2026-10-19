@@ -1,9 +1,7 @@
-"""Bind one Obsidian note push to the shared external-effect approval gate."""
+"""Validate historical Obsidian note cards against their frozen push payload."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Final
 
 from automation.interop.approval_lease import ApprovalLease, PostingJournal
@@ -14,12 +12,11 @@ from automation.interop.approval_lifecycle import (
     request_owner_approval,
 )
 from automation.interop.approval_surface import ApprovalKind
-from automation.interop.external_effect_gate import (
+from automation.interop.effect_approval import (
     ApprovalContext,
     ExternalEffectDecision,
     ToolCall,
-    evaluate_tool_call,
-    load_denylist,
+    validate_approval,
 )
 
 from .note import NotePlan
@@ -38,13 +35,6 @@ class OwnerApprovalRequest:
     journal: PostingJournal
 
 
-def denylist_path() -> Path:
-    override = os.environ.get("OBSIDIAN_WRITE_DENYLIST")
-    if override:
-        return Path(override).expanduser()
-    return Path(__file__).resolve().parents[2] / "configs" / "external-effect-tools.yaml"
-
-
 def build_tool_call(plan: NotePlan) -> ToolCall:
     return ToolCall(
         tool_name=TOOL_NAME,
@@ -60,7 +50,7 @@ def evaluate(
     plan: NotePlan, *, context: ApprovalContext | None = None
 ) -> ExternalEffectDecision:
     ctx = context if context is not None else approval_context()
-    return evaluate_tool_call(build_tool_call(plan), load_denylist(denylist_path()), ctx)
+    return validate_approval(build_tool_call(plan), "tool:obsidian_write_note_push:obsidian_write.note_push", ctx)
 
 
 def request_approval(request: OwnerApprovalRequest) -> Verdict:

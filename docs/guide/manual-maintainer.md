@@ -333,6 +333,12 @@ rm -f /tmp/update-trust.pub
 
 ### 1.8 컷 이후 확인
 
+적용 완료 통지를 보낸 뒤 승인 채널의 같은 버전 릴리스 스레드를 활성·보관 목록에서 찾아
+`✅ 완료 · 🏷️ 릴리스 <버전>`으로 닫는다. 소유자 ⛔ 결정은 상태 답글 뒤 `⛔ 취소 ·`,
+감사 회수·대체는 회수 답글 뒤 `⌛ 만료 ·`로 닫는다. 먼저 닫고 답글을 쓰면 다시 열리므로
+순서는 항상 답글·통지 → 보관이다. 스레드가 없으면 건너뛰며, 종결 실패는
+`THREAD-CLOSE-FAIL` 한 줄만 남기고 통지 마커·감사·결정 종료코드(⛔=9)를 바꾸지 않는다.
+
 ```bash
 # 공개 저장소에서 태그가 실제로 검증되는가 (신뢰키 파일이 설치된 노드에서)
 git -c gpg.format=ssh \
@@ -350,19 +356,12 @@ readlink /srv/autophagy-agent-current
 annotated 태그가 맞다. `^{}` 줄이 없으면 lightweight 태그이고, 그것은 후보조차 되지
 않는다.
 
-**외부효과 규칙을 더한 릴리스는 규칙 수도 확인한다.** `configs/external-effect-tools.yaml` 의
-규칙은 릴리스의 `deploy_all --apply` 가 인터롭 묶음으로 agent·peer 홈 사본에 나른다. 그 묶음이
-roster 보류(`INTEROP-DEPLOY-HELD`)로 멈추면 새 규칙이 적용되지 않은 채 남는다. 2026-10-14 에는 Drive
-사람별 공유 규칙 `gws_drive_permission_grant` 가 더해져 규칙이 9개다. 소유자 지시는
-"오토파지에 \"드라이브 업로드·공유\" 승인 경로를 새로 만들고 그걸로 보냄 (몇 시간, 다음에도 씀)"
-이었다([소개](../기능소개/메일-Drive-공유-링크.md)).
-
-```bash
-# 두 계정의 규칙 사본이 릴리스 트리와 같은가 (노드에서)
-sha256sum /srv/autophagy-agent-current/configs/external-effect-tools.yaml
-sudo -n -u agent -H sh -c 'sha256sum ~/.hermes/interop/external-effect-tools.yaml'
-sudo -n -u agent -H sh -c "grep -c '^  - id:' ~/.hermes/interop/external-effect-tools.yaml"
-```
+**현재 승인 범위를 확인한다.** Hermes 전용 규칙 파일·플러그인은 은퇴했다.
+릴리스·계정 밖 경로만 카드 대상이며 계정 내부 쓰기는 소유자 Discord 명령을
+확인하는 dori-gate로 처리한다. 은퇴한 타이머·사본의 잔존은 선언된 제거
+파생물의 배포 관측으로 확인한다. 옛 규칙 파일을 다시 배포하지 않는다.
+상세는 [승인 경로 점검표](승인-경로-점검표.md)와
+[승인 범위 정렬](../기능소개/승인-범위-정렬.md)을 따른다.
 
 ---
 

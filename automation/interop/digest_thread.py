@@ -57,6 +57,14 @@ class DigestThread:
     mark: str = MARK_NONE
 
 
+@dataclass(frozen=True, slots=True)
+class DigestStore:
+    """One digest kind's snapshot and its mark persistence boundary."""
+
+    threads: tuple[DigestThread, ...]
+    save: Callable[[DigestThread], None]
+
+
 def _path(day: str) -> Path:
     return state_dir() / f"{day}.json"
 
@@ -83,7 +91,7 @@ def load(day: str) -> DigestThread | None:
 
 def recent() -> list[DigestThread]:
     try:
-        days = sorted(path.stem for path in state_dir().glob("*.json"))
+        days = sorted(path.stem for path in state_dir().glob("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].json"))
     except OSError:
         return []
     threads = (load(day) for day in days[-KEEP_DAYS:])
@@ -196,21 +204,29 @@ def wanted_mark(thread: DigestThread, *, pending: int, latest: bool) -> str:
     return MARK_NONE if latest else MARK_DONE
 
 
-def settle(counts: Mapping[str, int], api: Callable[..., object]) -> None:
+def settle(
+    counts: Mapping[str, int], api: Callable[..., object], *,
+    store: DigestStore | None = None,
+) -> None:
     """Bring each recent thread's mark in line with its undecided-card count.
 
     ``counts`` maps a thread id to its undecided cards; a thread missing from it is left
     alone (its count is unknown, so nothing is closed on a guess). Discord renames are
     made only when the mark changes, and a failed rename leaves the stored mark so the
-    next tick retries.
+    next tick retries. A separate kind passes its snapshot and save callback in
+    ``DigestStore``: a calendar-only digest must never age out a mail digest.
     """
     from . import origin_notice
 
-    threads = recent()
-    latest = threads[-1].day if threads else ""
-    for thread in threads:
+    snapshot = recent() if store is None else store.threads
+    latest = max((thread.day for thread in snapshot), default="")
+    for thread in snapshot:
         if thread.channel_id not in counts:
+            if thread.day < latest:
+                print(f"DIGEST-THREAD-SKIP thread={thread.channel_id} reason=unknown-cards", file=sys.stderr)
             continue
+        if thread.day < latest and counts[thread.channel_id] > 0:
+            print(f"DIGEST-THREAD-SKIP thread={thread.channel_id} reason=live-cards", file=sys.stderr)
         mark = wanted_mark(thread, pending=counts[thread.channel_id], latest=thread.day == latest)
         if mark == thread.mark:
             continue
@@ -223,8 +239,11 @@ def settle(counts: Mapping[str, int], api: Callable[..., object]) -> None:
             changed = origin_notice.rename_thread(api, thread.channel_id, name, record_id=f"digest:{thread.day}")
         if not changed:
             continue
-        with _DayLock(thread.day):
-            current = load(thread.day)
-            if current is not None and current.channel_id == thread.channel_id:
-                _write(replace(current, mark=mark))
+        if store is not None:
+            store.save(replace(thread, mark=mark))
+        else:
+            with _DayLock(thread.day):
+                current = load(thread.day)
+                if current is not None and current.channel_id == thread.channel_id:
+                    _write(replace(current, mark=mark))
         print(f"DIGEST-THREAD-MARK day={thread.day} mark={mark or 'none'}", file=sys.stderr)

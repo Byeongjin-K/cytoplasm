@@ -18,7 +18,7 @@ sys.path.insert(0, str(_REPO / "skills" / "budget" / "scripts"))
 import budget_core  # noqa: E402
 import budget_gate  # noqa: E402
 import budget_store  # noqa: E402
-from automation.interop import external_effect_gate  # noqa: E402
+from automation.interop import effect_approval  # noqa: E402
 
 budget_cli = import_module("budget_cli")
 
@@ -178,29 +178,28 @@ def test_request_mail_contains_changes_and_regulation() -> None:
 
 # --- gate parity with the deployed pre_tool_call external-effect gate -----------
 
-def test_action_hash_parity_with_external_effect_gate() -> None:
+def test_action_hash_parity_with_effect_approval() -> None:
     argv = budget_core.build_gmail_argv("self@example.invalid", "제목", "본문 줄1\n줄2")
-    call = external_effect_gate.ToolCall(
+    call = effect_approval.ToolCall(
         tool_name="gws", arguments={"command": shlex.join(argv)}
     )
-    expected = external_effect_gate._action_hash(call, budget_core.EXTERNAL_EFFECT_TARGET_ID)  # noqa: SLF001
+    expected = effect_approval.action_hash(call, budget_core.EXTERNAL_EFFECT_TARGET_ID)  # noqa: SLF001
     assert budget_core.external_effect_action_hash(argv) == expected
 
 
 def test_gmail_argv_matches_denylist_rule() -> None:
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
     argv = budget_core.build_gmail_argv("self@example.invalid", "s", "b")
-    call = external_effect_gate.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
-    decision = external_effect_gate.evaluate_tool_call(
-        call, rules,
-        external_effect_gate.ApprovalContext(approval_log=None, owner_id="1", e2e_test_mode=False),
+    call = effect_approval.ToolCall(tool_name="gws", arguments={"command": shlex.join(argv)})
+    decision = effect_approval.validate_approval(
+        call, budget_core.EXTERNAL_EFFECT_TARGET_ID,
+        effect_approval.ApprovalContext(approval_log=None, owner_id="1", e2e_test_mode=False),
     )
     assert decision.external_effect is True
     assert decision.allowed is False
     assert decision.target_id == budget_core.EXTERNAL_EFFECT_TARGET_ID
 
 
-def test_gate_approval_record_unlocks_external_effect_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_approval_record_unlocks_effect_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The record execute_draft appends is exactly what the deployed gate reads."""
     monkeypatch.setenv("BUDGET_GATE_DIR", str(tmp_path / "gate"))
     monkeypatch.setenv("BUDGET_APPROVAL_LOG", str(tmp_path / "approvals.jsonl"))
@@ -216,13 +215,12 @@ def test_gate_approval_record_unlocks_external_effect_gate(tmp_path: Path, monke
     budget_gate.execute_draft(
         draft, budget_gate.Approval(ref="reaction:123", method="manual_reaction", owner="42"),
     )
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    call = external_effect_gate.ToolCall(
+    call = effect_approval.ToolCall(
         tool_name="gws", arguments={"command": shlex.join(tuple(draft["argv"]))}
     )
-    decision = external_effect_gate.evaluate_tool_call(
-        call, rules,
-        external_effect_gate.ApprovalContext(
+    decision = effect_approval.validate_approval(
+        call, budget_core.EXTERNAL_EFFECT_TARGET_ID,
+        effect_approval.ApprovalContext(
             approval_log=tmp_path / "approvals.jsonl", owner_id="42", e2e_test_mode=False,
         ),
     )

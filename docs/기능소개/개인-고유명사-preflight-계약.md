@@ -46,5 +46,5 @@ hash만 남긴다. clarify 텍스트는 소유자 본인에게만 가므로 후�
 - 테스트: `tests/unit/test_entity_preflight_gate.py` · `tests/unit/test_entity_preflight_contract.py` ·
   `tests/unit/test_mail_preflight.py`
 - 증적: `docs/qa/RTS-2/ef5-gate.txt` · `docs/qa/RTS-3/ef5b-mail-preflight.txt`
-- 기존 승인 게이트: `automation/interop/external_effect_gate.py` (대체하지 않음 — 외부 쓰기는 그대로 경유)
+- 승인 범위: dori-gate가 릴리스·계정 밖 경로를 카드로 분류한다. `automation/interop/effect_approval.py`는 기존 카드 검증을 보존한다. 계정 내부 쓰기는 소유자 Discord 명령을 확인한 뒤 카드 없이 처리한다.
 - clarify 선례: `skills/calendar/scripts/calendar_cli.py`의 `ROUTING-CLARIFY` exit

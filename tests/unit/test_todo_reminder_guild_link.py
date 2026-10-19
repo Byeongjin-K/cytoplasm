@@ -18,7 +18,6 @@ def test_todo_reminder_links_original_card_with_guild_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: a pending todo approval card in a server thread.
-    monkeypatch.setenv("TODO_DENYLIST", str(_REPO / "configs" / "external-effect-tools.yaml"))
     base = import_module("test_todo_watch")
     monkeypatch.setattr(base, "_CHANNEL", "1500000000000000001")
     monkeypatch.setattr(base, "_MESSAGE", "1500000000000000003")

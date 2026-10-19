@@ -45,6 +45,11 @@ _KNOWN_UNDEPLOYED: dict[str, str] = {
     # wiki fix stopped at the repo. patent-prep genuinely has no cron entry yet.
     "patent-prep": "the export confirmation watcher has no node cron entry yet",
 }
+#: Skills whose deploy.sh is retired on purpose: it refuses (exit 4) and retired_jobs
+#: removes the node timer, so their watchers must not be pushed again.
+_RETIRED_DEPLOY: dict[str, str] = {
+    "wiki": "retired 2026-10-19: deploy.sh refuses with WIKI-RETIRED",
+}
 
 
 def _is_cron_entrypoint(path: Path) -> bool:
@@ -118,6 +123,9 @@ def test_every_skill_watcher_is_carried_by_its_deploy_script() -> None:
                     unused_exemptions.discard(skill.name)
                 continue
             deploy_text = deploy.read_text(encoding="utf-8")
+            if skill.name in _RETIRED_DEPLOY:
+                assert "exit 4" in deploy_text, f"{skill.name}/deploy.sh is listed retired but still deploys"
+                continue
             watcher_source = str(watcher.relative_to(_REPO_ROOT))
             if watcher_source not in _pushed_script_sources(deploy_text):
                 uncarried.append(f"{skill.name}/deploy.sh is missing {watcher.name}")

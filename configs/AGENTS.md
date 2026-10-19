@@ -8,7 +8,7 @@ ops 체크아웃이 dirty해져 pull/peer-attest가 막힌다.
 | 파일 | 소비자 | 비고 |
 |------|--------|------|
 | `peers.example.yaml` | report-hub·calendar 분류 레지스트리의 공개 템플릿 | 권한 판정 금지. 실제값은 각 런타임의 비추적 `peers.yaml` |
-| `external-effect-tools.yaml` | `automation/interop/external_effect_gate.py` | denylist. 불량/빈/파싱불가 설정=mutation 전면 차단(fail-closed) |
+| 외부효과 승인 범위 | dori-gate, 루트 AGENTS.md 「모든 요청 승인 경로 규칙」 | Hermes 전용 denylist는 은퇴. 릴리스·계정 밖 경로만 카드, 계정 내부 쓰기는 소유자 Discord 명령 확인 후 카드 없이 처리 |
 | `entity-preflight.json` | `automation/entity_preflight/policy.py` | 개인 고유명사 자동선택·충돌 임계값과 출처 weight의 불변 시드. 누락/불량=fail-closed |
 | `~/.hermes/config.yaml`의 `approval_reminders` | `automation/interop/approval_reminder_config.py` → 공용 승인 watcher | 비밀이 아닌 런타임 정책. 파서 생략 기본은 enabled=true·3h·1h, 신규 provision 시드는 소유자 정책 1h·1h, 불량 간격=시작 실패 |
 | `mail-mode.default.json` | mail triage_mode | **시드 전용** — 런타임은 `~/.hermes/mail-triage/mail-mode.json`. 시드 경로 쓰기는 코드 가드가 거부 |

@@ -114,8 +114,8 @@ def main() -> int:
     parser.add_argument("--root", required=True)
     root = Path(parser.parse_args().root).resolve()
     sys.path.insert(0, str(root))
-    from automation.interop.external_effect_gate import (
-        ApprovalContext, ToolCall, evaluate_tool_call, load_denylist,
+    from automation.interop.effect_approval import (
+        ApprovalContext, ToolCall, validate_approval,
     )
 
     with tempfile.TemporaryDirectory(prefix="w4-budget-bank-") as tmp:
@@ -124,7 +124,7 @@ def main() -> int:
         e2e = {"E2E_TEST_MODE": "1", "INTEROP_E2E_SECRET": secrets.token_hex(32)}
         approval_log = work / "approvals.jsonl"
         gws_calls = work / "gws-calls.log"
-        rules = load_denylist(root / "configs" / "external-effect-tools.yaml")
+        target_id = "tool:gws_gmail_send:gws"
         obs: dict[str, dict[str, Any]] = {}
 
         # --- case 1: !budget query parity + baseline/no-change => zero effects -
@@ -188,7 +188,7 @@ def main() -> int:
         call = ToolCall("gws", {"command": shlex.join(draft["argv"])})
         ctx_e2e = ApprovalContext(approval_log=approval_log, owner_id=OWNER, e2e_test_mode=True)
         ctx_prod = ApprovalContext(approval_log=approval_log, owner_id=OWNER, e2e_test_mode=False)
-        allowed = evaluate_tool_call(call, rules, ctx_e2e)
+        allowed = validate_approval(call, target_id, ctx_e2e)
         double = _cli(root, env_b, "confirm", "--draft", draft_id, "--injection-file", str(work / "ok.json"), e2e=e2e)
         send_log_text = (work / "gate" / "send-log.jsonl").read_text(encoding="utf-8")
         gws_text = gws_calls.read_text(encoding="utf-8") if gws_calls.exists() else ""
@@ -205,7 +205,7 @@ def main() -> int:
             "approval_owner_bound": bool(gate_recs) and gate_recs[0]["approval"].get("owner_id") == OWNER,
             "gate_hash_matches_record": bool(gate_recs) and allowed.action_hash == gate_recs[0]["hash"],
             "gate_allows_approved_hash_e2e": allowed.external_effect and allowed.allowed,
-            "production_rejects_e2e_record": not evaluate_tool_call(call, rules, ctx_prod).allowed,
+            "production_rejects_e2e_record": not validate_approval(call, target_id, ctx_prod).allowed,
             "double_confirm_rejected": double.returncode != 0,
             "sends_after_double_confirm": _count(gws_calls),
             "send_log_sent": '"status":"sent"' in send_log_text,
@@ -215,7 +215,7 @@ def main() -> int:
 
         # --- case 4: gate bypass — gws gmail +send with NO approval record -----
         bypass_call = ToolCall("gws", {"command": "gws gmail +send --to bypass@example.invalid --subject x --body y"})
-        bypass = evaluate_tool_call(bypass_call, rules, ctx_e2e)
+        bypass = validate_approval(bypass_call, target_id, ctx_e2e)
         env_c = {**env, "BUDGET_SHEET_FILE": str(work / "fixture-c.json")}
         second = _cli(root, env_c, "snapshot", "--no-post")
         match2 = re.search(r"DRAFT-CREATED id=([0-9a-f]+)", second.stdout)

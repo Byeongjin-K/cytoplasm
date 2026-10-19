@@ -22,7 +22,7 @@ from automation.interop.approval_surface import (
     reuse_request_thread,
 )
 from automation.interop.discord_transport import DiscordTransport as NoticeSender
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 from automation.interop.origin_notice import ThreadOutcome
 from automation.interop.reaction_approval import thread_candidates as shared_thread_candidates
 from automation.obsidian_write import gate_binding

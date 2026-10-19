@@ -63,9 +63,14 @@ def test_missing_host_is_refused_before_any_ssh(relative: str, tmp_path: Path) -
 
     # Then: it stops with its own diagnosis rather than handing an unresolvable
     # placeholder to ssh, and it names the fix.
-    assert result.returncode == 3, result.stdout + result.stderr
-    assert "DEPLOY-BLOCK" in result.stderr
-    assert "DEPLOY_SSH_HOST" in result.stderr
+    if relative == "skills/wiki/deploy.sh":
+        assert result.returncode == 4, result.stdout + result.stderr
+        assert result.stderr.startswith("WIKI-RETIRED:")
+    else:
+        assert result.returncode == 3, result.stdout + result.stderr
+        assert "DEPLOY-BLOCK" in result.stderr
+        assert "DEPLOY_SSH_HOST" in result.stderr
+    assert "STUB-SSH REACHED" not in result.stderr
 
 
 @pytest.mark.parametrize("relative", _FAIL_CLOSED)

@@ -1,7 +1,7 @@
-"""게이트웨이 import 루트 고정(`automation/interop/pin_import_root.sh`, RCB todo 22).
+"""레거시 import 루트 진단(`automation/interop/pin_import_root.sh`, RCB todo 22).
 
-게이트웨이는 시작할 때마다(드롭인의 `ExecStartPre`) import 루트를 현재 릴리스 세대의 항목별
-심링크 묶음에 고정한다. 여기서 증명하는 불변식:
+자동 시작 드롭인은 은퇴했다. 명시적으로 실행하는 진단 유틸리티는 현재 릴리스 세대의
+항목별 심링크 묶음을 만든다. 여기서 증명하는 불변식:
   P1 순서 — 링크는 묶음이 다 만들어진 뒤에만, 한 번의 rename 으로 바뀐다.
   P2 실패 복귀 — 게이트 코드 닫힘이 하나라도 없으면 exit 78 이고 기존 링크·묶음은 그대로다.
   P3 가림 — 묶음은 `hermes_compat`·`__pycache__` 를 싣지 않는다. 호환 패치 캐리어의
@@ -70,7 +70,7 @@ def test_the_farm_exposes_automation_without_the_compat_package(tmp_path: Path) 
     farm = tmp_path / ".hermes/autophagy-import"
     assert os.path.realpath(farm) == str(tmp_path / ".hermes/autophagy-import.d" / _REPO.name)
     env = {**_env(tmp_path), "PYTHONPATH": str(farm)}
-    ok = subprocess.run([sys.executable, "-B", "-c", "import automation.interop.external_effect_gate"],
+    ok = subprocess.run([sys.executable, "-B", "-c", "import automation.interop.approval_types"],
                         env=env, cwd=tmp_path, capture_output=True, text=True, check=False)
     assert ok.returncode == 0, ok.stderr
     shadow = subprocess.run([sys.executable, "-B", "-c", "import automation.hermes_compat"],
@@ -193,12 +193,8 @@ def test_the_preflight_builds_the_same_farm(tmp_path: Path) -> None:
     assert gateway_preflight.resolve_root({"AUTOPHAGY_RUNTIME_ROOT": str(gen)}) == gen
 
 
-def test_the_dropin_is_account_neutral() -> None:
-    assert _DROPIN.read_text(encoding="utf-8").splitlines() == [
-        "[Service]",
-        "Environment=PYTHONPATH=%h/.hermes/autophagy-import",
-        "Environment=INTEROP_RUNTIME=%h/.hermes/autophagy-import",
-        "ExecStartPre=%h/.hermes/interop/production_guard.sh",
-        "ExecStartPre=%h/.hermes/interop/pin_import_root.sh",
-        "ExecStartPre=-/usr/bin/env python3 -B -m automation.interop.free_response --apply",
-    ]
+def test_the_hermes_startup_dropin_is_retired() -> None:
+    # Given the retired Hermes gateway hook package.
+    # When enumerating startup hooks that a new install could copy.
+    # Then no interop startup drop-in remains installable.
+    assert not _DROPIN.exists()

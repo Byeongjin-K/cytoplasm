@@ -24,7 +24,6 @@ _POINTER_FILE: Final = "automation/interop/thread_pointer.py"
 #: 생산자 → 에이전트가 실행하고 게시 직후 좌표 줄을 내는 파일.
 _ADOPTED: Final[dict[str, str]] = {
     "skills/mail/scripts/triage_approval.py::request_approval": "skills/mail/scripts/triage_cli.py",
-    "skills/todo/scripts/todo_cli.py::_cmd_request": "skills/todo/scripts/todo_cli.py",
     "skills/calendar/scripts/calendar_approval.py::request_confirmation":
         "skills/calendar/scripts/calendar_output.py",
     "skills/coordination/scripts/coordination_approval.py::request_confirmation":

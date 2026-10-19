@@ -34,7 +34,6 @@ _APPROVED: Final = {
     ("automation/hermes_compat/deploy-owner-dm.sh", "raw"): 5,
     ("automation/hermes_compat/deploy-public-message-policy.sh", "raw"): 5,
     ("automation/hermes_compat/deploy.sh", "raw"): 1,
-    ("automation/interop/deploy.sh", "raw"): 3,
     ("automation/notes_organize/deploy.sh", "raw"): 1,
     ("automation/rag_stack/deploy_runtime.sh", "raw"): 2,
     ("automation/regression_bank/deploy_lab_node.sh", "raw"): 8,

@@ -12,7 +12,7 @@ import pytest
 
 from automation import drive_outputs
 from automation.drive_client import DriveClient
-from automation.interop.external_effect_gate import (
+from automation.interop.effect_approval import (
     ApprovalBinding,
     ApprovalContext,
     JsonValue,

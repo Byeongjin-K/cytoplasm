@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
-from http.client import HTTPException
 from pathlib import Path
 from typing import Final
 
@@ -34,7 +33,9 @@ from automation import skill_gate, skill_gate_retire
 from automation.interop.approval_lifecycle import ApprovalRecordsError, ApprovalSurfaceError
 from automation.interop.approval_types import Probe
 from automation.release_released import correct_abandoned, is_released
-from automation.release_retire import abandoned_message, archive_bytes, retire_released_record
+from automation.release_retire import archive_bytes, retire_released_record
+from automation.release_thread_notice import reply
+from automation.interop.origin_notice import ThreadOutcome
 from automation.release_spec import ReleaseSpec, ReleaseSpecError, spec_from_record
 from automation.skill_gate_approval import SkillApprovalGate
 from automation.skill_gate_request import lease
@@ -168,22 +169,8 @@ def abandon(
             record_path.unlink()
         except (ReleaseSpecError, OSError):
             return _refused(ReleaseAbandon.ARCHIVE_FAILED)
-        # 승인 본문 수정은 바이트 바인딩을 깨므로 원 메시지를 참조하는 회신만 더한다.
-        try:
-            content = f"⛔ 만료 — {' '.join(order.reason.split())[:1000]}"
-            message = abandoned_message(found, order.reason)
-            if message is not None:
-                from automation.interop.owner_message import Ref, render
-
-                content = render(message, destination=Ref(scope="channel", channel_id=found["channel_id"]))
-            skill_gate._api("POST", f"/channels/{found['channel_id']}/messages", {
-                "content": content,
-                "message_reference": {"message_id": order.message_id, "fail_if_not_exists": True},
-                "allowed_mentions": {"parse": [], "replied_user": False},
-            })
-        except (OSError, HTTPException, ValueError, KeyError, SystemExit) as error:
-            # _api의 자격증명 부재는 SystemExit다. 이 부가 표시는 회수 결과를 바꾸지 않는다.
-            print(f"RELEASE-ABANDON-NOTICE-FAIL {type(error).__name__}", file=sys.stderr)
+        # 승인 본문·감사는 보존하고 상태 답글 뒤에만 스레드를 닫는다.
+        reply(found, order.reason, ThreadOutcome.EXPIRED)
         return ReleaseAbandoned(
             ReleaseAbandon.ABANDONED,
             0,

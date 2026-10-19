@@ -16,10 +16,16 @@ from automation.google_gate.root_assets import node_units
 
 
 def git(path: Path, *args: str) -> str:
+    # Fixture commits must not leave work behind: every `git commit` starts `git maintenance
+    # run --auto`, and git >= 2.47 detaches it, so `objects/maintenance.lock` can appear after
+    # the `before` snapshot (2026-10-19, CI runner git 2.55 under the parallel suite). Only the
+    # fixture's own git calls are configured; the block under test runs its git unchanged.
     result = subprocess.run(
         ["git", "-C", str(path), *args], capture_output=True, text=True, check=False,
         env={**os.environ, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.org",
-             "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.org"},
+             "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.org",
+             "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "maintenance.auto",
+             "GIT_CONFIG_VALUE_0": "false"},
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()

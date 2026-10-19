@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from automation.interop.external_effect_gate import (
+from automation.interop.effect_approval import (
     ApprovalBinding,
     ApprovalContext,
     SignedApprovalEvent,
