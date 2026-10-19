@@ -53,6 +53,22 @@ def jobs(hermes: str) -> tuple[str, dict[str, str]]:
     return output, {row["id"]: row["Name"] for row in rows}
 
 
+def check(home: Path, role: str, hermes: str) -> str:
+    """Rehearsal: the refusals remove() raises before its first write, with no write."""
+    _, current = jobs(hermes)
+    if retired(home):
+        if not sorted((home / ".hermes/retired/p5").glob("*/complete")):
+            raise ValueError("P5-REMOVE-REFUSED: retired marker without completed backup")
+        return f"P5-CHECK: role={role} 이미 제거됨(남은 일시정지 잡 {len(current)}개, 변경 없음)"
+    if len(current) != (30 if role == "agent" else 3):
+        raise ValueError("P5-REMOVE-REFUSED: expected 30 agent / 3 peer paused jobs")
+    payload = json.loads((home / ".hermes/cron/jobs.json").read_text(encoding="utf-8"))
+    raw = payload.get("jobs") if isinstance(payload, dict) else payload
+    if not isinstance(raw, list) or {row.get("id") for row in raw} != set(current):
+        raise ValueError("P5-REMOVE-REFUSED: jobs file and listing differ")
+    return f"P5-CHECK: role={role} 통과(잡 {len(current)}개, 변경 없음)"
+
+
 def remove(home: Path, role: str, head: str, hermes: str, systemctl: str) -> Path:
     """Backup first; fail on unexpected jobs or changed files; preserve backup on retry."""
     listing, current = jobs(hermes)
@@ -174,6 +190,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role", choices=("agent", "peer"), required=True)
     parser.add_argument("--head", required=True)
+    parser.add_argument("--check", action="store_true", help="run the refusals, change nothing")
     args = parser.parse_args()
     if re.fullmatch(r"[0-9a-f]{40}", args.head) is None:
         parser.error("invalid release HEAD")
@@ -185,6 +202,9 @@ def main() -> int:
         if mounted.returncode != 32:
             raise ValueError("P5-REMOVE-REFUSED: governed bind or unreadable skills root")
     os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+    if args.check:
+        print(check(home, args.role, str(home / ".local/bin/hermes")))
+        return 0
     lock = home / ".hermes/retired/p5.lock"
     lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with lock.open("w") as handle:

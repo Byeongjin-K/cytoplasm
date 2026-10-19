@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -49,12 +50,17 @@ ensure_release_note() { printf '%s\\n' "$2" >> "$GATE_DIR/notes"; }
 ''', encoding="utf-8")
     ci = tmp_path / "ci.sh"
     ci.write_text("exit 0\n", encoding="utf-8")
+    rehearsal = tmp_path / "rehearsal"
+    rehearsal.mkdir()
+    tip = "e" * 40
+    (rehearsal / tip).write_text(f"{int(time.time())} {tip}\nREHEARSAL-OK head={tip[:12]} actions=0 steps=plan\n")
     return {
         **os.environ, "PATH": f"{binaries}:{os.environ['PATH']}",
         "GATE_DIR": str(gate), "TIP": "e" * 40, "BASE": "c" * 40,
         "BOUND": record["head_sha"],
         "RELEASE_REPO_ROOT": str(worktree), "RELEASE_TAG_LIB": str(library),
         "RELEASE_LOCAL_CI": str(ci), "RELEASE_DEADLINE_SECONDS": "0",
+        "DEPLOY_ALL_REHEARSAL_DIR": str(rehearsal),
         "RELEASE_APPROVAL_CMD": f"{sys.executable} {_ROOT / 'tests/unit/release_recovery_driver.py'}",
         "RELEASE_COMPLETE_WORKTREE": str(worktree),
         "RELEASE_COMPLETE_STATE": str(tmp_path / "state"),

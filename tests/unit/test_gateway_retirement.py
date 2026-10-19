@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -250,3 +251,23 @@ def test_the_nodes_real_block_shape_is_removed_and_an_unknown_field_still_refuse
     with pytest.raises(ValueError, match="필드 불일치"):
         retirement.config_without_gateway(real.replace(b"    api_mode: chat_completions\n",
                                                    b"    api_mode: chat_completions\n    extra: x\n"))
+
+
+@pytest.mark.parametrize("given", [None, "/run/user/4242"])
+def test_runner_gives_systemctl_a_user_bus_without_overriding_one(
+    monkeypatch: pytest.MonkeyPatch, given: str | None,
+) -> None:
+    # Node 2026-10-19: under `sudo -u ops -H env …` systemctl --user printed nothing.
+    seen: dict[str, str] = {}
+    if given is None:
+        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    else:
+        monkeypatch.setenv("XDG_RUNTIME_DIR", given)
+
+    def fake(argv, **kwargs):
+        seen.update(kwargs["env"])
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(retirement.subprocess, "run", fake)
+    retirement.run(("systemctl", "--user", "is-active", "x.service"))
+    assert seen["XDG_RUNTIME_DIR"] == (given or f"/run/user/{os.getuid()}")
