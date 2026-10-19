@@ -204,7 +204,7 @@ def prepare_request(draft: dict[str, JsonValue], notice: str) -> tuple[ApprovalI
     except cards.CardRenderError as error:
         raise triage_gate.GateError(str(error), 3) from error
     prepared["render_version"] = card.render_version
-    if card.render_version in mail_card_compact.COMPACT_VERSIONS:
+    if card.render_version in mail_card_compact.DIGEST_VERSIONS:
         prepared["card_sha256"] = mail_card_compact.digest(card.content)
     return approval.confirm_intent(prepared), MailApprovalGate(prepared, notice, card.content)
 

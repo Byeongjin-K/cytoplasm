@@ -145,7 +145,7 @@ def test_a_second_draft_reuses_the_file_already_in_the_folder_instead_of_uploadi
     assert _record()["drive_share_result"]["action"] == "reused"
 
 
-def test_card_v5_lists_attachments_the_share_and_googles_invite(
+def test_card_v5_adds_attachments_and_googles_invite_to_the_share_line(
     env: Path, drive: InviteDrive, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: a share mail with one attached photo.
@@ -155,20 +155,17 @@ def test_card_v5_lists_attachments_the_share_and_googles_invite(
     assert _compose(monkeypatch, "--drive-share", str(_package(env)), "--share-with", PERSON,
                     "--attachment", str(photo)) == 0
     record = _record()
+    share = mail_card_compact.share_line(record["drive_share"])
+    invite = mail_card_compact.INVITE_NOTICE
     # When: the card is rendered short (inline body) and long (body in the text file).
-    v4 = mail_approval_attachment.summary({**record, "render_version": "4"}, "✅ / ⛔")
+    long_v4 = mail_approval_attachment.summary({**record, "render_version": "4"}, "✅ / ⛔")
     long_v5 = mail_approval_attachment.summary({**record, "render_version": "5"}, "✅ / ⛔")
     short_v4 = triage_core.render_approvals_message({**record, "render_version": "4"}, instruction="✅ / ⛔")
     short_v5 = triage_core.render_approvals_message({**record, "render_version": "5"}, instruction="✅ / ⛔")
-    # Then: v4 replays unchanged, and v5 shows the photo, who gets the file, and Google's invite.
-    assert "Drive" not in v4 and mail_card_compact.INVITE_NOTICE not in short_v4
-    assert long_v5.startswith(v4.rsplit("\n", 1)[0])
-    assert "- 첨부: 1개" in long_v5 and "  - `1-수정후.png` · 104 bytes" in long_v5
-    assert (f"- Drive 공유: `Planner-수정본.zip` · {len(PAYLOAD)} bytes → `viewer.person@example.com` "
-            "보기 권한만 — 링크 공개 없음") in long_v5
-    assert short_v5 == short_v4.replace(
-        "링크 공개 없음\n", f"링크 공개 없음\n{mail_card_compact.INVITE_NOTICE}\n", 1)
+    # Then: v4 replays without them, and v5 shows the photo, who gets the file, and Google's invite.
+    assert invite not in long_v4 + short_v4 and "1-수정후.png" not in long_v4
+    assert f"{share}\n{invite}" in short_v5 and f"{share}\n{invite}" in long_v5
+    assert "- 첨부: 1개\n  - `1-수정후.png` · 104 bytes" in long_v5
     for card in (long_v5, short_v5):
-        assert mail_card_compact.INVITE_NOTICE in card and card.endswith("✅ / ⛔")
-        assert not re.search(r"[0-9a-f]{64}", card)
+        assert card.endswith("✅ / ⛔") and not re.search(r"[0-9a-f]{64}", card)
         assert hashlib.sha256(PAYLOAD).hexdigest() not in card

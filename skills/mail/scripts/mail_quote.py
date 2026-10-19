@@ -15,10 +15,12 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 from typing import Final
 
 SEPARATOR: Final = "-----원본 메시지-----"
+_SEOUL: Final = ZoneInfo("Asia/Seoul")
 MAX_QUOTE_CHARS: Final = 20_000
 _BODY_HEADING: Final = "## Body"
 _EMPTY_BODY_PLACEHOLDER: Final = "(빈 본문)"  # what mailon.writer stores for an empty body
@@ -130,11 +132,14 @@ def _body_text(remainder: str) -> str:
 
 
 def _display_date(value: str) -> str:
+    """Show the original's date in Korea time; MailOn stores it as naive UTC (2026-10-19)."""
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
         return value
-    return parsed.strftime("%Y-%m-%d %H:%M")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(_SEOUL).strftime("%Y-%m-%d %H:%M")
 
 
 def _capped(body: str) -> str:

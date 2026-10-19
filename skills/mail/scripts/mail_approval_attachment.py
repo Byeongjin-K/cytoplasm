@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Final, TypedDict
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from mail_card_compact import INVITE_NOTICE
 from mail_quote import with_quote
 
 if TYPE_CHECKING:
@@ -48,10 +47,8 @@ def body_attachment(draft: Mapping[str, JsonValue]) -> BodyAttachment:
 def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     """Replay old summary bytes or select the new version over attachment-v1."""
     from automation.interop.approval_card import CardRenderError
-    if draft.get("render_version") == "4":
-        return _summary_v4(draft, instruction)
-    if draft.get("render_version") == "5":
-        return _summary_v5(draft, instruction)
+    if draft.get("render_version") in ("4", "5"):
+        return _summary_v4(draft, instruction, share=draft.get("render_version") == "5")
     if draft.get("bcc"):
         return _summary_v3(draft, instruction)
 
@@ -76,11 +73,7 @@ def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     ))
 
 
-def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
-    return "\n".join((*_summary_head(draft), instruction))
-
-
-def _summary_head(draft: Mapping[str, JsonValue]) -> tuple[str, ...]:
+def _summary_v4(draft: Mapping[str, JsonValue], instruction: str, *, share: bool = False) -> str:
     recipients = f"- To: {draft['to']}\n- Cc: {draft.get('cc') or '-'}"
     if draft.get("bcc"):
         from mail_bcc import summary as bcc_summary
@@ -88,36 +81,20 @@ def _summary_head(draft: Mapping[str, JsonValue]) -> tuple[str, ...]:
         recipients = bcc_summary(str(draft["to"]), str(draft.get("cc") or ""),
                                  tuple(str(address) for address in draft["bcc"]))
     size = body_attachment(draft).metadata["size"]
-    return ("📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
-            f"- 본문: 첨부 파일 참조 ({size} bytes)")
+    lines = ["📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
+             f"- 본문: 첨부 파일 참조 ({size} bytes)"]
+    spec = draft.get("drive_share")
+    if share:  # v5: the long-body card showed neither the attachments nor the share
+        attachments = draft.get("attachments") or []
+        if isinstance(attachments, list) and attachments:
+            lines.append(f"- 첨부: {len(attachments)}개")
+            lines.extend(f"  - `{str(item.get('display_name', '')).replace('`', chr(39))}` · {item.get('size_bytes')} bytes"
+                         for item in attachments if isinstance(item, Mapping))
+    if share and isinstance(spec, dict):
+        from mail_card_compact import INVITE_NOTICE, share_line
 
-
-def _summary_v5(draft: Mapping[str, JsonValue], instruction: str) -> str:
-    """v4 plus what else leaves with the mail: attachment names and sizes, and the Drive share.
-
-    A long body moves to the card's text file, and v4 dropped these lines with it, so the
-    owner could not see the file a share link would carry (owner 2026-10-19 12:15 KST).
-    """
-    extra: list[str] = []
-    attachments = draft.get("attachments") or []
-    if isinstance(attachments, list) and attachments:
-        extra.append(f"- 첨부: {len(attachments)}개")
-        for item in attachments:
-            if isinstance(item, Mapping):
-                name = str(item.get("display_name", "")).replace("`", "'")
-                extra.append(f"  - `{name}` · {item.get('size_bytes')} bytes")
-    share = draft.get("drive_share")
-    if isinstance(share, Mapping):
-        name = str(share.get("source_name", "")).replace("`", "'")
-        grantees = share.get("grantees")
-        people = ", ".join(f"`{person}`" for person in grantees) if isinstance(grantees, list) else "-"
-        extra.extend((
-            f"- Drive 공유: `{name}` · {share.get('size_bytes')} bytes → {people} 보기 권한만 — 링크 공개 없음",
-            INVITE_NOTICE,
-            f"  - ✅ 하면 올리고 확인한 뒤 본문의 `{share.get('placeholder')}` 자리에 링크를 넣어 보냅니다. "
-            "하나라도 실패하면 메일은 나가지 않습니다.",
-        ))
-    return "\n".join((*_summary_head(draft), *extra, instruction))
+        lines.extend((share_line(spec), INVITE_NOTICE))
+    return "\n".join((*lines, instruction))
 
 
 def _summary_v3(draft: Mapping[str, JsonValue], instruction: str) -> str:

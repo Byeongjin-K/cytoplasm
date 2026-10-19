@@ -60,13 +60,33 @@ def check_topology(handoff: Path, shared: Path, ops: int, group: int) -> None:
 
 
 def provision_shared(shared: Path, group: int) -> None:
-    """Run as ops: create the sticky, group-writable directory once; never repair it."""
+    """Run as ops: create the sticky, group-writable directory; remake only an empty setgid-less one.
+
+    ops is not in the service group on a default install, and the kernel clears S_ISGID when a
+    non-member chmods, so the directory was left 1770 and refused for good (PR #104 gap 2). Under
+    the setgid hand-off parent a new directory already inherits the group and setgid, so chown or
+    chmod runs only if that did not happen. A non-empty or foreign directory is never touched.
+    """
     try:
-        shared.mkdir(mode=0o770)
-    except FileExistsError:
-        return
-    os.chown(shared, -1, group)
-    shared.chmod(_SHARED_MODE)
+        info = shared.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        # Only the exact shape the kernel leaves (setgid cleared) is remade; a folder anyone
+        # loosened otherwise is left for the exact check to refuse.
+        if (stat.S_IMODE(info.st_mode) != _SHARED_MODE & ~stat.S_ISGID or not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.getuid() or any(shared.iterdir())):
+            return
+        shared.rmdir()
+    previous = os.umask(0)
+    try:
+        shared.mkdir(mode=0o1770)
+    finally:
+        os.umask(previous)
+    if shared.stat().st_gid != group:
+        os.chown(shared, -1, group)
+    if stat.S_IMODE(shared.stat().st_mode) != _SHARED_MODE:
+        shared.chmod(_SHARED_MODE)
 
 
 def provision_mailbox(mailbox: Mailbox) -> None:

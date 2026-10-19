@@ -82,6 +82,10 @@ def checked_value(value: str, kind: str, staging: Path) -> str:
         except ValueError:
             raise Refused("RFC3339 due date required") from None
     if kind == "file":
+        if "/" not in value:
+            # The STAGED name alone means that file in the staging folder (2026-10-19: a bare name
+            # was refused and YooDori could not tell which path to give).
+            value = str(staging / stage_name(value))
         path = Path(value)
         try:
             if (not path.is_absolute() or ".." in path.parts or path.is_symlink()

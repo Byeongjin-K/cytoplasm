@@ -151,6 +151,11 @@ def cmd_compose(args: argparse.Namespace) -> int:
     share_with = tuple(getattr(args, "share_with", ()) or ())
     if not drive_path and (share_with or getattr(args, "drive_folder", "")):
         raise triage_gate.GateError("--share-with · --drive-folder 는 --drive-share 와 함께만 씁니다", 2)
+    if not drive_path and mail_drive_share.PLACEHOLDER in (args.body or ""):
+        # Owner 2026-10-19 "앞으로 이런 실수 없도록 해": refused before a card, not at send time.
+        raise triage_gate.GateError(
+            f"본문에 `{mail_drive_share.PLACEHOLDER}` 자리가 있는데 --drive-share 가 없습니다 — "
+            "공유할 파일을 --drive-share 로 주거나 그 자리를 지워 주세요", 2)
     share = (
         mail_drive_share.prepare(drive_path, share_with, body=args.body or "",
                                  project=str(getattr(args, "drive_folder", "") or ""))

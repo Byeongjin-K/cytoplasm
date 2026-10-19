@@ -114,13 +114,19 @@ def _install(home: Path, name: str, mode: str, run: Run) -> int:
         )
         code, _ = run(("systemctl", "--user", *command, unit))
         if code:
+            loaded = run(("systemctl", "--user", "show", unit, "--property=LoadState", "--value"))[1]
+            if mode == "off" and loaded.strip() == "not-found":
+                continue  # Never installed on this node, so nothing to stop (PR #104 gap 7).
+            print(f"LEGACY-SERVICE-FAIL unit={unit} step={command[0]} rc={code}", file=sys.stderr)
             return 5
         if name == "hermes-memory":
             code, output = run(("systemctl", "--user", "is-enabled", unit))
             if output.strip() != ("disabled" if mode == "off" else "enabled") or code not in (0, 1, 3):
+                print(f"LEGACY-SERVICE-FAIL unit={unit} step=is-enabled state={output.strip()}", file=sys.stderr)
                 return 5
         code, output = run(("systemctl", "--user", "is-active", unit))
         if output.strip() != ("inactive" if mode == "off" else "active") or code not in (0, 3):
+            print(f"LEGACY-SERVICE-FAIL unit={unit} step=is-active state={output.strip()}", file=sys.stderr)
             return 5
     if mode == "off":
         marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

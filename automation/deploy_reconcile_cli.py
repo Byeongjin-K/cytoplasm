@@ -191,6 +191,7 @@ def run_release_update(
         stopped = stopped_in_receipt(
             _NODE_CONFIG.private_root / "deploy-all" / "receipt.json",
             (_NODE_CONFIG.agent_account, _NODE_CONFIG.peer_account),
+            _NODE_CONFIG.private_root / "deploy-all" / "gateways-stopped",
         )
     except (OSError, ValueError) as error:
         print(f"[deploy-reconcile] GATEWAY-RECEIPT-BLOCK {type(error).__name__}", file=sys.stderr)

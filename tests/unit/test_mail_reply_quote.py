@@ -48,7 +48,7 @@ def _markdown(tmp_path: Path, *, body: str = ORIGINAL_BODY, cc: str = ORIGINAL_C
     """The exact document the vendored mailon writer stores (what ``get --body`` returns)."""
     mail = Mail(
         uid="u-1", folder="inbox", subject=ORIGINAL_SUBJECT, sender=SENDER,
-        to=ORIGINAL_TO, cc=cc, date=datetime(2026, 8, 30, 15, 12), body_text=body,
+        to=ORIGINAL_TO, cc=cc, date=datetime(2026, 8, 30, 6, 12), body_text=body,  # MailOn stores naive UTC
     )
     return build_markdown(mail, tmp_path, tmp_path / "data" / "mails" / "2026" / "08" / "x.md")
 
@@ -56,7 +56,7 @@ def _markdown(tmp_path: Path, *, body: str = ORIGINAL_BODY, cc: str = ORIGINAL_C
 def _detail(tmp_path: Path, **overrides: object) -> dict:
     detail: dict = {
         "uid": "u-1", "subject": ORIGINAL_SUBJECT, "sender": SENDER,
-        "date": "2026-08-30T15:12:00", "body": _markdown(tmp_path),
+        "date": "2026-08-30T06:12:00", "body": _markdown(tmp_path),
     }
     detail.update(overrides)
     return detail
@@ -257,7 +257,7 @@ def test_parse_original_without_markdown_falls_back_to_wrapper_metadata() -> Non
     import mail_quote
 
     original = mail_quote.parse_original(
-        {"sender": SENDER, "subject": ORIGINAL_SUBJECT, "date": "2026-08-30T15:12:00", "body": None}
+        {"sender": SENDER, "subject": ORIGINAL_SUBJECT, "date": "2026-08-30T06:12:00", "body": None}
     )
     assert (original.sender, original.subject, original.body) == (SENDER, ORIGINAL_SUBJECT, "")
     assert original.to == "" and original.cc == ""

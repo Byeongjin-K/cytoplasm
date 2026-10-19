@@ -83,13 +83,13 @@ ssh <노드-별칭> 'stage report.pdf' < ./report.pdf
 ```
 
 게이트는 원시 바이트를 agent 홈 `.local/share/yoodori-staging/report.pdf`에 저장하고
-`STAGED report.pdf sha256=<64자리 hex> bytes=<바이트 수>`를 출력한다.
+`STAGED report.pdf sha256=<64자리 hex> bytes=<바이트 수> path=<스테이징 절대 경로>`를 출력한다.
 이름은 `[A-Za-z0-9._-]{1,120}`이고 선두 점·슬래시는 금지한다. 파일은 최대 64 MiB다.
 임시 파일(0600)에 받아 해시·크기를 계산하고 끝까지 받은 뒤 이름을 원자 교체한다.
 초과·읽기 실패는 `YOODORI-GATE-REFUSED`이며 부분 파일을 지우고 기존 완성 파일은 보존한다.
 폴더는 0700이고 이 단계는 노드 비공개 저장일 뿐, Drive·Obsidian에 쓰거나 카드를 올리지 않는다.
 
-전달 후 `drive-save --file <노드-agent-home>/.local/share/yoodori-staging/report.pdf …`로
+전달 후 `drive-save --file report.pdf …`(스테이징한 이름 그대로, 또는 `path=` 의 절대 경로)로
 기존 승인 카드를 요청한다. 형의 카드 ✅ 이후에만 Drive에 저장한다.
 노트 본문은 별도 업로드 없이 `obsidian-request --relpath … --body-b64 <UTF-8-Base64> …`로
 줄 수도 있다. 런타임이 검증한 본문을 같은 비공개 폴더의 해시 기반 `.md`로 저장한 뒤
