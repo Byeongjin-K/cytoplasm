@@ -19,7 +19,8 @@ from pathlib import Path
 # sshd runs this file with -I: only its own declared helper directory is added.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from yoodori_request_runtime import (  # noqa: E402
-    Refused, card_env, calendar_card, checked_value, job_env, stage_body, stage_file, stage_name,
+    Refused, card_env, calendar_card, checked_value, job_env, stage_body, stage_file,
+    stage_mail_attachment, stage_name,
 )
 import yoodori_jobs  # noqa: E402
 
@@ -135,6 +136,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
+         "Received attachment: mail-attachment <uid> <file name as mail-get shows it> + origin\n"
+         "  (copies that file of the owner's mail into staging; prints its staged path).\n"
          "Card requests (origin channel/message ids required): " + ", ".join(CARD_COMMANDS) + "\n"
          "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
          "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
@@ -469,6 +472,11 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if len(args) != 1:
             raise Refused("stage needs exactly one file name")
         return name, [stage_name(args[0])], STAGING
+    if name == "mail-attachment":
+        rest, channel, message = _origin(args)
+        if len(rest) != 2 or not _UID.fullmatch(rest[0]):
+            raise Refused("mail-attachment needs <uid> <file name> --origin-channel-id N --origin-message-id N")
+        return name, [rest[0], _value(rest[1], "short"), channel, message], STAGING
     if name in CARD_COMMANDS:
         if name == "mail-draft":
             if not args or not _REPLY_KEY.fullmatch(args[0]):
@@ -675,6 +683,13 @@ def main() -> int:
         elif name == "stage":
             path, digest, size = stage_file(STAGING, argv[0], sys.stdin.buffer)
             print(f"STAGED {argv[0]} sha256={digest} bytes={size} path={path}")
+            rc = 0
+        elif name == "mail-attachment":
+            _, notice_bot = _release_modules()
+            token = notice_bot.resolve_token(environ=job_env(HOME, RELEASE, ENV))
+            yoodori_jobs.verify_owner_origin(argv[2], argv[3], _owner_id(), token)
+            path, digest, size = stage_mail_attachment(HOME, STAGING, argv[0], argv[1])
+            print(f"STAGED {path.name} sha256={digest} bytes={size} path={path}")
             rc = 0
         else:
             env = card_env(HOME, RELEASE, ENV) if name in CARD_COMMANDS else ENV
