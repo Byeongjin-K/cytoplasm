@@ -2298,11 +2298,11 @@ pre > code {
 
     <div class="grid-2">
       <div class="card">
-        <h3 class="h3">호출 판정 — <span class="mono">evaluate_tool_call</span></h3>
-        <p class="muted mono">automation/interop/external_effect_gate.py</p>
+        <h3 class="h3">기존 카드 검증 — <span class="mono">validate_approval</span></h3>
+        <p class="muted mono">automation/interop/effect_approval.py</p>
         <ol>
-          <li><span class="mono">_matching_rule</span> — 도구 이름과 정렬된 JSON 인자를 <span class="mono">configs/external-effect-tools.yaml</span> denylist와 매칭한다. 매칭이 없으면 <span class="mono">external_effect=False, allowed=True</span> — 읽기는 그대로 통과한다.</li>
-          <li><span class="mono">target_id</span> 생성 — <span class="mono">tool:{rule_id}:{tool_name}</span> 형태로 대상을 고정한다.</li>
+          <li>Hermes 도구 분류기·denylist는 은퇴했다. dori-gate가 릴리스·계정 밖 경로에만 카드를 요구하고 계정 내부 쓰기는 소유자 Discord 명령 확인 후 카드 없이 처리한다.</li>
+          <li><span class="mono">target_id</span> — 기존 카드 생산자가 정한 대상을 그대로 검증한다.</li>
           <li><span class="mono">action_hash</span> 생성 — canonical payload <span class="mono">{action, arguments, target_id, tool_name}</span>를 키 정렬·compact JSON으로 직렬화해 SHA-256을 취하고 <span class="mono">sha256:&lt;hex&gt;</span>로 만든다. <strong>nonce는 포함하지 않는다</strong> — 그래서 같은 요청은 언제나 같은 해시가 되고, 내용이 바뀌면 해시도 바뀐다.</li>
           <li><span class="mono">_has_valid_approval</span> — approval log에서 아래 7가지를 <strong>모두</strong> 만족하는 레코드가 있어야 승인으로 인정한다.</li>
         </ol>
@@ -2316,7 +2316,7 @@ pre > code {
           <li><span class="mono">method == manual_reaction</span></li>
         </ul>
         <p class="muted">일치하면 <span class="mono">allowed=True / reason=approved</span>, 아니면 <span class="mono">allowed=False / reason=approval_required</span>가 된다.</p>
-        <p class="faint">주의: <span class="mono">evaluate_tool_call</span>은 실행기가 아니라 경계에서 허용·차단 판정만 반환한다.</p>
+        <p class="faint">주의: <span class="mono">validate_approval</span>은 실행기나 새 요청 분류기가 아니라 기존 카드의 정확한 해시·소유자만 검증한다.</p>
       </div>
 
       <div class="card">

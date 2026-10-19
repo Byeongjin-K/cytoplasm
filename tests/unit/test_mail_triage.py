@@ -18,7 +18,7 @@ sys.path.insert(0, str(_REPO / "skills" / "mail" / "scripts"))
 import triage_core  # noqa: E402
 import triage_llm  # noqa: E402
 import triage_store  # noqa: E402
-from automation.interop import external_effect_gate  # noqa: E402
+from automation.interop import effect_approval  # noqa: E402
 
 CANARY = "PSEUDOSECRET-cafe0123"  # synthetic; must never surface in approvals text
 
@@ -168,16 +168,15 @@ def test_draft_sha_binds_content() -> None:
 
 def test_action_hash_parity_with_deployed_gate(tmp_path: Path) -> None:
     argv = tuple(_draft(sensitive=False)["argv"])
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    call = external_effect_gate.ToolCall(
+    call = effect_approval.ToolCall(
         tool_name=triage_core.EXTERNAL_EFFECT_TOOL,
         arguments={"command": shlex.join(argv)},
     )
     log = tmp_path / "approvals.jsonl"
-    context = external_effect_gate.ApprovalContext(
+    context = effect_approval.ApprovalContext(
         approval_log=log, owner_id="owner-1", e2e_test_mode=False
     )
-    decision = external_effect_gate.evaluate_tool_call(call, rules, context)
+    decision = effect_approval.validate_approval(call, triage_core.EXTERNAL_EFFECT_TARGET_ID, context)
     assert decision.external_effect is True and decision.allowed is False
     assert decision.target_id == triage_core.EXTERNAL_EFFECT_TARGET_ID
     assert decision.action_hash == triage_core.external_effect_action_hash(argv)
@@ -190,29 +189,7 @@ def test_action_hash_parity_with_deployed_gate(tmp_path: Path) -> None:
         "target_id": triage_core.EXTERNAL_EFFECT_TARGET_ID,
         "timestamp": "2026-07-16T00:00:00Z",
     }) + "\n", encoding="utf-8")
-    assert external_effect_gate.evaluate_tool_call(call, rules, context).allowed is True
-
-
-def test_direct_terminal_mailon_send_matches_denylist() -> None:
-    rules = external_effect_gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    for command in (
-        "/home/agent/emailAutomation/.venv/bin/python -m mailon.main send --to x --confirm-send",
-        "python3 -m mailon.main send --to x",
-        "mailon send --to x",
-    ):
-        call = external_effect_gate.ToolCall(tool_name="python3", arguments={"command": command})
-        context = external_effect_gate.ApprovalContext(
-            approval_log=None, owner_id="o", e2e_test_mode=False
-        )
-        decision = external_effect_gate.evaluate_tool_call(call, rules, context)
-        assert decision.external_effect is True and decision.allowed is False, command
-    read_call = external_effect_gate.ToolCall(
-        tool_name="python3", arguments={"command": "python -m mailon.main sync --limit 3"}
-    )
-    context = external_effect_gate.ApprovalContext(
-        approval_log=None, owner_id="o", e2e_test_mode=False
-    )
-    assert external_effect_gate.evaluate_tool_call(read_call, rules, context).external_effect is False
+    assert effect_approval.validate_approval(call, triage_core.EXTERNAL_EFFECT_TARGET_ID, context).allowed is True
 
 
 # --- idempotency: claim-before-draft ----------------------------------------------

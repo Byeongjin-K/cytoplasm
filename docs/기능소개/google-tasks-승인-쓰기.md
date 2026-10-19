@@ -1,49 +1,28 @@
-# Google Tasks 승인 기반 쓰기
+# Google Tasks 소유자 명령 쓰기
 
 ## 무엇을
-
-Google Tasks에 할 일을 추가할 때 owner DM의 **소유자(cha) 승인(✅)**을 거쳐야만 실행되도록 보장한다. 승인 세대는 한 번만 소비하며, 쓰기 직후 API로 다시 조회해 요청한 내용이 정확히 반영됐는지 검증한다.
+계정 안 할 일 등록은 dori-gate가 확인한 소유자 Discord 명령으로 바로 처리한다.
+새 승인 카드는 만들지 않는다. `todo_cli create`와 `write-now`는 같은 경로이며
+등록 직후 `gws tasks tasks get`으로 제목·ID를 재조회한다.
 
 ## 왜
-
-기존에는 에이전트가 터미널 도구로 `gws tasks tasks insert`를 직접 실행할 수 있었다. 이 경로는 외부 효과 게이트의 denylist에 등록되어 있지 않아, 소유자 승인 없이도 외부 시스템에 쓰기가 가능했다. 이로 인해 오타가 섞인 개인 이름이 외부로 유출될 뻔한 사례가 있었다.
-
-이를 해결하기 위해 동결 argv 승인, owner-only 리액션 원장, 경쟁 안전 일회 claim, 성공 보고 전 재조회 검증을 하나의 경로로 묶었다. 재시작 시 `write_started`가 보이면 자동 재삽입하지 않고 조정 대상으로 남긴다. archive 기록 뒤 pending 정리 중 중단돼도 동일한 terminal 전이를 재시도해 정리를 끝내며, 서로 다른 archive로 덮어쓰지는 않는다.
+모든 쓰기에 카드를 요구하던 규칙은 은퇴했다. 새 할 일에 승인 세대를 만드는
+`request` 명령은 제거하되, 과거 카드의 일회 실행·변조 방지 계약은 보존한다.
 
 ## 사용 시나리오
+소유자가 “회의 준비를 할 일에 넣어줘”라고 Discord에서 지시하면 YooDori가
+dori-gate로 원문을 확인하고 원 채널·메시지 좌표와 함께 즉시 쓰기 경로를 호출한다.
+등록과 API 재조회가 일치하면 결과와 변경 영수증을 남긴다. 승인 카드 게시나
+추가 반응을 기다리지 않는다.
 
-**happy path — 할 일 추가**
-
-```
-cha: "내일 오전 10시에 회의 준비하라고 할 일에 넣어줘"
-→ 에이전트: todo_cli request --title "회의 준비" --due "2026-07-31T10:00:00Z"
-→ owner DM: "Google Tasks 등록 승인: 회의 준비"
-→ cha: ✅ 클릭
-→ 워처: 승인 원장 기록 + approved generation archive
-→ 에이전트: 같은 argv로 todo_cli create 실행
-→ 결과: Tasks 등록 1회 + API 재조회 검증 성공 + receipt 확정
-```
-
-**거부 경로 — 승인 없이 실행 시도**
-
-```
-에이전트: (승인 레코드 없이) todo_cli create --title "비인가 작업"
-→ 결과: TODO-FAIL [4] 승인 레코드가 없습니다.
-→ 외부 시스템에 아무런 영향 없음.
-```
-
-**재시도 경로 — 이미 소비했거나 중간 상태인 승인**
-
-```
-같은 승인으로 create 재실행 → exit 4, 외부 호출 0
-insert 뒤 중단되어 write_started가 남음 → exit 7, 자동 재삽입 0
-새 request→✅로 새 generation을 만들면 다시 1회 실행 가능
-```
+원문 좌표가 없거나 소유자 명령을 확인할 수 없으면 쓰지 않는다.
+같은 명령의 중복 실행이나 중간 `write_started`는 자동 재삽입하지 않고
+영수증 확인 대상으로 남긴다. 재조회가 다르면 성공으로 보고하지 않는다.
 
 ## 관련
-
-- 스킬: `todo` — 구현은 [`skills/todo/scripts/todo_cli.py`](../../skills/todo/scripts/todo_cli.py).
-- **승인 게이트**: `automation.interop.external_effect_gate`를 재사용하며, `action_hash`는 실행될 전체 인자(argv)에 바인딩된다.
-- **검증**: `gws tasks tasks get`으로 저장된 제목과 ID를 대조하여 일치할 때만 성공으로 간주한다.
-- 워처/상태: `skills/todo/scripts/todo_confirm_reaction_watch.py`, `todo_approval_store.py`, `todo_approval_store_io.py`, `todo_execution_claim.py`.
-- 증적: `docs/qa/RTS-6/04-a1-ssot.txt` ~ `docs/qa/RTS-6/09-review-fixes.txt`.
+- `skills/todo/scripts/todo_cli.py`, `todo_owner_command.py`
+- `todo_confirm_reaction_watch.py`, `todo_execution_claim.py`: 이미 저장된 승인 세대의
+  배수 호환만 유지하며 새 CLI 승인 생산자는 없다.
+- `automation/interop/effect_approval.py`: 과거 카드의 정확한 해시·소유자 검증
+- `tests/unit/test_todo_write_now.py`, `tests/unit/test_todo_skill.py`
+- [현재 승인 범위](승인-범위-정렬.md)

@@ -32,6 +32,7 @@ def todo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
         pytest.fail("owner-command unit tests must never call real gws or post a card")
 
     monkeypatch.setattr(module, "run_gws", forbid)
+    monkeypatch.setattr(module, "gate_module", forbid)
     monkeypatch.setattr(import_module("todo_approval"), "request_cli_approval", forbid)
     monkeypatch.setattr(module, "_notify_created", forbid)
     return module
@@ -117,12 +118,27 @@ def test_write_now_repeat_never_inserts_after_success_or_uncertain_failure(
     assert "OWNER-COMMAND-WRITTEN " not in capsys.readouterr().out
 
 
-def test_write_now_requires_both_origin_coordinates(todo: ModuleType) -> None:
+@pytest.mark.parametrize("command", ["create", "write-now"])
+def test_write_requires_both_origin_coordinates(todo: ModuleType, command: str) -> None:
     # Given: a command without the origin message.
     # When / Then: argument parsing refuses it before any connector call.
     with pytest.raises(SystemExit) as error:
-        todo.main(_ARGV[:-2])
+        todo.main([command, *_ARGV[1:-2]])
     assert error.value.code == 2
+
+
+def test_create_defaults_to_verified_owner_command(
+    todo: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: the normal create command has an owner origin and no approval record.
+    gws = FakeGws()
+    monkeypatch.setattr(todo, "run_gws", gws)
+    # When: the gate calls create with the frozen owner request.
+    rc = todo.main(["create", *_ARGV[1:]])
+    # Then: it writes and verifies without invoking the card producer.
+    assert rc == 0
+    assert [call[3] for call in gws.calls] == ["insert", "get"]
+    assert capsys.readouterr().out == "OWNER-COMMAND-WRITTEN todo task-fixture\n"
 
 
 def test_write_now_stale_copy_is_refused(

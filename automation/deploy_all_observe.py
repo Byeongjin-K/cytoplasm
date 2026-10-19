@@ -184,9 +184,9 @@ def _file(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]
 
 
 def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, object]) -> _Seen:
-    if decl.attr("algorithm") in ("retired-job-v1", "retired-reminder-data-v1"):
-        name = ("reminder-poller" if decl.attr("algorithm") == "retired-reminder-data-v1" else
-                Path(decl.destination).name.removeprefix("autophagy-cron-").removesuffix(".timer"))
+    if decl.attr("algorithm") in ("retired-job-v1", "retired-reminder-data-v1", "retired-interop-v1", "retired-wiki-script-v1"):
+        name = {"retired-reminder-data-v1": "reminder-poller", "retired-interop-v1": "interop-plugin", "retired-wiki-script-v1": "wiki-confirm-watch"}.get(
+            decl.attr("algorithm"), Path(decl.destination).name.removeprefix("autophagy-cron-").removesuffix(".timer"))
         rc, out = call(decl.account, ("retired-job", str(root), name))
         state = out.strip() if rc == 0 and out.strip() in ("ok", "stale") else "unknown"
         want = _sha_text("retired")

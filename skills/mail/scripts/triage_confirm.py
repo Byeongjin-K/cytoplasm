@@ -258,7 +258,8 @@ def _in_digest_thread(draft: dict) -> bool:
     try:
         import triage_digest_thread
 
-        return triage_digest_thread.is_digest_draft(draft)
+        # Compose also reuses the owner's thread, but owns that request's terminal result.
+        return draft.get("kind") != "compose" and triage_digest_thread.is_digest_draft(draft)
     except Exception as error:  # noqa: BLE001 — the result notice still goes out the usual way
         print(f"DIGEST-THREAD-CHECK-FAIL draft={draft.get('id')} err={type(error).__name__}", file=sys.stderr)
         return False

@@ -14,7 +14,6 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -27,7 +26,7 @@ import todo_approval_runtime  # noqa: E402
 import todo_approval_store_io as store_io  # noqa: E402
 import todo_cli  # noqa: E402
 import todo_confirm_reaction_watch as watch  # noqa: E402
-from automation.interop.external_effect_gate import ApprovalContext  # noqa: E402
+from automation.interop.effect_approval import ApprovalContext  # noqa: E402
 from todo_approval_model import ApprovalState, TodoApprovalSpec  # noqa: E402
 from todo_approval_store import TodoApprovalStore  # noqa: E402
 
@@ -139,8 +138,8 @@ def test_legacy_payload_without_origin_decodes_to_empty(tmp_path: Path) -> None:
 
 # -------------------------------------------------------------------- CLI
 
-def test_parser_accepts_origin_flags_on_request_and_create() -> None:
-    for command in ("request", "create", "plan"):
+def test_parser_accepts_origin_flags_on_owner_writes_and_plan() -> None:
+    for command in ("create", "write-now", "plan"):
         args = todo_cli.build_parser().parse_args([
             command, "--title", "장보기",
             "--origin-channel-id", ORIGIN_CHANNEL, "--origin-message-id", ORIGIN_MESSAGE,
@@ -148,25 +147,18 @@ def test_parser_accepts_origin_flags_on_request_and_create() -> None:
         assert (args.origin_channel_id, args.origin_message_id) == (ORIGIN_CHANNEL, ORIGIN_MESSAGE)
 
 
-def test_request_intent_carries_the_origin(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given: a channel instruction and a spied approval request
-    captured: list[object] = []
-    monkeypatch.setenv("TODO_OWNER_ID", "owner-1")
-    monkeypatch.setattr(
-        todo_cli, "evaluate",
-        lambda argv, *, context: SimpleNamespace(action_hash="sha256:h", target_id="t"),
-    )
-    monkeypatch.setattr(
-        todo_approval, "request_cli_approval", lambda intent, owner: captured.append(intent)
-    )
-    # When: the request command runs with origin flags
+def test_owner_write_rejects_nonnumeric_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: an origin message that is not a Discord message id.
+    def forbid(*_args, **_kwargs):
+        pytest.fail("invalid origin must not reach Google Tasks")
+
+    monkeypatch.setattr(todo_cli, "run_gws", forbid)
+    # When: a write command carries that origin.
     assert todo_cli.main([
-        "request", "--title", "장보기",
+        "create", "--title", "장보기",
         "--origin-channel-id", ORIGIN_CHANNEL, "--origin-message-id", ORIGIN_MESSAGE,
-    ]) == 0
-    # Then: the intent (hence the spec/record) carries the origin
-    [intent] = captured
-    assert (intent.origin_channel_id, intent.origin_message_id) == (ORIGIN_CHANNEL, ORIGIN_MESSAGE)
+    ]) == 3
+    # Then: the invalid owner command is refused before a connector call.
 
 
 # ----------------------------------------------------------- notify_result

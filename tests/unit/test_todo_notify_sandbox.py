@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "skills" / "todo" / "scripts"))

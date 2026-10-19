@@ -52,18 +52,17 @@ topics · prompt · meeting · recall · wiki · todo · doctype · procurement 
 plaud · (hello-autophagy=데모).
 
 ## 예외 매트릭스 (표준 계약 밖)
-- 승인 워처 보유: calendar · coordination · mail(triage+digest 2개) · budget · wiki · patent-prep(export confirm). `deploy.sh` 보유: calendar · coordination · mail.
+- 승인 워처 보유: calendar(외부 참석자 초대) · coordination · mail(triage+digest 2개) · budget · patent-prep(export confirm). wiki의 새 배포·확인 워처는 은퇴했으며 저장 형식·지식 조회 라이브러리만 보존한다.
 - CLI 명명 예외: mail=`triage_cli.py`, coordination=`coordinate_cli.py`, procurement=`procure_cli.py`+`procure_registry_cli.py`(2개), recall=`recall_cli.py`+`recall_reference.py`(2개 — 후자는 소유자 참고자료 폴더 조회. `recall_cli.py` 가 250 pure-LOC 상한에 정확히 붙어 있어 서브커맨드를 넣으면 F2 등록부에 자기 예외를 쌓게 된다).
 - meeting: 워처 대신 게이트웨이 **플러그인 훅**(`meeting/plugin/plugin.yaml`).
 - plaud: **읽기 전용** 상태 보고만(`plaud_cli.py status`, stdlib 전용). 워처·승인 카드·재게시는 스킬이 아니라 `automation/plaud_sync/`(홈 배포물 `plaud_sync_watch.py`)가 소유한다 — 스킬은 그 상태 파일을 읽을 뿐이다.
 - repair: repo-local CLI 아님 — `~/.hermes/repair/automation/repair/repair_cli.py` 외부 런타임 호출.
 - wiki: 본문·제목은 owner DM 밖 유출 금지. 트윈 판단은 `review_after` 만료 시 자율 행동에 사용 금지(`docs/guide/decision-twin-스키마.md`).
-- automation 공유 코드: calendar/coordination/mail/budget/wiki/meeting/todo는 `automation.interop.*`(external_effect_gate · injection_adapter · discord_transport · coordination)에 의존 — interop 시그니처 변경 시 동반 갱신.
+- automation 공유 코드: calendar/coordination/mail/budget/wiki/meeting/todo는 `automation.interop.*`(injection_adapter · discord_transport · coordination)에 의존 — interop 시그니처 변경 시 동반 갱신. Hermes 전용 도구 호출 게이트는 은퇴했다.
 - **지식 읽기 경계(R3)**: 스킬은 Obsidian/wiki/RAG를 직접 검색하지 않고 `automation.knowledge` 파사드만 호출한다. wiki 자체 CLI, rag_ingest, twin_* 쓰기 측만 예외다. `search_memory()`/`query_notes()`/`consult()` 직접 호출과 스킬별 `[En]` 출처 렌더 구현은 금지하며 `tests/unit/test_knowledge_adoption_conformance.py`가 강제한다. 정본은 [지식 계층 규약](../docs/guide/지식-계층-규약.md)이다.
 
 ## 이 디렉터리의 필수 규칙
-- **mutating 경로는 반드시 승인 게이트 경유** (draft/pending → render → resolve_reaction
-  → watch cron). 게이트 재사용: 새 승인 표면은 레코드의 `channel_id`로만 분기 — 별도 워처 신설 금지.
+- **카드 대상은 릴리스와 계정 밖 경로뿐이다.** 계정 안 일정·문서·할 일·Obsidian 쓰기는 소유자 Discord 명령에서 시작해 dori-gate로 카드 없이 처리한다. 카드 대상은 draft/pending → render → resolve_reaction → watch cron을 거친다. 게이트 재사용: 새 승인 표면은 레코드의 `channel_id`로만 분기 — 별도 워처 신설 금지.
 - **도메인 중첩 스킬은 결정론적 코드 가드 필수.** SKILL.md 라우팅 설명만으로 부족(LLM 확률적).
   가드는 **양방향**이어야 한다 — 한쪽만 막으면 두 경로가 동시 발동해 이중 쓰기(선례 사고
   2026-07-20: `peer-test 오전 10시`가 calendar 07-22 + coordination 07-29 이중 등록).

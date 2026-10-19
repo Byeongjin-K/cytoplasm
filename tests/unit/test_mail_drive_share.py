@@ -28,7 +28,6 @@ import triage_gate  # noqa: E402
 
 from automation import drive_outputs  # noqa: E402
 from automation.drive_client import DriveClient, DriveClientError  # noqa: E402
-from automation.interop import external_effect_gate as gate  # noqa: E402
 
 TO = "director@example.invalid"
 PERSON = "Viewer.Person@Example.com"
@@ -340,21 +339,6 @@ def test_share_options_without_a_file_are_refused(
 ) -> None:
     assert _compose(monkeypatch, "--share-with", PERSON) == 2
     assert "--drive-share" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize(
-    ("command", "gated"),
-    [('gws drive permissions create --params {"fileId":"f"} --json {"type":"anyone","role":"reader"}', True),
-     ("gws drive permissions update --params {}", True),
-     ("gws drive permissions list --params {}", False)],
-)
-def test_a_hand_typed_drive_share_needs_the_owner_approval(command: str, gated: bool) -> None:
-    rules = gate.load_denylist(_REPO / "configs" / "external-effect-tools.yaml")
-    decision = gate.evaluate_tool_call(
-        gate.ToolCall(tool_name="terminal", arguments={"command": command}), rules,
-        gate.ApprovalContext(None, "owner", False),
-    )
-    assert (decision.external_effect, decision.allowed) == (gated, not gated)
 
 
 def test_share_target_fixes_the_folder_and_name_at_request_time() -> None:

@@ -7,7 +7,7 @@ _GATE = (
     Path(__file__).resolve().parents[2]
     / "automation"
     / "interop"
-    / "external_effect_gate.py"
+    / "approval_types.py"
 )
 
 

@@ -13,7 +13,7 @@ import pytest
 from automation.drive_client import DriveClient, DriveClientError
 from automation.drive_outputs import PublishResult, client_from_environment, publish, publish_best_effort
 from automation.drive_taxonomy import TaxonomyError
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 
 _FOLDER_MIME = "application/vnd.google-apps.folder"
 

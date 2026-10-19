@@ -51,7 +51,7 @@ def test_compose_prints_the_approval_thread_link(
     out = capsys.readouterr().out.splitlines()
     assert out[0] == "COMPOSED draft=abc123 posted=1"
     assert out[1] == (
-        f"APPROVAL-THREAD draft=abc123 url=https://discord.com/channels/{GUILD}/{THREAD}"
+        f"APPROVAL-THREAD draft=abc123 url=https://discord.com/channels/{GUILD}/{THREAD}/{CARD}"
     )
 
 
@@ -101,5 +101,5 @@ def test_instruction_draft_prints_the_approval_thread_link(
     assert triage_cli.cmd_draft(args) == 0
     # Then: the thread link follows the DRAFTED marker
     assert capsys.readouterr().out.splitlines()[-1] == (
-        f"APPROVAL-THREAD draft=abc123 url=https://discord.com/channels/{GUILD}/{THREAD}"
+        f"APPROVAL-THREAD draft=abc123 url=https://discord.com/channels/{GUILD}/{THREAD}/{CARD}"
     )

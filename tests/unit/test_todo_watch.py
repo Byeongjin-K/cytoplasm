@@ -13,7 +13,7 @@ import pytest
 
 from automation.interop.approval_lease import FileKeyLease
 from automation.interop.approval_surface import ChannelFacts
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 from tests.unit.cron_fixture import TIMER_SOURCE, declared_cron, timer_call
 
 if TYPE_CHECKING:

@@ -28,6 +28,10 @@ from automation import skill_gate
 from automation.interop.approval_lifecycle import ApprovalRecordsError, ApprovalSurfaceError, Probe
 from automation.release_applied_notice import release_tags
 from automation.release_spec import ReleaseSpec, ReleaseSpecError, spec_from_record
+from automation.release_thread_notice import reply
+from automation.interop.origin_notice import ThreadOutcome
+from automation.release_retire import archive_bytes
+from automation.skill_gate_request import lease
 from automation.skill_gate_approval import SkillApprovalGate
 
 DECISION_APPROVED: Final = 0
@@ -103,6 +107,20 @@ def approval_decision(
                 assert_never(unreachable)
         return DECISION_UNAVAILABLE
     print(f"RELEASE-DECISION: {probe.name.lower()} version={record['version']}", file=sys.stderr)
+    match probe:
+        case Probe.CANCELLED:
+            # The decision is polled repeatedly; preserve one final reply per request.
+            marker = skill_gate.GATE_DIR / "release-cancel-notified" / record["message_id"]
+            try:
+                with lease(skill_gate.GATE_DIR).hold("release-cancel-notice") as owned:
+                    if owned and not marker.exists() and reply(record, "소유자 취소", ThreadOutcome.CANCELLED):
+                        archive_bytes(marker.parent, marker.name, b"notified\n")
+            except (OSError, ReleaseSpecError) as error:
+                print(f"RELEASE-CANCEL-NOTICE-FAIL {type(error).__name__}", file=sys.stderr)
+        case (Probe.APPROVED | Probe.BOUND_PENDING | Probe.MISSING | Probe.BINDING_MISMATCH | Probe.UNVERIFIABLE):
+            pass
+        case unreachable:
+            assert_never(unreachable)
     return decision_exit(probe)
 
 #: `git describe` 의 탐색 범위. 무엇이 릴리스 번호인지는 `release_tags` 가 단독으로 정한다.

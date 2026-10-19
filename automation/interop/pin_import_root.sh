@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Pin the Hermes gateway's import root to the current release generation (RCB todo 22).
+# Legacy import-root diagnostic utility; no longer installed as a Hermes startup hook.
 #
-# Runs as an ExecStartPre of hermes-gateway.service (gateway-dropin.conf) on every start, so a
-# restart always imports the plugin body and the external-effect gate from one generation:
+# An explicit invocation builds an import farm for one release generation:
 #   root = AUTOPHAGY_RUNTIME_ROOT, else ${PIN_RELEASE_POINTER:-/srv/autophagy-agent-current}
 #          when present, else ${PIN_MIRROR_ROOT:-/srv/autophagy-agents} (PIN-IMPORT-ROOT-WARN)
-#   gen  = readlink -f root; every file of the gate closure must exist in it, or exit 78
-#          (systemd then keeps the gateway down and retries; the old link stays as it was)
+#   gen  = readlink -f root; every file of the shared runtime closure must exist, or exit 78
+#          (the old link stays as it was)
 #   farm = ~/.hermes/autophagy-import.d/<gen name>/automation/<entry> -> gen/automation/<entry>
 #          for every entry except hermes_compat and __pycache__: the compat carrier's
 #          automation.hermes_compat must keep coming from the carrier, never from the release.
@@ -33,9 +32,8 @@ gen="$(readlink -f -- "$root" 2>/dev/null || true)"
 [[ -n "$gen" ]] || gen="$root"
 
 # Keep this list equal to automation/interop/gateway_preflight.py REQUIRED (tests pin both).
-for relative in automation/__init__.py automation/interop/external_effect_gate.py \
-  automation/interop/hermes_plugin/__init__.py automation/gateway_generation.py \
-  automation/interop/policy_paths.py automation/interop/plugin_shim/__init__.py; do
+for relative in automation/__init__.py automation/gateway_generation.py \
+  automation/interop/approval_types.py; do
   [[ -f "$gen/$relative" ]] || block "$gen/$relative"
 done
 name="${gen##*/}"

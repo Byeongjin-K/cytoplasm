@@ -17,7 +17,7 @@ from typing import Final
 from automation.interop import origin_notice
 from automation.interop.approval_lifecycle import ApprovalRequest, ApprovalSurfaceError, Probe
 from automation.interop.discord_transport import DiscordTransport as NoticeSender
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 from automation.interop.reaction_approval import record_push_approval
 
 from . import gate_binding

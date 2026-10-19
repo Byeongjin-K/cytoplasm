@@ -286,6 +286,8 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 ## 승인 경로 완결 규칙 (cha 지시, 2026-10-07)
 
+현재 구현(2026-10-19): 카드 대상은 「모든 요청 승인 경로 규칙」의 릴리스·계정 밖 경로뿐이다. 계정 안의 일정·문서·할 일·Obsidian 쓰기는 소유자 Discord 명령을 확인하는 dori-gate로 카드 없이 처리한다. Hermes 전용 denylist·플러그인은 은퇴했고 빌드 원장은 내부 쓰기의 카드 생산자를 요구하지 않는다. 아래는 은퇴한 구현의 기록이다.
+
 > **일부 대상 퇴역(2026-10-19 Q294)** — 이 절의 일부 문장은 퇴역한 대상(Hermes·Autophagy Agent/Peer/Ops 봇·#agent-chat·#notifications·노드 위키·D-day 알림)을 가리킨다. 지금 지킬 내용은 AGENTS.md의 같은 제목 지침문이다. 아래 원문은 기록으로 바이트 그대로 둔다.
 
 **게이트 대상 외부효과는 「표준 승인 카드 생산자 + 카드 ✅ 워처 + 실행 영수증」을 한 벌로 갖는다. 에이전트는 즉석 초안을 만들거나 소유자에게 채팅 메시지에 ✅ 를 요청하지 않는다 — 전용 스킬 명령이 없는 작업은 공용 「그 밖의 외부효과」 경로(`python3 -m automation.effect_request request`)로 카드를 올린다(2026-10-17 「모든 요청 승인 경로 규칙」).** 채팅 메시지의 ✅ 는 어떤 워처도 읽지 않는다 — 승인은 해시에 묶인 카드의 ✅ 만이다.
@@ -302,7 +304,7 @@ cha의 개인 Hermes 에이전트 시스템. Discord로 타 연구자 에이전�
 
 - **왜**: 2026-10-14 대리 요청(약 192 MB 실행 파일을 보기 전용으로 공유하고 링크를 메일로 회신)에서 메일 승인은 있었지만 Drive 업로드·공유 승인 경로가 없어 에이전트가 멈췄다.
 - **무엇이 묶이나**: 파일 sha256·크기, Drive 폴더·파일명(`autophagy/공유/` 아래), 공유받는 사람, 역할 `reader` 가 compose 초안의 승인 해시(`triage_core.draft_sha256` 의 `drive_share`)에 들어간다. 새 카드·새 워처는 없다(「단일 게이트 절차 재사용」).
-- **링크 공개는 없다**: 권한은 `type=user, role=reader` 만 만들고, 부여 전·후에 파일 권한이 "소유자 + 지정한 사람" 이 아니면(anyone·domain·group·writer·다른 사람) 멈춘다. 에이전트가 터미널에서 `gws drive permissions create|update` 로 직접 공유하는 것은 외부효과 규칙 `gws_drive_permission_grant` 가 막는다.
+- **링크 공개는 없다**: 권한은 `type=user, role=reader` 만 만들고, 부여 전·후에 파일 권한이 "소유자 + 지정한 사람" 이 아니면(anyone·domain·group·writer·다른 사람) 멈춘다. 에이전트가 터미널에서 `gws drive permissions create|update` 로 직접 공유하지 않는다. 유돌의 직접 공유 시도는 dori-gate 가 바깥 공유로 판정해 카드 없이 나가지 않는다(Hermes 외부효과 규칙 `gws_drive_permission_grant` 는 2026-10-19 은퇴).
 - **강제**: `tests/unit/test_mail_drive_share.py`(해시 바인딩·공개 권한 거부·실패 시 미발송·✅ 없으면 무동작), `tests/unit/test_gated_effect_paths_conformance.py`(규칙 → 카드 생산자). 절차는 `skills/mail/SKILL.md` §4-2, [소개](docs/기능소개/메일-Drive-공유-링크.md).
 
 ## 모든 요청 승인 경로 규칙 (cha 지시, 2026-10-17)

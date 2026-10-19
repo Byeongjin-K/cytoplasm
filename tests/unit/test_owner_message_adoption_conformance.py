@@ -88,7 +88,6 @@ _CARD_RENDER_ROOTS: Final = {
     "automation/effect_request/cli.py::cmd_request": "automation/effect_request/render.py::render_effect_approval",
     "automation/project_board/cli.py::post_card": "automation/project_board/proposal_render.py::render_proposal_card",
     "automation/plaud_sync/approval_gate.py::request_approval": "automation/plaud_sync/render.py::render_plaud_approval",
-    "skills/todo/scripts/todo_cli.py::_cmd_request": "skills/todo/scripts/todo_approval_render.py::render_todo_approval",
     "automation/release_approval.py::cmd_request": "automation/release_spec_message.py::render_v6",
 }
 # Closed pending ledger. Delete rows only WITH migration or reasoned promotion;

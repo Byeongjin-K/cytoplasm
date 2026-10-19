@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 from automation.drive_client import DriveClient
-from automation.interop.external_effect_gate import JsonValue
+from automation.entity_preflight.contracts import JsonValue
 from automation.plaud_sync.audio_manifest import ManifestEntry, record_manifest
 from automation.plaud_sync.model import PlaudSyncRecord, PlaudSyncState
 from automation.plaud_sync.store import save_note_body, save_state

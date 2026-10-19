@@ -12,7 +12,7 @@ except AttributeError:
         return method
 
 from automation.drive_client import DriveClient
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 from automation.obsidian_write import (
     ObsidianWriteConfig,
     ObsidianWriteError,

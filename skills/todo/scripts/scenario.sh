@@ -5,8 +5,7 @@
 #   (a) insert with NO owner approval record is refused by the gate — 0 writes.
 #   (b) insert with an approval record runs, then the post-write re-read matches.
 #   (c) a re-read whose stored title differs exits non-zero (no silent success).
-# The denylist below is a self-contained copy of the repo rule; drift is locked
-# by tests/unit/test_todo_skill.py::test_scenario_denylist_fixture_matches_repo_rule.
+# Stored-card validation remains available only for draining legacy generations.
 set -euo pipefail
 
 fail() { printf 'SCENARIO-FAIL %s\n' "$1" >&2; exit 1; }
@@ -42,13 +41,6 @@ export PYTHONPATH
 work="$(mktemp -d)"
 trap 'cd / && rm -rf "$work"' EXIT
 
-cat > "$work/denylist.yaml" <<'YAML'
-rules:
-  - id: gws_tasks_mutation
-    tool_name_regex: (?i)^(?:terminal|shell|bash|gws)$
-    arguments_regex: (?i)(?:^|[^A-Za-z0-9_])gws\s+tasks\s+tasks\s+(?:insert|patch|update|delete|move|clear)(?:\s|$)
-YAML
-
 cat > "$work/fake-gws" <<'PY'
 #!/usr/bin/env python3
 """In-memory Google Tasks stand-in: records argv, never touches the network."""
@@ -72,13 +64,30 @@ else:
 PY
 chmod +x "$work/fake-gws"
 
-export TODO_DENYLIST="$work/denylist.yaml"
 export TODO_APPROVAL_LOG="$work/approvals.jsonl"
 export TODO_APPROVAL_ROOT="$work/todo-approvals"
 export TODO_OWNER_ID="owner-sandbox"
 export TODO_GWS_BIN="$work/fake-gws"
 
 cli() { python3 "$script_dir/todo_cli.py" "$@"; }
+
+# Stored approval generations still drain through the legacy library writer.
+# There is no public CLI producer or approved-create command for new requests.
+legacy_create() {
+  python3 - "$script_dir" "$@" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import todo_cli as todo
+args = todo.build_parser().parse_args(["plan", *sys.argv[2:]])
+try:
+    created = todo.create_task(todo.TaskRequest(args.tasklist, args.title, args.notes, args.due))
+except todo.TodoError as error:
+    print(f"TODO-FAIL {error}", file=sys.stderr)
+    raise SystemExit(error.exit_code) from None
+print(f"CREATED id={created.task_id} tasklist={created.tasklist} hash={created.action_hash}")
+print(f"VERIFIED reread=tasks.tasks.get id={created.task_id} title_match=true")
+PY
+}
 
 approve() {
   cli plan --title "$1" > "$work/plan.out" || fail "plan failed for $1"
@@ -118,44 +127,51 @@ PY
 }
 
 # --- (a) no approval record -> refuse, and prove zero gws calls ---------------
-rc=0; cli create --title "무승인 합성 과제" > "$work/blocked.out" 2> "$work/blocked.err" || rc=$?
+rc=0; legacy_create --title "무승인 합성 과제" > "$work/blocked.out" 2> "$work/blocked.err" || rc=$?
 [[ "$rc" == 4 ]] || fail "unapproved insert exited $rc (expected 4 APPROVAL-REQUIRED)"
 grep -q 'TODO-FAIL' "$work/blocked.err" || fail "refusal did not report TODO-FAIL"
 [[ ! -e "$work/gws-calls.log" ]] || fail "gws was invoked despite the missing approval record"
 
 # --- (b) approved insert -> write, then matching post-write re-read -----------
 approve "승인된 합성 과제"
-cli create --title "승인된 합성 과제" > "$work/created.out" || fail "approved insert"
+legacy_create --title "승인된 합성 과제" > "$work/created.out" || fail "approved insert"
 grep -q '^CREATED id=task-sandbox-1 ' "$work/created.out" || fail "create output missing CREATED"
 grep -q '^VERIFIED reread=tasks.tasks.get ' "$work/created.out" || fail "post-write re-read not reported"
 [[ "$(tr '\n' ' ' < "$work/gws-calls.log")" == "tasks tasks insert tasks tasks get " ]] \
   || fail "expected exactly insert then get, got: $(tr '\n' ' ' < "$work/gws-calls.log")"
 
-rc=0; cli create --title "승인된 합성 과제" > "$work/replay.out" 2> "$work/replay.err" || rc=$?
+rc=0; legacy_create --title "승인된 합성 과제" > "$work/replay.out" 2> "$work/replay.err" || rc=$?
 [[ "$rc" == 4 ]] || fail "consumed approval replay exited $rc"
 [[ "$(wc -l < "$work/gws-calls.log")" == 2 ]] || fail "replay invoked gws"
 
 approve "승인된 합성 과제"
-cli create --title "승인된 합성 과제" > "$work/created-again.out" || fail "second generation insert"
+legacy_create --title "승인된 합성 과제" > "$work/created-again.out" || fail "second generation insert"
 [[ "$(wc -l < "$work/gws-calls.log")" == 4 ]] || fail "second generation did not execute exactly once"
 
-rc=0; cli create --title "해시 불일치 과제" > "$work/hash.out" 2> "$work/hash.err" || rc=$?
+rc=0; legacy_create --title "해시 불일치 과제" > "$work/hash.out" 2> "$work/hash.err" || rc=$?
 [[ "$rc" == 4 ]] || fail "hash mismatch exited $rc"
 [[ "$(wc -l < "$work/gws-calls.log")" == 4 ]] || fail "hash mismatch invoked gws"
 
 # --- (c) re-read mismatch -> non-zero exit, never a silent success ------------
 approve "재조회 불일치 합성 과제"
-rc=0; FAKE_GWS_MISMATCH=1 cli create --title "재조회 불일치 합성 과제" > "$work/mismatch.out" 2> "$work/mismatch.err" || rc=$?
+rc=0; FAKE_GWS_MISMATCH=1 legacy_create --title "재조회 불일치 합성 과제" > "$work/mismatch.out" 2> "$work/mismatch.err" || rc=$?
 [[ "$rc" == 6 ]] || fail "re-read mismatch exited $rc (expected 6 VERIFY-FAIL)"
 grep -q 'TODO-FAIL' "$work/mismatch.err" || fail "mismatch did not report TODO-FAIL"
 grep -q 'VERIFIED' "$work/mismatch.out" && fail "mismatch still claimed verification"
 
 approve "만료 후 재개 과제" resume
-cli create --title "만료 후 재개 과제" > "$work/resumed.out" || fail "expiry resume insert"
+legacy_create --title "만료 후 재개 과제" > "$work/resumed.out" || fail "expiry resume insert"
 grep -q '^VERIFIED reread=tasks.tasks.get ' "$work/resumed.out" || fail "expiry resume lacked verification"
 
 # --- reads stay ungated ------------------------------------------------------
 cli plan --title "무승인 합성 과제" | grep -q 'approved=False' || fail "plan lost its refusal reporting"
+
+# --- new owner requests use the public writer without minting approval cards --
+cli create --title "소유자 지시 합성 과제" \
+  --origin-channel-id 123456789012345678 --origin-message-id 123456789012345679 \
+  > "$work/owner.out" || fail "owner command insert"
+grep -q '^OWNER-COMMAND-WRITTEN todo task-sandbox-1$' "$work/owner.out" \
+  || fail "owner command lacked verified success marker"
 
 printf 'BLOCKED rc=4 gws_calls=0\n'
 grep '^CREATED ' "$work/created.out"

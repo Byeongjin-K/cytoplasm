@@ -19,7 +19,7 @@ import todo_cli
 import todo_confirm_reaction_watch as watch
 from todo_approval_model import ApprovalState, TodoApprovalRecord
 from automation.interop import origin_notice, owner_message
-from automation.interop.external_effect_gate import ApprovalContext
+from automation.interop.effect_approval import ApprovalContext
 
 
 LEGACY_BODIES: Final = {
@@ -156,8 +156,12 @@ def test_cli_exit_and_claim_survive_when_notice_transport_fails(
         decision = item.todo.evaluate(item.todo.insert_argv(item.request), context=item.context)
         item.claims.acquire(decision, item.context)
         item.todo._notify_created(decision.action_hash, "task-1", item.request.title, item.context)
-    # When: the public create command executes (or resumes an uncertain write).
-    result = item.todo.main(["create", "--title", item.request.title])
+    # When: the legacy approved writer executes (or resumes an uncertain write).
+    try:
+        item.todo.create_task(item.request)
+        result = 0
+    except item.todo.TodoError as error:
+        result = error.exit_code
     # Then: notice failure cannot change the receipt, exit code, or insert count.
     expected = "write_started" if started else "verified"
     assert (result, item.claims.status(item.record), states, fake.methods) == (
