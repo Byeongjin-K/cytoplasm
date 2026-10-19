@@ -16,10 +16,13 @@ NOTICE = "🔁 새 판으로 대체됨 — 이 카드는 실행되지 않습니�
 
 
 def _same_request(old: dict, new: dict) -> bool:
+    # A thread's first draft comes from the parent-channel message that opened the thread, and a
+    # Discord thread's id is that message's id (2026-10-19: af9375 was never closed for this).
     thread = new.get("approval_thread_id")
     return (
         old.get("id") != new.get("id") and old.get("kind") == "compose" and old.get("status") == "pending"
-        and bool(thread) and old.get("approval_thread_id") == thread == old.get("origin_channel_id")
+        and bool(thread) and old.get("approval_thread_id") == thread
+        and thread in (old.get("origin_channel_id"), old.get("origin_message_id"))
     )
 
 

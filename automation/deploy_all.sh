@@ -223,7 +223,14 @@ restart_gateways() { # 「게이트웨이 재시동 규칙」(2026-07-22) — �
 }
 
 change_gateways() { # Reversible release effect: attempt both accounts, including after a failure.
-  local verb="$1" acct script failed=0
+  local verb="$1" acct script failed=0 marker="$RECEIPT_DIR/gateways-stopped"
+  # The ops-readable marker tells the release reconciler the gateways are stopped on a node with no
+  # receipt yet (PR #104 gap 8: it otherwise restarted them on every new release). Starting drops
+  # it first, because the intent has already changed.
+  if [[ "$verb" == start ]]; then
+    ssh "$host" "sudo -n -u ops -H rm -f -- $marker" </dev/null \
+      || { log "GATEWAY-MARKER-FAIL: start"; failed=1; }
+  fi
   for acct in agent peer; do
     if [[ "$verb" == stop ]]; then
       script='export XDG_RUNTIME_DIR=/run/user/$(id -u); umask 077; mkdir -p "$HOME/.hermes" && printf stopped > "$HOME/.hermes/gateway-stopped-by-release" && systemctl --user stop hermes-gateway.service && systemctl --user reset-failed hermes-gateway.service && [[ "$(systemctl --user is-active hermes-gateway.service)" == inactive ]]'
@@ -234,6 +241,10 @@ change_gateways() { # Reversible release effect: attempt both accounts, includin
     ssh "$host" "sudo -n -u $acct -H bash -lc '$script'" </dev/null \
       || { log "GATEWAY-${verb^^}-FAIL: $acct"; failed=1; }
   done
+  if [[ "$verb" == stop && "$failed" == 0 ]]; then
+    ssh "$host" "sudo -n -u ops -H bash -c 'umask 027; mkdir -p $RECEIPT_DIR && printf stopped > $marker && cmp -s $marker <(printf stopped)'" </dev/null \
+      || { log "GATEWAY-MARKER-FAIL: stop"; failed=1; }
+  fi
   return "$failed"
 }
 

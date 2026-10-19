@@ -78,10 +78,12 @@ interrupted() {
 }
 
 # (b) the gate code running now must read the new rule file before it replaces the old one.
+#     An old runtime with no gate at all reads no rule file; its gateway reads the release tree once
+#     the import-root pin this deploy installs runs, so that tree is what gets checked (PR #104 gap 3).
 want_rules="$(PYTHONPATH="$repo_root" python3 -B -c "$count_rules" "$rules")" \
   || block "the repository rule file does not parse"
 for account in "${accounts[@]}"; do
-  got="$(run_account "$account" 't="$(mktemp)" || exit 1; cat > "$t" || { rm -f "$t"; exit 1; }; if [ -e "$HOME/.hermes/autophagy-import" ]; then p="$HOME/.hermes/autophagy-import"; else p="$HOME/.hermes/interop_runtime"; fi; PYTHONPATH="$p" '"$gateway_python"' -B -c '"$(printf '%q' "$count_rules")"' "$t"; rc=$?; rm -f "$t"; exit "$rc"' < "$rules")" || got=""
+  got="$(run_account "$account" 't="$(mktemp)" || exit 1; cat > "$t" || { rm -f "$t"; exit 1; }; if [ -e "$HOME/.hermes/autophagy-import" ]; then p="$HOME/.hermes/autophagy-import"; elif [ -e "$HOME/.hermes/interop_runtime/automation/interop/external_effect_gate.py" ]; then p="$HOME/.hermes/interop_runtime"; else '"$resolve_root"'p="$root"; fi; PYTHONPATH="$p" '"$gateway_python"' -B -c '"$(printf '%q' "$count_rules")"' "$t"; rc=$?; rm -f "$t"; exit "$rc"' < "$rules")" || got=""
   [[ "$got" == "$want_rules" ]] \
     || block "the gate code on $account does not read the new rule file (want $want_rules rules, got ${got:-none}); nothing replaced"
 done

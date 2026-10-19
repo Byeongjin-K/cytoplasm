@@ -43,7 +43,7 @@ def test_stage_reads_binary_stdin_without_a_child_and_builds_drive_request(
     assert private_staging.stat().st_mode & 0o777 == 0o700
     assert list(private_staging.iterdir()) == [path]
     assert capsys.readouterr().out == (
-        f"STAGED upload.bin sha256={hashlib.sha256(data).hexdigest()} bytes={len(data)}\n")
+        f"STAGED upload.bin sha256={hashlib.sha256(data).hexdigest()} bytes={len(data)} path={path}\n")
     assert gate.build(["drive-save", "--file", str(path), "--summary", "파일 저장", *ORIGIN]) == (
         "drive-save", [PY, "-m", "automation.effect_request", "request", "drive-save",
                        "--file", str(path), "--summary", "파일 저장", *ORIGIN], gate.RELEASE)
@@ -181,4 +181,4 @@ def test_actual_isolated_gate_accepts_ssh_stdin(tmp_path: Path) -> None:
     path = tmp_path / ".local/share/yoodori-staging/file.txt"
     assert path.read_bytes() == data
     assert process.stdout.decode() == (
-        f"STAGED file.txt sha256={hashlib.sha256(data).hexdigest()} bytes={len(data)}\n")
+        f"STAGED file.txt sha256={hashlib.sha256(data).hexdigest()} bytes={len(data)} path={path}\n")

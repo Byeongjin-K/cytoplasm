@@ -97,9 +97,9 @@ def run_shadow_check(
         if notify is notify_owner:
             message = shadow_message(content, current, account_home)
             if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-                ok = notify_owner(content, message=message)
+                ok = notify_owner(content, message=message, fault=True)
             else:
-                ok = notify_owner(content)
+                ok = notify_owner(content, fault=True)
         else:
             ok = notify(content)
         if not ok:

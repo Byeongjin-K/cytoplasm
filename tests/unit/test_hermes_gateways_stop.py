@@ -172,6 +172,7 @@ def _host(tmp_path: Path, switch: str | None, auth_rc: int = 0) -> tuple[Path, d
         '*"sha256sum"*"/receipt.json"*) sha256sum "$RECEIPT" | cut -d" " -f1;;\n'
         '*"systemctl --user stop"*|*"systemctl --user start"*|*"systemctl --user restart"*)\n'
         '  [[ "$cmd" != *"agent -H"* || "${FAIL_AGENT:-0}" != 1 ]];;\n'
+        '*"gateways-stopped"*) ;;\n'
         '*) exit 97;;\nesac\n'
     )
     ssh.chmod(0o755)
@@ -276,6 +277,7 @@ def test_stop_and_revert_execute_real_marker_and_systemctl_steps(tmp_path: Path)
         'reset-failed) printf inactive > "$HOME/service-state";;\n'
         'start) printf active > "$HOME/service-state";;\n'
         'is-active) state="$(cat "$HOME/service-state")"; printf "%s\\n" "$state"; [[ "$state" == active ]];;\n'
+        '*"gateways-stopped"*) ;;\n'
         '*) exit 97;;\nesac\n'
     )
     systemctl.chmod(0o755)
