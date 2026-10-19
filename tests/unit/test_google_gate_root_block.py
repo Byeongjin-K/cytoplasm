@@ -75,7 +75,8 @@ def inputs(tmp: Path) -> tuple[Path, list[str]]:
 def sandbox(repo: Path, tmp: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
     # Everything outside tmp is read-only, including /etc, /var and the real HOME.
     return subprocess.run([
-        "bwrap", "--ro-bind", "/", "/", "--bind", str(tmp), str(tmp), "--dev", "/dev",
+        "bwrap", *(("--unshare-user", "--uid", "0", "--gid", "0") if "--apply" in args else ()),
+        "--ro-bind", "/", "/", "--bind", str(tmp), str(tmp), "--dev", "/dev",
         "--proc", "/proc", "--chdir", str(repo), "--setenv", "TMPDIR", str(tmp),
         "--setenv", "HOME", str(tmp), "--setenv", "PYTHONDONTWRITEBYTECODE", "1",
         "sh", "docs/guide/google-gate-root-block.sh", *args,
@@ -89,6 +90,58 @@ def test_google_gate_root_when_default_dryrun_never_writes_outside_temp(tmp_path
     # When
     result = sandbox(repo, tmp_path, args)
     # Then: a write anywhere else would fail in the read-only sandbox.
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "GOOGLE_GATE_DRYRUN_OK"
+    assert result.stderr == ""
+    assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+
+
+@pytest.mark.parametrize("mode", ["--dry-run", "--apply"])
+@pytest.mark.parametrize("vault_state", ["missing", "empty", "wrong-remote", "non-bare"])
+def test_google_gate_root_when_vault_clone_invalid_refuses_before_writes(
+    tmp_path: Path, mode: str, vault_state: str,
+) -> None:
+    # Given
+    repo, args = inputs(tmp_path)
+    vault = tmp_path / "vault"
+    remote = "git@example.org:archive.git"
+    if vault_state != "missing":
+        vault.mkdir()
+    if vault_state == "wrong-remote":
+        git(vault, "init", "--bare", "-q")
+        git(vault, "remote", "add", "origin", "git@example.org:other.git")
+    elif vault_state == "non-bare":
+        git(vault, "init", "-q")
+        git(vault, "remote", "add", "origin", remote)
+        shutil.copyfile(vault / ".git/HEAD", vault / "HEAD")
+    args += ["--vault-dir", str(vault), "--vault-remote", remote,
+             "--vault-key", str(tmp_path / "bot-input"), "--vault-prefix", "notes"]
+    before = {p.relative_to(tmp_path): p.read_bytes() if p.is_file() else None
+              for p in tmp_path.rglob("*")}
+    # When
+    result = sandbox(repo, tmp_path, [mode, *args])
+    # Then
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.strip() == "GOOGLE-GATE-ROOT-REFUSED vault-clone-required"
+    assert {p.relative_to(tmp_path): p.read_bytes() if p.is_file() else None
+            for p in tmp_path.rglob("*")} == before
+
+
+def test_google_gate_root_when_vault_bare_clone_matches_dryrun_passes(tmp_path: Path) -> None:
+    # Given
+    repo, args = inputs(tmp_path)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    git(vault, "init", "--bare", "-q")
+    remote = "git@example.org:archive.git"
+    git(vault, "remote", "add", "origin", remote)
+    args += ["--vault-dir", str(vault), "--vault-remote", remote,
+             "--vault-key", str(tmp_path / "bot-input"), "--vault-prefix", "notes"]
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    # When
+    result = sandbox(repo, tmp_path, ["--dry-run", *args])
+    # Then
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "GOOGLE_GATE_DRYRUN_OK"
     assert result.stderr == ""
