@@ -17,13 +17,13 @@
 </div>
 
 > [!IMPORTANT]
-> **릴리스 서명키 교체 공지 (2026-10-13)** — 업데이트를 검증하는 서명키를 바꿨는데 공지가 늦었습니다. 죄송합니다.
+> **릴리스 서명키 교체 공지 (2026-10-19)** — 릴리스를 만드는 기계를 옮기면서 업데이트를 검증하는 서명키를 새로 만들었습니다.
 >
-> - v1.22.2 까지는 옛 키, **v1.22.3 부터는 새 키**로 서명합니다. 새 키 지문: `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`
-> - 이미 설치한 서버가 옛 키만 믿고 있으면 **v1.22.2 에서 조용히 멈춰** 더 업데이트되지 않습니다.
-> - 운영자가 할 일: 새 공개키를 신뢰 파일에 덧붙입니다 — `trust_key_bootstrap.py install --add` 명령 전체는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있습니다.
-> - 확인: `python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'` 의 마지막 줄이 `TRUSTED` 이면 됩니다(2분 안에 최신 릴리스로 따라옵니다).
-> - 이 경고가 들어간 버전부터는 같은 일로 멈추면 리컨실러 로그·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 경고와 새 지문이 남습니다.
+> - v2.6.5 까지는 이전 키(`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`), **v2.6.6 부터는 새 키**로 서명합니다. 새 키 지문: `SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU`
+> - 이미 설치한 서버가 이전 키만 믿고 있으면 **v2.6.5 에서 멈춰** 더 업데이트되지 않습니다. 리컨실러 로그·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 경고와 새 지문이 남습니다.
+> - 운영자가 할 일: v2.6.6 릴리스에 붙은 `update-trust.pub` 를 받아 신뢰 파일에 덧붙입니다 — `trust_key_bootstrap.py install --add` 명령 전체는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있습니다.
+> - 확인: `python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'` 의 마지막 줄이 `TRUSTED` 이면 됩니다(2분 안에 최신 릴리스로 따라옵니다).
+> - 이전 교체(2026-10-13): v1.22.2 까지는 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3~v2.6.5 는 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 였습니다.
 
 ---
 
@@ -168,7 +168,7 @@ python3 -m automation.install.wizard
 넘겨 대조하는 것이 이 부트스트랩의 핵심입니다. 마법사도 설치기도 지문을 지어내지 않아요.
 
 ```
-SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang
+SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU
 ```
 
 사람이 직접 판단해야 하는 지점은 사실상 여기 하나뿐입니다.
@@ -179,7 +179,7 @@ SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang
 python3 -m automation.install.wizard \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 마법사는 프로필(`core`·`rag`·`report-hub`·`full`), 업데이트 origin URL, 호스트 이름, 운영자
@@ -207,7 +207,7 @@ python3 -m automation.install \
     --config ~/.config/autophagy/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' \
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU' \
     --dry-run
 
 # 실제 설치 — 멱등입니다. 막히면 고치고 같은 명령을 다시 실행하세요
@@ -215,7 +215,7 @@ sudo python3 -m automation.install \
     --config ~/.config/autophagy/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 명시적 레거시 `--profile`은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로
@@ -299,13 +299,13 @@ flowchart TD
 - 서명 검증에 실패하면 그 틱은 아무것도 하지 않고 안전하게 건너뜁니다.
 - 롤백 방지 앵커가 있어서 옛 릴리스를 다시 밀어 넣는 강제 다운그레이드가 막혀요. 문제가 있는
   릴리스는 되돌리는 게 아니라 **더 높은 버전으로 앞질러 고칩니다.**
-- 서명 개인키는 어떤 저장소에도, 어떤 노드에도, CI 에도 두지 않아요. 노드에 놓이는 것은
-  공개키 한 줄뿐입니다.
+- 서명 개인키는 어떤 저장소에도, CI 에도 두지 않고, 릴리스를 만드는 운영자 계정에만 있어요
+  (노드의 서비스 계정은 읽지 못합니다). 노드의 신뢰 파일에 놓이는 것은 공개키 한 줄뿐입니다.
 
 소프트웨어 업데이트와 스킬 배포는 **완전히 다른 채널**이에요. 스킬은 받아 두는 것까지만 자동이고,
 실제로 켜는 일(live 마운트)은 언제나 그 설치 소유자의 ✅ 입니다.
 
-업데이트 신뢰키가 바뀌면(2026-10-13 첫 회전 — v1.22.3 부터 위 새 지문) 이미 설치한 서버는
+업데이트 신뢰키가 바뀌면(2026-10-13·2026-10-19 회전 — 지금은 v2.6.6 부터 위 새 지문) 이미 설치한 서버는
 새 키를 `/etc/autophagy/update-allowed-signers` 에 덧붙이기 전까지 옛 릴리스에 머뭅니다. 그때
 리컨실러 저널·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 한 줄과 새 서명 키
 지문이 남고, 덧붙이는 절차는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있어요.

@@ -145,7 +145,7 @@ python3 automation/install/trust_key_bootstrap.py install --key <bundle>/update-
 ```bash
 python3 automation/install/trust_key_bootstrap.py install \
     --key <bundle>/update-trust.pub --dry-run \
-    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 > 신뢰키는 두 개가 아니라 두 **종류**다. 여기서 다루는 것은 업스트림 코드 릴리스를
@@ -227,7 +227,7 @@ python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' \
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU' \
     --dry-run
 ```
 
@@ -411,7 +411,7 @@ sudo python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 **`sudo`는 환경변수를 지운다.** §5에서 `DISCORD_BOT_TOKEN`을 올려두었더라도 위 명령에는
@@ -426,7 +426,7 @@ sudo --preserve-env=DISCORD_BOT_TOKEN python3 -m automation.install \
     --config /tmp/node.toml \
     --profile core \
     --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 `sudo`가 `--preserve-env`를 거부하는 배포판이면 그대로 진행해도 된다 — Discord 전제는 설치
@@ -506,7 +506,7 @@ sudo runuser -u ops -- ssh-keyscan github.com >> /home/ops/.ssh/known_hosts   # 
 언제든 다시 확인할 수 있다:
 
 ```bash
-python3 automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+python3 automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 파일이 없으면 이렇게 나오고, 그 상태에서는 리컨실러가 **어떤 릴리스도 적용하지 않는다**:
@@ -611,8 +611,9 @@ best-effort로 호출한다. `pending`이 1 이상인데 둘째 명령이 실패
 서버는 옛 키로 검증되는 마지막 릴리스에 머문다. 업데이트 채널은 일부러 `/etc` 를 고치지
 않으므로(자기 신뢰 근원을 스스로 바꾸는 채널은 한 번 장악되면 끝이다) 이 단계는 서버
 운영자가 손으로 한다. 2026-10-13 회전이 처음이었다: v1.22.2 까지는 옛 키
-`SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3 부터는 새 키
-`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 다.
+`SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3~v2.6.5 는
+`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 다. 2026-10-19 두 번째 회전(릴리스 호스트를 옮김)부터, v2.6.6 이후는 새 키
+`SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU` 다.
 
 **알아채는 법.** 리컨실러 저널과 헬스체크에 이런 줄이 남고, 소유자 통지가 설정돼 있으면
 같은 내용이 한 번 온다.
@@ -638,10 +639,10 @@ python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py f
 # 2. 기존 줄을 보존한 채 새 키를 덧붙인다(먼저 --dry-run 으로 두 줄이 렌더되는지 본다)
 sudo python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py install --add \
     --key /tmp/update-trust.pub \
-    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang' --dry-run
+    --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU' --dry-run
 sudo python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py install --add \
     --key /tmp/update-trust.pub \
-    --expect-fingerprint 'SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang'
+    --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
 ```
 
 다음 리컨실러 틱(2분 이내)에 서버가 최신 릴리스로 전진하고 경고 줄이 사라진다.

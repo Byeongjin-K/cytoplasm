@@ -1,4 +1,4 @@
-# Workstation-only: the signing key lives here; never install this unit on a node.
+# Release-host operator account only: the signing key lives in this account; never install this unit in a node service account.
 [Unit]
 Description=Complete an already-approved Autophagy release
 After=network-online.target
