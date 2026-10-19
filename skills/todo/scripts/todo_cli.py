@@ -2,8 +2,9 @@
 
 ``create`` and ``write-now`` share the owner-command writer. Their caller is
 dori-gate, which verifies the initiating Discord owner message before execution.
-No CLI command produces a todo approval card. ``create_task`` remains solely
-for draining already stored approval generations through the legacy watcher.
+Owner-internal writes need no card. ``request`` stays only for callers that still
+post a todo card (the YooDori ``todo-request`` card command and Plaud-selected
+tasks); ``create_task`` drains those stored approval generations.
 Both writers reuse the personal-entity preflight and verify the inserted task.
 
 Env: TODO_APPROVAL_LOG, TODO_OWNER_ID, TODO_GWS_BIN,
@@ -104,13 +105,19 @@ def evaluate(argv: Sequence[str], *, context: ApprovalContext) -> ExternalEffect
     )
 
 
+def gws_bin() -> str:
+    override = os.environ.get("TODO_GWS_BIN", "")
+    if override:
+        return override
+    found = shutil.which("gws") or os.path.expanduser("~/.local/bin/gws")
+    if not Path(found).exists():
+        raise TodoError("gws CLI를 찾을 수 없습니다 (TODO_GWS_BIN 설정 필요)", 3)
+    return found
+
+
 def run_gws(argv: Sequence[str]) -> dict[str, Any]:
     """Execute a frozen gws argv with an explicitly propagated child env."""
-    override = os.environ.get("TODO_GWS_BIN", "")
-    binary = override or shutil.which("gws") or os.path.expanduser("~/.local/bin/gws")
-    if not override and not Path(binary).exists():
-        raise TodoError("gws CLI를 찾을 수 없습니다 (TODO_GWS_BIN 설정 필요)", 3)
-    command = [binary, *argv[1:]]
+    command = [gws_bin(), *argv[1:]]
     env = dict(os.environ)
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
     proc = subprocess.run(  # noqa: S603
@@ -220,6 +227,42 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_request(args: argparse.Namespace) -> int:
+    request = TaskRequest(args.tasklist, args.title, args.notes, args.due)
+    argv = insert_argv(request)
+    decision = evaluate(argv, context=approval_context())
+    adapter = import_module("todo_approval")
+    intent = adapter.TodoApprovalIntent(
+        decision.action_hash,
+        decision.target_id,
+        adapter.masked_argv_summary(argv),
+        request.title,
+        request.due,
+        origin_channel_id=str(getattr(args, "origin_channel_id", "") or ""),
+        origin_message_id=str(getattr(args, "origin_message_id", "") or ""),
+        tasklist=request.tasklist,
+        notes=request.notes,
+    )
+    try:
+        adapter.request_cli_approval(intent, owner_id())
+    except adapter.TodoApprovalError as error:
+        raise TodoError(str(error), 3) from None
+    print(f"REQUESTED hash={decision.action_hash} target={decision.target_id}")
+    _print_thread_line(decision.action_hash)
+    return 0
+
+
+def _print_thread_line(action_hash: str) -> None:
+    record = import_module("todo_approval_runtime").origin_record(action_hash) or {}
+    try:
+        from automation.interop.thread_pointer import approval_thread_line
+    except ImportError as error:
+        print(f"APPROVAL-THREAD-UNAVAILABLE hash={action_hash} err={type(error).__name__}",
+              file=sys.stderr)
+        return
+    print(approval_thread_line("hash", action_hash, record))
+
+
 def _cmd_write_now(args: argparse.Namespace) -> int:
     return import_module("todo_owner_command").write_now(args)
 
@@ -244,6 +287,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name, handler in (
         ("plan", _cmd_plan),
+        ("request", _cmd_request),
         ("create", _cmd_write_now),
         ("write-now", _cmd_write_now),
     ):
@@ -253,11 +297,11 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--notes", default=None)
         sub.add_argument("--due", default=None)
         sub.add_argument(
-            "--origin-channel-id", default="", required=name != "plan",
+            "--origin-channel-id", default="", required=name in {"create", "write-now"},
             help="dori-gate가 확인한 소유자 지시의 Discord 채널 id",
         )
         sub.add_argument(
-            "--origin-message-id", default="", required=name != "plan",
+            "--origin-message-id", default="", required=name in {"create", "write-now"},
             help="dori-gate가 확인한 소유자 지시의 Discord 메시지 id",
         )
         sub.set_defaults(handler=handler)
@@ -271,7 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command in {"create", "write-now"}:
+    if args.command in {"request", "create", "write-now"}:
         import importlib
 
         todo_governed = importlib.import_module("todo_governed")

@@ -2,6 +2,7 @@
 name: wiki
 description: "은퇴한 Hermes 위키 스킬. 새 요청에는 사용하지 않는다. 소유자 노트는 dori-gate를 거치는 일반 Obsidian 쓰기로 처리한다."
 version: 2.1.4
+author: autophagy-agents
 license: MIT
 ---
 

@@ -67,7 +67,7 @@ python3 /srv/autophagy-skills/live/todo/scripts/todo_cli.py create --title "실�
 ## 라우팅 규칙 (에이전트용)
 
 - 소유자가 Discord에서 "할 일 추가/투두 등록"을 요청하면 검증된 dori-gate가
-  `write-now` 또는 같은 경로인 `create`를 쓴다. `request` 명령과 새 todo 승인 카드는 없다.
+  `write-now` 또는 같은 경로인 `create`를 쓴다. 이 요청에 `request`(승인 카드)를 쓰지 않는다.
   소유자 Discord 지시가 없는 요청은 실행하지 않는다.
   **`gws tasks tasks insert`를 터미널에서 직접 실행하지 않는다** — 게이트가 차단한다.
 - 일정(특정 시각이 있는 약속)은 todo가 아니라 `calendar` 스킬이다. 마감일만 있는

@@ -141,14 +141,6 @@ def test_create_defaults_to_verified_owner_command(
     assert capsys.readouterr().out == "OWNER-COMMAND-WRITTEN todo task-fixture\n"
 
 
-def test_request_card_command_is_not_available(todo: ModuleType) -> None:
-    # Given: a former request-card command, even with both origin coordinates.
-    # When / Then: parsing rejects it before any producer or connector is reached.
-    with pytest.raises(SystemExit) as error:
-        todo.build_parser().parse_args(["request", *_ARGV[1:]])
-    assert error.value.code == 2
-
-
 def test_write_now_stale_copy_is_refused(
     todo: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
