@@ -260,7 +260,9 @@ def test_deploy_when_running_the_sandbox_scenario_then_declares_the_staged_root_
     statement = script[start:end]
 
     # Then
-    assert r'AUTOPHAGY_SKILL_LIVE_ROOT=\"\$REAL_HOME/.hermes/skills\"' in statement
+    # With peer retired the staged root sits in the sandbox's own home (2026-10-19), so the
+    # declared root follows SANDBOX_HOME rather than the account's real skill root.
+    assert r'AUTOPHAGY_SKILL_LIVE_ROOT=\"$SANDBOX_HOME/.hermes/skills\"' in statement
 
 
 def test_deploy_when_isolating_the_scenario_home_then_still_forwards_interop_runtime() -> None:

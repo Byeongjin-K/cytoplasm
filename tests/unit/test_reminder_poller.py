@@ -168,6 +168,7 @@ def _run_poll(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.Ca
     monkeypatch.setenv("REMINDER_MILESTONES_FILE", str(milestones_file))
     monkeypatch.setenv("REMINDER_DB", str(tmp_path / "reminders.db"))
     monkeypatch.setenv("REMINDER_NOW", NOW.isoformat())
+    monkeypatch.setenv("REMINDER_CALENDAR_EVENTS", "1")  # the node calendar leg is off by default (Q276)
     monkeypatch.setenv("REMINDER_DRY_RUN", "1")
     assert poll_reminders.main() == 0
     return [line for line in capsys.readouterr().out.splitlines() if line.startswith("DRY-RUN")]

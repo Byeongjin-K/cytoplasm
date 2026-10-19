@@ -89,9 +89,9 @@ def send_report(
     label = account_label if _ACCOUNT_LABEL.fullmatch(account_label) else "unknown"
     message = audit_message(content, label)
     if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-        ok = notify_owner(content, message=message)
+        ok = notify_owner(content, message=message, fault=True)
     else:
-        ok = notify_owner(content)
+        ok = notify_owner(content, fault=True)
     return ok
 
 

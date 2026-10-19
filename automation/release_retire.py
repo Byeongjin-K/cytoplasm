@@ -105,9 +105,9 @@ def notify_stale_approval(record: Mapping[str, str], tip: str) -> None:
             )
             message = stale_message(record, tip)
             if message is not None and getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-                ok = owner_notice.notify_owner(body, message=message)
+                ok = owner_notice.notify_owner(body, message=message, fault=True)
             else:
-                ok = owner_notice.notify_owner(body)
+                ok = owner_notice.notify_owner(body, fault=True)
             if ok:
                 archive_bytes(root, key, b"notified\n")
                 print(f"RELEASE-STALE-NOTIFIED episode={key[:12]}", file=sys.stderr)

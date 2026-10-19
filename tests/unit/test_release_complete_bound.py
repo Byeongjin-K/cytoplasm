@@ -25,7 +25,7 @@ from automation.interop.approval_types import Probe
 from tests.unit.test_release_approval import _StubGate
 skill_gate.GATE_DIR = Path(os.environ["GATE_DIR"])
 release_approval._gate = lambda spec: _StubGate(Probe[os.environ.get("PROBE", "APPROVED")])
-def notify(body, *, message=None):
+def notify(body, *, message=None, fault=False):
     with Path(os.environ["NOTICES"]).open("a") as stream:
         stream.write("NOTIFY\\n")
     return True

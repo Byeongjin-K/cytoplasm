@@ -38,7 +38,7 @@ def test_legacy_bytes_when_facade_has_no_capability(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("MEMORY_CURATOR_DRY_RUN", raising=False)
     monkeypatch.delattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", raising=False)
     sent: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda content: sent.append(content) is None)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda content, **_: sent.append(content) is None)
     # When the curator reports through its production adapter.
     ok = effects.alert_owner(LEGACY)
     # Then old runtimes receive exactly the same bytes.
@@ -77,7 +77,7 @@ def test_envelope_fields_when_facade_accepts_messages(monkeypatch: pytest.Monkey
     monkeypatch.delenv("MEMORY_CURATOR_DRY_RUN", raising=False)
     sent: list[tuple[str, OwnerMessage | None]] = []
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         sent.append((content, message))
         return True
 
@@ -98,7 +98,7 @@ def test_legacy_bytes_when_envelope_import_is_unavailable(monkeypatch: pytest.Mo
     monkeypatch.delenv("MEMORY_CURATOR_DRY_RUN", raising=False)
     monkeypatch.setitem(sys.modules, "automation.interop.owner_message", None)
     sent: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda content: sent.append(content) is None)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda content, **_: sent.append(content) is None)
     # When the production adapter attempts its lazy envelope import.
     ok = effects.alert_owner(LEGACY)
     # Then its legacy content still reaches the old sender unchanged.
@@ -271,7 +271,7 @@ def test_search_context_preserves_multiple_refs_and_legacy_delivery(
     else:
         monkeypatch.setitem(sys.modules, "automation.interop.owner_message", None)
     sent: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda content: sent.append(content) is None)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda content, **_: sent.append(content) is None)
     # Then transport still receives the identical legacy string bytes.
     assert effects.alert_owner(content) and sent == [legacy]
 

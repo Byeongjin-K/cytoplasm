@@ -50,8 +50,8 @@ def apply(args: argparse.Namespace, staging: Path) -> None:
         owner = args.gate_user if directory == state else args.relay_user
         command(("install", "-d", "-m", "0700", "-o", owner, "-g", owner, str(directory)))
     if args.vault_dir:
-        command(("install", "-d", "-m", "0700", "-o", args.gate_user,
-                 "-g", args.gate_user, args.vault_dir))
+        command(("chown", "-R", f"{args.gate_user}:{args.gate_user}", args.vault_dir))
+        os.chmod(args.vault_dir, 0o700)
         install_file(Path(args.vault_key), state / "vault-key", args.gate_user)
     command(("install", "-d", "-m", "0755", "/opt/dori-gate"))
     command(("install", "-d", "-m", "0750", "-o", "root", "-g", args.gate_user, "/etc/dori-gate"))
@@ -133,6 +133,15 @@ def main() -> int:
         if args.vault_key:
             values["vault_key"] = str(Path(args.state) / "vault-key")
         rendered = config.render(argparse.Namespace(**values))
+        if args.vault_dir:
+            try:
+                git = ("git", "-c", "safe.directory=*", "--git-dir", args.vault_dir)
+                if (not (Path(args.vault_dir) / "HEAD").is_file()
+                        or command((*git, "rev-parse", "--is-bare-repository")).strip() != b"true"
+                        or command((*git, "remote", "get-url", "origin")).decode().strip() != args.vault_remote):
+                    raise GateError("vault-clone-required")
+            except (OSError, GateError):
+                raise GateError("vault-clone-required") from None
         line = authorized_key(args.relay_key_file, args.pc_ip)
         with tempfile.TemporaryDirectory(prefix="google-gate-") as temporary:
             staging = Path(temporary)

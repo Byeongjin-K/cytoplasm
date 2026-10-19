@@ -37,7 +37,7 @@ def main() -> int:
     release_approval._gate = lambda spec: OwnerGate()
     skill_gate._api = lambda method, path, payload: {"id": "status-reply"}
 
-    def notice(body: str, *, message: OwnerMessage | None = None) -> bool:
+    def notice(body: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         with (skill_gate.GATE_DIR / "notices").open("a", encoding="utf-8") as stream:
             stream.write("notice\n")
         return True

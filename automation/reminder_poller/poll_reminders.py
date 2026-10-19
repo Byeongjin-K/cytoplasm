@@ -32,6 +32,12 @@ Env hooks (never set on the production cron path):
   REMINDER_GWS_BIN          gws binary override
   REMINDER_NOW              fixed ISO-8601 now (deterministic tests)
   REMINDER_DRY_RUN=1        print composed reminders instead of sending DMs
+  REMINDER_CALENDAR_EVENTS  1/0 forces the calendar leg on or off (tests); otherwise the file below
+
+Calendar leg switch (owner Q276, 2026-10-19 "유돌 것만 남기고 노드 일정 리마인더는 끄기 — 마일스톤 D-day
+알림은 노드 그대로"): YooDori now announces upcoming events, so the calendar leg runs only when
+~/.hermes/reminder-poller/calendar-events holds exactly "on". Milestones always run.
+Undo on the node: printf on > ~/.hermes/reminder-poller/calendar-events
 """
 from __future__ import annotations
 
@@ -176,10 +182,20 @@ def _deliver(db: Path, sender: DmSender, kind: str, key: str, body: str) -> None
         raise
 
 
+def calendar_events_on() -> bool:
+    forced = os.environ.get("REMINDER_CALENDAR_EVENTS", "")
+    if forced in ("0", "1"):
+        return forced == "1"
+    try:
+        return (Path.home() / ".hermes/reminder-poller/calendar-events").read_bytes().strip() == b"on"
+    except OSError:
+        return False
+
+
 def main() -> int:
     now = poll_now()
     db = _env_path("REMINDER_DB", "~/state/reminders.db")
-    for event in fetch_events(now):
+    for event in fetch_events(now) if calendar_events_on() else ():
         if not poller_core.in_reminder_window(event.start, now):
             continue
         sender = DmSender(poller_core.ReminderContext(

@@ -28,6 +28,7 @@ version: 1
 id: w3-coordination
 title: "W3 agent-to-agent coordination E2E bank (no auto-accept + refusal + deadlock)"
 driver: tests/e2e/drivers/w3_coordination.sh
+retired_when: peer-retired=retired  # retired by this release switch (2026-10-19); remove the switch file to run it again
 # The bank may rerun this full live Discord/SSH integration once after a
 # transient driver failure; unmarked offline scenarios always remain exact,
 # single-attempt checks.  Every retry reruns the same strict self-assertions.
