@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from mail_card_compact import INVITE_NOTICE
 from mail_quote import with_quote
 
 if TYPE_CHECKING:
@@ -49,6 +50,8 @@ def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
     from automation.interop.approval_card import CardRenderError
     if draft.get("render_version") == "4":
         return _summary_v4(draft, instruction)
+    if draft.get("render_version") == "5":
+        return _summary_v5(draft, instruction)
     if draft.get("bcc"):
         return _summary_v3(draft, instruction)
 
@@ -74,6 +77,10 @@ def summary(draft: Mapping[str, JsonValue], instruction: str) -> str:
 
 
 def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
+    return "\n".join((*_summary_head(draft), instruction))
+
+
+def _summary_head(draft: Mapping[str, JsonValue]) -> tuple[str, ...]:
     recipients = f"- To: {draft['to']}\n- Cc: {draft.get('cc') or '-'}"
     if draft.get("bcc"):
         from mail_bcc import summary as bcc_summary
@@ -81,8 +88,36 @@ def _summary_v4(draft: Mapping[str, JsonValue], instruction: str) -> str:
         recipients = bcc_summary(str(draft["to"]), str(draft.get("cc") or ""),
                                  tuple(str(address) for address in draft["bcc"]))
     size = body_attachment(draft).metadata["size"]
-    return "\n".join(("📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
-                      f"- 본문: 첨부 파일 참조 ({size} bytes)", instruction))
+    return ("📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
+            f"- 본문: 첨부 파일 참조 ({size} bytes)")
+
+
+def _summary_v5(draft: Mapping[str, JsonValue], instruction: str) -> str:
+    """v4 plus what else leaves with the mail: attachment names and sizes, and the Drive share.
+
+    A long body moves to the card's text file, and v4 dropped these lines with it, so the
+    owner could not see the file a share link would carry (owner 2026-10-19 12:15 KST).
+    """
+    extra: list[str] = []
+    attachments = draft.get("attachments") or []
+    if isinstance(attachments, list) and attachments:
+        extra.append(f"- 첨부: {len(attachments)}개")
+        for item in attachments:
+            if isinstance(item, Mapping):
+                name = str(item.get("display_name", "")).replace("`", "'")
+                extra.append(f"  - `{name}` · {item.get('size_bytes')} bytes")
+    share = draft.get("drive_share")
+    if isinstance(share, Mapping):
+        name = str(share.get("source_name", "")).replace("`", "'")
+        grantees = share.get("grantees")
+        people = ", ".join(f"`{person}`" for person in grantees) if isinstance(grantees, list) else "-"
+        extra.extend((
+            f"- Drive 공유: `{name}` · {share.get('size_bytes')} bytes → {people} 보기 권한만 — 링크 공개 없음",
+            INVITE_NOTICE,
+            f"  - ✅ 하면 올리고 확인한 뒤 본문의 `{share.get('placeholder')}` 자리에 링크를 넣어 보냅니다. "
+            "하나라도 실패하면 메일은 나가지 않습니다.",
+        ))
+    return "\n".join((*_summary_head(draft), *extra, instruction))
 
 
 def _summary_v3(draft: Mapping[str, JsonValue], instruction: str) -> str:
