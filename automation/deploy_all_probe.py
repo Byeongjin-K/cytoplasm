@@ -218,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-memory", choices=("on", "off"), default="on")
+    parser.add_argument("--owner-timers-off", default="off")
     parser.add_argument("--peer-retired", choices=("active", "retired"), default="active")
     from automation.yoodori_channel import channel_value
 
@@ -237,7 +238,9 @@ def main(argv: list[str] | None = None) -> int:
                                  agent_chat_channel=args.yoodori_channel,
                                  peer_retired=args.peer_retired == "retired",
                                  omo_relay_mode=args.omo_relay,
-                                 **({"mail_html_reply": args.mail_html_reply} if args.mail_html_reply == "on" else {}))
+                                 **({"mail_html_reply": args.mail_html_reply} if args.mail_html_reply == "on" else {}),
+                                 **({"owner_timers_off": args.owner_timers_off}
+                                    if args.owner_timers_off != "off" else {}))
     if args.format == "gateways":
         return _gateways(args.runtime_root, functools.partial(observer, gateway_only=True), args.hermes_gateways,
                          retired=args.peer_retired == "retired")

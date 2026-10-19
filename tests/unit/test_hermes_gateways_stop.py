@@ -144,7 +144,7 @@ def _host(tmp_path: Path, switch: str | None, auth_rc: int = 0) -> tuple[Path, d
     repo = tmp_path / "repo"
     automation = repo / "automation"
     automation.mkdir(parents=True)
-    for name in ("__init__.py", "hermes_agent_chat_ignore.py", "hermes_memory_config.py", "hermes_gateways.py", "legacy_services.py", "peer_retired.py", "hermes_product.py", "hermes_product_policy.py", "gateway_retirement.py", "gateway_retirement_policy.py"):
+    for name in ("__init__.py", "hermes_agent_chat_ignore.py", "hermes_memory_config.py", "hermes_gateways.py", "legacy_services.py", "peer_retired.py", "hermes_product.py", "hermes_product_policy.py", "gateway_retirement.py", "gateway_retirement_policy.py", "owner_timers.py", "owner_timers_policy.py", "node_config.py"):
         (automation / name).symlink_to(REPO / "automation" / name)
     shutil.copyfile(REPO / "automation/deploy_all.sh", automation / "deploy_all.sh")
     (automation / "node_config_sh.py").write_text('print("")\n')
@@ -173,6 +173,7 @@ def _host(tmp_path: Path, switch: str | None, auth_rc: int = 0) -> tuple[Path, d
         '*"systemctl --user stop"*|*"systemctl --user start"*|*"systemctl --user restart"*)\n'
         '  [[ "$cmd" != *"agent -H"* || "${FAIL_AGENT:-0}" != 1 ]];;\n'
         '*"gateways-stopped"*) ;;\n'
+        '*"automation.owner_timers install"*) ;;\n'
         '*) exit 97;;\nesac\n'
     )
     ssh.chmod(0o755)

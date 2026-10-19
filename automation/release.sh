@@ -64,6 +64,10 @@ gateway_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.hermes_gate
 gateway_args=()
 [[ "$gateway_mode" != stopped ]] || gateway_args+=(--hermes-gateways stopped)
 legacy_args=()
+owner_timers="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.owner_timers switch)" \
+  || die "OWNER-TIMERS-REFUSED: invalid release-host switch" 4
+owner_timer_args=()
+[[ "$owner_timers" == off ]] || owner_timer_args=(--owner-timers-off "$owner_timers")
 for service in report-hub hermes-dashboard hermes-memory; do
   legacy_mode="$(PYTHONPATH="$SCRIPT_DIR/.." python3 -B -m automation.legacy_services switch --name "$service")" \
     || die "LEGACY-SERVICE-REFUSED: invalid release-host switch" 4
@@ -332,7 +336,7 @@ if (( decision_rc != 0 )); then
     log "RAG-MCP-PLAN-UNKNOWN: RAG 소스·이미지를 판정하지 못해 카드에 갱신을 싣지 않는다 — 수렴 뒤 영수증의 남은 소유자 조치로 남는다"
   fi
   "${plan_approval[@]}" plan --repo "$REPO_ROOT" --base "$base" --head "$head" \
-    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${product_args[@]}" "${retirement_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${ledger_args[@]}" "${relay_args[@]}" "${legacy_args[@]}" "${mail_html_args[@]}" > "$workdir/plan.json" \
+    --version "$version" --bump "$bump" "${wrapper_args[@]}" "${rag_args[@]}" "${dori_args[@]}" "${gateway_args[@]}" "${peer_args[@]}" "${product_args[@]}" "${retirement_args[@]}" "${chat_args[@]}" "${notice_args[@]}" "${auto_args[@]}" "${ledger_args[@]}" "${relay_args[@]}" "${legacy_args[@]}" "${owner_timer_args[@]}" "${mail_html_args[@]}" > "$workdir/plan.json" \
     || die "release plan failed" 4
   request_refusal="approval request was refused — 살아 있는 다른 요청은 파괴하지 않는다 (⛔ 로 막혔다면 노드 agent 계정에서: python3 -m automation.release_abandon --version <v> --head <sha> --message-id <id> --reason <why>)"
   if ! post_request; then

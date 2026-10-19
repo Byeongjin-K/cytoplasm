@@ -1,6 +1,9 @@
 # automation/ — 오케스트레이션·게이트·워처·배치 코어
 
 에이전트 실시간 로직 밖의 모든 자동화. 순수 로직은 stdlib 전용, 외부효과는 승인 게이트 경유.
+`owner_timers.py`는 `owner-timers-off` 호스트 목록을 같은 HEAD 릴리스 승인에 묶고
+선언된 agent 표식으로 타이머 정지를 보존한다. 목록·실제 disabled/inactive를 함께
+관측하며 파일 삭제+새 릴리스는 이전 목록을 복구한다([소개](../docs/기능소개/형이-끈-정기-작업-유지.md)).
 Q231의 예외는 `auto_write`의 릴리스 승인된 Plaud 자동 쓰기뿐이다. 아래 Plaud의 건별 카드 설명은
 자동 모드가 꺼진 기본 경로이며, 켜면 동결 SHA를 확인해 같은 writer로 쓰고 공용 일일 요약에 남긴다.
 `auto_write.record(kind, Entry)`·`summarize(now)`·`release_kinds(home)`는 종류별로 공유한다.

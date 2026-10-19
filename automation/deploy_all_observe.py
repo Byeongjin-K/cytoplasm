@@ -60,6 +60,7 @@ case "$1" in
     if [[ -d "$d/mailon" ]]; then mailon_vendor_digest "$d/mailon" || exit 44; else echo -; fi
     [[ ! -e "$d/runtime-manifest.json" ]] || cat -- "$d/runtime-manifest.json" || exit 44 ;;
   legacy-service) PYTHONPATH="$2" python3 -B -m automation.legacy_services check --name "$3" --mode "$4" ;;
+  owner-timers) PYTHONPATH="$2" python3 -B -m automation.owner_timers check --jobs "$3" ;;
   config) PYTHONPATH="$2" python3 -B -m "$3" --show "${@:4}" ;;
   roster) PYTHONPATH="$2" python3 -B -m automation.group_roster validate "$HOME/.hermes/roster.yaml" >/dev/null 2>&1 ;;
   cron) PATH="$HOME/.local/bin:$PATH" hermes cron list --all ;;
@@ -192,6 +193,12 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
         # Before the first release there is no marker; that is the plain-text default.
         state = "ok" if mode == "off" and have == "-" else _state(want, have)
         return _Seen(want, want if state == "ok" else have, state)
+    if decl.attr("algorithm") == "owner-timers-v1":
+        value = str(_cache.get("owner_timers_off", "off"))
+        rc, out = call(decl.account, ("owner-timers", str(root), value))
+        state = out.strip() if rc == 0 and out.strip() in ("ok", "stale") else "unknown"
+        want = _sha_text(value)
+        return _Seen(want, want if state == "ok" else "?" if state == "unknown" else "-", state)
     if decl.attr("algorithm") == "legacy-service-v1":
         from automation.legacy_services import UNITS
 
@@ -322,6 +329,7 @@ def collect(
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
+    owner_timers_off: str = "off",
     peer_retired: bool = False,
 ) -> list[str]:
     """v2 선언의 관측 줄 + 게이트웨이 세대 + 위임 프로브 줄 + `OBS|artifacts|<n>`. legacy 행은 다루지 않는다.
@@ -347,9 +355,15 @@ def collect(
     cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard, "hermes-memory": hermes_memory})
     cache["omo_relay_mode"] = omo_relay_mode
     cache["mail_html_reply"] = mail_html_reply
+    cache["owner_timers_off"] = owner_timers_off
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
     for decl in declarations:
+        if (owner_timers_off != "off" and decl.kind == "cron" and decl.account == "agent"
+                and decl.destination in owner_timers_off.split("/")):
+            # The owner-timers derived declaration verifies marker and disabled units,
+            # including before the new list has been installed on the node.
+            continue
         if (hermes_memory == "off" and decl.kind == "cron" and decl.account == "agent"
                 and decl.destination in ("memory-curator-watch", "memory-relocate-watch")):
             # The derived declaration verifies both disabled timers instead of re-enabling them.
@@ -391,6 +405,7 @@ def observe_node(
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     hermes_memory: str = "on",
+    owner_timers_off: str = "off",
     peer_retired: bool = False,
 ) -> list[str]:
     """노드의 기본 수집 — 노드 설정의 ops 계정으로 위임 프로브를 돌린다(설정 불가 = 확인 불가)."""
@@ -401,6 +416,6 @@ def observe_node(
     return collect(runtime_root, default_runner, ops_account, gateway_only=gateway_only,
                    dori_agent_chat=dori_agent_chat, hermes_gateways=hermes_gateways,
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
-                    hermes_memory=hermes_memory,
+                    hermes_memory=hermes_memory, owner_timers_off=owner_timers_off,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
                    omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply)

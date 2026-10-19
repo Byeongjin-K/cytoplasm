@@ -98,6 +98,7 @@ def _rehearse(tmp_path: Path, *, refuse: str = "", pin_check: str = "true",
         '*"rm -rf /tmp/deploy-rehearse."*) ;;\n'
         f'*"{refuse or "never-matches"}"*"--check"*) exit 4;;\n'
         '*"--check"*) ;;\n'
+        '*"automation.owner_timers check"*) printf "ok\\n";;\n'
         '*) exit 97;;'
     )
     ssh.write_text(ssh.read_text().replace("*) exit 97;;", extra))
@@ -109,7 +110,7 @@ def _rehearse(tmp_path: Path, *, refuse: str = "", pin_check: str = "true",
 def test_rehearsal_runs_every_approved_removal_check_from_the_staged_candidate(tmp_path: Path) -> None:
     result, calls = _rehearse(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,dori-pin,hermes-product,spend-gateway"
+    assert result.stdout.splitlines()[-1] == f"REHEARSAL-OK head={HEAD[:12]} actions=1 steps=plan,owner-timers-off,dori-pin,hermes-product,spend-gateway"
     assert not any(line.startswith("authorize ") for line in calls)
     removals = [line for line in calls if "--remove" in line]
     assert len(removals) == 3 and all(
