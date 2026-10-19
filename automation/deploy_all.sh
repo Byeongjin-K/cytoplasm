@@ -368,6 +368,11 @@ case "$mode" in
         log "already fully deployed"
       fi
       # The account's routing transaction is already checked by the probe.
+      # A release with nothing else to deploy still owes its approved removals (v2.6.1 took this
+      # branch and skipped the product removal). Both are idempotent behind completion markers.
+      if [[ "$product_mode" == retired ]]; then
+        retire_hermes_product || exit 4
+      fi
       if [[ "$retirement_mode" == retired ]]; then
         retire_spend_gateway || exit 4
       fi

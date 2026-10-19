@@ -422,3 +422,29 @@ def test_kanban_sidecars_from_the_migration_read_go_with_it_only_when_the_wal_is
     product.remove(home, HEAD, runtime=runtime, proc_reader=lambda: ())
     for path in (kanban, Path(f"{kanban}-wal"), Path(f"{kanban}-shm")):
         assert path.exists() is not removed
+
+
+def test_an_already_deployed_release_still_runs_the_approved_removals(tmp_path: Path) -> None:
+    # v2.6.1 (2026-10-19) had nothing else to deploy and skipped the product removal.
+    from tests.unit.test_hermes_gateways_stop import _host
+
+    repo, env = _host(tmp_path, "stopped")
+    flags = Path(env["HOME"]) / ".hermes/release-flags"
+    (flags / "hermes-product").write_bytes(b"retired")
+    env.update(NODE_AGENT_ACCOUNT="agent", NODE_PEER_ACCOUNT="peer", NODE_OPS_ACCOUNT="ops",
+               NODE_PRIVATE_ROOT=str(tmp_path / "private"))
+    ssh = tmp_path / "bin/ssh"
+    script = ssh.read_text()
+    assert '"$ACTIONS"; exit 1;;' in script
+    script = script.replace('"$ACTIONS"; exit 1;;', '""; exit 0;;').replace('*) exit 97;;', (
+        '*"automation.hermes_product --remove"*) exit 0;;\n*) exit 97;;'
+    ))
+    ssh.write_text(script)
+    ssh.chmod(0o755)
+    result = subprocess.run(("bash", str(repo / "automation/deploy_all.sh"), "--apply"),
+                            env=env, text=True, capture_output=True, check=False)
+    assert "already fully deployed" in result.stdout + result.stderr
+    calls = (tmp_path / "calls").read_text().splitlines()
+    products = [i for i, line in enumerate(calls) if "automation.hermes_product --remove" in line]
+    assert len(products) == 1, result.stdout + result.stderr
+    assert "authorize-hermes-product --head " + HEAD in calls[products[0] - 1]

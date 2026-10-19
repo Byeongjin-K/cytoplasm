@@ -30,7 +30,12 @@ Runner = Callable[[tuple[str, ...]], subprocess.CompletedProcess[str]]
 
 
 def run(argv: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=120)
+    # deploy_all reaches us through `sudo -n -u <acct> -H env …`, which carries no
+    # XDG_RUNTIME_DIR; `systemctl --user` then prints nothing and every unit check refused
+    # (v2.6.1 on the node, 2026-10-19). An existing value is kept.
+    env = dict(os.environ)
+    env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=120, env=env)
 
 
 def checked(argv: tuple[str, ...], runner: Runner) -> str:
