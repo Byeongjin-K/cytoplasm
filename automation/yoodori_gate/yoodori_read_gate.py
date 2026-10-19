@@ -135,7 +135,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Wiki reads: wiki-search <words...>, wiki-get <slug>. Obsidian read: note-get <PARA path>.\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
-         "Release reads: release-notes <vX.Y.Z>.\n"
+         "Release reads: release-notes <vX.Y.Z>. Plaud notes written: plaud-written <n 1-50>.\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Received attachment: mail-attachment <uid> <file name as mail-get shows it> + origin\n"
          "  (copies that file of the owner's mail into staging; prints its staged path).\n"
@@ -450,6 +450,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if len(args) != 1 or _RELEASE_TAG.fullmatch(args[0]) is None:
             raise Refused("release-notes needs <vX.Y.Z>")
         return name, args, HOME
+    if name == "plaud-written":
+        if len(args) != 1:
+            raise Refused("plaud-written needs exactly <n>")
+        return name, [_int(args[0], 1, 50)], HOME
     if name == "stage":
         if len(args) != 1:
             raise Refused("stage needs exactly one file name")
@@ -553,6 +557,29 @@ def release_notes(tag: str, *, fetcher: Callable[[str], bytes] = _fetch_release_
         raise Refused("release notes unavailable") from None
 
 
+def plaud_written(home: Path, count: int) -> dict:
+    """The latest Plaud notes written without a card, for YooDori's one-line notice.
+
+    Owner 2026-10-19 17:20 KST "좋아. 전사되면 간단하게 알림만 해줘": names and note paths only,
+    read from the shared auto-write ledger; no note body leaves the node.
+    """
+    notes = []
+    try:
+        lines = (home / ".hermes/auto-write/ledger.jsonl").read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        lines = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("kind") == "plaud" and isinstance(row.get("path"), str):
+            notes.append({"id": str(row.get("source_id", "")), "title": Path(row["path"]).stem,
+                          "path": row["path"], "recorded_at": str(row.get("recorded_at", "")),
+                          "written_at": str(row.get("written_at", ""))})
+    return {"status": "ok", "notes": notes[-count:]}
+
+
 def _switched(kind: str) -> bool:
     """Unreadable or malformed node settings keep the card path."""
     try:
@@ -651,6 +678,9 @@ def main() -> int:
             rc = run_job(job)
         elif name == "release-notes":
             print(release_notes(argv[0]))
+            rc = 0
+        elif name == "plaud-written":
+            print(json.dumps(plaud_written(HOME, int(argv[0])), ensure_ascii=False))
             rc = 0
         elif name == "job":
             rc, text = yoodori_jobs.report(yoodori_jobs.job_dir(HOME, argv[0]))
