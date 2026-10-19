@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
+import unit_node
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 
@@ -45,6 +46,7 @@ def test_scenario_runs_from_the_live_mount_layout(tmp_path: Path, skill: str) ->
     completed = subprocess.run(
         ("bash", str(scenario)),
         env={
+            **unit_node.env(),
             "HOME": str(home),
             "PATH": "/usr/bin:/bin",
             "INTEROP_RUNTIME": str(_REPO),

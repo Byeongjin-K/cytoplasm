@@ -125,7 +125,12 @@ def test_render_makes_automation_importable_from_a_mounted_layout(
     version = _version(tmp_path, monkeypatch)
     _figures(version, model="gpt-image-2")
     repo_entries = {str(_REPO), "", "."}
-    monkeypatch.setattr(sys, "path", [entry for entry in sys.path if entry not in repo_entries])
+    # A cron bootstrap imported earlier in the session may have put an installed runtime
+    # (/srv/autophagy-agent-current on the node) on sys.path; drop every package root.
+    monkeypatch.setattr(sys, "path", [
+        entry for entry in sys.path
+        if entry not in repo_entries and not (Path(entry) / "automation").is_dir()
+    ])
     for name in [name for name in sys.modules if name == "automation" or name.startswith("automation.")]:
         monkeypatch.delitem(sys.modules, name)
     monkeypatch.chdir(tmp_path)

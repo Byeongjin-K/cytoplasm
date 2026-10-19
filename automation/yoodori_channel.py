@@ -24,6 +24,11 @@ OVERRIDE: Final = "private/channel-override.json"
 _ID: Final = re.compile(r"[1-9][0-9]{16,19}")
 
 
+def _owner_notice_env_file() -> Path:
+    """The owner-notice credential file; the same override the healthcheck probe honours."""
+    return Path(os.environ.get("HEALTHCHECK_OWNER_NOTICE_CREDENTIAL", "/etc/autophagy/repair-approval.env"))
+
+
 def channel_value(value: str) -> str:
     if value != "off" and _ID.fullmatch(value) is None:
         raise ConfigShapeError("YOODORI-CHANNEL-REFUSED: expected a decimal channel id only")
@@ -158,7 +163,7 @@ def _ops_before() -> str:
     notice = os.environ.get("OWNER_NOTICE_CHANNEL_ID")
     if notice is None:
         try:
-            for line in Path("/etc/autophagy/repair-approval.env").read_text(encoding="utf-8").splitlines():
+            for line in _owner_notice_env_file().read_text(encoding="utf-8").splitlines():
                 if line.startswith("OWNER_NOTICE_CHANNEL_ID="):
                     notice = line.partition("=")[2].strip().strip("'\"")
         except FileNotFoundError:
@@ -181,7 +186,7 @@ def _check_guild(text: str, target: str, home: Path, role: str) -> None:
     if not token:
         paths = [home / ".env.secrets"]
         if role == "ops":
-            paths.append(Path("/etc/autophagy/repair-approval.env"))
+            paths.append(_owner_notice_env_file())
         for path in paths:
             try:
                 token = file_token(path, shell=True)

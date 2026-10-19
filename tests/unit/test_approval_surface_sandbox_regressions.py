@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import unit_node
 
 _REPO = Path(__file__).resolve().parents[2]
 _WIKI_SCRIPTS = _REPO / "skills" / "wiki" / "scripts"
@@ -48,8 +50,10 @@ def test_scenario_uses_no_retired_flow_specific_approval_override(
 
 def _scenario(skill: str) -> subprocess.CompletedProcess[str]:
     environment = {
+        **unit_node.env(),
         "AUTOPHAGY_DEMO_SECRET": "DUMMY-local-sandbox-regression",
-        "AUTOPHAGY_REPO_ROOT": "/srv/autophagy-agents",
+        # an absent mirror on every host (the real one is unreadable on the node)
+        "AUTOPHAGY_REPO_ROOT": str(Path(os.environ["AUTOPHAGY_UNIT_NODE_ROOT"]) / "mirror"),
         "HOME": str(Path.home()),
         "INTEROP_RUNTIME": str(_REPO),
         "PATH": "/usr/bin:/bin",

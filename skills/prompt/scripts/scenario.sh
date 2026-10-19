@@ -15,7 +15,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cd "$work"
 
-if [[ -d /srv/autophagy-agents ]]; then
+# The node mirror only when this account can read it: the operator on the primary node
+# sees it but cannot enter it, and would otherwise fail on its prompt library.
+if [[ -r /srv/autophagy-agents/prompts/README.md ]]; then
   repo_root=/srv/autophagy-agents
 else
   repo_root="$(cd "$script_dir/../../.." && pwd)"

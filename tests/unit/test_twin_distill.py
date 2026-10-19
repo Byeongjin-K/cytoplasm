@@ -1,6 +1,7 @@
 """DT-C2: inferred decision-twin distillation is draft-only."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -32,6 +33,9 @@ from automation.twin_distill.validate import (
     build_proposal,
 )
 
+
+# Absent on every host; the literal /home/agent is a real, unreadable account on the node.
+_ABSENT_HOME = str(Path(os.environ["AUTOPHAGY_UNIT_NODE_ROOT"]) / "home" / "agent")
 
 WELL_FORMED_BODY = (
     "## Trigger\n"
@@ -239,7 +243,7 @@ def test_unreachable_codex_oauth_fails_before_any_draft_is_emitted() -> None:
 def test_live_client_calls_codex_oauth_with_the_user_config_honored() -> None:
     # Given: the live client the CLI builds for an environment that can reach Codex
     client = CodexLlmClient.from_environment(
-        {"HOME": "/home/agent", "AUTOPHAGY_HERMES_BIN": "/home/agent/.local/bin/hermes"}
+        {"HOME": _ABSENT_HOME, "AUTOPHAGY_HERMES_BIN": f"{_ABSENT_HOME}/.local/bin/hermes"}
     )
 
     # When: the argv of one distillation call is inspected

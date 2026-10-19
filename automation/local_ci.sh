@@ -134,6 +134,11 @@ cmd_run() {
   cd "$REPO_ROOT" || die "cannot enter $REPO_ROOT"
   command -v bwrap >/dev/null \
     || die "bubblewrap is required; install it before running local CI (Ubuntu: sudo apt-get install bubblewrap)"
+  # Installed is not usable: Ubuntu 24.04 refuses unprivileged user namespaces unless an
+  # AppArmor profile grants bwrap `userns`, and the sandboxed scenario tests then fail one by
+  # one with no hint (2026-10-19, the primary node as release host). Say it once, up front.
+  bwrap --ro-bind / / --unshare-all true 2>/dev/null \
+    || die "bubblewrap cannot create namespaces here; allow it once as root: an /etc/apparmor.d/bwrap profile with 'userns,' for /usr/bin/bwrap, then apparmor_parser -r it"
   record_step lint ruff check . --exclude skills/mail/vendor \
     || die "lint failed — no receipt written"
   record_step unit-tests python3 -m pytest tests/unit -q \

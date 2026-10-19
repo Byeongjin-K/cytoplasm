@@ -44,6 +44,9 @@ def unconfigured_reason(config: NodeConfig) -> str | None:
 
 def main() -> int:
     """Refuse deploy entry points before placeholder hostnames can reach DNS."""
+    from automation.node_config_sh import apply_system_override
+
+    apply_system_override()  # the same system-file lookup as the shell bridge beside it
     reason = unconfigured_reason(load_node_config())
     if reason is None:
         return 0

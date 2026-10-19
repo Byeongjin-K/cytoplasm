@@ -19,6 +19,7 @@ import pytest
 
 from automation.stt_eval import model
 from automation.stt_eval.snapshot import move_snapshot
+import unit_node
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "skills/speechtotext/scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -318,6 +319,7 @@ def local_fixture(root: Path) -> tuple[Path, dict[str, str]]:
     _ = weights.write_bytes(b"fixture-model")
     meeting = _executable(root / "meeting", "import os, sys\nsys.exit(int(os.environ.get('FIXTURE_MEETING_EXIT', '0')))\n")
     env = {
+        **unit_node.env(),
         "HOME": str(root), "PATH": "/usr/bin:/bin",
         "AUTOPHAGY_RUNTIME_ROOT": str(SCRIPTS.parents[2]),
         "SPEECHTOTEXT_CLI": str(SCRIPTS / "speechtotext_cli.py"),
