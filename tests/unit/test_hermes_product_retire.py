@@ -190,6 +190,18 @@ def test_live_path_refuses_before_backup_or_deletion(
     assert not (home / product.MARKER).exists()
 
 
+def test_a_retired_declaration_under_a_target_is_not_a_live_use(tmp_path: Path) -> None:
+    # v2.6.8 stopped at `.hermes/skills reason=declaration`: the retired wiki skill keeps
+    # its old `.hermes/skills/wiki` row as policy=retired, which only observes absence.
+    home, runtime = _home(tmp_path)
+    (runtime / "automation/example/deploy-manifest.txt").write_text(
+        "agent|automation/example/run.py|.hermes/scripts/run.py|required\n"
+        "agent|skills/wiki|.hermes/skills/wiki|v2:tree;policy=retired;reason=wiki-skill-retired\n")
+    _remove(home, runtime)
+    assert not (home / ".hermes/skills").exists()
+    assert (home / product.MARKER).read_text() == HEAD
+
+
 @pytest.mark.parametrize("link", ["cwd", "fd/3"])
 def test_proc_reader_detects_real_open_and_cwd_links(tmp_path: Path, link: str) -> None:
     proc = tmp_path / "proc"

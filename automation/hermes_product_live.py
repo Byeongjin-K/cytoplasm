@@ -86,7 +86,8 @@ def check(home: Path, targets: Sequence[Path], runtime: Path,
         if not declarations:
             raise ManifestError("missing runtime declarations")
         for row in declarations:
-            if row.account != "agent":
+            # policy=retired only observes that the path is gone, so removing it agrees.
+            if row.account != "agent" or row.policy == "retired":
                 continue
             destination = home / row.destination
             for target in targets:

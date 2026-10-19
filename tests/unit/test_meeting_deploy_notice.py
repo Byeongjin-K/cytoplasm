@@ -218,6 +218,25 @@ def test_unchanged_plugin_is_silent(deployment: Deployment) -> None:
     assert "PLUGIN-CHANGED:" not in result.stderr
 
 
+@pytest.mark.parametrize("marker,content,pushed", [
+    (".hermes/peer-retired", "retired", False),
+    (".hermes/gateway-stopped-by-release", "stopped", True),
+])
+def test_no_restart_notice_when_no_hermes_gateway_runs(
+    deployment: Deployment, marker: str, content: str, pushed: bool,
+) -> None:
+    # v2.6.8 posted "restart agent·peer gateways" to the pair channel on a P5-retired node:
+    # no gateway loads the plugin there, and P5 had already removed it as a retired path.
+    run, repo, home, _ = deployment
+    _ = (home / marker).write_text(content)
+    result, events = run()
+    assert result.returncode == 0, result.stderr
+    assert not events
+    assert "PLUGIN-CHANGED:" not in result.stderr
+    assert ((home / PLUGIN).read_bytes() == (repo / SOURCE).read_bytes()) == pushed
+    _assert_timer(home, result.stdout)
+
+
 def test_unconfigured_channel_uses_facade_dm(deployment: Deployment) -> None:
     run, _, _, config = deployment
     _ = config.write_text(json.dumps({"owner_id": "456"}))
