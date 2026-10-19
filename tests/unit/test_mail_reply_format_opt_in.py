@@ -10,7 +10,6 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "skills/mail/scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import mail_approval_attachment  # noqa: E402
 import mail_drive_share  # noqa: E402
 import mail_preflight  # noqa: E402
 import mail_quote  # noqa: E402
@@ -123,14 +122,22 @@ def test_card_discloses_owner_only_test_even_with_body_attachment(mail_env, monk
     # Given
     assert _compose(monkeypatch, "--format-test", "html", "--body", "본문" * (2000 if long_body else 1)) == 0
     record = _only_draft()[1]
-    # When: render the same draft on either standard card path.
-    content = (mail_approval_attachment.summary(record, "✅ / ⛔") if long_body
-               else triage_core.render_approvals_message(record, instruction="✅ / ⛔"))
+    import triage_approval
+    import triage_approval_gate
+
+    # Keep the actual inline/attachment preparation; stub only the binding/transport boundary.
+    monkeypatch.setattr(triage_approval, "confirm_intent", lambda _draft: None)
+    monkeypatch.setattr(triage_approval, "reaction_instruction", lambda _draft: "✅ / ⛔")
+    # When: prepare the actual card, including automatic attachment selection for long bodies.
+    _intent, card = triage_approval_gate.prepare_request(record, "")
+    content = card.content
     # Then: compare the shipped field, not an independent prose expectation.
     from mail_reply_format import TEST_CARD_LINE
 
     assert TEST_CARD_LINE in content
     assert record["sha256"] == triage_core.draft_sha256(record)
+    assert card.draft["render_version"] == "6"
+    assert ("approval_attachment" in card.draft) is long_body
 
 
 def test_node_marker_enables_ordinary_draft_and_choice_survives_marker_removal(mail_env, monkeypatch):
