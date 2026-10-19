@@ -50,9 +50,9 @@ def notify_stale_key(stale: StaleTrustKey, warning: str) -> bool:
     try:
         from automation.interop.owner_message import Action, OwnerMessage, Ref, Result
     except Exception:  # noqa: BLE001 - optional module initialization must preserve string delivery
-        return notify_owner(warning)
+        return notify_owner(warning, fault=True)
     if not getattr(owner_notice, "ACCEPTS_OWNER_MESSAGE", False):
-        return notify_owner(warning)
+        return notify_owner(warning, fault=True)
     message = OwnerMessage(
         subject_key=stale.tag,
         subject="업데이트 신뢰 키 갱신 필요",
@@ -70,7 +70,7 @@ def notify_stale_key(stale: StaleTrustKey, warning: str) -> bool:
         recovery="not_applicable",
         detail=Result("executed"),
     )
-    return notify_owner(warning, message=message)
+    return notify_owner(warning, message=message, fault=True)
 
 
 def observe_stale_trust_key(

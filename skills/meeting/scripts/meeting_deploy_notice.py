@@ -23,7 +23,7 @@ def notify_restart(before: str, after: str) -> bool:
         recovery="not_applicable",
         detail=Result("executed"),
     )
-    return notify_owner("", message=message)
+    return notify_owner("", message=message, fault=True)
 
 
 if __name__ == "__main__":

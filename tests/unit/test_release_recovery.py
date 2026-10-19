@@ -52,7 +52,7 @@ def test_decision_notifies_once_when_same_approved_request_stays_stale(
     # Given: the same approved request across several changing tips.
     _pending(gate_dir)
     notices: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None: notices.append(body) or True)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None, fault=False: notices.append(body) or True)
     # When: independent completer decision ticks inspect the episode.
     results = [release_approval.main(["decision", "--head", tip * 40, "--notify-stale"])
                for tip in ("c", "d", "e")]
@@ -69,7 +69,7 @@ def test_decision_sends_nothing_when_stale_request_is_not_approved(
     _pending(gate_dir)
     monkeypatch.setattr(release_approval, "_gate", lambda spec: _StubGate(probe))
     notices: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None: notices.append(body) or True)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None, fault=False: notices.append(body) or True)
     # When: a completer tick inspects it.
     rc = release_approval.main(["decision", "--head", "e" * 40, "--notify-stale"])
     # Then: fail closed without inventing an approved-stale incident.
@@ -83,7 +83,7 @@ def test_decision_retries_notice_when_delivery_failed(
     # Given: one transport failure followed by a functioning transport.
     _pending(gate_dir)
     attempts: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None: attempts.append(body) or len(attempts) > 1)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None, fault=False: attempts.append(body) or len(attempts) > 1)
     # When: ticks repeat the same episode.
     results = [release_approval.main(["decision", "--head", "e" * 40, "--notify-stale"])
                for _ in range(3)]
@@ -98,7 +98,7 @@ def test_new_request_gets_its_own_notice_when_version_and_head_are_reused(
     # Given: a previously notified request and its replacement with a new message id.
     record = _pending(gate_dir)
     notices: list[str] = []
-    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None: notices.append(body) or True)
+    monkeypatch.setattr(owner_notice, "notify_owner", lambda body, *, message=None, fault=False: notices.append(body) or True)
     assert release_approval.main(["decision", "--head", "e" * 40, "--notify-stale"]) == 2
     path = gate_dir / "pending/release.json"
     path.write_text(json.dumps({**record, "message_id": "replacement"}), encoding="utf-8")

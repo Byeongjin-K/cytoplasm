@@ -86,7 +86,7 @@ def test_stale_envelope_when_tip_has_advanced(
     messages: list[OwnerMessage | None] = []
     original = owner_notice.notify_owner
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         messages.append(message)
         return original(content, message=message)
 

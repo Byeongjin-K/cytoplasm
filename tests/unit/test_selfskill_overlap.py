@@ -110,7 +110,7 @@ class TestMorningReport:
         monkeypatch.setattr(report, "_governed_root", lambda: None)
         monkeypatch.setattr(report, "find_overlaps", lambda home, root: (hit,))
         monkeypatch.delattr("automation.owner_notice.ACCEPTS_OWNER_MESSAGE")
-        monkeypatch.setattr(report, "notify_owner", lambda text: sent.append(text) or True)
+        monkeypatch.setattr(report, "notify_owner", lambda text, **_: sent.append(text) or True)
         assert report.run_once(home=tmp_path, account_label="agent") == 0
         (text,) = sent
         assert "OVERLAPS-GOVERNED:recall" in text

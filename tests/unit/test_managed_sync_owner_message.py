@@ -28,7 +28,7 @@ def test_legacy_bytes_when_runtime_is_old(
 ) -> None:
     # Given
     sent: list[str] = []
-    monkeypatch.setattr(watch, 'notify_owner', lambda content: sent.append(content) or True)
+    monkeypatch.setattr(watch, 'notify_owner', lambda content, **_: sent.append(content) or True)
     if legacy == 'missing_module':
         monkeypatch.setitem(sys.modules, 'automation.interop.owner_message', None)
     else:
@@ -46,7 +46,7 @@ def test_envelope_is_sent_when_release_is_staged(
     # Given
     sent: list[OwnerMessage | None] = []
 
-    def capture(content: str, *, message: OwnerMessage | None = None) -> bool:
+    def capture(content: str, *, message: OwnerMessage | None = None, fault: bool = False) -> bool:
         sent.append(message)
         return False  # failure must not undo staging
 
