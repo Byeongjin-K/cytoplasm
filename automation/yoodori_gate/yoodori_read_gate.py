@@ -112,7 +112,7 @@ TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
             frozenset({"transcribe", "ingest", "polish"})),
     "meeting": ("meeting/scripts/meeting_cli.py", frozenset({"evidence"}), frozenset({"ingest"})),
 }
-JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "wiki-write", "mail-sync")
+JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync")
 LONG = frozenset({"proposal", "stt", "meeting"})
 JOB_WAIT = 100
 # Test replays, injected approvals and output-root overrides are never caller-controlled.
@@ -123,16 +123,12 @@ DENIED_FLAGS = frozenset({
     "--origin-channel-id", "--origin-message-id", "--allow-plaintext",
 })
 _FLAG = re.compile(r"--[a-z][a-z0-9-]{0,40}")
-_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,80}")
 _OUT_NAME = re.compile(r"(?!\.)[A-Za-z0-9._-]{1,120}")
-# Owner 2026-10-19 (Q278, "현행 구조에서 위키노트가 필요해? 거의 의미 없어 보이는데"): notes go to Obsidian.
-WIKI_RETIRED = ("wiki-write is retired (owner 2026-10-19): write the note to Obsidian with dori-gate "
-                "PUT /_vault/note?path=000_PARA/Resource/유돌 위키/<제목>.md and the owner message header")
 
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
-         "Wiki reads: wiki-search <words...>, wiki-get <slug>. Obsidian read: note-get <PARA path>.\n"
+         "Obsidian read: note-get <PARA path>.\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>.\n"
@@ -143,7 +139,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
          "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
-         "  meeting <ingest|evidence> [args] (wiki-write is retired: notes go to Obsidian via dori-gate),\n"
+         "  meeting <ingest|evidence> [args],\n"
          "  mail-sync (collect institutional mail now; waits for a running collection);\n"
          "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
          "  --<flag>-b64 for multi-line text; --out-name <name> for an output file.\n"
@@ -417,8 +413,6 @@ def build_job(words: list[str]) -> Job:
             raise Refused("mail-sync takes no arguments besides the origin")
         argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now"]
         return Job(name, argv, False, "기관메일 지금 수집", 1800, channel, message)
-    if name == "wiki-write":
-        raise Refused(WIKI_RETIRED)
     if name == "doc":
         if not rest or rest[0] not in TOOLS or rest[0] in {"patent", "stt", "meeting"}:
             raise Refused("doc needs one of: " + ", ".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}))
@@ -496,12 +490,6 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if len(args) != 1:
             raise Refused("note-get needs exactly one PARA-relative path")
         return name, ["/usr/bin/cat", "--", str(note_path(args[0]))], HOME
-    if name == "wiki-search":
-        return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "query", _text(args, 200)], HOME
-    if name == "wiki-get":
-        if len(args) != 1 or not _SLUG.fullmatch(args[0]):
-            raise Refused("wiki-get needs exactly one <slug>")
-        return name, [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "show", args[0]], HOME
     if name == "recall":
         return name, [py, str(LIVE / "recall/scripts/recall_cli.py"), "search", _text(args, 300)], HOME
     if name == "status":
