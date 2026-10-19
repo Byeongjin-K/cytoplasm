@@ -20,6 +20,7 @@ import sys
 import tempfile
 import types
 from collections.abc import Iterator
+from typing import SupportsIndex
 from pathlib import Path
 
 import pytest
@@ -177,6 +178,26 @@ def _node_read_audit(event: str, args: tuple[object, ...]) -> None:
 
 
 sys.addaudithook(_node_read_audit)
+
+
+class _NodeFreePath(list[str]):
+    """sys.path that drops installed-runtime entries a module inserts on import.
+
+    Cron wrappers put /srv/autophagy-agent-current and live skill scripts on sys.path
+    when they are imported. On the node those exist, so a later test's import resolves
+    or scans the installed copy instead of this checkout; elsewhere they are inert.
+    """
+
+    def insert(self, index: SupportsIndex, entry: str) -> None:
+        if not (isinstance(entry, str) and _node_path(entry)):
+            super().insert(index, entry)
+
+    def append(self, entry: str) -> None:
+        if not (isinstance(entry, str) and _node_path(entry)):
+            super().append(entry)
+
+
+sys.path = _NodeFreePath(entry for entry in sys.path if not _node_path(entry))
 
 
 # Tests that still read this host's install on purpose, each with why. An entry is a

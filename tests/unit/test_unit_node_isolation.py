@@ -88,6 +88,18 @@ def test_sudo_is_refused_before_it_reaches_a_service_account() -> None:
     assert "UNIT-TEST-SUDO-BLOCKED" in result.stderr
 
 
+def test_an_installed_runtime_never_lands_on_sys_path(tmp_path: Path) -> None:
+    # When: a cron wrapper's import-time bootstrap inserts the release tree and a live mount
+    before = list(sys.path)
+    sys.path.insert(0, "/srv/autophagy-agent-current")
+    sys.path.append("/srv/autophagy-skills/live/todo/scripts")
+    sys.path.insert(0, str(tmp_path))
+    after = list(sys.path)
+    sys.path.remove(str(tmp_path))
+    # Then: only the checkout-side entry was kept
+    assert after == [str(tmp_path), *before]
+
+
 def test_an_open_of_an_existing_node_path_is_recorded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: a file standing in for node state, under a prefix the guard watches
     guard = _conftest()
