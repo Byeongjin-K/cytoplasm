@@ -83,7 +83,7 @@ def test_card_version_and_probe_when_request_posts(producer: str, available: boo
         case _:
             raise AssertionError(producer)
     if not binding_intact:
-        if producer == "mail":  # v4 mail cards bind by the recorded digest of the posted text
+        if producer == "mail":  # v4/v5 mail cards bind by the recorded digest of the posted text
             fake.contents[bound.message_id] += " (변조)"
         else:
             fake.contents[bound.message_id] = fake.contents[bound.message_id].replace(bound.action_hash, "wrong-binding")

@@ -84,10 +84,16 @@ def _summary_v4(draft: Mapping[str, JsonValue], instruction: str, *, share: bool
     lines = ["📨 **메일 발송 승인**", f"- 제목: {draft['subject']}", recipients,
              f"- 본문: 첨부 파일 참조 ({size} bytes)"]
     spec = draft.get("drive_share")
-    if share and isinstance(spec, dict):  # v5: the long-body card showed no share at all
-        from mail_card_compact import share_line
+    if share:  # v5: the long-body card showed neither the attachments nor the share
+        attachments = draft.get("attachments") or []
+        if isinstance(attachments, list) and attachments:
+            lines.append(f"- 첨부: {len(attachments)}개")
+            lines.extend(f"  - `{str(item.get('display_name', '')).replace('`', chr(39))}` · {item.get('size_bytes')} bytes"
+                         for item in attachments if isinstance(item, Mapping))
+    if share and isinstance(spec, dict):
+        from mail_card_compact import INVITE_NOTICE, share_line
 
-        lines.append(share_line(spec))
+        lines.extend((share_line(spec), INVITE_NOTICE))
     return "\n".join((*lines, instruction))
 
 

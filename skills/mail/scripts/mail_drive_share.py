@@ -126,15 +126,22 @@ def with_link(draft: dict, link: str) -> dict:
     return {**draft, "send_argv": argv}
 
 
-def _fail(draft: dict, cause: str, *, retryable: bool) -> triage_gate.GateError:
+def _fail(draft: dict, cause: str, *, retryable: bool, detail: str = "") -> triage_gate.GateError:
     error = {"error_code": "drive_share_failed", "stage": "drive_share",
              "retryable": retryable, "cause": cause}
+    if detail:  # node-private record only; the owner's notice prints stage and cause
+        error["detail"] = detail
     path = triage_gate._draft_path(draft["id"])
     if path is not None:
         triage_gate.write_json(path, mail_send_retry.after_failure(draft, error, datetime.now(UTC)))
     return triage_gate.GateError(
         "Drive 업로드·공유 단계에서 멈춰 메일을 보내지 않았습니다 "
         f"(cause={cause} retryable={str(retryable).lower()})", 6)
+
+
+def _detail(error: Exception) -> str:
+    """Which call failed and how, for the private record: the class and a short message."""
+    return f"{type(error).__name__}: {' '.join(str(error).split())[:200]}"
 
 
 def run(draft: dict, approval: triage_gate.Approval) -> dict:
@@ -159,11 +166,11 @@ def run(draft: dict, approval: triage_gate.Approval) -> dict:
             prior_id=prior_id or None,
         )
     except drive_outputs.ShareRefused as error:
-        raise _fail(draft, error.code, retryable=False) from error
+        raise _fail(draft, error.code, retryable=False, detail=_detail(error)) from error
     except Exception as error:  # noqa: BLE001 — a transport failure is retried on the capped backoff
-        raise _fail(draft, "drive_upload_failed", retryable=True) from error
+        raise _fail(draft, "drive_upload_failed", retryable=True, detail=_detail(error)) from error
     receipt = {"action": result.action, "file_id": result.file_id, "link": result.link,
-               "shared_at": triage_core.utc_now()}
+               "invited_by_google": list(result.invited_by_google), "shared_at": triage_core.utc_now()}
     path = triage_gate._draft_path(draft["id"])
     if path is not None:
         triage_gate.write_json(path, {**draft, "drive_share_result": receipt})
