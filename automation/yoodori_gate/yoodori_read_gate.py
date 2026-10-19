@@ -125,8 +125,9 @@ DENIED_FLAGS = frozenset({
 _FLAG = re.compile(r"--[a-z][a-z0-9-]{0,40}")
 _SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,80}")
 _OUT_NAME = re.compile(r"(?!\.)[A-Za-z0-9._-]{1,120}")
-WIKI_FLAGS = {"--title": "short", "--tags": "short", "--links": "short", "--slug": "short",
-              "--edit": "short", "--body": "body"}
+# Owner 2026-10-19 (Q278, "현행 구조에서 위키노트가 필요해? 거의 의미 없어 보이는데"): notes go to Obsidian.
+WIKI_RETIRED = ("wiki-write is retired (owner 2026-10-19): write the note to Obsidian with dori-gate "
+                "PUT /_vault/note?path=000_PARA/Resource/유돌 위키/<제목>.md and the owner message header")
 
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
@@ -142,7 +143,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Owner-command jobs (origin = the owner's own message, checked on the node):\n"
          "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
-         "  meeting <ingest|evidence> [args], wiki-write [--edit <slug>] --title .. --body-b64 ..,\n"
+         "  meeting <ingest|evidence> [args] (wiki-write is retired: notes go to Obsidian via dori-gate),\n"
          "  mail-sync (collect institutional mail now; waits for a running collection);\n"
          "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
          "  --<flag>-b64 for multi-line text; --out-name <name> for an output file.\n"
@@ -417,26 +418,7 @@ def build_job(words: list[str]) -> Job:
         argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now"]
         return Job(name, argv, False, "기관메일 지금 수집", 1800, channel, message)
     if name == "wiki-write":
-        values: dict[str, str] = {}
-        if len(rest) % 2:
-            raise Refused("wiki-write takes flag/value pairs only")
-        for flag, raw in zip(rest[::2], rest[1::2]):
-            decoded = flag.removesuffix("-b64")
-            if decoded not in WIKI_FLAGS or decoded in values or (flag != decoded and decoded != "--body"):
-                raise Refused("unknown or repeated wiki flag (body needs --body-b64)")
-            if decoded == "--body" and flag == decoded:
-                raise Refused("wiki body requires --body-b64")
-            values[decoded] = _value(_decode(raw) if flag != decoded else raw, WIKI_FLAGS[decoded])
-        for key in ("--slug", "--edit"):
-            if key in values and not _SLUG.fullmatch(values[key]):
-                raise Refused("slug must be lowercase letters, digits and hyphens")
-        if "--edit" not in values and "--title" not in values:
-            raise Refused("wiki-write needs --title for a new note or --edit <slug>")
-        argv = [py, str(LIVE / "wiki/scripts/wiki_cli.py"), "write",
-                *[v for pair in values.items() for v in pair],
-                "--origin-channel-id", channel, "--origin-message-id", message]
-        label = f"위키 {values.get('--edit') or values.get('--slug') or '새 노트'}"
-        return Job(name, argv, True, label[:160], 300, channel, message)
+        raise Refused(WIKI_RETIRED)
     if name == "doc":
         if not rest or rest[0] not in TOOLS or rest[0] in {"patent", "stt", "meeting"}:
             raise Refused("doc needs one of: " + ", ".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}))
