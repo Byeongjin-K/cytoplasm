@@ -24,6 +24,8 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 2026-10-19 소유자 “끄지 말고 삭제”와 Q282로 메모리 예약 작업 둘과
 `reminder_poller` 전체를 제거했다. `hermes-memory-off` 스위치도 제거했다.
 `retired_jobs`의 필수 derived 선언이 아직 도는 타이머를 멈춘 뒤(멈춤 재조회) 유닛을 삭제하고 재조회한다.
+같은 정리에서 agent의 옛 `memory_curator_watch.py`·`memory_relocate_watch.py`·`poll_reminders.py`
+래퍼도 제거한다. 세 파일은 retired 선언으로 인벤토리에 남기며, 실제 제거는 필수 derived 경로가 한다.
 알림 유닛 제거 확인 뒤 정확히 `state/reminders.db`·`state/milestones.yaml`만
 심링크를 거부하며 삭제한다. USER.md·MEMORY.md·메모리 백업·recall은 보존한다.
 기억 저장은 유돌 omo(소유자 선호·규칙은 `system/human.md`), 긴 기록은
@@ -59,7 +61,7 @@ Hermes 전용 선언을 수렴 대상에서 제외하고, 공급망은 owner 승
 | `report_hub/` | `#agents-log` 콜렉터(SQLite) + 대시보드(tailnet + Basic auth, 인증 없으면 fail-closed 미기동, 읽기 전용) | W3-4 |
 | `legacy_services.py` · `legacy_services/` | `report-hub-off`·`hermes-dashboard-off` 호스트 스위치의 정지를 같은 HEAD의 릴리스 승인으로 수행하고 `legacy-service-v1` 선언으로 실제 유닛까지 재조회한다. 파일 삭제+재배포로 복구하며 CLI·설정·로그인·kanban.db는 보존한다. doctor는 유돌 발신 채널을 검사하고 RAG 설정은 대화·agents-log 수집만 기본 해제한다. [소개](../docs/기능소개/hermes-유산-정리.md) | legacy-1 |
 | `managed_skills/` | 관리형 스킬 발행 + 개인→그룹 제출. 제출은 personal HEAD tarball·`ManagedManifest` v1을 `approval_lifecycle`의 `skill-submit`으로 검토 요청할 뿐 자동 import하지 않으며, 관리자 `publish_cli --submission-*` 명시 실행만 기존 발행 게이트로 넘긴다 | W-F3, W-F4-B |
-| `retired_jobs.py` · `retired_jobs/` | 메모리 예약 둘·알림 폴러·연구 동향 타이머의 생성 유닛과 알림 파생 데이터만 같은 릴리스의 필수 derived 선언으로 정리한다. `policy=retired`는 관측만 하므로 실제 삭제에는 쓰지 않는다. [소개](../docs/기능소개/끈-정기-작업-삭제.md) | 제거 |
+| `retired_jobs.py` · `retired_jobs/` | 메모리 예약 둘·알림 폴러·연구 동향 타이머의 생성 유닛, 앞 셋의 `.hermes/scripts/` 래퍼, 알림 파생 데이터만 같은 릴리스의 필수 derived 선언으로 정리한다. `policy=retired`는 관측만 하므로 실제 삭제에는 쓰지 않는다. [소개](../docs/기능소개/끈-정기-작업-삭제.md) | 제거 |
 | `research_trends/` | 노드 주간 보고 예약은 은퇴했다. 주간 연구 보고서와 키워드는 cytoplasm 밖 별도 연구 에이전트 공도리가 관리하며 공도리 채널에서 요청한다. 릴리스가 타이머·서비스를 정지·삭제·재조회하고, 기존 런타임·프롬프트·주제 데이터는 보존한다. [소개](../docs/기능소개/주간-연구동향-노드-예약-은퇴.md) | 예약 은퇴 |
 | `gateway_retirement.py` · `gateway_retirement_policy.py` | 2026-10-19 소유자 결정으로 폐기한 비용 게이트웨이·09:00 지출 보고 정리. 같은 HEAD의 릴리스 승인 뒤 ops 백업 해시·유닛·포트·컨테이너 사용을 검사하고 명시한 비루트 경로만 제거한다. agent 키·미사용 제공자 블록은 원자 편집하고 나머지 바이트는 보존한다. 완료 표식 뒤 재실행은 무동작. 상세는 [기능 현황판](../docs/features.md). | 퇴역 |
 | `effect_request/` | 「그 밖의 외부효과」 공용 승인 경로(2026-10-17 소유자 지시) — `python3 -m automation.effect_request request drive-save|command` 가 파일·argv 를 동결하고 kind `external-effect` 카드를 요청별 스레드에 올린다. cron `effect-request-watch`(2분)가 소유자 ✅ 에만 실행(Drive 저장은 `drive_outputs.publish` 재다운로드 sha256, 명령은 `running` 선점 후 한 번), `policy.py` 가 형만 하는 일·전용 경로 효과를 exit 4 로 거절. 배포 `deploy.sh`·`deploy-manifest.txt` | 2026-10-17 |

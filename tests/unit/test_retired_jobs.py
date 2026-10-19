@@ -164,7 +164,7 @@ def test_removed_jobs_have_no_schedule_and_cleanup_is_required() -> None:
                "daily-cost-report", "research-trends"}
     assert not any(row.kind == "cron" and row.destination in removed for row in rows)
     assert not any(row.source.startswith("automation/reminder_poller/") for row in rows)
-    cleanup = [row for row in rows if row.owner == "automation/retired_jobs"]
+    cleanup = [row for row in rows if row.owner == "automation/retired_jobs" and row.kind == "derived"]
     assert len(cleanup) == 6
     assert all(row.kind == "derived" and row.policy == "required" for row in cleanup)
     assert {row.destination for row in cleanup if row.destination.startswith("state/")} == set(retired_jobs.DATA)
@@ -212,7 +212,8 @@ def test_timer_reactivation_during_reload_preserves_both_data_files(tmp_path: Pa
 
 @pytest.mark.parametrize("status", ["stale", "ok", "unexpected"])
 def test_release_observer_dispatches_every_cleanup_declaration(status: str) -> None:
-    rows = [row for row in all_declarations(ROOT) if row.owner == "automation/retired_jobs"]
+    rows = [row for row in all_declarations(ROOT)
+            if row.owner == "automation/retired_jobs" and row.kind == "derived"]
     calls: list[tuple[str, ...]] = []
 
     def call(account: str, argv: tuple[str, ...]) -> tuple[int, str]:

@@ -5,3 +5,6 @@ agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-reminder-polle
 agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-research-trends.timer|v2:derived;algorithm=retired-job-v1
 agent|automation/retired_jobs|state/reminders.db|v2:derived;algorithm=retired-reminder-data-v1
 agent|automation/retired_jobs|state/milestones.yaml|v2:derived;algorithm=retired-reminder-data-v1
+agent|automation/retired_jobs.py|.hermes/scripts/memory_curator_watch.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
+agent|automation/retired_jobs.py|.hermes/scripts/memory_relocate_watch.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
+agent|automation/retired_jobs.py|.hermes/scripts/poll_reminders.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper

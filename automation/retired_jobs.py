@@ -15,6 +15,11 @@ from automation.gateway_retirement import Runner, checked, run, safe_path, stopp
 JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends")
 ALGORITHM: Final = "retired-job-v1"
 DATA: Final = ("state/reminders.db", "state/milestones.yaml")
+SCRIPTS: Final = {
+    "memory-curator-watch": ".hermes/scripts/memory_curator_watch.py",
+    "memory-relocate-watch": ".hermes/scripts/memory_relocate_watch.py",
+    "reminder-poller": ".hermes/scripts/poll_reminders.py",
+}
 
 
 def unit_paths(home: Path, name: str) -> tuple[Path, Path]:
@@ -50,9 +55,10 @@ def check(home: Path, name: str, runner: Runner = run) -> str:
     """Observe actual units and exact paths; unreadable is never absent."""
     try:
         units = unit_paths(home, name)
+        scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
         live = [running(path.name, runner) for path in units]
         data = tuple(safe_path(home, path) for path in DATA) if name == "reminder-poller" else ()
-        return "stale" if any(live) or any(path.exists() for path in (*units, *data)) else "ok"
+        return "stale" if any(live) or any(path.exists() for path in (*units, *scripts, *data)) else "ok"
     except (OSError, ValueError, subprocess.SubprocessError):
         return "unknown"
 
@@ -76,6 +82,8 @@ def quiesce(unit: str, runner: Runner) -> None:
 def install(home: Path, name: str, runner: Runner = run) -> None:
     """Stop the retired job, then remove data only after unit removal read-back."""
     units = unit_paths(home, name)
+    # research-trends keeps its script: topics imports and retained data still use it.
+    scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
     # Validate every path before unlinking any of them, including data symlinks.
     if name == "reminder-poller":
         for path in DATA:
@@ -92,6 +100,8 @@ def install(home: Path, name: str, runner: Runner = run) -> None:
         raise ValueError("RETIRED-JOB-REFUSED: unit removal not confirmed")
     for path in units:
         stopped(path.name, runner)
+    for script in scripts:
+        script.unlink(missing_ok=True)
     if name == "reminder-poller":
         remove_reminder_data(home)
     if check(home, name, runner) != "ok":
