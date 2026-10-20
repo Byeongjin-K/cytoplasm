@@ -19,6 +19,7 @@ from automation import term_correction
 from .lifelog_model import ExtractionOutcome, LifelogRecording
 from .model import PlaudSyncRecord
 from .note import corrected_lifelog_note
+from .transcript_corrector import Corrector
 
 PLAUD_SYNC_HASH_VERSION: Final = "plaud-sync-v1"
 
@@ -55,6 +56,7 @@ def finalize(
     extraction: ExtractionOutcome,
     tz: tzinfo,
     glossary: term_correction.Glossary = (),
+    transcript_corrector: Corrector | None = None,
 ) -> tuple[PlaudSyncRecord, str, tuple[term_correction.Correction, ...]]:
     """언 기록 · 그 본문 · 그 노트를 만들며 고친 어절.
 
@@ -67,7 +69,8 @@ def finalize(
     # 남기지 않는다(소유자 결정 2026-09-15).
     pinned = PurePosixPath(record.note_relpath) if record.remote_ref is not None else None
     note = corrected_lifelog_note(
-        recording, extraction=extraction, tz=tz, glossary=glossary, relpath=pinned
+        recording, extraction=extraction, tz=tz, glossary=glossary, relpath=pinned,
+        transcript_corrector=transcript_corrector,
     )
     plan = note.plan
     relpath = plan.relpath.as_posix()

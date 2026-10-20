@@ -112,7 +112,7 @@ def process(
         transcript_source=transcript.source_label,
     )
     try:
-        promoted, body = _promote(record, recording, effects)
+        promoted, body = _promote(record, recording, effects, transcript=transcript)
     except LifelogExtractError as error:
         return _block(record, effects, f"추출: {error}")
     _ = effects.store_transcript(transcript_stem(promoted), transcript.markdown)

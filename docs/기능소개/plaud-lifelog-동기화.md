@@ -42,6 +42,10 @@ read-back)로 push 되고, RAG obsidian 소스가 자동 인제스트해 recall 
 
 ## 관련
 
+- 선택 기능: [전문 첫 저장 전 교정](plaud-전사-동결전-교정.md).
+  노드 명령을 명시한 경우에만 동결 전에 전문을 교정하며, 원본 전사 파일은 보존한다.
+  설정이 없으면 기존 동작·노트 바이트가 그대로다.
+
 - 구현: `automation/plaud_sync/`(mcp_client·note·model·store·binding·render·approval_gate·watch_step·
   sync·fetch·effects_live·lifelog_model·lifelog_fields·lifelog_extract·lifelog_extract_live·
   cron/plaud_sync_watch.py) · 계획 `.omo/plans/plaud-lifelog-sync.md` · v2 양식 `.omo/plans/plaud-lifelog-format-v2.md`

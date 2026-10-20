@@ -25,6 +25,7 @@ from .lifelog_fields import DEFAULT_TIMEZONE
 from .lifelog_model import ExtractionOutcome, ExtractionSkipped, Extractor, LifelogExtractError
 from .model import PlaudStatus, PlaudSyncRecord, PlaudSyncState, canonical_recording_id
 from .note import LifelogRecording, PlaudNoteError, corrected_lifelog_note, recording_stamp
+from .transcript_corrector import Corrector
 
 APPROVAL_KIND: Final = "obsidian-write"
 APPROVAL_SURFACE: Final = "agent-chat-thread"
@@ -80,6 +81,7 @@ def plan_new_records(
     initial_status: PlaudStatus = "planned",
     glossary: term_correction.Glossary = (),
     min_duration_ms: int = DEFAULT_MIN_DURATION_MS,
+    transcript_corrector: Corrector | None = None,
 ) -> DiscoveryResult:
     records = dict(state.records)
     known_ids = {
@@ -129,7 +131,8 @@ def plan_new_records(
                 continue
         taken = frozenset(PurePosixPath(existing.note_relpath) for existing in records.values())
         note = corrected_lifelog_note(
-            recording, extraction=extraction, tz=tz, glossary=glossary, taken=taken
+            recording, extraction=extraction, tz=tz, glossary=glossary, taken=taken,
+            transcript_corrector=transcript_corrector if initial_status == "planned" else None,
         )
         plan = note.plan
         if note.corrections:

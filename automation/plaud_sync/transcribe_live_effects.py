@@ -43,6 +43,7 @@ from .store import load_note_body, load_state, save_note_body, save_state, save_
 from .terms import glossary as lifelog_glossary
 from .terms import record as record_note_corrections
 from .transcribe import CliResult, TranscribeError
+from .transcript_corrector import CommandCorrector, Corrector
 
 CLI_ENV: Final = "SPEECHTOTEXT_CLI"
 SCRIPTS_ENV: Final = "SPEECHTOTEXT_SCRIPTS"
@@ -140,6 +141,10 @@ class LiveEffects:
     @property
     def tz(self) -> tzinfo:
         return note_timezone(self.env)[0]
+
+    @property
+    def transcript_corrector(self) -> Corrector:
+        return CommandCorrector(self.env)
 
     def _mcp_client(self) -> PlaudMcpClient:
         return PlaudMcpClient()

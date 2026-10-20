@@ -259,6 +259,7 @@
 완료 기능: [실행경로 가드 일반화 — 배포됨 ≠ 실행됨](기능소개/실행경로-가드-일반화.md) (후속 과제 스윕 4 · calendar·budget·todo·wiki·coordination · v1.1.0 에서 meeting·speechtotext·doctype·proposal·report·procurement·patent-prep·prompt 추가 = 14/14)
 완료 기능: [전사본 화자 경계 문장 분할](기능소개/전사본-화자-경계-문장-분할.md) (후속 과제 스윕 4 · speechtotext v1.1.1)
 완료 기능: [Plaud lifelog 동기화 — MCP 무등록 워처·건별 승인·vault 저장](기능소개/plaud-lifelog-동기화.md) (automation/plaud_sync · plaud skill v1.0.0 · 2026-09-02)
+완료 기능: [Plaud 전문 첫 저장 전 교정 — 기본 꺼짐 노드 명령 훅, 원본 보존·실패 시 원문](기능소개/plaud-전사-동결전-교정.md) (automation/plaud_sync · 2026-10-20)
 완료 기능: [Plaud 녹음 로컬 전사 — 오디오를 내려받아 노드에서 화자 분리 전사, lifelog·회의록이 그 파일을 소비](기능소개/plaud-녹음-로컬-전사.md) (plaud_sync `transcribing` 스테이지 · plaud skill v1.1.0 · 2026-09-04)
 완료 기능: [용어집을 Drive 에 두고 문서 종류별로 중첩시킨다](기능소개/용어집-drive-중첩-계층.md) (automation/term_glossary · 소유자 지시 2026-09-05)
 완료 기능: [교정 로그 — 무엇이 무엇으로 바뀌었는지 남긴다](기능소개/교정-로그.md) (automation/term_correction_log · 소유자 지시 2026-09-05)
