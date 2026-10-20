@@ -20,8 +20,8 @@ from automation.document_text import (
     GOOGLE_EXPORTS,
     HWP_REASON,
     SUPPORTED_REASON,
-    SUPPORTED_SUFFIXES,
     oversize_reason,
+    readable_suffixes,
 )
 
 SNIPPET_CHARS: Final = 320
@@ -57,9 +57,10 @@ def refusal(candidate: Candidate, max_bytes: int) -> str:
         return NOT_EXPORTABLE
     if not native:
         suffix = PurePosixPath(candidate.name).suffix.lower()
-        if suffix == ".hwp":
+        readable = readable_suffixes()
+        if suffix == ".hwp" and suffix not in readable:
             return HWP_REASON
-        if suffix not in SUPPORTED_SUFFIXES:
+        if suffix not in readable:
             return SUPPORTED_REASON
     if 0 < max_bytes < candidate.size:
         return oversize_reason(max_bytes)

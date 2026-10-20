@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shlex
 import subprocess
 import zipfile
 from dataclasses import dataclass
@@ -22,6 +24,10 @@ from xml.etree import ElementTree
 MAX_DOCUMENT_BYTES: Final = 25 * 1024 * 1024
 PDF_TIMEOUT_SECONDS: Final = 120
 OK: Final = "ok"
+OCR_COMMAND_ENV: Final = "DOCUMENT_OCR_CMD"
+OCR_TIMEOUT_ENV: Final = "DOCUMENT_OCR_TIMEOUT_SECONDS"
+OCR_TIMEOUT_SECONDS: Final = 1800
+OCR_SUFFIXES: Final = frozenset({".pdf", ".hwp", ".png", ".jpg", ".jpeg"})
 
 SUPPORTED_SUFFIXES: Final = frozenset(
     {".md", ".markdown", ".txt", ".csv", ".pdf", ".pptx", ".docx", ".hwpx", ".xlsx"}
@@ -39,6 +45,7 @@ _SHEET_ENTRY: Final = re.compile(r"^xl/worksheets/sheet(\d+)\.xml$")
 _DOCTYPE: Final = re.compile(rb"<!(?:DOCTYPE|ENTITY)", re.IGNORECASE)
 SUPPORTED_REASON: Final = "지원 형식은 pdf·pptx·docx·hwpx·xlsx·md·txt·csv 입니다"
 HWP_REASON: Final = "구형 hwp 는 hwpx 나 pdf 로 저장해 주세요"
+OCR_FAILED_REASON: Final = "글자 읽기(OCR)로도 본문을 얻지 못했습니다"
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +192,43 @@ def _from_pdf(path: Path) -> list[str]:
     return [page.strip() for page in pages]
 
 
+def ocr_command() -> tuple[str, ...]:
+    """`DOCUMENT_OCR_CMD` 가 비어 있으면 글자 읽기는 꺼져 있다(기본).
+
+    값은 `<명령> [인자...]` 이고 끝에 파일 경로를 붙여 부르며, 명령은 markdown 을 stdout 에 낸다.
+    """
+    configured = os.environ.get(OCR_COMMAND_ENV, "").strip()
+    return tuple(shlex.split(configured)) if configured else ()
+
+
+def readable_suffixes() -> frozenset[str]:
+    return SUPPORTED_SUFFIXES | OCR_SUFFIXES if ocr_command() else SUPPORTED_SUFFIXES
+
+
+def _ocr_timeout() -> int:
+    configured = os.environ.get(OCR_TIMEOUT_ENV, "").strip()
+    return int(configured) if configured.isdigit() and int(configured) > 0 else OCR_TIMEOUT_SECONDS
+
+
+def _from_ocr(path: Path, command: tuple[str, ...]) -> list[str]:
+    try:
+        completed = subprocess.run(  # noqa: S603
+            [*command, str(path)],
+            capture_output=True,
+            timeout=_ocr_timeout(),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if completed.returncode != 0:
+        return []
+    text = completed.stdout.decode("utf-8", errors="replace").strip()
+    return [text] if text else []
+
+
 def extract_document(path: Path, *, max_bytes: int = MAX_DOCUMENT_BYTES) -> Extracted:
+    ocr = ocr_command()
+    tried_ocr = False
     try:
         if not path.is_file():
             return _refused("파일을 찾을 수 없습니다")
@@ -204,6 +247,12 @@ def extract_document(path: Path, *, max_bytes: int = MAX_DOCUMENT_BYTES) -> Extr
             sections = _from_xlsx(path)
         elif suffix == ".pdf":
             sections = _from_pdf(path)
+            if ocr and not any(section.strip() for section in sections):
+                tried_ocr = True
+                sections = _from_ocr(path, ocr)
+        elif ocr and suffix in OCR_SUFFIXES:
+            tried_ocr = True
+            sections = _from_ocr(path, ocr)
         elif suffix == ".hwp":
             return _refused(HWP_REASON)
         else:
@@ -217,5 +266,7 @@ def extract_document(path: Path, *, max_bytes: int = MAX_DOCUMENT_BYTES) -> Extr
     ):
         return _refused("파일을 여는 데 실패했습니다")
     if not any(section.strip() for section in sections):
+        if tried_ocr:
+            return _refused(OCR_FAILED_REASON)
         return _refused("텍스트 레이어가 없습니다(스캔본이거나 빈 자료)")
     return Extracted(units=tuple(sections), status=OK)
