@@ -1,7 +1,7 @@
 # automation/interop/ — 승인 레코드·프로토콜 공용 코어
 
 승인 레코드·카드·원문 통지와 프로토콜 값 형식을 공유한다. 규약은 [docs/guide/interop-규약.md](../../docs/guide/interop-규약.md).
-Hermes 외부효과 평가기·플러그인·규칙 파일은 폐기했다. `deploy.sh`는 기존 `retired_jobs` 정리 경로만 호출하며 Hermes를 설치·활성화·재시동하지 않는다. `policy=retired`는 잔존 관측만 하고, 양 계정의 실제 파일 정리는 `retired-interop-v1` 필수 derived 선언이 맡는다. 게이트웨이가 정지·비활성임을 확인하지 못하면 삭제하지 않는다.
+Hermes 외부효과 평가기·플러그인·규칙 파일은 폐기했다(이슈 #150 묘비는 아래 표). `deploy.sh`는 기존 `retired_jobs` 정리 경로만 호출하며 Hermes를 설치·활성화·재시동하지 않는다. `policy=retired`는 잔존 관측만 하고, 양 계정의 실제 파일 정리는 `retired-interop-v1` 필수 derived 선언이 맡는다. 게이트웨이가 정지·비활성임을 확인하지 못하면 삭제하지 않는다.
 메일·예산·릴리스·외부 참석자 초대 카드와 기존 승인 저장 형식은 유지한다. 아래 소유자 대리 요청·음성·import-farm 도우미는 레거시 소비자·진단용이며 Hermes 훅으로 등록하지 않는다.
 
 ## 파일 지도
@@ -23,6 +23,7 @@ Hermes 외부효과 평가기·플러그인·규칙 파일은 폐기했다. `dep
 | `digest_reaction_listener.py` | 레거시 Hermes 반응 리스너 도우미. 플러그인의 자동 install 호출은 폐기했다. 메일 워처의 카드 판정·2분 틱은 별도 경로로 보존한다 |
 | `loop_guard.py` | 봇 연쇄 분당 5회 상한 + 본문 해시 dedup |
 | `gate_driver.py` · `live_peer_driver.py` | 레거시 프로토콜 진단 드라이버(자동 배포하지 않음) |
+| `external_effect_gate.py` · `policy_paths.py` · `plugin_shim/` · `hermes_plugin/` | **묘비**(이슈 #150). v2.6.6 노드 홈에 남은 드롭인의 옛 `pin_import_root.sh` 가 이 네 경로를 새 트리에 요구하고, 없으면 exit 78 → 옛 세대 reconcile 틱이 릴리스를 롤백한다. 앞의 셋은 import 하면 `ImportError`, `hermes_plugin.register` 는 들어오는 이벤트를 모두 skip·도구 호출을 모두 block 해 옛 게이트웨이를 아무 일도 하지 않게 둔다. 평가기·허용 경로를 되살리지 않는다. v2.6.6 고정물: `tests/unit/fixtures/legacy_v2_6_6/` |
 | `production_guard.sh` | 프로덕션 게이트웨이에서 `E2E_TEST_MODE` 거부(부팅 차단) |
 | `free_response.py` | 계정 free-response 설정의 순수 판정·레거시 수리 도우미. doctor가 같은 판정을 읽으며 interop 드롭인의 부팅 적용은 폐기했다 |
 
