@@ -100,6 +100,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
         from automation.mail_html_reply import surface as mail_html_surface
 
         surfaces.append(mail_html_surface())
+    color = getattr(args, "calendar_default_color", None)
+    if color is not None:
+        from automation.calendar_default_color import surface as color_surface
+
+        try:
+            surfaces.append(color_surface(color))
+        except ValueError as error:
+            print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
+            return 4
     from automation.owner_timers import decode as decode_timers, surfaces as timer_surfaces
 
     try:
@@ -426,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--auto-write", action="append", help="카드 없이 쓰는 생산자 종류")
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--mail-html-reply", choices=("on",), help="기관메일 회신 새 서식 켜기")
+    plan.add_argument("--calendar-default-color", choices=tuple(str(i) for i in range(1, 12)),
+                      help="새 캘린더 일정의 기본 Google colorId")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard"))
     plan.add_argument("--owner-timers-off", default="off")
@@ -571,6 +582,17 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     html_reply.set_defaults(run=authorize_html_reply)
+    calendar_color = commands.add_parser("authorize-calendar-default-color")
+    calendar_color.add_argument("--head", required=True)
+    calendar_color.add_argument("--color", required=True, choices=tuple(str(i) for i in range(1, 12)))
+    def authorize_calendar_color(args: argparse.Namespace) -> int:
+        from automation.calendar_default_color import surface
+
+        name, digest = surface(args.color)
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    calendar_color.set_defaults(run=authorize_calendar_color)
     args = parser.parse_args(argv)
     return int(args.run(args))
 

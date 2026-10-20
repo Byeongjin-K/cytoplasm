@@ -1,7 +1,7 @@
 ---
 name: calendar
 description: "내 일정을 보거나 새로 잡거나 바꾸거나 지울 때 사용(상대와 시간 조율은 제외). cha 본인 Google 캘린더 관리 스킬 (gws CLI). 조회(list)는 즉시. 소유자 Discord 지시로 시작한 본인 내부 쓰기는 dori-gate를 거쳐 카드 없이 실행한다. 본인 아닌 참석자 초대·본인 소유가 아니거나 공개된 일정 쓰기는 기존 승인 카드의 ✅가 필요하다. 모호한 시간은 되묻는다. 라우팅: 상대 미지정 요청은 calendar 소유; 피어가 명시돼도 '정확한 단일 시각'이면 제목 토큰으로 보고 본인 단독 일정=calendar; 피어+범위+조율 의사면 coordination으로 ROUTING-REJECT(exit 4); 의도 모호(피어명만/시각+조율 충돌)는 ROUTING-CLARIFY(exit 4, fail-closed)로 되묻는다."
-version: 1.6.3
+version: 1.7.0
 author: autophagy-agents
 license: MIT
 platforms: [linux]
@@ -15,6 +15,27 @@ prerequisites:
 # 내 캘린더 관리 (calendar)
 
 cha 본인의 Google 캘린더를 gws CLI(OAuth, W0-6)로 관리한다.
+
+## 새 일정 기본색 (노드별 선택)
+
+릴리스 호스트의 `~/.hermes/release-flags/calendar-default-color`에 Google
+`colorId` 하나를 **줄바꿈 없이** 쓴다(허용 `1`~`11`, 세이지=`2`).
+다음 릴리스의 기존 승인 카드가 색상값까지 묶고, 같은 HEAD 승인 뒤 배포기가
+노드 `~/.hermes/calendar-default-color.mode`에 반영한다. 초안 생성기는
+`HERMES_HOME`(미설정=`~/.hermes`)의 이 표식을 읽어 새 `events.insert --json`에만
+`colorId`를 넣는다. 실행·승인 시에는 설정을 다시 읽지 않는다.
+
+- 미설정/배포 표식 `off`: 예전 명령·해시·카드 바이트 그대로. 잘못된 값은 초안 생성을 거부한다.
+- 색상이 있는 신규 카드는 v5이며 `색: 세이지`(다른 id는 `Google 색상 N`)를 보여 준다.
+  그 값은 동결 argv의 기존 SHA-256에 포함된다. 기존 v1~v4는 그대로 재생한다.
+- 기존 이벤트의 update/patch/delete·이미 동결한 초안에는 소급 적용하지 않는다.
+  호스트 파일 삭제+다음 승인 릴리스는 `off`를 배포한다.
+- **현재는 노드의 생성 경로 전체에 적용하는 기본값**이다. 개인·업무 분류기는 없다.
+  업무 메일 digest/card에서 만드는 일정만 세이지, 개인 일정(기일·생일·모임·병원·미용)은
+  기본색 유지라는 정책의 자동 예외는 [후속 과제](../../docs/follow-ups.md)에 남긴다.
+  이 구분이 필요한 혼용 노드에서는 예외가 구현되기 전 전역 기본색을 켜지 않는다.
+
+[기능 소개·켜는 방법](../../docs/기능소개/캘린더-새-일정-기본색.md).
 
 ## 현재 승인 규칙 — 소유자 내부 쓰기는 카드 없이
 

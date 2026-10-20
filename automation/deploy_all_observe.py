@@ -201,6 +201,17 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
         # Before the first release there is no marker; that is the plain-text default.
         state = "ok" if mode == "off" and have == "-" else _state(want, have)
         return _Seen(want, want if state == "ok" else have, state)
+    if decl.attr("algorithm") == "calendar-default-color-v1":
+        from automation.calendar_default_color import COLORS
+
+        mode = _cache.get("calendar_default_color", "off")
+        if mode not in ("off", *COLORS):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("sha", decl.destination))
+        have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
+        state = "ok" if mode == "off" and have == "-" else _state(want, have)
+        return _Seen(want, want if state == "ok" else have, state)
     if decl.attr("algorithm") == "owner-timers-v1":
         value = str(_cache.get("owner_timers_off", "off"))
         rc, out = call(decl.account, ("owner-timers", str(root), value))
@@ -334,6 +345,7 @@ def collect(
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
+    calendar_default_color: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     owner_timers_off: str = "off",
@@ -362,6 +374,7 @@ def collect(
     cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard})
     cache["omo_relay_mode"] = omo_relay_mode
     cache["mail_html_reply"] = mail_html_reply
+    cache["calendar_default_color"] = calendar_default_color
     cache["owner_timers_off"] = owner_timers_off
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
@@ -405,6 +418,7 @@ def observe_node(
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
+    calendar_default_color: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     owner_timers_off: str = "off",
@@ -420,4 +434,5 @@ def observe_node(
                    report_hub=report_hub, hermes_dashboard=hermes_dashboard,
                    owner_timers_off=owner_timers_off,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
-                   omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply)
+                   omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply,
+                   calendar_default_color=calendar_default_color)

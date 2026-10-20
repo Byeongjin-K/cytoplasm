@@ -77,6 +77,7 @@ Hermes 실행 파일·게이트웨이·무멘션 응답 및 운영자 peer 진�
 
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `calendar_default_color` | module | `automation/calendar_default_color.py` · `skills/calendar/scripts/calendar_cli.py` · `calendar_card.py` | 정확한 Google id의 릴리스 승인·선언 표식 배포. 새 insert와 v5 카드에 색을 동결하며 미설정 argv·해시·v1~v4는 보존. 개인 일정 예외는 후속. |
 | `assemble_report` | fn | `skills/report/scripts/report_core.py` | 보고서가 유일한 문서 제목을 소유한다. 모델 초안 맨 앞 H1만 빼고 본문·하위 절·근거 노트는 보존한다. [사용 규약](skills/report/SKILL.md#재료-파일과-입력-한도-2026-10-19) |
 | `google_gate` | package | `automation/google_gate/` | 기본 꺼짐 노드 Google 게이트 준비: 설정 렌더·jobs 토큰 gws shim·doctor 모드·소유자 루트 블록. 자동 배포 없음, 실제 전환은 후속 소유자 카드. [소개](docs/기능소개/구글-게이트-하나로.md) |
 | `gateway_retirement` | module | `automation/gateway_retirement.py` · `automation/gateway_retirement_policy.py` | 2026-10-19 소유자 "이거 아예 삭제해 litellm", 09:00 비용 보고 "이것도 이제 없애라". 호스트 `release-flags/litellm`의 정확한 `retired`를 승인 해시에 묶고 동일 HEAD 전량 적용 맨 끝에만 ops·agent 잔여물을 정리한다. ops 백업 검증·사용 중 거부, agent 제공자 블록·키의 원자 제거, 완료 표식 재실행 무동작. [소개](docs/기능소개/litellm-지우기.md) |

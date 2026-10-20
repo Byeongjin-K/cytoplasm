@@ -109,8 +109,18 @@ def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
     if not summary:
         raise calendar_core.ParseRejected("일정 제목을 알 수 없습니다 (--summary로 지정 가능)")
     request = calendar_core.ParsedRequest(summary=summary, start=request.start, end=request.end)
+    from automation.calendar_default_color import node_color
+
+    try:
+        color = node_color(Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser())
+    except (OSError, ValueError) as error:
+        raise calendar_gate.GateError("캘린더 기본색 설정이 잘못되었습니다", 3) from error
+    argv = (
+        calendar_core.build_create_argv(args.calendar, request, color_id=color)
+        if color is not None else calendar_core.build_create_argv(args.calendar, request)
+    )
     return calendar_gate.build_draft(
-        action="create", argv=calendar_core.build_create_argv(args.calendar, request),
+        action="create", argv=argv,
         calendar_id=args.calendar, event_id="", summary=summary,
         start=request.start.isoformat(), end=request.end.isoformat(),
         channel_id=args.channel_id, **_origin_of(args),

@@ -22,6 +22,9 @@ MUTATING_SUBCOMMANDS: frozenset[str] = frozenset({
 
 def _automation_root() -> Path:
     """automation/skill_mount.py를 포함하는 런타임 checkout을 찾는다."""
+    configured = os.environ.get("AUTOPHAGY_REPO_ROOT")
+    if configured:
+        return Path(configured).expanduser()
     for candidate in (Path("/srv/autophagy-agent-current"), *Path(__file__).resolve().parents):
         if (candidate / "automation" / "skill_mount.py").is_file():
             return candidate

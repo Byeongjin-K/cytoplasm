@@ -1,0 +1,2 @@
+# Exact release-host color, or off; verified by the node release probe.
+agent|automation/calendar_default_color|.hermes/calendar-default-color.mode|v2:derived;algorithm=calendar-default-color-v1

@@ -227,12 +227,16 @@ def _event_time(value: datetime) -> dict[str, str]:
     return {"dateTime": value.isoformat(), "timeZone": "Asia/Seoul"}
 
 
-def build_create_argv(calendar_id: str, request: ParsedRequest) -> tuple[str, ...]:
-    body = {
+def build_create_argv(
+    calendar_id: str, request: ParsedRequest, *, color_id: str | None = None,
+) -> tuple[str, ...]:
+    body: dict[str, str | Mapping[str, str]] = {
         "summary": request.summary,
         "start": _event_time(request.start),
         "end": _event_time(request.end),
     }
+    if color_id is not None:
+        body["colorId"] = color_id
     return (
         "gws", "calendar", "events", "insert",
         "--params", _cjson({"calendarId": calendar_id}),

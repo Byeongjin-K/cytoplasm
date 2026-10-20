@@ -22,6 +22,9 @@ def prepare_draft(draft: DraftRecord) -> DraftRecord:
 
     version = draft.get("render_version", "1" if draft.get("approval_thread_id") else "4")
     try:
+        if "render_version" not in draft and not draft.get("approval_thread_id"):
+            if _changes(draft).color is not None:
+                version = "5"
         card = prepare(lambda selected: calendar_confirm.render_confirmation(
             {**draft, "render_version": selected},
         ), version)
@@ -37,7 +40,7 @@ def render_envelope(draft: DraftRecord) -> str:
     from calendar_binding import reaction_instruction
 
     version = draft.get("render_version")
-    if version not in {"2", "3", "4"}:
+    if version not in {"2", "3", "4", "5"}:
         raise CardRenderError("unknown calendar card render version")
     if not callable(getattr(owner_message, "render", None)):
         raise CardRenderError("owner envelope unavailable")
@@ -47,13 +50,13 @@ def render_envelope(draft: DraftRecord) -> str:
         location=here, owner=owner_message.Action("react", here, reaction_instruction()),
         agent_next="승인된 캘린더 변경만 실행", recovery="not_applicable",
         detail=owner_message.Approval(None, "캘린더를 변경하지 않음"),
-        render_version="owner-ko-v2" if version == "4" else "owner-ko-v1",
+        render_version="owner-ko-v2" if version in {"4", "5"} else "owner-ko-v1",
     )
     try:
         body = owner_message.render(envelope, destination=here)
     except owner_message.OwnerMessageError as error:
         raise CardRenderError("calendar envelope cannot render") from error
-    if version == "4":
+    if version in {"4", "5"}:
         return f"{body}\n해시: `sha256:{draft['sha256']}`"
     return f"{body}\nsha256:{draft['sha256']}"
 
@@ -70,6 +73,7 @@ class ChangeFields:
     summary: str | None
     start: str | None
     end: str | None
+    color: str | None = None
 
 
 def _time_value(value: JsonValue) -> str | None:
@@ -122,12 +126,18 @@ def _changes(draft: DraftRecord) -> ChangeFields:
             case unreachable:
                 assert_never(unreachable)
         body: JsonValue = json.loads(argv[argv.index("--json") + 1])
-        if not isinstance(body, dict) or not body or body.keys() - {"summary", "start", "end"} or None in body.values():
+        if not isinstance(body, dict) or not body or body.keys() - {"summary", "start", "end", "colorId"} or None in body.values():
             raise CardRenderError("calendar command fields cannot be displayed")
+        color = body.get("colorId")
+        if color is not None:
+            from automation.calendar_default_color import COLORS
+
+            if action != CalendarAction.CREATE or not isinstance(color, str) or color not in COLORS:
+                raise CardRenderError("calendar color field is invalid")
         summary = body.get("summary")
         if summary is not None and not isinstance(summary, str):
             raise CardRenderError("calendar title field is invalid")
-        return ChangeFields(action, summary, _time_value(body.get("start")), _time_value(body.get("end")))
+        return ChangeFields(action, summary, _time_value(body.get("start")), _time_value(body.get("end")), color)
     except (KeyError, ValueError, IndexError) as error:
         raise CardRenderError("calendar frozen command is invalid") from error
 
@@ -170,7 +180,7 @@ def change_details(draft: DraftRecord) -> str:
         case "3":
             changed = _changes(draft)
             multiline = False
-        case "4":
+        case "4" | "5":
             changed = _changes(draft)
             multiline = True
         case _:
@@ -199,6 +209,13 @@ def change_details(draft: DraftRecord) -> str:
         if multiline and label in {"시작", "종료"} and value:
             shown = _display_time(value)
         lines.append(f"{label}: {shown}{suffix}")
+    if changed.color is not None:
+        from automation.calendar_default_color import color_label
+        from automation.interop.approval_card import CardRenderError
+
+        if draft.get("render_version") != "5":
+            raise CardRenderError("calendar color requires card version 5")
+        lines.append(f"색: {color_label(changed.color)}")
     if not multiline:
         return " · ".join(lines)
     return "\n".join((f"작업: {lines[0]}", *lines[1:]))
