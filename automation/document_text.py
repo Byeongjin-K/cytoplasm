@@ -246,7 +246,12 @@ def extract_document(path: Path, *, max_bytes: int = MAX_DOCUMENT_BYTES) -> Extr
         elif suffix == ".xlsx":
             sections = _from_xlsx(path)
         elif suffix == ".pdf":
-            sections = _from_pdf(path)
+            try:
+                sections = _from_pdf(path)
+            except OSError:
+                if not ocr:
+                    raise
+                sections = []
             if ocr and not any(section.strip() for section in sections):
                 tried_ocr = True
                 sections = _from_ocr(path, ocr)
