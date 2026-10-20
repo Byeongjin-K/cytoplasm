@@ -215,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ledger", choices=("on", "off"), default="off")
     parser.add_argument("--mail-html-reply", choices=("on", "off"), default="off")
     parser.add_argument("--calendar-default-color", choices=("off", *(str(i) for i in range(1, 12))), default="off")
+    parser.add_argument("--document-ocr", choices=("on", "off"), default="off")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
     parser.add_argument("--report-hub", choices=("on", "off"), default="on")
     parser.add_argument("--hermes-dashboard", choices=("on", "off"), default="on")
@@ -240,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
                                  **({"mail_html_reply": args.mail_html_reply} if args.mail_html_reply == "on" else {}),
                                  **({"calendar_default_color": args.calendar_default_color}
                                     if args.calendar_default_color != "off" else {}),
+                                 **({"document_ocr": args.document_ocr} if args.document_ocr == "on" else {}),
                                  **({"owner_timers_off": args.owner_timers_off}
                                     if args.owner_timers_off != "off" else {}))
     if args.format == "gateways":

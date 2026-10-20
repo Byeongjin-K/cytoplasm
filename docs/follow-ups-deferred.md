@@ -1,5 +1,12 @@
 # 보류·인계 후속 과제
 
+## 문서 글자 읽기(OCR) 연결 후속 (2026-10-21)
+
+- **중간 · 메일 첨부 본문 추출 없음**: 기관메일은 첨부를 `data/attachments/<UID>/` 에 저장만 하고 본문을 뽑지 않는다(`skills/mail/vendor/mailon/scraper.py` 저장 경로) → 첨부 요약·검색이 필요해지면 저장 뒤 공용 `extract_document` 를 부르는 단계를 vendor 밖 래퍼에 두고(vendor 바이트 유지), 글자 읽기는 같은 설정을 따른다.
+  ↳ 해소(요청형, 2026-10-21): 유돌 게이트 `mail-attachment-text <uid> <이름>`(형 글 근거)이 저장된 첨부를 공용 추출기로 읽는다. 첨부를 미리 뽑아 검색에 넣는 일은 남은 「개인 RAG 는 markdown 만」 항목과 함께 본다.
+- **낮음 · 유돌 계정의 명령 경로**: 유돌 계정은 로컬 포트(루프백)에 닿지 못해 다른 계정의 GPU 큐로 가는 명령을 그대로 쓸 수 없다 → 유돌 쪽에서 켤 때는 게이트가 허용하는 전달 경로를 먼저 정한다.
+  ↳ 해소(2026-10-21): 게이트·nft·sudoers 변경 없이 파일 넘기기(`~/outbox/ocr`→운영자 중계기→`~/inbox/ocr`)로 정했다. 노드 쪽 클라이언트는 `automation/document_ocr.py relay`, 켜기는 릴리스 스위치 `document-ocr`.
+
 ## 릴리스 수렴 사각지대 해소 후 남긴 것 (2026-10-01)
 
 - **[소유자 결정] `daily-cost-report` 가 2026-10-01 실행까지 28회 연속 실패하고 있다** — 노드 cron 캡처(2026-10-01 05:01Z)의 2026-10-01 09:00:40 KST 실행이 code 1 로 끝났고 출력은 `cost-report error: 'COST_REPORT_SOFT_CAP'  (28 failures in a row)` 다(2026-09-30 실행도 rc 1 로 관측됐었다). 단서: `automation/cost-report/send_cost_report.py:211` 이 필수 환경변수 `COST_REPORT_SOFT_CAP` 을 읽는다. 이 계획에서는 노드 실행 환경을 읽지 않았으므로 근본 원인은 확인되지 않았다 → 기존 보류 항목 「일일 비용 보고 필수 임계값 미설정 (2026-09-19) — 소유자」(`docs/follow-ups-deferred.md`)의 소유자 조치대로, USD 경보 임계값을 정해 실제 cron 실행 환경에 전달하거나 이 보고의 사용 중단을 결정한다. **영향: 일일 지출 통지 중단(반복) · 심각도 중**.
