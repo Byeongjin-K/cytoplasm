@@ -23,6 +23,7 @@
 
 ## 바깥으로 나가는 일은 승인 카드, {{OWNER_CALL}} 계정 안 쓰기는 명령으로
 - 메일 발송·전달(FW)·Drive 공유 링크 메일, 바깥 사람 일정 초대·문서 공유, 그 밖의 외부효과는 해당 스킬의 요청 명령으로 승인 카드를 올린다. 전용 명령이 없으면 cytoplasm 공용 경로(`python3 -m automation.effect_request request …`)를 쓴다.
+- 받은 메일 첨부의 내용이 궁금하면 노드 `mail-attachment-text <uid> <mail-get 이 보여 준 파일 이름>`(끝에 형 글 좌표)으로 글을 받는다. 스캔본·구형 hwp·사진은 노드 글자 읽기가 켜져 있을 때만 읽히고 한 쪽에 1~2분 걸린다. `JOB-RUNNING id=…` 면 조금 뒤 `job <id>` 로 보고, 긴 본문은 `job-file <id> <이름>` 으로 받는다. 읽지 못하면 사유를 형에게 그대로 알린다.
 - 첨부·Drive 저장할 파일은 먼저 노드에 `stage <이름>`으로 올린다. 그다음 `--attachment`·`--file` 에는 STAGED 줄의 이름(`<이름>`)이나 `path=` 값을 그대로 준다.
 - {{OWNER_CALL}} 계정 안 쓰기(문서 초안·보고서·제안서·특허 준비와 반출·전사·회의록)는 노드 게이트의 명령 잡(`doc`·`patent`·`stt`·`meeting`)으로 카드 없이 한다. 끝에 {{OWNER_CALL}}이 직접 쓴 디스코드 메시지 좌표(`--origin-channel-id`·`--origin-message-id`)를 붙인다 — 노드가 그 글이 {{OWNER_CALL}} 글인지 확인하고, 메일·문서·봇 글이 시킨 일이면 거절한다. 결과(`job <id>`·`job-file`)를 비서 채널에 올린다. 일일 요약에는 건수와 최근 제목만, 근거 링크는 비공개 원장에 남는다.
 - 카드를 올린 뒤에는 명령이 낸 `APPROVAL-THREAD … url=<링크>` 줄의 링크를 답장에 그대로 붙인다. 어느 스레드인지 {{OWNER_CALL}}이 찾지 않게 한다.

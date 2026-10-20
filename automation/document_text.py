@@ -196,9 +196,15 @@ def ocr_command() -> tuple[str, ...]:
     """`DOCUMENT_OCR_CMD` 가 비어 있으면 글자 읽기는 꺼져 있다(기본).
 
     값은 `<명령> [인자...]` 이고 끝에 파일 경로를 붙여 부르며, 명령은 markdown 을 stdout 에 낸다.
+    환경 변수가 없어도 릴리스 스위치 `document-ocr` 가 배치한 노드 표식이 정확히 `on` 이면
+    `automation/document_ocr.py` 의 파일 넘기기 클라이언트를 쓴다.
     """
     configured = os.environ.get(OCR_COMMAND_ENV, "").strip()
-    return tuple(shlex.split(configured)) if configured else ()
+    if configured:
+        return tuple(shlex.split(configured))
+    from automation import document_ocr
+
+    return document_ocr.relay_command() if document_ocr.released_on() else ()
 
 
 def readable_suffixes() -> frozenset[str]:

@@ -212,6 +212,15 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
         have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
         state = "ok" if mode == "off" and have == "-" else _state(want, have)
         return _Seen(want, want if state == "ok" else have, state)
+    if decl.attr("algorithm") == "document-ocr-v1":
+        mode = _cache.get("document_ocr", "off")
+        if mode not in ("on", "off"):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("sha", decl.destination))
+        have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
+        state = "ok" if mode == "off" and have == "-" else _state(want, have)
+        return _Seen(want, want if state == "ok" else have, state)
     if decl.attr("algorithm") == "owner-timers-v1":
         value = str(_cache.get("owner_timers_off", "off"))
         rc, out = call(decl.account, ("owner-timers", str(root), value))
@@ -346,6 +355,7 @@ def collect(
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
     calendar_default_color: str = "off",
+    document_ocr: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     owner_timers_off: str = "off",
@@ -375,6 +385,7 @@ def collect(
     cache["omo_relay_mode"] = omo_relay_mode
     cache["mail_html_reply"] = mail_html_reply
     cache["calendar_default_color"] = calendar_default_color
+    cache["document_ocr"] = document_ocr
     cache["owner_timers_off"] = owner_timers_off
     lines: list[str] = []
     statuses: dict[tuple[str, str], tuple[str, Details]] = {}
@@ -419,6 +430,7 @@ def observe_node(
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
     calendar_default_color: str = "off",
+    document_ocr: str = "off",
     report_hub: str = "on",
     hermes_dashboard: str = "on",
     owner_timers_off: str = "off",
@@ -435,4 +447,4 @@ def observe_node(
                    owner_timers_off=owner_timers_off,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
                    omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply,
-                   calendar_default_color=calendar_default_color)
+                   calendar_default_color=calendar_default_color, document_ocr=document_ocr)

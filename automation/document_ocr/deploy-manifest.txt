@@ -1,0 +1,2 @@
+# Dynamic release-host mode for document OCR, verified against the node marker by the release probe.
+agent|automation/document_ocr|.hermes/document-ocr.mode|v2:derived;algorithm=document-ocr-v1

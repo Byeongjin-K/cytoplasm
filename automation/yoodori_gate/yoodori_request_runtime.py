@@ -52,12 +52,8 @@ def stage_file(root: Path, name: str, source: BinaryIO) -> tuple[Path, str, int]
     return destination, digest.hexdigest(), size
 
 
-def stage_mail_attachment(home: Path, staging: Path, uid: str, filename: str) -> tuple[Path, str, int]:
-    """Copy one saved attachment of a mail in the owner's mailbox into the private staging folder.
-
-    Owner 2026-10-19 (live QA 2): a Drive share or a new mail may carry a file that arrived by mail,
-    and only staged paths are accepted. The bytes stay on the node; YooDori gets path, digest, size.
-    """
+def saved_attachment(home: Path, uid: str, filename: str) -> tuple[int, Path]:
+    """The 1-based position and node path of one saved attachment of the owner's mail."""
     data = home / ".hermes/mailon-runtime/state/data"
     try:
         db = sqlite3.connect(f"file:{data / 'state.db'}?mode=ro", uri=True)
@@ -82,14 +78,60 @@ def stage_mail_attachment(home: Path, staging: Path, uid: str, filename: str) ->
         raise Refused("that attachment is not saved on the node")
     if source.stat().st_size > MAX_STAGE_BYTES:
         raise Refused("attachment exceeds 64 MiB")
+    return index + 1, source
+
+
+def _attachment_name(uid: str, position: int, filename: str) -> str:
     # Letter-first extensions only: a recorded name may still end in the page's size ("x.wrl 37.86 MB").
     extensions = re.findall(r"\.([A-Za-z][A-Za-z0-9]{0,9})\b", filename)
-    name = f"mail-{uid}-{index + 1}" + (f".{extensions[-1]}" if extensions else "")
+    return f"mail-{uid}-{position}" + (f".{extensions[-1]}" if extensions else "")
+
+
+def stage_mail_attachment(home: Path, staging: Path, uid: str, filename: str) -> tuple[Path, str, int]:
+    """Copy one saved attachment of a mail in the owner's mailbox into the private staging folder.
+
+    Owner 2026-10-19 (live QA 2): a Drive share or a new mail may carry a file that arrived by mail,
+    and only staged paths are accepted. The bytes stay on the node; YooDori gets path, digest, size.
+    """
+    position, source = saved_attachment(home, uid, filename)
+    name = _attachment_name(uid, position, filename)
     with source.open("rb") as handle:
         staged = stage_file(staging, name, handle)
     # The staged name is plain ASCII; the original name rides beside it so a Drive share keeps it.
     stage_file(staging, name + ".name", io.BytesIO(filename.encode("utf-8")))
     return staged
+
+
+ATTACHMENT_PREVIEW = 6000
+
+
+def attachment_text(home: Path, uid: str, filename: str, out: Path) -> int:
+    """Read one saved attachment of the owner's mail as text with the shared extractor.
+
+    Owner Q335 (2026-10-21 "머지하고 다음 릴리스 때 켜기"): scanned pdf, legacy hwp and photos
+    are read through OCR only when the release switch `document-ocr` is on. The full text lands in
+    `out/<name>.md` (job-file); stdout carries one status line and a bounded preview.
+    """
+    position, source = saved_attachment(home, uid, filename)
+    name = _attachment_name(uid, position, filename)
+    from automation.document_text import OK, extract_document
+
+    with tempfile.TemporaryDirectory(prefix="attachment-text-") as scratch:
+        copy = Path(scratch) / name
+        with source.open("rb") as handle, copy.open("wb") as target:
+            while chunk := handle.read(65536):
+                target.write(chunk)
+        extracted = extract_document(copy)
+    if extracted.status != OK:
+        print(f"ATTACHMENT-TEXT status=refused name={name} reason={extracted.status}")
+        return 3
+    text = extracted.text
+    result = out / f"{Path(name).stem}.md"
+    stage_file(out, result.name, io.BytesIO(text.encode("utf-8")))
+    print(f"ATTACHMENT-TEXT status=ok name={name} sections={extracted.sections} chars={len(text)} "
+          f"file={result.name}")
+    print(text if len(text) <= ATTACHMENT_PREVIEW else text[:ATTACHMENT_PREVIEW] + "\n…(뒷부분은 파일에)")
+    return 0
 
 
 def original_name(staging: Path, staged: str) -> str:
@@ -203,3 +245,13 @@ def calendar_card(argv: list[str], cwd: Path, env: dict[str, str], timeout: int)
         raise Refused("calendar did not return exactly one draft id")
     return subprocess.run([*argv[:2], "post-confirm", "--draft", ids[0]], cwd=cwd,
                           env=env, stdin=subprocess.DEVNULL, timeout=timeout, check=False).returncode
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 5 or sys.argv[1] != "attachment-text":
+        sys.exit(2)
+    try:
+        sys.exit(attachment_text(Path.home(), sys.argv[2], sys.argv[3], Path(sys.argv[4])))
+    except Refused as exc:
+        sys.stderr.write(f"ATTACHMENT-TEXT-REFUSED {exc}\n")
+        sys.exit(2)

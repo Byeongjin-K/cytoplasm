@@ -113,7 +113,9 @@ TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
             frozenset({"transcribe", "ingest", "polish"})),
     "meeting": ("meeting/scripts/meeting_cli.py", frozenset({"evidence"}), frozenset({"ingest"})),
 }
-JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync")
+JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync", "mail-attachment-text")
+# Read jobs still start only from the owner's own recent message, but never touch the write ledger.
+ORIGIN_READ_JOBS = frozenset({"mail-sync", "mail-attachment-text"})
 LONG = frozenset({"proposal", "stt", "meeting"})
 JOB_WAIT = 100
 # Test replays, injected approvals and output-root overrides are never caller-controlled.
@@ -142,6 +144,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
          "  meeting <ingest|evidence> [args],\n"
          "  mail-sync (collect institutional mail now; waits for a running collection);\n"
+         "  mail-attachment-text <uid> <file name as mail-get shows it> (that attachment as text; scans,\n"
+         "  old hwp and photos only when the node's OCR release switch is on);\n"
          "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
          "  --<flag>-b64 for multi-line text; --out-name <name> for an output file.\n"
          "  job <id> (status/output), job-file <id> <name> (bytes on stdout).\n")
@@ -421,6 +425,13 @@ def build_job(words: list[str]) -> Job:
             raise Refused("mail-sync takes no arguments besides the origin")
         argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now"]
         return Job(name, argv, False, "기관메일 지금 수집", 1800, channel, message)
+    if name == "mail-attachment-text":
+        if len(rest) != 2 or not _UID.fullmatch(rest[0]):
+            raise Refused("mail-attachment-text needs <uid> <file name> --origin-channel-id N --origin-message-id N")
+        runtime = str(Path(__file__).resolve().with_name("yoodori_request_runtime.py"))
+        argv = [py, runtime, "attachment-text", rest[0], _value(rest[1], "short"), "{OUT}"]
+        # OCR may take its own 1800 s budget; the job keeps a margin above it.
+        return Job(name, argv, False, f"메일 첨부 글 읽기 {rest[0]}", 2400, channel, message)
     if name == "doc":
         if not rest or rest[0] not in TOOLS or rest[0] in {"patent", "stt", "meeting"}:
             raise Refused("doc needs one of: " + ", ".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}))
@@ -588,7 +599,7 @@ def _switched(kind: str) -> bool:
 def run_job(job: Job) -> int:
     env = job_env(HOME, RELEASE, ENV)
     link = ""
-    if job.name == "mail-sync":
+    if job.name in ORIGIN_READ_JOBS:
         _, notice_bot = _release_modules()
         link = yoodori_jobs.verify_owner_origin(
             job.channel_id, job.message_id, _owner_id(), notice_bot.resolve_token(environ=env)).link

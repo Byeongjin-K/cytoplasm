@@ -207,6 +207,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
     from automation.mail_html_reply import CARD_LINE as HTML_REPLY_LINE, SURFACE as HTML_REPLY_SURFACE
     from automation.calendar_default_color import PREFIX as COLOR_PREFIX, color_label
+    from automation.document_ocr import CARD_LINE as OCR_LINE, SURFACE as OCR_SURFACE
     from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
     from automation.peer_retired import CARD_LINES as RETIRE_LINES, ROOT_NOTE, SURFACE as RETIRE_SURFACE
     from automation.hermes_product_policy import CARD_LINES as PRODUCT_LINES, SURFACE as PRODUCT_SURFACE
@@ -237,6 +238,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
             [f"새 일정 기본색: {color_label(name.removeprefix(COLOR_PREFIX))}"
              for name, _digest in spec.surface_digests if name.startswith(COLOR_PREFIX)]
         ),
+        *([OCR_LINE] if any(name == OCR_SURFACE for name, _digest in spec.surface_digests) else []),
         *[line for name, line in LEGACY_LINES.items() if legacy_surface(name) in spec.surface_digests],
         *([*RETIRE_LINES, ROOT_NOTE]
           if any(name == RETIRE_SURFACE for name, _digest in spec.surface_digests) else []),

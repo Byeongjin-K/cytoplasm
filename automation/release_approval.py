@@ -109,6 +109,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         except ValueError as error:
             print(f"RELEASE-PLAN-BLOCK: {error}", file=sys.stderr)
             return 4
+    if getattr(args, "document_ocr", None) == "on":
+        from automation.document_ocr import surface as document_ocr_surface
+
+        surfaces.append(document_ocr_surface())
     from automation.owner_timers import decode as decode_timers, surfaces as timer_surfaces
 
     try:
@@ -437,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--mail-html-reply", choices=("on",), help="기관메일 회신 새 서식 켜기")
     plan.add_argument("--calendar-default-color", choices=tuple(str(i) for i in range(1, 12)),
                       help="새 캘린더 일정의 기본 Google colorId")
+    plan.add_argument("--document-ocr", choices=("on",), help="스캔본·구형 hwp·사진 글자 읽기 켜기")
     plan.add_argument("--omo-relay", metavar="DIGEST", help="이 PC omo 중계 설정 지문")
     plan.add_argument("--legacy-service-off", action="append", choices=("report-hub", "hermes-dashboard"))
     plan.add_argument("--owner-timers-off", default="off")
@@ -593,6 +598,16 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     calendar_color.set_defaults(run=authorize_calendar_color)
+    document_ocr = commands.add_parser("authorize-document-ocr")
+    document_ocr.add_argument("--head", required=True)
+    def authorize_document_ocr(args: argparse.Namespace) -> int:
+        from automation.document_ocr import surface
+
+        name, digest = surface()
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    document_ocr.set_defaults(run=authorize_document_ocr)
     args = parser.parse_args(argv)
     return int(args.run(args))
 
