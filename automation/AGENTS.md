@@ -21,6 +21,12 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 삭제+다음 릴리스는 평문 복귀이며, 꺼짐 중 시험은 형 기관주소 전용 초안만 허용한다.
 [소개](../docs/기능소개/기관메일-회신-서식-유지.md).
 
+캘린더 기본색은 `calendar_default_color`의 기본 꺼짐 릴리스 스위치다.
+`release-flags/calendar-default-color`의 정확한 Google id `1`~`11`과 HEAD를
+기존 승인에 묶고, 선언된 `push_file`로 agent 표식을 배포·재조회한다.
+노드 생성 초안만 그 값을 읽으며 기존 카드·초안·수정 일정은 바꾸지 않는다.
+카드 staging에는 이 모듈을 포함한다([소개](../docs/기능소개/캘린더-새-일정-기본색.md)).
+
 2026-10-19 소유자 “끄지 말고 삭제”와 Q282로 메모리 예약 작업 둘과
 `reminder_poller` 전체를 제거했다. `hermes-memory-off` 스위치도 제거했다.
 `retired_jobs`의 필수 derived 선언이 아직 도는 타이머를 멈춘 뒤(멈춤 재조회) 유닛을 삭제하고 재조회한다.

@@ -77,6 +77,7 @@ fi
 auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_release switches)" || exit 4
 ledger_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release switch)" || exit 4
 mail_html_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.mail_html_reply switch)" || exit 4
+calendar_color="$(PYTHONPATH="$repo_root" python3 -B -m automation.calendar_default_color switch)" || exit 4
 relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release switch)" || exit 4
 report_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name report-hub)" || exit 4
 dashboard_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.legacy_services switch --name hermes-dashboard)" || exit 4
@@ -103,7 +104,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --mail-html-reply $mail_html_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --calendar-default-color $calendar_color --mail-html-reply $mail_html_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_owner_timers() {
@@ -423,6 +424,11 @@ case "$mode" in
     if [[ "$mail_html_mode" == on ]]; then
       "$repo_root/automation/release_approval_remote.sh" authorize-mail-html-reply --head "$node_sha" \
         || { log "MAIL-HTML-REPLY-UNAUTHORIZED: 같은 HEAD의 릴리스 승인이 필요합니다"; exit 4; }
+    fi
+    if [[ "$calendar_color" != off ]]; then
+      "$repo_root/automation/release_approval_remote.sh" authorize-calendar-default-color \
+        --head "$node_sha" --color "$calendar_color" \
+        || { log "CALENDAR-COLOR-UNAUTHORIZED: 같은 HEAD와 색상값의 릴리스 승인이 필요합니다"; exit 4; }
     fi
     if [[ "$peer_mode" == retired ]]; then
       # No non-root cleanup can run until the deployed release card authorizes it.
