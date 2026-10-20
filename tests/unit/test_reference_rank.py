@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from automation import reference_rank
 from automation.document_text import HWP_REASON, SUPPORTED_REASON
 
@@ -108,3 +110,10 @@ def test_snippet_centres_on_the_first_match() -> None:
 
 def test_link_for_builds_the_drive_view_url() -> None:
     assert reference_rank.link_for("file1") == "https://drive.google.com/file/d/file1/view"
+
+
+def test_old_hwp_is_readable_when_ocr_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOCUMENT_OCR_CMD", "dori-ocr")
+    assert reference_rank.refusal(_md("계획서.hwp"), MAX_BYTES) == ""
+    assert reference_rank.refusal(_md("현장사진.png"), MAX_BYTES) == ""
+    assert reference_rank.refusal(_md("설치본.exe"), MAX_BYTES) == SUPPORTED_REASON

@@ -276,3 +276,89 @@ def test_scanned_pdf_without_a_text_layer_is_refused(tmp_path: Path) -> None:
 
 def test_default_size_ceiling_matches_the_meeting_input_ceiling() -> None:
     assert MAX_DOCUMENT_BYTES == 25 * 1024 * 1024
+
+
+def _fake_ocr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, exit_code: int = 0) -> Path:
+    calls = tmp_path / "ocr-calls.txt"
+    script = tmp_path / "fake_ocr.py"
+    script.write_text(
+        "import pathlib, sys\n"
+        f"pathlib.Path({str(calls)!r}).open('a').write(sys.argv[1] + '\\n')\n"
+        "print('| 항목 | 값 |\\n|---|---|\\n| 굴착 오차 | 10 mm |')\n"
+        f"sys.exit({exit_code})\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(document_text.OCR_COMMAND_ENV, f"{sys.executable} {script}")
+    return calls
+
+
+def test_ocr_is_off_without_a_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(document_text.OCR_COMMAND_ENV, raising=False)
+    path = tmp_path / "설계도.hwp"
+    path.write_bytes(b"\x00\x01\x02")
+
+    assert document_text.readable_suffixes() == document_text.SUPPORTED_SUFFIXES
+    assert extract_document(path).status == "읽지 못함: 구형 hwp 는 hwpx 나 pdf 로 저장해 주세요"
+
+
+def test_pdf_without_a_text_layer_is_read_by_ocr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _fake_ocr(tmp_path, monkeypatch)
+    path = tmp_path / "스캔본.pdf"
+    path.write_bytes(b"%PDF-1.4\n%%EOF\n")
+
+    extracted = extract_document(path)
+
+    assert extracted.status == OK
+    assert "| 굴착 오차 | 10 mm |" in extracted.text
+    assert calls.read_text(encoding="utf-8").splitlines() == [str(path)]
+
+
+@pytest.mark.parametrize("name", ["설계도.hwp", "현장사진.png", "도면.JPG"])
+def test_hwp_and_images_go_to_ocr_when_it_is_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    _ = _fake_ocr(tmp_path, monkeypatch)
+    path = tmp_path / name
+    path.write_bytes(b"\x00\x01\x02")
+
+    extracted = extract_document(path)
+
+    assert extracted.status == OK
+    assert "10 mm" in extracted.text
+
+
+@pytest.mark.skipif(shutil.which("pdftotext") is None, reason="pdftotext 없음")
+def test_pdf_with_a_text_layer_does_not_call_ocr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _fake_ocr(tmp_path, monkeypatch)
+    path = tmp_path / "보고서.pdf"
+    subprocess.run([sys.executable, str(_FIXTURE_PDF), str(path), "--text"], check=True)
+
+    extracted = extract_document(path)
+
+    assert extracted.status == OK
+    assert not calls.exists()
+
+
+def test_failed_ocr_is_reported_not_raised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = _fake_ocr(tmp_path, monkeypatch, exit_code=4)
+    path = tmp_path / "설계도.hwp"
+    path.write_bytes(b"\x00\x01\x02")
+
+    extracted = extract_document(path)
+
+    assert extracted.status == "읽지 못함: 글자 읽기(OCR)로도 본문을 얻지 못했습니다"
+    assert extracted.text == ""
+
+
+def test_missing_ocr_command_is_reported_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(document_text.OCR_COMMAND_ENV, str(tmp_path / "없는-명령"))
+    path = tmp_path / "현장사진.png"
+    path.write_bytes(b"\x00\x01\x02")
+
+    assert extract_document(path).status == "읽지 못함: 글자 읽기(OCR)로도 본문을 얻지 못했습니다"
