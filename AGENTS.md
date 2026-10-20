@@ -330,6 +330,7 @@
 - 층: `autophagy/용어집.csv`→`autophagy/<문서 종류>/용어집.csv`→`.../<과제>/용어집.csv`, 깊은 층이 같은 낱말을 덮어쓴다. 폴더 정본 `drive_taxonomy.CATEGORIES`, Drive 외 `term_glossary.EXTRA_FOLDERS`.
 - 엔진 `automation/term_correction.py`·`term_glossary.py`·`term_correction_log.py`만. 사본 금지.
 - 새 스킬: ①렌더 전 해석 결과(요약·결정·액션·사람·장소)에 교정 ②원문 인용 구역(`### C. 원문 전사본`, `## 전문`, `-----원본 메시지-----` 아래)은 바이트 그대로 ③`term_correction_log.record(document=…,stage=…)` 어절만 ④Drive 조회는 `DRIVE_PUBLISH_ENABLED` 옵트인, 실패 시 노드 캐시. 교정 실패가 문서 생성을 막으면 안 됨, 모델 금지.
+- 명시적 예외: [Plaud 동결 전 전문 교정 훅](docs/기능소개/plaud-전사-동결전-교정.md)은 노드별 기본 꺼짐이다. opt-in 명령만 전문의 메모리 사본을 교정하고 원본 전사 파일은 보존하며, 실패하면 원문으로 동결한다. 기존 용어집 엔진·다른 원문 인용은 불변.
 - `test_term_correction_conformance.py`: (a)사본 `automation/`밖 RED (b)전사본 경로 교정 호출 RED (c)미채택 `_EXEMPT` 사유 필수. 절차·형식·환경변수·실패 마커의 정본은 `docs/guide/용어-교정-규약.md`(여기 복사하지 않는다).
 원문: [RULES.md](RULES.md) 「용어 교정 위치 규칙」 · 장부 `cyto-term-correction-stage`
 

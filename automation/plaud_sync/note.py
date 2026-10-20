@@ -37,6 +37,7 @@ from .lifelog_fields import (
 )
 from .lifelog_model import ExtractionOutcome, ExtractionSkipped, LifelogExtraction, LifelogRecording
 from .note_paths import PlaudNoteError, note_destination, note_title, recording_stamp
+from .transcript_corrector import Corrector, TranscriptContext
 
 __all__ = [
     "SOURCE_RULE",
@@ -84,6 +85,7 @@ def corrected_lifelog_note(
     glossary: term_correction.Glossary = (),
     taken: Collection[PurePosixPath] = frozenset(),
     relpath: PurePosixPath | None = None,
+    transcript_corrector: Corrector | None = None,
 ) -> CorrectedNote:
     """계획한 노트와 그 노트를 만들며 고친 낱말들.
 
@@ -100,6 +102,13 @@ def corrected_lifelog_note(
     if destination is None:
         destination, title_corrections = note_destination(
             recording, stamp, glossary, generated=_generated_title(extraction), taken=taken
+        )
+    if transcript_corrector is not None:
+        recording = replace(
+            recording,
+            transcript_text=transcript_corrector(
+                recording.transcript_text, TranscriptContext(recording.id, destination.stem)
+            ),
         )
     body, corrections = _render(recording, extraction, stamp, glossary, title=destination.stem)
     return CorrectedNote(
@@ -122,10 +131,10 @@ def render_lifelog_body(
 def _corrected_fields(
     extraction: ExtractionOutcome, glossary: term_correction.Glossary
 ) -> tuple[ExtractionOutcome, tuple[term_correction.Correction, ...]]:
-    """사람·장소·결정·할 일에만 교정을 건다 — 렌더된 본문 전체에 걸면 '## 전문' 까지 고쳐진다.
+    """용어집은 사람·장소·결정·할 일에만 적용한다 — 기본 '## 전문' 은 원문이다.
 
     시각(`at`)과 기한(`due`)은 낱말이 아니라 일정이라 손대지 않고, 생략 사유는 우리가 쓴
-    문장이라 교정할 것이 없다.
+    문장이라 교정할 것이 없다. 노드가 명시한 transcript_corrector만 동결 전에 전문을 바꾼다.
     """
     if not isinstance(extraction, LifelogExtraction):
         return extraction, ()

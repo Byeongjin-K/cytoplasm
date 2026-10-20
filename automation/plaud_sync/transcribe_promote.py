@@ -19,6 +19,7 @@ from .transcribe_model import ENVIRONMENT_EXIT_CODES, LocalTranscript, Outcome, 
 from .transcribe_policy import RetryPolicy
 from .transcribe_text import recording_from_source as _recording
 from .transcribe_text import split_transcript, transcript_stem
+from .transcript_corrector import CorrectionEffects, Corrector, TranscriptContext
 
 REASON_LIMIT: Final = 200
 NO_SUMMARY: Final = "- (요약 없음)"
@@ -26,15 +27,29 @@ NO_TRANSCRIPT: Final = "- (전사 없음)"
 
 
 def promote(
-    record: PlaudSyncRecord, recording: LifelogRecording, effects: TranscribeEffects
+    record: PlaudSyncRecord, recording: LifelogRecording, effects: TranscribeEffects,
+    *, transcript: LocalTranscript | None = None,
 ) -> tuple[PlaudSyncRecord, str]:
     """Finalize the record with fields extracted from this transcription."""
+    corrector: Corrector | None = None
+    if isinstance(effects, CorrectionEffects):
+        command = effects.transcript_corrector
+
+        def correct_note(markdown: str, context: TranscriptContext) -> str:
+            if transcript is None:
+                return command(markdown, context)
+            corrected = command(transcript.markdown, context)
+            legend, text = split_transcript(corrected)
+            return "\n\n".join(part for part in (legend, text) if part)
+
+        corrector = correct_note
     promoted, body, corrections = finalize(
         record,
         recording,
         extraction=effects.extract(recording),
         tz=effects.tz,
         glossary=effects.glossary(),
+        transcript_corrector=corrector,
     )
     effects.record_corrections(recording, corrections)
     return promoted, body

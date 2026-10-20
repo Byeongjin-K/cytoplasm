@@ -45,6 +45,7 @@ from automation.plaud_sync.store import (  # noqa: E402
 from automation.plaud_sync.sync import plan_new_records, poll_due  # noqa: E402
 from automation.plaud_sync import terms, transcribe_live  # noqa: E402
 from automation.plaud_sync.watch_step import ResolveResult, resolve_tick  # noqa: E402
+from automation.plaud_sync.transcript_corrector import CommandCorrector  # noqa: E402
 
 ENV_SECRETS = watch_runtime.ENV_SECRETS
 INTEROP_CONFIG = watch_runtime.INTEROP_CONFIG
@@ -84,6 +85,7 @@ def _discover(state: PlaudSyncState, now: datetime) -> PlaudSyncState:
             initial_status=initial_status,
             glossary=terms.glossary(),
             min_duration_ms=_env_int("PLAUD_SYNC_MIN_DURATION_MS", DEFAULT_MIN_DURATION_MS),
+            transcript_corrector=CommandCorrector(os.environ),
         )
         for recording_id, body in result.bodies.items():
             save_note_body(STATE_DIR, recording_id, body)
