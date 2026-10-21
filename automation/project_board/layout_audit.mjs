@@ -132,7 +132,8 @@ function probe() {
         if (dot.width < 1 || mid < i.r.top || mid > i.r.bottom) continue;
         const before = items.some((o) => o !== i && block.contains(o.el) && o.r.right <= dot.left + 1 && o.r.top < mid && o.r.bottom > mid);
         const sameNodeBefore = (() => { if (k === 0) return false; const q = document.createRange(); q.setStart(n, 0); q.setEnd(n, k); return [...q.getClientRects()].some((x) => x.width > 1 && x.top < mid && x.bottom > mid && x.right <= dot.left + 1 && /\S/.test(n.textContent.slice(0, k).split('\n').pop())); })();
-        if (!before && !sameNodeBefore) found.push({ type: 'lead-sep', a: name(i.el) });
+        const authored = /\n[ \t\u00a0]*$/.test(n.textContent.slice(0, k)); // a bullet the writer put at a line start
+        if (!before && !sameNodeBefore && !authored) found.push({ type: 'lead-sep', a: name(i.el) });
       }
     }
   }
