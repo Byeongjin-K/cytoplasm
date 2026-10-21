@@ -10,7 +10,7 @@ from pathlib import Path
 
 from automation.project_board import demo
 from automation.project_board.board_store import BoardStore
-from automation.project_board.dashboard import render_dashboard
+from automation.project_board.dashboard import _sender, render_dashboard
 from automation.project_board.models import TodoExtra, proposal_from_dict
 from automation.project_board.sessions_view import render_sessions
 
@@ -57,3 +57,9 @@ def test_session_cards_and_the_look_first_list_open_their_groups() -> None:
     assert {"ss-lanes", "ss-agents", "ss-services"} <= ids
     targets = re.findall(r'<div class="callout ss-attention">.*?</div></div>', page, re.S)[0]
     assert all(href[1:] in ids for href in re.findall(r'<a href="(#[^"]+)"', targets))
+
+
+def test_a_quoted_mail_sender_reads_as_a_name_and_address() -> None:
+    assert _sender('\\"가상인물\\" <a@example.org>') == "가상인물 <a@example.org>"  # as stored from a real header
+    assert _sender('"가상인물" <a@example.org>') == "가상인물 <a@example.org>"
+    assert _sender("연구관리팀") == "연구관리팀"

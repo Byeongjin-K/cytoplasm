@@ -897,7 +897,7 @@ def _source_card(
         f'<a href="{escape(todo_href(t.todo_id), quote=True)}">{_quoted_plain(t.title)}</a>'
         for t in produced
     ) or "없음"
-    top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
+    top = [_md(row.source_date), kind] + ([escape(_sender(row.source_sender))] if row.source_sender else [])
     top += [f'<a href="{escape(project_href(row.project), quote=True)}">{escape(row.project)}</a>'] if with_project else []
     return (
         f'<div class="card src-card"><div class="top"><span>{_SEP.join(top)}</span>{_grade_badge(row.grade)}</div>'
@@ -1078,6 +1078,13 @@ def _project_page(
 _SETTABLE: Final = ("열림", "진행", "완료")
 
 
+def _sender(raw: str) -> str:
+    """A mail header's sender as people write it: ``"이름" <주소>`` (even with escaped quotes) reads 이름 <주소>."""
+    text = raw.replace('\\"', '"').strip()
+    match = re.match(r'^"([^"]*)"\s*(<[^>]*>)?$', text)
+    return f"{match.group(1)} {match.group(2) or ''}".strip() if match else text
+
+
 def _calendar_day(due: str) -> str:
     """The owner's calendar opened on that day — the place to see what else is on it, or the meeting itself."""
     day = date.fromisoformat(due)
@@ -1113,7 +1120,7 @@ def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date, extr
     subject = escape(todo.source_subject or todo.source_id)
     where = f'<a href="{escape(href, quote=True)}">{icon("mail" if todo.source_kind == "mail" else "sources")}{subject}</a>' if href else subject
     if source is not None:
-        where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(source.source_sender)] if source.source_sender else []))}</div>'
+        where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(_sender(source.source_sender))] if source.source_sender else []))}</div>'
     rows = [("상태", badge), ("마감", due)]
     rows += [("마감 근거", escape(extra.due_reason))] if extra and extra.due_reason else []
     rows += [("장소", escape(extra.place))] if extra and extra.place else []
