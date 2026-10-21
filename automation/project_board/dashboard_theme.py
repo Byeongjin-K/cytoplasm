@@ -152,10 +152,28 @@ li.saving{opacity:.55}
 .agenda .where{flex-basis:100%;font-size:var(--t-sm);color:var(--text-3);padding-left:0}
 .agenda .ag-title{font-weight:600;color:var(--text)}
 .agenda .ag-title:hover{color:var(--accent-ink);text-decoration:underline}
-.agenda .where a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.agenda .where a{display:inline-block;padding:3px 0;color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
 .agenda .where a:hover{color:var(--accent-ink)}
 .agenda li>.src-link{flex-basis:100%;margin-top:0}
 ul.todos li[id]{scroll-margin:96px 0 112px}
+.todo-title{display:block;color:var(--text);font-weight:600}
+a.todo-title:hover{color:var(--accent-ink);text-decoration:underline}
+.who-link{color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.td-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--s3) var(--s4);margin:0;align-items:baseline}
+.td-facts dt{color:var(--text-3);font-size:var(--t-sm)}
+.td-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.td-facts dd a{display:inline-flex;align-items:center;gap:6px;min-height:24px}
+.seg{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
+.seg-btn[aria-pressed=true]{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink);font-weight:650}
+.td-list{list-style:none;margin:0;padding:0}
+.td-list li{display:flex;gap:var(--s2);align-items:center;justify-content:space-between;min-height:var(--hit);border-top:1px solid var(--line)}
+.td-list li:first-child{border-top:0}
+main>section[data-tab=todo],main>section[data-tab=person]{max-width:820px}
+.td-log{list-style:none;margin:0;padding:0}
+.td-log li{display:flex;flex-direction:column;gap:2px;padding:var(--s2) 0;border-top:1px solid var(--line)}
+.td-log li:first-child{border-top:0}
+.td-log time{font-size:var(--t-sm);color:var(--text-3)}
+main>section[data-tab=todo]>.card+.card,main>section[data-tab=person]>.card+.card,.reader .card+.card{margin-top:var(--s4)}
 ul.todos li:target{background:var(--accent-wash);box-shadow:inset 3px 0 0 var(--accent);border-radius:var(--r-sm)}
 .src-card .top{display:flex;flex-wrap:wrap;gap:6px var(--s2);align-items:center;font-size:var(--t-sm);color:var(--text-3)}
 .src-card .title{display:block;margin-top:6px;font-size:var(--t-lg);font-weight:650;color:var(--text)}

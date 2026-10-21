@@ -38,7 +38,7 @@ from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .board_store import BoardStore
-from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, render_dashboard, stamp_etag
+from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError
 from .sessions import SessionsState
@@ -52,6 +52,13 @@ _CSP: Final = (
     "form-action 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
 _MAX_BODY: Final = 4096
+# opened from the dashboard: go back to that very screen and say its name; opened directly: the plain link
+_BACK_JS: Final = (
+    "<script>(function(){var a=document.querySelector('[data-back]'),n='';"
+    "try{n=sessionStorage.getItem('pb-back')||'';}catch(e){}"
+    "if(!a||!n||history.length<2){return;}a.querySelector('span').textContent=n;"
+    "a.addEventListener('click',function(e){e.preventDefault();history.back();});})();</script>"
+)
 IDENTITY_HEADER: Final = "Tailscale-User-Login"
 
 logger = logging.getLogger("project_board.server")
@@ -184,10 +191,26 @@ class _Handler(BaseHTTPRequestHandler):
         heading = first[2:].strip() if first.startswith("# ") else ""
         title = f"<h1>{escape(heading)}</h1>" if heading else ""
         body = (
-            f'<main class="reader"><a class="back" href="/#sources">{icon("chevron-left")}근거 목록</a>'
-            f'<div class="card">{title}<pre>{escape(rest.strip() if heading else text)}</pre></div></main>'
+            f'<main class="reader"><a class="back" href="/#sources" data-back>{icon("chevron-left")}<span>근거 목록</span></a>'
+            f'{self._source_links(kind, source_id)}'
+            f'<div class="card">{title}<pre>{escape(rest.strip() if heading else text)}</pre></div></main>{_BACK_JS}'
         )
         self._send(200, page_shell(heading or "원문", body, self.brand).encode("utf-8"), "text/html; charset=utf-8")
+
+    def _source_links(self, kind: str, source_id: str) -> str:
+        """The project and the todos this source made, so the reader is never a dead end."""
+        snapshot = self.store.snapshot(today=self.today())
+        made = [t for t in snapshot.todos if t.source_kind == kind and t.source_id == source_id]
+        if not made:
+            return ""
+        project = made[0].project
+        todos = ", ".join(
+            f'<a href="/{escape(todo_href(t.todo_id), quote=True)}">{escape(t.title)}</a>'
+            for t in made
+        )
+        link = f'<a href="/{escape(project_href(project), quote=True)}">{escape(project)}</a>'
+        return (f'<div class="card src-links"><div class="names">{icon("projects")}<span>프로젝트 {link}</span></div>'
+                f'<div class="names">{icon("list")}<span>만든 할\u00a0일: {todos}</span></div></div>')
 
     def _attachment(self, kind: str, source_id: str, name: str) -> None:
         if "/" in name or "\\" in name or ".." in name or not name:

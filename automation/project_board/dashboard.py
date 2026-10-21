@@ -85,6 +85,16 @@ _SERVED_JS: Final = """
           note(main.lastElementChild,why(error));say(why(error));});
     });
   });
+  root.querySelectorAll('button[data-set-status]').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(b.getAttribute('aria-pressed')==='true'){return;}
+      var group=b.parentNode,old=group.parentNode.querySelector('.row-error');if(old){old.remove();}
+      [].forEach.call(group.children,function(x){x.disabled=true;});say('저장하는 중');
+      post('/todo/'+encodeURIComponent(b.dataset.statusTodo),'status='+encodeURIComponent(b.dataset.setStatus))
+        .then(function(){location.reload();})
+        .catch(function(error){[].forEach.call(group.children,function(x){x.disabled=false;});note(group,why(error));say(why(error));});
+    });
+  });
   root.querySelectorAll('button[data-archive]').forEach(function(b){
     b.addEventListener('click',function(){
       if(b.dataset.archive!=='1'||!dialog||!dialog.showModal){
@@ -129,6 +139,8 @@ _TABS_JS: Final = """
   function dec(s){try{return decodeURIComponent(s);}catch(e){return '';}}
   function parse(hash){
     var q=hash.indexOf('?p=');
+    if(hash.indexOf('todo/')===0){return {tab:'todo',proj:dec(hash.slice(5))};}
+    if(hash.indexOf('person/')===0){return {tab:'person',proj:dec(hash.slice(7))};}
     if(hash.indexOf('project/')===0){return {tab:'project',proj:dec(hash.slice(8))};}
     if(q>=0){return {tab:hash.slice(0,q),proj:dec(hash.slice(q+3))};}
     return {tab:hash.indexOf('todo-')===0?'todos':hash,proj:''};
@@ -167,20 +179,27 @@ _TABS_JS: Final = """
     var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
         names=[].map.call(links,function(a){return a.dataset.tab;});
     var hash=location.hash.slice(1),r=parse(hash),tab=r.tab,page=null;
-    if(tab==='project'){
-      panels.forEach(function(s){if(s.dataset.tab==='project'&&s.dataset.project===r.proj){page=s;}});
-      if(!page){tab='projects';}
+    if(tab==='project'||tab==='todo'||tab==='person'){
+      panels.forEach(function(s){if(s.dataset.tab===tab&&(tab==='project'?s.dataset.project:s.dataset.key)===r.proj){page=s;}});
+      if(!page){tab=tab==='project'?'projects':tab==='todo'?'todos':'summary';}
     }else if(names.indexOf(tab)<0){tab='summary';}
-    var navTab=page?(page.dataset.archived?'archive':'projects'):tab;
+    var navTab=page?(page.dataset.tab==='project'?(page.dataset.archived?'archive':'projects'):'todos'):tab;
     panels.forEach(function(s){s.hidden=page?s!==page:s.dataset.tab!==tab;});
     links.forEach(function(a){var on=a.dataset.tab===navTab;a.classList.toggle('on',on);
       if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
     var t=filterTodos(tab==='todos'?r.proj:''),s=filterSchedule(tab==='schedule'?r.proj:'');
-    if(page){sticky=r.proj;}else if(tab==='todos'){sticky=t||'';}else if(tab==='schedule'){sticky=s||'';}
+    if(page){if(page.dataset.tab==='project'){sticky=r.proj;}}else if(tab==='todos'){sticky=t||'';}else if(tab==='schedule'){sticky=s||'';}
     links.forEach(function(a){var n=a.dataset.tab;if(n==='todos'||n==='schedule'){
       a.setAttribute('href','#'+n+(sticky?'?p='+encodeURIComponent(sticky):''));}});
-    document.title=page?r.proj+' · '+title:title;
+    document.title=page?(page.dataset.title||r.proj)+' · '+title:title;
     if(keep===true){return;}
+    var here=page?(page.dataset.title||r.proj):'';
+    if(!here){links.forEach(function(a){if(a.dataset.tab===navTab){here=[].filter.call(a.childNodes,function(n){return n.nodeType===3;})
+      .map(function(n){return n.textContent;}).join('').trim();}});}
+    var st=history.state||{};
+    if(!('pbFrom' in st)){st={pbFrom:moves>0&&last!==here?last:''};try{history.replaceState(st,'');}catch(e){}}
+    if(page){var b=page.querySelector('[data-back] span');if(b&&st.pbFrom){b.textContent=st.pbFrom;}}
+    last=here;moves++;
     var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash),fresh=jump;jump=false;
     if(!fresh&&hash in seen){window.scrollTo(0,seen[hash]);return;}
     if(target&&hash.indexOf('todo-')===0){reveal(target);}
@@ -193,11 +212,31 @@ _TABS_JS: Final = """
     for(var d=li.closest('details');d;d=d.parentElement&&d.parentElement.closest('details')){d.open=true;}
   }
   // back and forward return to where that screen was left; a link or a picker opens its screen fresh
-  var seen={},jump=false;
-  document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');if(a){jump=true;}},true);
+  var seen={},jump=false,moves=-1,last='';
+  // a detail screen back link returns to the screen it was opened from (its name on the link), else to its list
+  document.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[data-back]');if(a&&(history.state||{}).pbFrom){e.preventDefault();history.back();}
+  });
+  document.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[href]');if(!a){return;}var h=a.getAttribute('href');
+    if(h.charAt(0)==='#'&&!(a.hasAttribute('data-back')&&(history.state||{}).pbFrom)){jump=true;}
+  },true);
   window.addEventListener('scroll',function(){seen[location.hash.slice(1)]=window.scrollY;},{passive:true});
   PB.show=show;
   window.addEventListener('hashchange',show);show();
+})();
+"""
+
+_BACK_MARK_JS: Final = """
+(function(){
+  // a source opened from here remembers which screen to come back to (the reader back link says its name)
+  document.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[href^="/source/"]');if(!a){return;}
+    var on=document.querySelector('nav a.on'),pg=document.querySelector('main>[data-title]:not([hidden]),main>[data-tab=project]:not([hidden])'),name='대시보드';
+    if(pg){name=pg.dataset.title||pg.dataset.project;}else if(on){name=[].filter.call(on.childNodes,function(n){return n.nodeType===3;})
+      .map(function(n){return n.textContent;}).join('').trim()||name;}
+    try{sessionStorage.setItem('pb-back',name);}catch(x){}
+  },true);
 })();
 """
 
@@ -208,6 +247,7 @@ _REFRESH_JS: Final = """
       tag=meta?meta.content:'',timer=0,ticker=0,last=Date.now(),checked=Date.now(),fault='',held=null,waiting=false,busyFetch=false;
   function keyOf(n){
     if(n.dataset&&n.dataset.tab==='project'){return 'p:'+n.dataset.project;}
+    if(n.dataset&&n.dataset.key){return n.dataset.tab+':'+n.dataset.key;}
     return n.id||(n.classList.contains('onboard')?'onboard':n.tagName);
   }
   function norm(n){var c=n.cloneNode(true);c.querySelectorAll('[data-live]').forEach(function(e){e.textContent='';});return c.outerHTML;}
@@ -533,6 +573,20 @@ def project_href(name: str, tab: str = "project") -> str:
     return f"#project/{encoded}" if tab == "project" else f"#{tab}?p={encoded}"
 
 
+def todo_href(todo_id: str) -> str:
+    """``#todo/<id>``: the one screen of a todo. 일정·할 일·근거·기록·사람 rows all open this same screen."""
+    return f"#todo/{quote(todo_id, safe='')}"
+
+
+def person_href(name: str) -> str:
+    """``#person/<name>``: everything one person owns, across projects."""
+    return f"#person/{quote(name, safe='')}"
+
+
+def _person_link(name: str) -> str:
+    return f'<a class="who-link" href="{escape(person_href(name), quote=True)}">{escape(name)}</a>'
+
+
 def project_sort_key(view: ProjectView) -> tuple[str, ...]:
     """The one place that decides project order — cards, the picker and every per-project list follow it.
 
@@ -616,10 +670,13 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
     pending = ""
     if snapshot.pending:
         items = []
+        known = {view.name for view in snapshot.projects}
         for p in snapshot.pending:
+            name = (f'<a href="{escape(project_href(p.project), quote=True)}"><b>{escape(p.project)}</b></a>'
+                    if p.project in known else f"<b>{escape(p.project)}</b>")
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li><b>{escape(p.project)}</b> {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
+                f"<li>{name} {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
                 f"근거 {_quoted(p.source_subject)}{link}</li>"
             )
         pending = (
@@ -687,9 +744,10 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -
     due = f"<span>{_md(todo.due)}</span>" if todo.due else ""
     if not done:
         label, css = _dday(todo.due, today)
-        badges += f'<span class="due"><span class="badge {css}">{label}</span>{due}</span>'
+        when = escape(project_href(todo.project, "schedule"), quote=True)
+        badges += f'<a class="due" href="{when}" title="일정에서 보기"><span class="badge {css}">{label}</span>{due}</a>'
         due = ""
-    owner = f"<span>{escape(todo.owner)}</span>" if todo.owner else '<span class="muted">담당 미정</span>'
+    owner = _person_link(todo.owner) if todo.owner else '<span class="muted">담당 미정</span>'
     href = _source_href(mode, todo.source_kind, todo.source_id)
     subject = escape(todo.source_subject or todo.source_id)
     kind = "mail" if todo.source_kind == "mail" else "sources"
@@ -702,7 +760,7 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -
     ident = f'id="todo-{escape(todo.todo_id, quote=True)}" ' if anchor else ""
     return (
         f'<li {ident}data-project="{escape(todo.project, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
-        f'{done_class}>{box}<div class="todo-main"><div class="todo-title">{escape(todo.title)}</div>'
+        f'{done_class}>{box}<div class="todo-main"><a class="todo-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{escape(todo.title)}</a>'
         f'<div class="meta">{badges}{_grade_badge(todo.grade)}{owner}{due}</div>{source}{note}</div></li>'
     )
 
@@ -740,12 +798,12 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
 
 def _agenda_cards(
     todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s", *, with_project: bool = True,
-    mode: Mode = "served", linked: bool = True,
+    mode: Mode = "served",
 ) -> str:
     """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket.
 
-    Every part of a row leads somewhere: the title to that todo on the 할 일 screen (``linked`` is off only where
-    the todo is not listed there, an archived project), the project to its page, the subject to the source.
+    Every part of a row leads somewhere: the title to that todo's own screen, the project to its page, the owner
+    to everything they own, the subject to the source.
     """
     buckets: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
@@ -761,10 +819,9 @@ def _agenda_cards(
             label, css = _dday(todo.due, today)
             project = f'<a href="{escape(project_href(todo.project), quote=True)}">{escape(todo.project)}</a>'
             where = [project] if with_project else []
-            where += [escape(todo.owner)] if todo.owner else []
+            where += [_person_link(todo.owner)] if todo.owner else []
             where += [_md(todo.due)] if todo.due else []
-            title = (f'<a class="ag-title" href="#todo-{escape(todo.todo_id, quote=True)}">{escape(todo.title)}</a>'
-                     if linked else f'<b>{escape(todo.title)}</b>')
+            title = f'<a class="ag-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{escape(todo.title)}</a>'
             href = _source_href(mode, todo.source_kind, todo.source_id)
             kind = "mail" if todo.source_kind == "mail" else "sources"
             subject = escape(todo.source_subject or todo.source_id)
@@ -797,7 +854,9 @@ def _agenda(snapshot: BoardSnapshot, today: date, mode: Mode = "served") -> str:
     return f'<section id="schedule" data-tab="schedule" class="agenda">{head}{picker}{body}</section>'
 
 
-def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_project: bool = True) -> str:
+def _source_card(
+    row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_project: bool = True
+) -> str:
     href = _source_href(mode, row.source_kind, row.source_id)
     subject = escape(row.source_subject or row.source_id)
     title = f'<a class="title" href="{escape(href, quote=True)}">{subject}</a>' if href else f'<span class="title">{subject}</span>'
@@ -810,9 +869,12 @@ def _source_card(row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_pr
         else:
             files.append(escape(name))
     attachments = f'<div class="names">{icon("paperclip")}<span>{", ".join(files)}</span></div>' if files else ""
-    todos = ", ".join(_quoted_plain(t.title) for t in produced) or "없음"
+    todos = ", ".join(
+        f'<a href="{escape(todo_href(t.todo_id), quote=True)}">{_quoted_plain(t.title)}</a>'
+        for t in produced
+    ) or "없음"
     top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
-    top += [escape(row.project)] if with_project else []
+    top += [f'<a href="{escape(project_href(row.project), quote=True)}">{escape(row.project)}</a>'] if with_project else []
     return (
         f'<div class="card src-card"><div class="top"><span>{_SEP.join(top)}</span>{_grade_badge(row.grade)}</div>'
         f'{title}<p>{_keep(row.summary)}</p>{attachments}'
@@ -848,9 +910,11 @@ _PROGRESS: Final = re.compile(r"^(\S+)→(\S+) (\d+)→(\d+)%(?: · (.*))?$")
 def _event_text(event: EventRow, titles: dict[str, str]) -> str:
     """What happened, as a sentence; a progress record's ``열림→완료 0→100%`` becomes ``… 완료로 바꿈``."""
     title = titles.get(event.todo_id, "")
-    named = f"{_quoted(title)} " if title else ""
+    anchor = f'href="{escape(todo_href(event.todo_id), quote=True)}"'
+    named = f"<a {anchor}>{_quoted(title)}</a> " if title else ""
     if event.kind == "approved":
-        return f"할\u00a0일\u00a0추가 {_quoted(event.detail)}"
+        added = f"<a {anchor}>{_quoted(event.detail)}</a>" if title else _quoted(event.detail)
+        return f"할\u00a0일\u00a0추가 {added}"
     if event.kind == "progress":
         match = _PROGRESS.match(event.detail)
         if not match:
@@ -875,7 +939,8 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
     def row(e: EventRow) -> str:
         return (
             f'<li><time data-live data-ago="{escape(e.at, quote=True)}" datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
-            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><b>{escape(e.project)}</b> · "
+            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><a class=\"ev-project\" "
+            f"href=\"{escape(project_href(e.project), quote=True)}\">{escape(e.project)}</a> · "
             f"{_event_text(e, titles)}{who(e)}</div></li>"
         )
 
@@ -948,7 +1013,7 @@ def _project_page(
         f'<div class="card empty">{icon("todos")}<b>할 일이 없습니다</b><p>이 프로젝트에서 승인된 할 일이 아직 없습니다.</p></div>'
     )
     key = f"p:{view.name}"
-    agenda = _agenda_cards(todos, today, f"{key}:s", with_project=False, mode=mode, linked=not archived) or (
+    agenda = _agenda_cards(todos, today, f"{key}:s", with_project=False, mode=mode) or (
         f'<div class="card empty">{icon("schedule")}<b>남은 마감이 없습니다</b><p>열린 할 일이 없거나 모두 끝났습니다.</p></div>'
     )
     by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
@@ -984,6 +1049,82 @@ def _project_page(
     )
 
 
+_SETTABLE: Final = ("열림", "진행", "완료")
+
+
+def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date) -> str:
+    """A todo's own screen: when, who, which project, why (the source and its summary), what else came with it, history."""
+    source = next((s for s in full.sources if (s.source_kind, s.source_id) == (todo.source_kind, todo.source_id)), None)
+    status = f"{todo.status} {todo.progress}%" if todo.status == "진행" else todo.status
+    badge = f'<span class="badge {_STATUS_CLASS.get(todo.status, "st-open")}">{escape(status)}</span>'
+    if mode == "served":
+        buttons = "".join(
+            f'<button type="button" class="btn seg-btn" data-set-status="{s}" data-status-todo="{escape(todo.todo_id, quote=True)}"'
+            f' aria-pressed="{"true" if todo.status == s else "false"}">{s}</button>'
+            for s in _SETTABLE
+        )
+        done = f'<span class="small muted">진행률 {todo.progress}%</span>' if todo.status == "진행" and todo.progress else ""
+        badge = f'<div class="seg" role="group" aria-label="상태 바꾸기">{buttons}</div>{done}'
+    schedule = escape(project_href(todo.project, "schedule"), quote=True)
+    if todo.due:
+        label, css = _dday(todo.due, today)
+        flag = f' <span class="badge {css}">{label}</span>' if todo.status in OPEN_STATUSES else ""
+        due = f'<a href="{schedule}">{_md(todo.due)}</a>{flag}'
+    else:
+        due = f'<a href="{schedule}">마감 미정</a>'
+    owner = _person_link(todo.owner) if todo.owner else '<span class="muted">담당 미정</span>'
+    href = _source_href(mode, todo.source_kind, todo.source_id)
+    subject = escape(todo.source_subject or todo.source_id)
+    where = f'<a href="{escape(href, quote=True)}">{icon("mail" if todo.source_kind == "mail" else "sources")}{subject}</a>' if href else subject
+    if source is not None:
+        where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(source.source_sender)] if source.source_sender else []))}</div>'
+    rows = [("상태", badge), ("마감", due), ("담당", owner),
+            ("프로젝트", f'<a href="{escape(project_href(todo.project), quote=True)}">{escape(todo.project)}</a>'),
+            ("보안 등급", _grade_badge(todo.grade)), ("근거", where)]
+    rows += [("메모", escape(todo.note))] if todo.note else []
+    rows += [("근거 요약", _keep(source.summary))] if source is not None and source.summary else []
+    facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
+    siblings = [t for t in full.todos if t.proposal_id == todo.proposal_id and t.todo_id != todo.todo_id]
+    same = ""
+    if siblings:
+        items = "".join(
+            f'<li><a href="{escape(todo_href(t.todo_id), quote=True)}">{escape(t.title)}</a>'
+            f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
+            for t in siblings
+        )
+        same = f'<div class="card"><h3>같은 근거에서 나온 할\u00a0일</h3><ul class="td-list">{items}</ul></div>'
+    titles = {t.todo_id: t.title for t in full.todos}
+    mine = sorted((e for e in full.events if e.todo_id == todo.todo_id), key=lambda e: e.at, reverse=True)
+    history = "".join(f'<li><time datetime="{escape(e.at, quote=True)}">{_keep(_kst(e.at))}</time>'
+                      f'<div class="what">{_event_text(e, titles)}</div></li>' for e in mine[:12])
+    log = f'<div class="card"><h3>기록</h3><ul class="td-log">{history}</ul></div>' if history else ""
+    return (
+        f'<section data-tab="todo" data-key="{escape(todo.todo_id, quote=True)}" data-title="{escape(todo.title, quote=True)}">'
+        f'<a class="back" href="#todos" data-back>{icon("chevron-left")}<span>할\u00a0일</span></a>'
+        f'<div class="pv-head"><h2>{escape(todo.title)}</h2></div>'
+        f'<div class="card"><dl class="td-facts">{facts}</dl></div>{same}{log}</section>'
+    )
+
+
+def _person_page(name: str, todos: list[TodoRow], today: date) -> str:
+    """Everything one person owns: open first by due date, then done, each opening its own screen."""
+    ordered = sorted(todos, key=_todo_order)
+    items = "".join(
+        f'<li data-project="{escape(t.project, quote=True)}"><a class="ag-title" href="{escape(todo_href(t.todo_id), quote=True)}">'
+        f'{escape(t.title)}</a><span class="where"><a href="{escape(project_href(t.project), quote=True)}">{escape(t.project)}</a>'
+        f'{_SEP + _md(t.due) if t.due else ""}</span>'
+        f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
+        for t in ordered
+    )
+    open_count = sum(1 for t in todos if t.status in OPEN_STATUSES)
+    return (
+        f'<section data-tab="person" data-key="{escape(name, quote=True)}" data-title="{escape(name, quote=True)}">'
+        f'<a class="back" href="#todos" data-back>{icon("chevron-left")}<span>할\u00a0일</span></a>'
+        f'<div class="pv-head"><h2>{escape(name)}</h2><span class="small muted">맡은 할\u00a0일 {len(todos)}건 · 열림 {open_count}건</span></div>'
+        f'<div class="card agenda"><ul>{items}</ul></div></section>'
+    )
+
+
 def render_dashboard(
     snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
     sessions: SessionsState = "missing", now: datetime | None = None,
@@ -1007,12 +1148,17 @@ def render_dashboard(
     served = mode == "served"
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">{_ETAG_META}' if served else ""
     # the refresh script runs first: it notes the page as the server sent it, before the others change it
-    scripts = (_REFRESH_JS if served else "") + _FOLD_JS + _TABS_JS + _FILTER_JS + (_SERVED_JS if served else "")
+    scripts = (_REFRESH_JS if served else "") + _FOLD_JS + _TABS_JS + _FILTER_JS + (_SERVED_JS + _BACK_MARK_JS if served else "")
     fresh = '<span id="pb-fresh" class="fresh" title="2분마다 바뀐 내용만 새로 받습니다">방금 갱신</span>' if served else ""
     pages = "".join(
         _project_page(i, view, full, mode, today, archived=view in shelf)
         for i, view in enumerate(snapshot.projects + shelf, 1)
-    )
+    ) + "".join(_todo_page(t, full, mode, today) for t in full.todos)
+    people: dict[str, list[TodoRow]] = defaultdict(list)
+    for todo in full.todos:
+        if todo.owner:
+            people[todo.owner].append(todo)
+    pages += "".join(_person_page(person, rows, today) for person, rows in sorted(people.items()))
     name = escape(brand or DEFAULT_BRAND)
     ledger = ledger if served else None
     ledger_nav = f'<a href="#ledger" data-tab="ledger">{icon("todos")}장부</a>' if ledger is not None else ""
