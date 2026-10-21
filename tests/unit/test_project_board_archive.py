@@ -225,5 +225,5 @@ def test_on_the_tailnet_archive_and_check_record_the_same_tailscale_login(tmp_pa
     assert snapshot.archived[0].archived_by == OWNER
     assert {(e.kind, e.actor) for e in snapshot.events if e.kind in ("archive", "progress")} == {("archive", OWNER), ("progress", OWNER)}
     served = render_dashboard(snapshot, mode="served", token="")
-    assert "「알파 보고」</span> 완료로 바꿈" in served and f'<div class="who">{OWNER}</div>' in served
+    assert "「알파 보고」</span></a> 완료로 바꿈" in served and f'<div class="who">{OWNER}</div>' in served
     assert OWNER not in render_dashboard(snapshot, mode="file")
