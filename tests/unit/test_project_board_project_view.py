@@ -53,7 +53,7 @@ def test_summary_and_project_cards_link_to_the_project_page(tmp_path: Path) -> N
     summary = page.split('<section id="summary"', 1)[1].split("</section>", 1)[0]
     href = "#project/" + quote("프로젝트A", safe="")
     assert project_href("프로젝트A") == href
-    assert f'href="{href}"' in summary
+    assert 'href="#projects"' in summary and f'href="{href}"' not in summary  # owner Q346: one line to 프로젝트
     projects = page.split('<section id="projects"', 1)[1].split("</section>", 1)[0]
     assert f'href="{href}"' in projects
 

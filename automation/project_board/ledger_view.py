@@ -8,7 +8,7 @@ from typing import TypedDict
 from automation.ledger.store import Document, LedgerError, Store
 from .dashboard_theme import icon
 
-NAV_CSS = "@media(max-width:640px){nav.ledger-nav{grid-template-columns:repeat(8,minmax(0,1fr))}}"
+NAV_CSS = "@media(max-width:640px){nav.ledger-nav{grid-template-columns:repeat(7,minmax(0,1fr))}}"
 
 
 class LedgerView(TypedDict, total=False):

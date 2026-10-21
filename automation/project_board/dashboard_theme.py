@@ -165,6 +165,9 @@ a.todo-title:hover{color:var(--accent-ink);text-decoration:underline}
 .td-facts dd a{display:inline-flex;align-items:center;gap:6px;min-height:24px}
 .seg{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
 .seg-btn[aria-pressed=true]{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink);font-weight:650}
+.shelf-link{margin-top:var(--s5)}
+.events .what a,.td-log .what a,.callout li a,.agenda .ag-title,.who-link,a.due{display:inline-block;padding:3px 0}
+a.todo-title{padding:3px 0}
 .td-list{list-style:none;margin:0;padding:0}
 .td-list li{display:flex;gap:var(--s2);align-items:center;justify-content:space-between;min-height:var(--hit);border-top:1px solid var(--line)}
 .td-list li:first-child{border-top:0}
@@ -265,7 +268,7 @@ _RESPONSIVE: Final = """
 @media (max-width:640px){html{scroll-padding-top:64px}
 header{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg)}
 .bar{padding:var(--s2) var(--s4);min-height:52px}
-nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(7,1fr);gap:0;
+nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(6,1fr);gap:0;
 background:var(--surface);box-shadow:0 -1px 0 var(--line);
 border-top:1px solid var(--line);padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
 nav a{flex-direction:column;justify-content:center;gap:2px;min-height:52px;padding:0;font-size:11px;font-weight:600;border-radius:var(--r-md)}
