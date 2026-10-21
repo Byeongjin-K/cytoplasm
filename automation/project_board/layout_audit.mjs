@@ -16,6 +16,7 @@
 //   PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node automation/project_board/layout_audit.mjs \
 //     [--url <dashboard url with ?t=token>] [--engines webkit,chromium] [--shots <dir>] [--out <file.json>]
 //     [--only '#summary,#todo/demo-1-5']   (only these screens)
+// Screens: every tab of the bottom bar, #archive, #orders, and each #todo/ #person/ #project/ #order/ and /source/ link.
 // Without --url it starts `python3 -m automation.project_board demo` (invented data, loopback, thrown away)
 // and stops it at the end. With --url it only reads the page: it never ticks, saves or changes anything.
 // Exit 0 when no screen has a finding, 1 when any does (each finding is printed), 2 when it cannot run.
@@ -174,7 +175,8 @@ try {
         const screens = await page.evaluate(() => {
           const keys = new Set([...document.querySelectorAll('nav a[href^="#"]')].map((a) => a.getAttribute('href')));
           keys.add('#archive');
-          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="/source/"]')) keys.add(a.getAttribute('href'));
+          if (document.querySelector('a[href="#orders"]')) keys.add('#orders');
+          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="#order/"], a[href^="/source/"]')) keys.add(a.getAttribute('href'));
           return [...keys];
         });
         const only = args.only ? args.only.split(',') : null;
