@@ -107,7 +107,7 @@ def test_repair_watcher_reminder_links_original_card_with_guild_id(
     assert len(posts) == 1
     assert posts[0][0] == f"/channels/{CHANNEL_ID}/messages"
     assert posts[0][1] == (
-        f"⏰ 승인 대기 1시간 · https://discord.com/channels/{GUILD_ID}/{CHANNEL_ID}/{MESSAGE_ID}"
+        f"⏰ 승인 대기 1시간 · [승인 카드](<https://discord.com/channels/{GUILD_ID}/{CHANNEL_ID}/{MESSAGE_ID}>)"
     )
     assert "@me" not in posts[0][1]
     assert captured == []

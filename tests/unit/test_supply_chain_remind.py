@@ -74,7 +74,7 @@ def test_hourly_reminder_links_to_original_approval_message(tmp_path: Path) -> N
     assert delivered == [
         (
             _CHANNEL_ID,
-            f"⏰ 승인 대기 1시간 · {expected_link}",
+            f"⏰ 승인 대기 1시간 · [승인 카드](<{expected_link}>)",
         )
     ]
 

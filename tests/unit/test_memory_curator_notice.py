@@ -15,7 +15,7 @@ from tests.unit.test_memory_curator_effects import _posted_state
 
 LEGACY = (
     "🔔 승인 대기 1건 — 아래 링크에서 처리하세요(이 알림 자체는 승인이 아닙니다).\n"
-    "- `ab12cd` [USER.md] '어떤 판단 근거' → https://discord.com/channels/@me/111/222"
+    "- `ab12cd` [USER.md] '어떤 판단 근거' → [승인 카드](<https://discord.com/channels/@me/111/222>)"
 )
 
 
@@ -138,7 +138,7 @@ def test_draft_reference_when_stored_space_varies(
 REMINDER_ENVELOPE = (
     "대상: 메모리 큐레이터 점검 (memory-curator)\n"
     "사실: 🔔 승인 대기 1건 — 아래 링크에서 처리하세요(이 알림 자체는 승인이 아닙니다). "
-    "- `ab12cd` [USER.md] '어떤 판단 근거' → https://discord.com/channels/@me/111/222 (실행 완료)\n"
+    "- `ab12cd` [USER.md] '어떤 판단 근거' → [승인 카드](<https://discord.com/channels/@me/111/222>) (실행 완료)\n"
     "위치: 해당 없음\n"
     "인계: 소유자: 조치 없음; 다음: 다음 주기에 메모리 상태를 다시 확인합니다.\n"
     "되돌리기: 해당 없음"
