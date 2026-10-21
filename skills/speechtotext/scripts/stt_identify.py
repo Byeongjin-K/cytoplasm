@@ -32,6 +32,14 @@ SUGGEST_PREFIX: Final = stt_speakers.CATALOG_SUGGEST
 DEFAULT_ACCEPT: Final = 0.80
 DEFAULT_SUGGEST: Final = 0.65
 DEFAULT_MARGIN: Final = 0.05
+#: 같은 녹음 안의 차이로 확정하는 두 번째 길(소유자 결정 2026-10-21). 녹음마다 마이크·방이
+#: 달라 소유자 점수가 통째로 .68-.75 로 내려앉은 녹음이 이어졌다 — 등록본을 늘려도 +.01-.03
+#: 이었고, 같은 녹음의 다른 라벨은 그때도 .64 를 넘지 않았다. 그래서 절대 문턱 대신 「그 녹음의
+#: 2위 라벨보다 충분히 높다」를 본다. 지난 46건에서 이 값은 정답 있는 녹음에 엉뚱한 이름을
+#: 붙이지 않았다. 둘로 갈린 라벨(둘 다 .65 이상)은 이 길로 확정하지 않는다 — 서로 다른
+#: 사람일 수 있다.
+DEFAULT_GAP_ACCEPT: Final = 0.70
+DEFAULT_GAP: Final = 0.10
 
 #: 블록 하나를 자르는 상한과 라벨당 블록 수. 실측에서 3~15초 블록이 라벨 순서를 바로잡았다.
 DEFAULT_PER_SPAN_MS: Final = 15_000
@@ -64,6 +72,9 @@ class Thresholds:
     accept: float
     suggest: float
     margin: float
+    gap_accept: float = DEFAULT_GAP_ACCEPT
+    gap: float = DEFAULT_GAP
+    gap_rule: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +104,12 @@ def thresholds_from_env(env: Mapping[str, str]) -> Thresholds:
     margin = _ratio(env.get("SPEECHTOTEXT_IDENTIFY_MARGIN"), DEFAULT_MARGIN)
     if suggest > accept:
         return DEFAULTS
-    return Thresholds(accept, suggest, margin)
+    gap_accept = _ratio(env.get("SPEECHTOTEXT_IDENTIFY_GAP_ACCEPT"), DEFAULT_GAP_ACCEPT)
+    gap = _ratio(env.get("SPEECHTOTEXT_IDENTIFY_GAP"), DEFAULT_GAP)
+    if not suggest <= gap_accept <= accept:
+        gap_accept = DEFAULT_GAP_ACCEPT
+    gap_rule = env.get("SPEECHTOTEXT_IDENTIFY_GAP_RULE", "").strip() != "0"
+    return Thresholds(accept, suggest, margin, gap_accept, gap, gap_rule)
 
 
 def cosine(left: Vector, right: Vector) -> float:
@@ -203,6 +219,43 @@ def _verdict(label: str, scores: Mapping[str, float], thresholds: Thresholds) ->
     return Verdict(label, name, score, margin, "미상")
 
 
+def _confirm_by_gap(
+    verdicts: list[Verdict], table: ScoreTable, thresholds: Thresholds
+) -> list[Verdict]:
+    """절대 문턱에 못 미친 제안을, 같은 녹음의 다른 라벨보다 충분히 높으면 확정으로 올린다.
+
+    비교 상대가 없는 한 라벨 녹음은 이 길을 타지 않는다(남 혼자 녹음한 파일을 소유자로 적을 수
+    있다). 그 사람이 이미 어느 라벨에서 확정됐으면 손대지 않는다.
+    """
+    if not thresholds.gap_rule or len(table) < 2:
+        return verdicts
+    confirmed = {verdict.name for verdict in verdicts if verdict.kind == "확정"}
+    tops: dict[str, Verdict] = {}
+    for verdict in verdicts:
+        if verdict.kind != "제안" or not verdict.name or verdict.name in confirmed:
+            continue
+        if verdict.name not in tops or verdict.score > tops[verdict.name].score:
+            tops[verdict.name] = verdict
+    promoted: set[str] = set()
+    for name, top in tops.items():
+        runner_up = max(
+            (row.get(name, 0.0) for label, row in table.items() if label != top.label),
+            default=0.0,
+        )
+        if (
+            top.score >= thresholds.gap_accept
+            and top.score - runner_up >= thresholds.gap
+            and top.margin >= thresholds.margin
+        ):
+            promoted.add(top.label)
+    return [
+        Verdict(verdict.label, verdict.name, verdict.score, verdict.margin, "확정")
+        if verdict.label in promoted
+        else verdict
+        for verdict in verdicts
+    ]
+
+
 def match(
     speakers: Mapping[str, Sequence[Vector]],
     people: Mapping[str, Sequence[Vector]],
@@ -215,10 +268,11 @@ def match(
     앉으면 액션아이템 담당이 갈린다.
     """
     table = score_table(speakers, people)
-    verdicts = [
-        _verdict(label, table[label], thresholds)
-        for label in sorted(table, key=_label_order)
-    ]
+    verdicts = _confirm_by_gap(
+        [_verdict(label, table[label], thresholds) for label in sorted(table, key=_label_order)],
+        table,
+        thresholds,
+    )
     best: dict[str, float] = {}
     for verdict in verdicts:
         if verdict.kind == "확정":

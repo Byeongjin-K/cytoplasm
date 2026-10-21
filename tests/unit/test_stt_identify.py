@@ -222,6 +222,79 @@ def test_match_confirms_one_label_per_person_and_demotes_the_rest() -> None:
     ]
 
 
+def _owner_scores(scores: dict[str, float]) -> tuple[stt_identify.Verdict, ...]:
+    """라벨마다 주어진 점수를 내는 한 녹음 — 등록된 사람은 소유자 한 명, 기본 문턱."""
+    return stt_identify.match(
+        {label: (_unit(score),) for label, score in scores.items()}, {"김민수": (_HERE,)}
+    )
+
+
+def test_match_confirms_the_owner_who_stands_clear_of_the_other_labels_in_a_quiet_recording() -> None:
+    """노드 실측 10-02 둘째 녹음(2026-10-21): 소유자 .75 · 다른 사람 .55 — .80 에는 못 미쳐도 차이가 분명하다."""
+    verdicts = _owner_scores({"화자1": 0.55, "화자2": 0.75})
+
+    assert [(verdict.label, verdict.kind) for verdict in verdicts] == [
+        ("화자1", "미상"),
+        ("화자2", "확정"),
+    ]
+    assert stt_identify.to_speaker_map(verdicts) == (
+        stt_speakers.SpeakerName("화자2", "김민수", f"{stt_identify.SOURCE_PREFIX} 0.75"),
+    )
+
+
+def test_gap_rule_names_nobody_when_the_owner_is_split_and_never_the_other_person() -> None:
+    """노드 실측 10-12 녹음: 소유자가 화자2(.68)·화자3(.735)으로 갈렸고 화자1(.48)은 다른 사람이다.
+
+    둘 다 .65 이상인 두 라벨은 서로 다른 사람일 수 있다(09-29 녹음에서 실제로 그랬다) — 차이가
+    .10 에 못 미치면 확정하지 않는다.
+    """
+    verdicts = _owner_scores({"화자1": 0.48, "화자2": 0.68, "화자3": 0.735})
+
+    assert [(verdict.label, verdict.kind) for verdict in verdicts] == [
+        ("화자1", "미상"),
+        ("화자2", "제안"),
+        ("화자3", "제안"),
+    ]
+
+
+def test_gap_rule_leaves_the_accept_path_and_its_demotion_as_they_were() -> None:
+    """VC3 원 녹음(등록본이 나온 녹음): 확정은 .80 길의 화자1 하나, 가장 가까운 다른 라벨은 제안."""
+    verdicts = _owner_scores({"화자1": 0.97, "화자2": 0.72, "화자3": 0.59, "화자4": 0.60})
+
+    assert [(verdict.label, verdict.kind) for verdict in verdicts] == [
+        ("화자1", "확정"),
+        ("화자2", "제안"),
+        ("화자3", "미상"),
+        ("화자4", "미상"),
+    ]
+
+
+def test_gap_rule_needs_another_label_to_compare_with() -> None:
+    """한 라벨 녹음은 비교 상대가 없다 — 남이 혼자 녹음한 파일에 소유자 이름을 적지 않는다."""
+    (verdict,) = _owner_scores({"화자1": 0.78})
+
+    assert verdict.kind == "제안"
+
+
+def test_gap_rule_can_be_switched_off_from_the_environment() -> None:
+    thresholds = stt_identify.thresholds_from_env({"SPEECHTOTEXT_IDENTIFY_GAP_RULE": "0"})
+    verdicts = stt_identify.match(
+        {"화자1": (_unit(0.55),), "화자2": (_unit(0.75),)}, {"김민수": (_HERE,)}, thresholds
+    )
+
+    assert [verdict.kind for verdict in verdicts] == ["미상", "제안"]
+
+
+def test_thresholds_from_env_reads_the_gap_values_and_keeps_them_between_the_two_bars() -> None:
+    read = stt_identify.thresholds_from_env(
+        {"SPEECHTOTEXT_IDENTIFY_GAP_ACCEPT": "0.72", "SPEECHTOTEXT_IDENTIFY_GAP": "0.15"}
+    )
+    above_accept = stt_identify.thresholds_from_env({"SPEECHTOTEXT_IDENTIFY_GAP_ACCEPT": "0.9"})
+
+    assert (read.gap_accept, read.gap, read.gap_rule) == (0.72, 0.15, True)
+    assert above_accept.gap_accept == stt_identify.DEFAULT_GAP_ACCEPT
+
+
 def test_match_says_unknown_when_nobody_is_enrolled() -> None:
     (verdict,) = stt_identify.match(
         {"화자1": (_HERE,)}, {}, stt_identify.Thresholds(0.60, 0.45, 0.10)
