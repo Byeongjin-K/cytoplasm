@@ -34,10 +34,25 @@ _SERVED_JS: Final = """
   var PB=window.PB=window.PB||{},token=document.querySelector('meta[name=pb-token]').content,live=document.getElementById('live');
   function say(text){if(live){live.textContent='';live.textContent=text;}}
   PB.say=say;
-  function post(path,body){
+  function attempt(path,body){
     return fetch(path,{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-PB-Token':token},
-      body:body}).then(function(r){if(!r.ok){throw new Error(r.status);}return r;});
+      body:body});
+  }
+  function fresh(){
+    return fetch(location.pathname,{credentials:'same-origin',cache:'no-store',headers:{'Accept':'text/html'}}).then(function(r){
+      if(!r.ok){return false;}
+      return r.text().then(function(html){
+        var m=new DOMParser().parseFromString(html,'text/html').querySelector('meta[name=pb-token]');
+        if(!m){return false;}token=m.content;return true;
+      });
+    },function(){return false;});
+  }
+  function post(path,body){
+    return attempt(path,body).then(function(r){
+      if(r.status!==401&&r.status!==403){return r;}
+      return fresh().then(function(ok){return ok?attempt(path,body):r;});
+    }).then(function(r){if(!r.ok){throw new Error(r.status);}return r;});
   }
   function why(error){
     var code=String(error&&error.message||'');
