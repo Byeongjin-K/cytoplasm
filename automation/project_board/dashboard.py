@@ -515,6 +515,14 @@ def _ago(stamp: str, now: str) -> str:
 _SEP: Final = "\u00a0· "  # a separator never starts a line
 
 
+def _glued(items: list[str]) -> str:
+    """``_SEP.join`` for rows whose items are links: a link drawn inline-block (for its touch height) leaves a line
+    break after itself that a no-break space does not close, so Safari began a line with 「·」. Each item and the
+    separator after it share one no-wrap span; the item itself still wraps inside."""
+    head = "".join(f'<span class="glue">{item}\u00a0·</span> ' for item in items[:-1])
+    return head + (items[-1] if items else "")
+
+
 def _keep(text: str) -> str:
     """Escaped text in which 「할 일」 never breaks across lines (Korean reads it as one word)."""
     return escape(text).replace("할 일", "할\u00a0일")
@@ -591,6 +599,10 @@ def todo_href(todo_id: str) -> str:
 def person_href(name: str) -> str:
     """``#person/<name>``: everything one person owns, across projects."""
     return f"#person/{quote(name, safe='')}"
+
+
+def _project_link(name: str) -> str:
+    return f'<a href="{escape(project_href(name), quote=True)}">{escape(name)}</a>'
 
 
 def _person_link(name: str) -> str:
@@ -696,7 +708,7 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
                     if p.project in known else f"<b>{escape(p.project)}</b>")
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li>{name} {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
+                f"<li>{name} <span class=\"glue\">{_grade_badge(p.grade)}\u00a0·</span> 할\u00a0일\u00a0{p.todo_count}건 · "
                 f"근거 {_quoted(p.source_subject)}{link}</li>"
             )
         pending = (
@@ -855,7 +867,7 @@ def _agenda_cards(
             items.append(
                 f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
                 f'{title}{_grade_badge(todo.grade)}'
-                f'<span class="where">{_SEP.join(where)}</span>{source}</li>'
+                f'<span class="where">{_glued(where)}</span>{source}</li>'
             )
         fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
         parts.append(fold.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else fold)
@@ -965,8 +977,8 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
     def row(e: EventRow) -> str:
         return (
             f'<li><time data-live data-ago="{escape(e.at, quote=True)}" datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
-            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><a class=\"ev-project\" "
-            f"href=\"{escape(project_href(e.project), quote=True)}\">{escape(e.project)}</a> · "
+            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><span class=\"glue\"><a class=\"ev-project\" "
+            f"href=\"{escape(project_href(e.project), quote=True)}\">{escape(e.project)}</a>\u00a0·</span> "
             f"{_event_text(e, titles)}{who(e)}</div></li>"
         )
 
@@ -1161,8 +1173,8 @@ def _person_page(name: str, todos: list[TodoRow], today: date) -> str:
     ordered = sorted(todos, key=_todo_order)
     items = "".join(
         f'<li data-project="{escape(t.project, quote=True)}"><a class="ag-title" href="{escape(todo_href(t.todo_id), quote=True)}">'
-        f'{escape(t.title)}</a><span class="where"><a href="{escape(project_href(t.project), quote=True)}">{escape(t.project)}</a>'
-        f'{_SEP + _md(t.due) if t.due else ""}</span>'
+        f'{escape(t.title)}</a><span class="where">'
+        f'{_glued([_project_link(t.project)] + ([_md(t.due)] if t.due else []))}</span>'
         f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
         for t in ordered
     )

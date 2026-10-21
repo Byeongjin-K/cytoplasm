@@ -9,11 +9,13 @@
 //   offscreen  a text line runs past the left or right edge of the screen
 //   hscroll    the page scrolls sideways
 //   smalltext  text under 11px
+//   lead-sep   a 「·」 separator begins a line (it belongs at the end of the item before it)
 //   under-nav  at the end of the page, content sits under the fixed bottom tab bar
 //
 // Usage (node 18+ with the playwright package; nothing is installed into the repository):
 //   PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node automation/project_board/layout_audit.mjs \
 //     [--url <dashboard url with ?t=token>] [--engines webkit,chromium] [--shots <dir>] [--out <file.json>]
+//     [--only '#summary,#todo/demo-1-5']   (only these screens)
 // Without --url it starts `python3 -m automation.project_board demo` (invented data, loopback, thrown away)
 // and stops it at the end. With --url it only reads the page: it never ticks, saves or changes anything.
 // Exit 0 when no screen has a finding, 1 when any does (each finding is printed), 2 when it cannot run.
@@ -114,6 +116,24 @@ function probe() {
     if (!pinned(i.el) && (i.r.right > vw + 1 || i.r.left < -1)) found.push({ type: 'offscreen', a: name(i.el) });
     if (parseFloat(getComputedStyle(i.el).fontSize) < 11) found.push({ type: 'smalltext', a: name(i.el) });
   }
+  for (const i of items) {
+    if (!i.text) continue;
+    const block = i.el.closest('li, p, dd, div, td');
+    if (!block) continue;
+    // the 「·」 glyphs of this text node that start their line: nothing of the same block sits left of them on that line
+    const walk = document.createTreeWalker(i.el, NodeFilter.SHOW_TEXT);
+    for (let n; (n = walk.nextNode());) {
+      for (let k = n.textContent.indexOf('·'); k !== -1; k = n.textContent.indexOf('·', k + 1)) {
+        const r = document.createRange(); r.setStart(n, k); r.setEnd(n, k + 1);
+        const dot = r.getBoundingClientRect();
+        const mid = (dot.top + dot.bottom) / 2;
+        if (dot.width < 1 || mid < i.r.top || mid > i.r.bottom) continue;
+        const before = items.some((o) => o !== i && block.contains(o.el) && o.r.right <= dot.left + 1 && o.r.top < mid && o.r.bottom > mid);
+        const sameNodeBefore = (() => { if (k === 0) return false; const q = document.createRange(); q.setStart(n, 0); q.setEnd(n, k); return [...q.getClientRects()].some((x) => x.width > 1 && x.top < mid && x.bottom > mid && x.right <= dot.left + 1 && /\S/.test(n.textContent.slice(0, k).split('\n').pop())); })();
+        if (!before && !sameNodeBefore) found.push({ type: 'lead-sep', a: name(i.el) });
+      }
+    }
+  }
   if (document.scrollingElement.scrollWidth > vw + 1) found.push({ type: 'hscroll', a: `${document.scrollingElement.scrollWidth}px` });
   return found;
 }
@@ -157,7 +177,9 @@ try {
           for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="/source/"]')) keys.add(a.getAttribute('href'));
           return [...keys];
         });
+        const only = args.only ? args.only.split(',') : null;
         for (const key of screens) {
+          if (only && !only.includes(decodeURIComponent(key))) continue;
           if (key.startsWith('#')) {
             await page.goto(origin + '/', { waitUntil: 'networkidle' });
             await page.evaluate((h) => { location.hash = h; }, key);

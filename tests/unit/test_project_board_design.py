@@ -48,6 +48,16 @@ def test_no_row_or_link_gives_up_its_own_height_or_hides_its_text() -> None:
     assert all("ellipsis" not in body and "nowrap" not in body for sel, body in rules.items() if ".src-link" in sel)
 
 
+def test_a_separator_rides_with_the_link_before_it(tmp_path: Path) -> None:
+    """A link drawn inline-block leaves a break after it that a no-break space does not close: Safari began the
+    next line with 「·」. Every separator after a link sits inside the same no-wrap span as that link."""
+    page = _page(tmp_path, "served")
+    assert '<span class="glue"><a class="who-link"' in page or '<span class="glue"><a href="#project/' in page
+    assert not re.search(r"</a>[\u00a0 ]· ", page)
+    rules = dict(re.findall(r"(?m)^([^{}@\n]+)\{([^{}]*)\}", dashboard_theme._PARTS))
+    assert rules[".glue"] == "white-space:nowrap"
+
+
 @pytest.mark.parametrize("mode", ["served", "file"])
 def test_the_page_has_no_inline_styles_dashes_or_emoji(tmp_path: Path, mode: str) -> None:
     page = _page(tmp_path, mode)

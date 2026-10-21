@@ -154,6 +154,8 @@ li.saving{opacity:.55}
 .agenda .ag-title:hover{color:var(--accent-ink);text-decoration:underline}
 .agenda .where a{display:inline-block;padding:3px 0;color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
 .agenda .where a:hover{color:var(--accent-ink)}
+.glue{white-space:nowrap}
+.glue>*{white-space:normal}
 .agenda li>.src-link{flex-basis:100%;margin-top:0}
 ul.todos li[id]{scroll-margin:96px 0 112px}
 .todo-title{display:block;color:var(--text);font-weight:600}
