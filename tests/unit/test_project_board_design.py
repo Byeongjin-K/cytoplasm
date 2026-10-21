@@ -38,6 +38,16 @@ def test_every_colour_and_size_comes_from_a_token_the_dark_appearance_overrides_
     assert not re.findall(r"#[0-9a-fA-F]{3,6}\b", rules)  # colours live in the token block only
 
 
+def test_no_row_or_link_gives_up_its_own_height_or_hides_its_text() -> None:
+    """Safari drew the 보안 등급 badge and a wrapped 근거 subject on one spot (2026-10-21): WebKit lifts a
+    baseline-aligned grid row holding a multi-line inline-flex link into the row above. Rows align to their
+    top, and a mail subject wraps instead of ending in an ellipsis. layout_audit.mjs measures the screens."""
+    rules = dict(re.findall(r"(?m)^([^{}@\n]+)\{([^{}]*)\}", dashboard_theme._PARTS))
+    assert "align-items:start" in rules[".td-facts"]
+    assert all("baseline" not in body for sel, body in rules.items() if ".td-facts" in sel)
+    assert all("ellipsis" not in body and "nowrap" not in body for sel, body in rules.items() if ".src-link" in sel)
+
+
 @pytest.mark.parametrize("mode", ["served", "file"])
 def test_the_page_has_no_inline_styles_dashes_or_emoji(tmp_path: Path, mode: str) -> None:
     page = _page(tmp_path, mode)

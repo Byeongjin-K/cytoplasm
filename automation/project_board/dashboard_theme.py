@@ -139,9 +139,9 @@ li.done .todo-title{text-decoration:line-through;color:var(--text-3);font-weight
 .meta{display:flex;gap:6px var(--s2);flex-wrap:wrap;align-items:center;font-size:var(--t-sm);color:var(--text-2);margin-top:6px}
 .meta .sep{color:var(--line-strong)}
 .due{display:inline-flex;align-items:center;gap:6px}
-.src-link{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;min-height:28px;color:var(--text-3);font-size:var(--t-sm);margin-top:2px}
-.src-link .ico{width:15px;height:15px}
-.src-link span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-link{display:inline-flex;align-items:flex-start;gap:6px;max-width:100%;min-width:0;min-height:28px;color:var(--text-3);font-size:var(--t-sm);margin-top:2px;padding:3px 0}
+.src-link .ico{width:15px;height:15px;margin-top:calc((1.55em - 15px) / 2)}
+.src-link span{min-width:0}
 a.src-link:hover{color:var(--accent-ink)}
 .row-error{display:block;margin-top:6px;font-size:var(--t-sm);color:var(--danger);font-weight:600}
 li.saving{opacity:.55}
@@ -159,10 +159,12 @@ ul.todos li[id]{scroll-margin:96px 0 112px}
 .todo-title{display:block;color:var(--text);font-weight:600}
 a.todo-title:hover{color:var(--accent-ink);text-decoration:underline}
 .who-link{color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
-.td-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--s3) var(--s4);margin:0;align-items:baseline}
-.td-facts dt{color:var(--text-3);font-size:var(--t-sm)}
+.td-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--s3) var(--s4);margin:0;align-items:start}
+.td-facts dt{color:var(--text-3);font-size:var(--t-sm);line-height:calc(var(--t-md) * 1.55)}
+.td-facts dt:has(+dd>.seg){display:flex;align-items:center;min-height:calc(var(--hit) + var(--s2));padding-top:var(--s2)}
 .td-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
-.td-facts dd a{display:inline-flex;align-items:center;gap:6px;min-height:24px}
+.td-facts dd a{display:inline-flex;align-items:flex-start;gap:6px;min-height:24px}
+.td-facts dd a .ico{margin-top:calc((1.55em - 18px) / 2)}
 .seg{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
 .seg-btn[aria-pressed=true]{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink);font-weight:650}
 .shelf-link{margin-top:var(--s5)}
