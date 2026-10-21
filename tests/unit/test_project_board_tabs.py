@@ -24,7 +24,8 @@ def test_every_menu_item_owns_exactly_one_panel_and_none_is_hidden_in_the_markup
         page = render_dashboard(store.snapshot(today=TODAY), mode=mode)  # type: ignore[arg-type]
         assert re.findall(r'<a href="#(\w+)" data-tab="\1">', page) == [tab for tab, _ in TABS]
         panels = re.findall(r'<section id="(\w+)" data-tab="(\w+)"', page)
-        assert [tab for _, tab in panels if _ != "events"] == [tab for tab, _ in TABS]
+        # 보관함 is a screen reached from the foot of 프로젝트 (owner Q347), not a menu item
+        assert [tab for _, tab in panels if _ != "events"] == [*(tab for tab, _ in TABS if tab != "sessions"), "archive", "sessions"]
         assert ("events", "summary") in panels
         assert " hidden" not in page.split('<main id="main">', 1)[1].split("<script>", 1)[0]
         assert "window.addEventListener('hashchange'" in page

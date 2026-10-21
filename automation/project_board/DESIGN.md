@@ -14,8 +14,8 @@ the exported dashboard attachment.
 ## 3. Layout
 Reuse the existing main scroll owner, responsive navigation and `stack`.
 Boards are native `details` groups; cards form readable single-column lists.
-With the live ledger tab, the existing mobile navigation uses eight equal columns
-instead of seven, so the extra tab does not create a second fixed row.
+With the live ledger tab, the existing mobile navigation uses seven equal columns
+instead of six (보관함 moved under 프로젝트, owner Q347), so the extra tab does not create a second fixed row.
 
 ## 4. Hierarchy
 A section title, board title and count, then card title, status and reference.

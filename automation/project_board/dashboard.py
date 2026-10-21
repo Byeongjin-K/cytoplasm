@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
@@ -142,8 +142,9 @@ _TABS_JS: Final = """
     if(hash.indexOf('todo/')===0){return {tab:'todo',proj:dec(hash.slice(5))};}
     if(hash.indexOf('person/')===0){return {tab:'person',proj:dec(hash.slice(7))};}
     if(hash.indexOf('project/')===0){return {tab:'project',proj:dec(hash.slice(8))};}
+    var sq=hash.indexOf('?s=');if(sq>=0){return {tab:hash.slice(0,sq),proj:'',status:dec(hash.slice(sq+3))};}
     if(q>=0){return {tab:hash.slice(0,q),proj:dec(hash.slice(q+3))};}
-    return {tab:hash.indexOf('todo-')===0?'todos':hash,proj:''};
+    return {tab:hash.indexOf('todo-')===0?'todos':hash.indexOf('sched-')===0?'schedule':hash==='events'?'summary':hash,proj:''};
   }
   function pick(panel,proj){
     var sel=panel?panel.querySelector('select[data-picker]'):null;if(!sel){return '';}
@@ -177,16 +178,20 @@ _TABS_JS: Final = """
   }
   function show(keep){
     var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
-        names=[].map.call(links,function(a){return a.dataset.tab;});
+        names=[].map.call(links,function(a){return a.dataset.tab;}).concat(['archive']);
     var hash=location.hash.slice(1),r=parse(hash),tab=r.tab,page=null;
     if(tab==='project'||tab==='todo'||tab==='person'){
       panels.forEach(function(s){if(s.dataset.tab===tab&&(tab==='project'?s.dataset.project:s.dataset.key)===r.proj){page=s;}});
       if(!page){tab=tab==='project'?'projects':tab==='todo'?'todos':'summary';}
     }else if(names.indexOf(tab)<0){tab='summary';}
-    var navTab=page?(page.dataset.tab==='project'?(page.dataset.archived?'archive':'projects'):'todos'):tab;
+    var navTab=page?(page.dataset.tab==='project'?'projects':'todos'):tab==='archive'?'projects':tab;
     panels.forEach(function(s){s.hidden=page?s!==page:s.dataset.tab!==tab;});
     links.forEach(function(a){var on=a.dataset.tab===navTab;a.classList.toggle('on',on);
       if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
+    var ss=document.getElementById('todo-s');
+    // a filter set by a link (진행 중 tile) lasts while that address is open; the plain 할 일 tab starts unfiltered again
+    if(ss&&tab==='todos'&&r.status!==undefined){ss.value=r.status;linkedStatus=true;}
+    else if(ss&&tab==='todos'&&linkedStatus){ss.value='';linkedStatus=false;}
     var t=filterTodos(tab==='todos'?r.proj:''),s=filterSchedule(tab==='schedule'?r.proj:'');
     if(page){if(page.dataset.tab==='project'){sticky=r.proj;}}else if(tab==='todos'){sticky=t||'';}else if(tab==='schedule'){sticky=s||'';}
     links.forEach(function(a){var n=a.dataset.tab;if(n==='todos'||n==='schedule'){
@@ -200,9 +205,10 @@ _TABS_JS: Final = """
     if(!('pbFrom' in st)){st={pbFrom:moves>0&&last!==here?last:''};try{history.replaceState(st,'');}catch(e){}}
     if(page){var b=page.querySelector('[data-back] span');if(b&&st.pbFrom){b.textContent=st.pbFrom;}}
     last=here;moves++;
-    var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash),fresh=jump;jump=false;
+    var target=(hash.indexOf('todo-')===0||hash.indexOf('sched-')===0||hash==='pending'||hash==='events')&&document.getElementById(hash),fresh=jump;jump=false;
     if(!fresh&&hash in seen){window.scrollTo(0,seen[hash]);return;}
     if(target&&hash.indexOf('todo-')===0){reveal(target);}
+    if(target&&target.tagName==='DETAILS'){target.open=true;}
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
   }
   // a todo opened from 일정·근거·기록 must be on screen: lift a search or status filter that hides it, open its fold
@@ -212,7 +218,7 @@ _TABS_JS: Final = """
     for(var d=li.closest('details');d;d=d.parentElement&&d.parentElement.closest('details')){d.open=true;}
   }
   // back and forward return to where that screen was left; a link or a picker opens its screen fresh
-  var seen={},jump=false,moves=-1,last='';
+  var seen={},jump=false,moves=-1,last='',linkedStatus=false;
   // a detail screen back link returns to the screen it was opened from (its name on the link), else to its list
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[data-back]');if(a&&(history.state||{}).pbFrom){e.preventDefault();history.back();}
@@ -404,7 +410,7 @@ def stamp_etag(page: str) -> tuple[str, str]:
 
 TABS: Final = (
     ("summary", "요약"), ("projects", "프로젝트"), ("todos", "할 일"), ("schedule", "일정"), ("sources", "근거"),
-    ("archive", "보관함"), ("sessions", "세션"),
+    ("sessions", "세션"),
 )
 _NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{icon(tab)}{label}</a>' for tab, label in TABS)
 LOCAL_ACTOR: Final = "노드 로컬 접속"
@@ -640,15 +646,16 @@ def _fresh_in_shelf(full: BoardSnapshot, shelf: tuple[ProjectView, ...]) -> dict
     return {name: count for name, count in counts.items() if count}
 
 
-def _nav(shelf: tuple[ProjectView, ...], fresh: dict[str, int]) -> str:
-    """The tab bar; 보관함 carries its own counts so archived work is noticed without leaving the shelf."""
+def _shelf_link(shelf: tuple[ProjectView, ...], fresh: dict[str, int]) -> str:
+    """보관함 lives at the foot of 프로젝트 (owner Q347); it carries its counts so archived work is still noticed."""
     if not shelf:
-        return _NAV
+        return ""
     new = sum(fresh.values())
     badges = f' <span class="badge d-none">{len(shelf)}</span>' + (
         f' <span class="badge d-soon">새 {new}</span>' if new else ""
     )
-    return _NAV.replace("보관함</a>", f"보관함{badges}</a>")
+    return (f'<a class="card ss-strip shelf-link" href="#archive">{icon("archive")}<span><b>보관함{badges}</b>'
+            f'<span class="ss-hubsub">보관한 프로젝트를 보고 되살립니다</span></span>{icon("chevron-right")}</a>')
 
 
 def _long_day(today: date) -> str:
@@ -661,11 +668,20 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
     week = sum(1 for t in open_todos if _bucket(t.due, today) == "이번 주")
     doing = sum(1 for t in snapshot.todos if t.status == "진행")
     waiting = len(snapshot.pending)
+    week_ago = (today - timedelta(days=7)).isoformat()
+    fresh = sum(1 for e in snapshot.events if e.kind == "approved" and e.at[:10] >= week_ago)
     tiles = (
-        _tile("alert", "지연", str(overdue), "danger" if overdue else "", "#schedule")
-        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", "#schedule")
-        + _tile("activity", "진행 중", str(doing), "info" if doing else "", "#todos")
-        + _tile("inbox", "승인 대기", str(waiting), "info" if waiting else "", "#pending" if waiting else "")
+        _tile("alert", "지연", str(overdue), "danger" if overdue else "", "#sched-late" if overdue else "#schedule")
+        + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", "#sched-week" if week else "#schedule")
+        + _tile("activity", "진행 중", str(doing), "info" if doing else "", "#todos?s=" + quote("진행", safe=""))
+        + (_tile("inbox", "승인 대기", str(waiting), "info", "#pending") if waiting
+           else _tile("inbox", "최근 7일 새 할\u00a0일", str(fresh), "info" if fresh else "", "#events"))
+    )
+    undated = sum(1 for t in open_todos if not t.due)
+    undated_line = (
+        f'<a class="card ss-strip" href="#sched-none">{icon("schedule")}<span><b>마감이 정해지지 않은 할\u00a0일 {undated}건</b>'
+        f'<span class="ss-hubsub">일정의 「미정」 묶음에서 봅니다</span></span>{icon("chevron-right")}</a>'
+        if undated else ""
     )
     pending = ""
     if snapshot.pending:
@@ -690,15 +706,16 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
         else ""
     )
     projects = ""
-    if snapshot.projects:
-        cards = "".join(_project_card(view, today) for view in snapshot.projects)
+    if snapshot.projects:  # owner Q346: the cards live on 프로젝트 only; the summary keeps one line to them
+        late = sum(1 for view in snapshot.projects if view.overdue)
+        note = f", 지연이 있는 프로젝트 {late}개" if late else ""
         projects = (
-            '<div class="section-title"><h3>프로젝트</h3><span class="small muted">눌러서 그 프로젝트만 봅니다</span></div>'
-            f'<div class="grid">{cards}</div>'
+            f'<a class="card ss-strip" href="#projects">{icon("projects")}<span><b>프로젝트 {len(snapshot.projects)}개 보기</b>'
+            f'<span class="ss-hubsub">진행 중인 프로젝트{note}</span></span>{icon("chevron-right")}</a>'
         )
     return (
         f'<section id="summary" data-tab="summary">{_head("오늘의 현황", "기준일 " + _long_day(today))}'
-        f'<div class="tiles">{tiles}</div>{sessions}{pending}{projects}{withheld}</section>'
+        f'<div class="tiles">{tiles}</div>{undated_line}{projects}{sessions}{pending}{withheld}</section>'
     )
 
 
@@ -723,11 +740,11 @@ def _project_card(view: ProjectView, today: date, note: str = "") -> str:
     )
 
 
-def _projects(snapshot: BoardSnapshot, today: date) -> str:
+def _projects(snapshot: BoardSnapshot, today: date, shelf: str = "") -> str:
     cards = "".join(_project_card(view, today) for view in snapshot.projects)
     body = f'<div class="grid">{cards}</div>' if cards else EMPTY_SECTION
     sub = f"진행 중인 프로젝트 {len(snapshot.projects)}개" if cards else ""
-    return f'<section id="projects" data-tab="projects">{_head("프로젝트", sub)}{body}</section>'
+    return f'<section id="projects" data-tab="projects">{_head("프로젝트", sub)}{body}{shelf}</section>'
 
 
 def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -> str:
@@ -785,7 +802,8 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
         fold = _fold(f"t:{project}", heading, len(items), body, cls="todo-group card fold")
         blocks.append(fold.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))
-    options = "".join(f'<option value="{s}">{s}</option>' for s in ("열림", "진행", "완료", "보류"))
+    have = Counter(t.status for t in snapshot.todos)
+    options = "".join(f'<option value="{s}">{s} {have[s]}건</option>' for s in ("열림", "진행", "완료", "보류") if have[s] or s != "보류")
     filters = (
         f'<div class="filters">{_picker("todos", snapshot)}'
         f'<label class="field field-search">검색<span class="control">{icon("search")}'
@@ -794,6 +812,9 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         '<span id="todo-count" class="count" aria-live="polite"></span></div>'
     )
     return f'<section id="todos" data-tab="todos">{_head("할 일", sub)}{filters}{"".join(blocks)}</section>'
+
+
+_BUCKET_IDS: Final = {"지연": "late", "이번 주": "week", "다음 주": "next", "이후": "later", "미정": "none"}
 
 
 def _agenda_cards(
@@ -832,7 +853,8 @@ def _agenda_cards(
                 f'{title}{_grade_badge(todo.grade)}'
                 f'<span class="where">{_SEP.join(where)}</span>{source}</li>'
             )
-        parts.append(_fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold"))
+        fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
+        parts.append(fold.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else fold)
     return "".join(parts)
 
 
@@ -985,7 +1007,8 @@ def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dic
         f'<div class="card empty">{icon("archive")}<b>보관한 프로젝트가 없습니다</b>'
         "<p>끝난 프로젝트는 프로젝트 화면의 <span class=\"q\">「보관」으로</span> 이곳에\u00a0옮길\u00a0수\u00a0있습니다.</p></div>"
     )
-    return f'<section id="archive" data-tab="archive">{_head("보관함", sub)}{body}</section>'
+    back = f'<a class="back" href="#projects">{icon("chevron-left")}프로젝트</a>'
+    return f'<section id="archive" data-tab="archive">{back}{_head("보관함", sub)}{body}</section>'
 
 
 def _project_page(
@@ -1006,7 +1029,8 @@ def _project_page(
         _tile("alert", "지연", str(overdue), "danger" if overdue else "", schedule if not archived else "")
         + _tile("schedule", "이번 주 마감", str(week), "warn" if week else "", schedule if not archived else "")
         + _tile("todos", "완료", f"{view.done}/{view.total}", "", escape(project_href(view.name, "todos"), quote=True) if todos and not archived else "")
-        + _tile("inbox", "승인 대기", str(len(pending)), "info" if pending else "", "#pending" if pending and not archived else "")
+        + (_tile("inbox", "승인 대기", str(len(pending)), "info", "#pending" if not archived else "") if pending
+           else _tile("schedule", "마감 미정", str(sum(1 for t in open_todos if not t.due)), "", schedule if not archived else ""))
     )
     items = "".join(_todo_item(t, mode, today, anchor=False) for t in sorted(todos, key=_todo_order))
     todo_block = f'<div class="card"><ul class="todos">{items}</ul></div>' if items else (
@@ -1171,8 +1195,8 @@ def render_dashboard(
         f"<style>{CSS}{ledger_css}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
-        f'<nav aria-label="화면"{nav_class}>{_nav(shelf, new_in_shelf)}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
-        f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today)}"
+        f'<nav aria-label="화면"{nav_class}>{_NAV}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
+        f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today, _shelf_link(shelf, new_in_shelf))}"
         f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today, mode)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
         f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
