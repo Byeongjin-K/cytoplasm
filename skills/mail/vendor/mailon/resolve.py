@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from . import folders
 from .browser import BrowserError
 from .send_trigger import open_compose_when_ready
 
@@ -112,7 +113,10 @@ def resolve_name(browser: ResolveBrowser, query: str) -> tuple[list[str], int]:
     Returns (cell_texts, post_count). Read-only: only the compose screen is
     opened; nothing is submitted.
     """
-    log.debug("resolve_name: opening compose for query %r", query)
+    # Same page-boot step sync and send take since 2026-10-13: in slow windows the
+    # page's 'load' never fires and compose throws until its load handler runs.
+    boot = folders.finish_page_boot(browser)
+    log.debug("resolve_name: page boot %s; opening compose for query %r", boot, query)
     open_compose_when_ready(browser)
     browser.wait_ms(3000)
     browser.clear_network_requests()

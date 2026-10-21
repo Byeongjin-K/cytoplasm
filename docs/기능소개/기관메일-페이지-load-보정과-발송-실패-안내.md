@@ -35,18 +35,21 @@
 - **그래도 실패**: 승인 스레드에
   `⚠️ 발송 실패: FW: … (draft 5ff53c)` / `멈춘 단계: compose_open · 원인: compose_not_ready · 실패한 명령: eval · 오류: js_type_error` /
   `시도 1/6 · 다음 자동 재시도: 10-13 16:10 KST`. 다음 틱은 그 시각 전에는 `RETRY-WAIT` 만 남긴다.
+- **느린 구간에 이름으로 주소 찾기**(2026-10-21): `mail_wrapper.py resolve --name` 도 메일쓰기를 열기 전에
+  같은 load 처리기 보정을 한다. 이전에는 이 길만 빠져 있어 로그인은 되는데 매번 exit 2
+  (`auth_or_browser_error`)로 끝났고, 보정 뒤 같은 조회가 조직도 후보를 돌려줬다.
 - **6회 모두 실패**: 마지막 안내가 「자동 재시도를 멈췄습니다. 메일은 발송되지 않았습니다」를 말하고
   초안은 `blocked`(`retry_exhausted`). 다시 보내려면 새로 요청한다.
 
 ## 관련
 
-- 페이지 부팅 보정: `skills/mail/vendor/mailon/folders.py` `finish_page_boot`(동기화·발송 공용,
+- 페이지 부팅 보정: `skills/mail/vendor/mailon/folders.py` `finish_page_boot`(동기화·발송·수신자 이름 조회 `resolve.py` 공용,
   `recover_inbox_uid` 가 새로고침 전후로 사용), 발송 `send.py` `_open_compose_with_recovery`,
   실패 단계 `SendStepError`·`failure_details`·`record_send_failure`
 - 재시도 상한·안내 문구: `skills/mail/scripts/mail_send_retry.py`, 기록 `triage_gate_mailon.py`,
   워처 `triage_cli.cmd_watch`(`SEND-FAILED`·`RETRY-WAIT`). 승인 해시·중복 발송 방지·보낸메일함 확인은
   그대로이고, 전체 mail-mode 강등(연속 발송 실패 2회 → no-go)은 브라우저 단계 실패에 쓰지 않는다 —
   웹메일이 회복되면 승인된 메일이 그대로 나가야 하기 때문이다.
-- 시험: `tests/unit/test_mailon_page_boot.py`, `tests/unit/test_mail_send_failure_notice.py`,
+- 시험: `tests/unit/test_mailon_page_boot.py`, `tests/unit/test_mailon_resolve_page_boot.py`, `tests/unit/test_mail_send_failure_notice.py`,
   `skills/mail/vendor/tests/test_send_failure_record.py`, 샌드박스 `skills/mail/scripts/scenario.sh` 11b
 - 앞선 완화: [목록 미표시 새로고침 우선](기관메일-목록-미표시-새로고침-우선.md)
