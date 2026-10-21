@@ -186,8 +186,7 @@ def notify_owner(
     실패 마커는 첨부가 있든 없든 같다 — 첨부 때문에 발신자가 자기 전송을 갖게 두면 목적지
     규칙이 두 벌이 되고, 드리프트하는 쪽은 언제나 둘째 사본이다(ON-2/ON-3).
     `fault=True`는 release가 정한 페어 채널을 우선한다. 미설정은 기존 목적지 그대로다.
-    RETAINED: content: str은 budget_confirm.dm_owner의 렌더 완료 본문·기존 폴백을 받는다.
-    전체 계약의 영구 예외는 calendar_confirm.send_owner_dm, approval_reminder._PointerSender,
+    RETAINED: content: str 계약의 영구 예외는 calendar_confirm.send_owner_dm, approval_reminder._PointerSender,
     카드 없는 obsidian_write.gate_binding 위임도 포함한다. meeting 게이트웨이의 별도 문자열
     ACK는 INTEROP_RUNTIME 미보장 경계다. 이 경계·능력 폴백을 대체해 예외가 모두 해소되고
     격리 meeting 배달이 검증될 때만 문자열 경로의 퇴역을 재판정한다(채택 원장 참조).

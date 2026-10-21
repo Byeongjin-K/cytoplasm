@@ -138,7 +138,6 @@ def test_inventory_covers_the_owner_only_producers() -> None:
     modules = {surface.split("::")[0] for surface in owner_only}
     assert {
         "skills/mail/scripts/triage_binding.py",
-        "skills/budget/scripts/budget_binding.py",
         "skills/calendar/scripts/calendar_binding.py",
         "skills/coordination/scripts/coordination_binding.py",
         "skills/todo/scripts/todo_approval_runtime.py",

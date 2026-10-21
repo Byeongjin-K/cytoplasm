@@ -27,8 +27,7 @@
   ARM64 폴백 보드 후보 확인.
 - **OpenClaw 폴백 스모크 (W0-9)** — user-space Node 경로로 ARM64 설치 검증, 2-에이전트 위임 실증(1·2단계 PASS).
   W1-5 실패 대비용 — 게이트 PASS로 미발동.
-- **과제비 원장 Sheet (W0-10)** — 탭 3개(항목밄 잔액/지출 이력/수동 메모) + 운영 규칙 3항목,
-  W4-3 소비용 좌표(`configs/budget-sheet.md`) 고정.
+- **과제비 원장 Sheet (W0-10)** — 2026-10-22 형의 요청으로 budget 스킬과 함께 제거([과제비 감시 제거](기능소개/과제비-감시-제거.md)).
 
 ### 코어 시스템 (Wave 1)
 
@@ -74,7 +73,7 @@
 
 - **기관메일 읽기 래퍼 (W4-1)** — `mail_wrapper.py`(list/get/classify/status), READ-ONLY 가드로 send/compose/reply 차단. full-go 분기 확정, classify는 메타데이터만(LLM 무경유), W1-8 마운트. 증적 `docs/qa/W4-1/`.
 - **수신메일 분류→초안→승인→발송 (W4-2)** — `triage_*.py` + `mail-triage-watch` cron. 6단계(민감도 게이트→분류→한국어 초안→#approvals→동결 argv send→approvals.jsonl), cha 실 승인 발송 2건 라이브 확인. 증적 `docs/qa/W4-2/`.
-- **과제비 감지 → 요청메일 (W4-3)** — `!budget` 조회 + Sheet 스냅샷 diff → 초안 → 승인 → gws Gmail 발송. 증적 `docs/qa/W4-3/`. → [소개](기능소개/메일-과제비-단일-승인-메시지.md)
+- **과제비 감지 → 요청메일 (W4-3)** — 2026-10-22 형의 요청으로 제거([과제비 감시 제거](기능소개/과제비-감시-제거.md)).
 - **수신자 이름→이메일 해석 (mail resolve)** — 기관 웹메일 자동완성 기반 read-only 조회, 후보 0=fail-closed / 1=사용 / 2+=소유자 선택. `mail_wrapper.py`(SKILL.md v1.5.0, `2f3cae3`).
 - **기관메일 첨부 발송 (repair `t_c6f9e704`)** — 승인형 메일 첨부 업로드(서버 UID 검증) + 오류 분류 정정. → [소개](기능소개/기관메일-첨부-발송.md)
 - **W4 통합 E2E + 뱅크 (승인 게이트 집중) (W4-5)** — `run_bank.sh --all` exit 0(w2+w3+w4 누적 7시나리오), 분기별 승인 카운트 검증 + NEGATIVE 전부 0-send. 증적 `docs/qa/W4-5/`.

@@ -1,5 +1,7 @@
 # Autophagy 기능 현황판
 
+- [과제비 감시 제거](기능소개/과제비-감시-제거.md) — 형의 요청으로 budget 스킬(과제비 조회·변경 감지·요청 메일 카드)과 30분 `budget-watch`를 걷어냈다. 노드 정리는 다음 승인된 릴리스가 하며 시트와 노드 데이터는 그대로 둔다.
+
 - [캘린더 새 일정 기본색](기능소개/캘린더-새-일정-기본색.md) — 노드별 릴리스 승인 색상을 생성 argv·신규 v5 카드에 동결. 미설정은 기존 바이트 유지, 개인 일정 예외 1건은 후속.
 
 - [주간 연구 동향 노드에서 완전 제거](기능소개/주간-연구동향-노드-예약-은퇴.md) — 주간 연구동향 보고서와 키워드는 공도리가 맡는다. 노드의 예약·코드·`topics` 스킬·옛 보고서를 걷어냈다.
@@ -259,7 +261,7 @@
 완료 기능: [전사본 화자 구분과 문장 단위 출력](기능소개/전사본-화자-구분과-문장-단위-출력.md) (speechtotext v1.1.0 · meeting v1.6.0)
 완료 기능: [배포 미선언 홈 산출물 관측](기능소개/배포-미선언-홈-산출물-관측.md) (후속 과제 스윕 4 · deploy_all `undeclared`)
 완료 기능: [obsidian write 클론 위생 — lock·tmp_pack·fetch 예산·blobless](기능소개/obsidian-write-클론-위생.md) (후속 과제 스윕 4)
-완료 기능: [실행경로 가드 일반화 — 배포됨 ≠ 실행됨](기능소개/실행경로-가드-일반화.md) (후속 과제 스윕 4 · calendar·budget·todo·wiki·coordination · v1.1.0 에서 meeting·speechtotext·doctype·proposal·report·procurement·patent-prep·prompt 추가 = 14/14)
+완료 기능: [실행경로 가드 일반화 — 배포됨 ≠ 실행됨](기능소개/실행경로-가드-일반화.md) (후속 과제 스윕 4 · calendar·budget·todo·wiki·coordination · v1.1.0 에서 meeting·speechtotext·doctype·proposal·report·procurement·patent-prep·prompt 추가 = 14/14, budget은 2026-10-22 제거)
 완료 기능: [전사본 화자 경계 문장 분할](기능소개/전사본-화자-경계-문장-분할.md) (후속 과제 스윕 4 · speechtotext v1.1.1)
 완료 기능: [Plaud lifelog 동기화 — MCP 무등록 워처·건별 승인·vault 저장](기능소개/plaud-lifelog-동기화.md) (automation/plaud_sync · plaud skill v1.0.0 · 2026-09-02)
 완료 기능: [Plaud 전문 첫 저장 전 교정 — 기본 꺼짐 노드 명령 훅, 원본 보존·실패 시 원문](기능소개/plaud-전사-동결전-교정.md) (automation/plaud_sync · 2026-10-20)

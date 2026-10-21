@@ -62,7 +62,7 @@ class TestApprovalClaims:
         hits = claims.find_approval_claims(tmp_path)
 
         # Then
-        assert len(governed_skills) >= 18
+        assert len(governed_skills) >= 17
         assert hits == ()
 
 

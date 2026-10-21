@@ -1,4 +1,4 @@
-"""Posted-copy equality pins for the four SAFE_SUBSTRING approval producers."""
+"""Posted-copy equality pins for the three SAFE_SUBSTRING approval producers."""
 from __future__ import annotations
 
 import sys
@@ -13,11 +13,9 @@ from automation.entity_preflight.contracts import JsonValue
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-for skill in ("mail", "budget", "calendar", "coordination"):
+for skill in ("mail", "calendar", "coordination"):
     sys.path.insert(0, str(ROOT / "skills" / skill / "scripts"))
 
-budget_core = import_module("budget_core")
-budget_gate = import_module("budget_gate")
 calendar_confirm = import_module("calendar_confirm")
 calendar_gate = import_module("calendar_gate")
 coordination_approval = import_module("coordination_approval")
@@ -47,8 +45,6 @@ def record() -> dict[str, JsonValue]:
 def render_case(name: str, draft: dict[str, JsonValue], monkeypatch: pytest.MonkeyPatch) -> str:
     """Drive the existing render root, replacing only its external effects."""
     match name:
-        case "budget":
-            return budget_core.render_approvals_message(draft, instruction=INSTRUCTION)
         case "calendar":
             posts: list[str] = []
 
@@ -97,19 +93,18 @@ LEGACY = {
     "original": '[mail-triage] 수신메일 회신 발송 승인 요청\n- 분류: important / 플래그: reply_needed\n- 발신(마스킹): `sha256:masked`\n- 원문 제목: 문의\n- Cc: `cc@example.invalid`\n- 회신 제목: Re: 문의\n- 회신 본문:\n```\n회신 본문\n```\n- draft: `abc123` sha256: `digest-1`\n- 반응(기본): 이 메시지에 ✅ 실행 / ⛔ 취소',
     "compose": '[mail-triage] 새 메일 발송 승인 요청 (DM 확정)\n- To: `to@example.invalid`\n- Cc: `cc@example.invalid`\n- 제목: `Re: 문의`\n- 본문:\n```\n회신 본문\n```\n- draft: `abc123` sha256: `digest-1`\n- 반응(기본): 이 메시지에 ✅ 실행 / ⛔ 취소',
     "gmail": '[mail-triage] Gmail 발송 승인 요청 (DM 확정)\n- 발신 계정: `sender@example.invalid`\n- 작업: `reply`\n- 수신자: `to@example.invalid`\n- Cc: `cc@example.invalid`\n- 회신 대상: `reply-1`\n- 제목: `Re: 문의`\n- 본문:\n```\n회신 본문\n```\n- draft: `abc123` sha256: `digest-1`\n- action hash: `sha256:action-1`\n- 반응(기본): 이 메시지에 ✅ 실행 / ⛔ 취소',
-    "budget": '[budget-mail] 과제비 변경 감지 — 요청 메일 발송 승인 요청\n- 과제: 예제 (2026년)\n- 변경 1건 (금액은 마스킹 — 원문은 `!budget` 조회):\n  - 재료비 / 잔액: [MASKED-ad5736] → [MASKED-1a6562]\n- 스냅샷: `previous` → `next`\n- draft: `abc123` sha256: `digest-1`\n- 반응(기본): 이 메시지에 ✅ 실행 / ⛔ 취소\n- 텍스트 대체: `실행/취소 abc123` — 반응 사용이 기본이며, 확정 시 다음 30분 tick에 발송',
     "calendar": 'CHANGE-SUMMARY\n동작: 생성\n제목: 일정 제목\n일시: 2026-09-01 (화) 09:00 ~ 09:30 KST\n캘린더: primary\n대상 이벤트: (신규)\n\n이 메시지에 ✅ 실행 / ⛔ 취소. 텍스트 fallback: `실행 abc123`/`취소 abc123`\nsha256:digest-1',
     "coordination": '📅 일정 조율 (coord-1): 상대 에이전트(peer)가 2026-09-01 (화) 09:00~09:30 KST 슬롯을 승인했습니다.\n제목: 일정 제목\n이 메시지에 ✅ 실행 / ⛔ 취소 — 또는 `실행 abc123`/`취소 abc123` 텍스트도 가능\nsha256:digest-1',
 }
 
 
-@pytest.mark.parametrize("name", ["original", "compose", "gmail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("name", ["original", "compose", "gmail", "calendar", "coordination"])
 def test_legacy_bytes_when_record_has_no_version(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a fixed pre-version record; when its real render root runs; then posted bytes replay.
     assert render_case(name, {**record(), "render_version": "1"}, monkeypatch) == LEGACY[name]
 
 
-@pytest.mark.parametrize("name", ["original", "compose", "gmail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("name", ["original", "compose", "gmail", "calendar", "coordination"])
 def test_envelope_when_record_uses_version_two(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a new rendering version; when rendered; then all five fields precede the binding.
     content = render_case(name, {**record(), "render_version": "2"}, monkeypatch)
@@ -138,15 +133,6 @@ def test_fields_and_posted_bytes_when_rendering_v2(name: str, monkeypatch: pytes
     content = render_case(name, {**record(), "render_version": "2"}, monkeypatch)
     assert len(seen) == 1
     assert content == BYTES[name]
-
-
-def test_budget_version_survives_when_stale_cli_rebinds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given the committed v2 card and the CLI's stale in-memory draft.
-    monkeypatch.setenv("BUDGET_GATE_DIR", str(tmp_path))
-    budget_gate.write_json(budget_gate._draft_path("abc123"), {**record(), "render_version": "2", "message_id": "333"})
-    # When the old CLI wrapper persists the same message again; then its version is retained.
-    updated = budget_gate.set_message_id(record(), "333")
-    assert updated.get("render_version") == "2"
 
 
 @pytest.mark.parametrize("name", list(LEGACY))

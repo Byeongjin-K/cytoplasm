@@ -1,12 +1,12 @@
-"""다섯 no-agent cron 래퍼가 governed live 마운트 정의 **하나**를 쓰는지 고정한다.
+"""세 no-agent cron 래퍼가 governed live 마운트 정의 **하나**를 쓰는지 고정한다.
 
-배경(`docs/follow-ups.md`, 2026-08-17): budget·report·coordination·calendar·
-(그때는 research-trends 도)가 각자 마운트 경로를 들고 있어, 심링크가 멀쩡한데도 `not mounted`
+배경(`docs/follow-ups.md`, 2026-08-17): report·coordination·calendar·
+(그때는 budget·research-trends 도)가 각자 마운트 경로를 들고 있어, 심링크가 멀쩡한데도 `not mounted`
 또는 import 오류를 냈다. 판정은 `automation/skill_mount_drift.py`·`skill_mount_probe.sh`
 와 같은 `/srv/autophagy-skills/live/<skill>` 정의 하나여야 한다.
 
-경로 다섯 벌이 우연히 같은 문자열이어도 정의가 하나인 것은 아니다 — 그래서 이 파일은
-문자열을 다섯 번 확인하는 대신 **주입된 live 루트를 다섯 래퍼가 모두 따르는지**를 본다.
+경로 여러 벌이 우연히 같은 문자열이어도 정의가 하나인 것은 아니다 — 그래서 이 파일은
+문자열을 여러 번 확인하는 대신 **주입된 live 루트를 모든 래퍼가 모두 따르는지**를 본다.
 주입(`AUTOPHAGY_SKILL_LIVE_ROOT`)은 `skill_mount_probe.sh` 의 `HEALTHCHECK_SKILL_LIVE_ROOT`
 와 같은 테스트/운영용 구멍이며, 없으면 governed 기본값으로 fail-closed 한다.
 """
@@ -28,7 +28,6 @@ _LIVE_ROOT_ENV: Final = "AUTOPHAGY_SKILL_LIVE_ROOT"
 #: 래퍼가 읽는 환경 변수는 전부 걷어내고 테스트가 명시한 것만 남긴다 — 바깥 환경이
 #: 판정을 바꾸면 이 테스트가 증명하는 것이 없어진다.
 _STRIPPED_ENV: Final = (
-    "BUDGET_SCRIPTS",
     "REPORT_SCRIPTS",
     "CALENDAR_SCRIPTS",
     "COORDINATION_SCRIPTS",
@@ -39,7 +38,6 @@ _STRIPPED_ENV: Final = (
 
 #: (래퍼 경로, governed 스킬 이름, 해결된 스크립트 경로를 담은 모듈 심볼).
 _WRAPPERS: Final = (
-    ("skills/budget/scripts/budget_watch.py", "budget", "_SCRIPTS"),
     ("automation/notes_organize/notes_organize.py", "report", "_SCRIPTS"),
     ("skills/coordination/scripts/confirm_reaction_watch.py", "coordination", "_SCRIPTS"),
     ("skills/calendar/scripts/confirm_reaction_watch.py", "calendar", "_SCRIPTS"),
@@ -120,7 +118,7 @@ def test_shared_definition_when_env_override_set_then_override_wins() -> None:
     from automation.skill_mount import skill_scripts
 
     # When
-    resolved = skill_scripts("budget", env_var="BUDGET_SCRIPTS", env={"BUDGET_SCRIPTS": "~/mounted"})
+    resolved = skill_scripts("report", env_var="REPORT_SCRIPTS", env={"REPORT_SCRIPTS": "~/mounted"})
 
     # Then: 덮어쓰기가 이기고 `~` 는 펼쳐진다.
     assert resolved == Path.home() / "mounted"
@@ -156,7 +154,6 @@ def test_wrapper_when_only_governed_live_exists_then_resolves_there(
 @pytest.mark.parametrize(
     ("relative", "watch_name", "cli"),
     (
-        ("skills/budget/scripts/budget_watch.py", "budget-watch", "budget_cli.py"),
         ("automation/notes_organize/notes_organize.py", "notes-weekly-organize", "report_cli.py"),
     ),
 )
@@ -168,7 +165,7 @@ def test_watcher_when_only_governed_live_exists_then_runs_the_mounted_cli(
     home.mkdir()
     live_root = tmp_path / "srv" / "autophagy-skills" / "live"
     marker = tmp_path / "child-ran"
-    skill = "budget" if cli.startswith("budget") else "report"
+    skill = "report"
     _plant_mounted_cli(live_root, skill, cli, marker)
 
     # When: cron 틱이 돈다.
@@ -183,7 +180,6 @@ def test_watcher_when_only_governed_live_exists_then_runs_the_mounted_cli(
 @pytest.mark.parametrize(
     ("relative", "watch_name", "incident_open"),
     (
-        ("skills/budget/scripts/budget_watch.py", "budget-watch", False),
         ("automation/notes_organize/notes_organize.py", "notes-weekly-organize", True),
     ),
 )

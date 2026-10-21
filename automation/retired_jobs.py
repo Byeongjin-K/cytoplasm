@@ -16,11 +16,13 @@ from automation.gateway_retirement import Runner, checked, run, safe_path, stopp
 if TYPE_CHECKING:
     from automation.node_config import NodeConfig
 
-JOBS: Final = ("memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends", "wiki-confirm-watch")
+JOBS: Final = ("budget-watch", "memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends",
+               "wiki-confirm-watch")
 ALGORITHM: Final = "retired-job-v1"
 DATA: Final = ("state/reminders.db", "state/milestones.yaml")
 WIKI_SCRIPT: Final = ".hermes/scripts/wiki_confirm_reaction_watch.py"
 SCRIPTS: Final = {
+    "budget-watch": ".hermes/scripts/budget_watch.py",
     "memory-curator-watch": ".hermes/scripts/memory_curator_watch.py",
     "memory-relocate-watch": ".hermes/scripts/memory_relocate_watch.py",
     "reminder-poller": ".hermes/scripts/poll_reminders.py",

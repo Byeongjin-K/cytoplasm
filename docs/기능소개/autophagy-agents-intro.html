@@ -2343,7 +2343,7 @@ pre > code {
 <section id="skills" class="section">
   <div class="wrap">
     <p class="eyebrow mono">04 / 스킬</p>
-    <h2 class="h2">17개 스킬 — 에이전트가 실제로 할 수 있는 일</h2>
+    <h2 class="h2">16개 스킬 — 에이전트가 실제로 할 수 있는 일</h2>
     <p class="lead">스킬은 이 에이전트의 능력 목록이다. 메일·캘린더·할 일·위키처럼 <strong>바깥 세계를 건드리는 스킬은 예외 없이 소유자 승인 게이트를 지난다</strong> — 초안을 먼저 보여주고, 소유자가 ✅ 를 누른 뒤에야 실제 효과가 실행된다. 나머지는 읽기·개인 저장소 쓰기만 하므로 승인 없이 즉시 답한다.</p>
 
     <div>
@@ -2431,16 +2431,6 @@ pre > code {
         </div>
         <p class="skill-card__desc">!meeting 요청으로 회의록에서 결정사항·액션아이템·마일스톤 추출. 내 항목은 Kanban, 타인 항목은 #team 게시.</p>
         <p class="skill-card__ex">사용 예시 <code>!meeting</code> + 회의록 첨부</p>
-      </article>
-
-      <article class="skill-card" data-skill-id="budget" data-approval="approval">
-        <div class="skill-card__head">
-          <span class="skill-card__name">budget</span>
-          <span class="skill-card__ver mono">v1.1.0</span>
-          <span class="badge badge--gate">승인 필요</span>
-        </div>
-        <p class="skill-card__desc">Google Sheet 과제비 원장 조회 + 잔액 변화 감지. 변경 시 규정 요청메일 초안 생성 후 승인 대기.</p>
-        <p class="skill-card__ex">사용 예시 <code>!budget 재료비</code></p>
       </article>
 
       <article class="skill-card" data-skill-id="procurement" data-approval="none">
@@ -2645,7 +2635,7 @@ pre > code {
         <li><span class="mono">W0-7a·b·c</span> 기관메일 읽기→전송→통제 실발송 — 읽기부터 통제된 실발송까지 세 단계로 열었다. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W0-8</span> 개인 Kanban 검증 — 칸반 보드가 실제 작업 흐름을 감당하는지 확인했다. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W0-9</span> OpenClaw ARM64 폴백 — ARM64 환경용 폴백 경로를 확보했다. <span class="badge badge--ok">완료</span></li>
-        <li><span class="mono">W0-10</span> 과제비 Google Sheet — 과제비 원장을 시트로 마련했다. <span class="badge badge--ok">완료</span></li>
+        <li><span class="mono">W0-10</span> 과제비 Google Sheet — 과제비 원장을 시트로 마련했다(2026-10-22 budget 스킬과 함께 제거). <span class="badge badge--ok">완료</span></li>
       </ul>
     </details>
 
@@ -2697,7 +2687,7 @@ pre > code {
       <ul class="wave__list">
         <li><span class="mono">W4-1</span> 기관메일 읽기 래퍼 — 기관 메일함을 안전하게 읽는 경계. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W4-2</span> 수신메일 분류·초안·발송 — 분류하고 회신 초안을 만들되, 발송은 승인 이후에만. <span class="badge badge--ok">완료</span></li>
-        <li><span class="mono">W4-3</span> 과제비 감지·요청메일 — 잔액 변화를 감지해 규정 요청메일 초안을 세운다. <span class="badge badge--ok">완료</span></li>
+        <li><span class="mono">W4-3</span> 과제비 감지·요청메일 — 잔액 변화를 감지해 규정 요청메일 초안을 세운다(2026-10-22 제거). <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W4-4</span> 구매·용역 서류 생성 — 등록된 양식에 품목·금액·업체를 채워 초안을 만든다. <span class="badge badge--cond">진행중</span></li>
         <li><span class="mono">W4-5</span> 통합 E2E — 7개 시나리오 PASS. <span class="badge badge--ok">완료</span></li>
         <li><span class="mono">W4</span> 기관메일 첨부 발송 — 첨부가 붙은 메일도 같은 승인 게이트를 지난다. <span class="badge badge--ok">완료</span></li>

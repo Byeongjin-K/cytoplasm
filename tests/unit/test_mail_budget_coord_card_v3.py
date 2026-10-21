@@ -23,7 +23,7 @@ from skills.coordination.scripts.coordination_pending import (
     PendingConfirmStore,
 )
 
-CASES = ("original", "compose", "gmail", "budget", "coordination")
+CASES = ("original", "compose", "gmail", "coordination")
 
 
 @pytest.mark.parametrize("name", CASES)

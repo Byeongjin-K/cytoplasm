@@ -22,9 +22,7 @@ from automation.plaud_sync.model import PlaudSyncState
 from automation.plaud_sync.store import load_state, save_note_body, save_state
 from tests.unit.test_approval_directory import FakeApi
 from tests.unit.test_plaud_sync_effects import _BASE, _BODY
-from tests.unit.test_mail_budget_repair_approval_characterization import _new_mail_draft, _new_budget_draft
-budget_core = import_module("budget_core")
-budget_gate = import_module("budget_gate")
+from tests.unit.test_mail_budget_repair_approval_characterization import _new_mail_draft
 triage_core = import_module("triage_core")
 triage_gate = import_module("triage_gate")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills/calendar/scripts"))
@@ -86,11 +84,10 @@ def test_approval_guild_error_path_leaves_record_unchanged_when_discord_refuses(
     assert len(api.calls) == 1
 
 
-@pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "wiki"])
+@pytest.mark.parametrize("producer", ["mail", "calendar", "wiki"])
 def test_guild_is_durable_when_dictionary_producer_binds(producer: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: actual producer stores rooted in this test, with distinct routing metadata.
     monkeypatch.setenv("TRIAGE_GATE_DIR", str(tmp_path))
-    monkeypatch.setenv("BUDGET_GATE_DIR", str(tmp_path))
     monkeypatch.setenv("CALENDAR_GATE_DIR", str(tmp_path))
     monkeypatch.setattr(wiki_gate, "GATE_DIR", tmp_path)
     binding = ApprovalBinding(ApprovalKind.TODO, ApprovalSurface.AGENT_CHAT_THREAD, "444", 8, "111")
@@ -101,11 +98,6 @@ def test_guild_is_durable_when_dictionary_producer_binds(producer: str, tmp_path
             triage_gate.set_approval_binding(draft, kind="reply", surface=str(binding.surface), channel_id=binding.channel_id, policy_version=8, approval_thread_id=binding.channel_id, approval_guild_id=binding.guild_id)
             stored = triage_gate.load_draft(draft["id"])
             digest = triage_core.draft_sha256(stored)
-        case "budget":
-            draft = _new_budget_draft()
-            budget_gate.set_message_id(draft, "555", binding)
-            stored = budget_gate.load_draft(draft["id"])
-            digest = budget_core.draft_sha256(stored)
         case "calendar":
             draft = calendar_gate.create_draft(action="delete", argv=("gws", "calendar", "events", "delete"), calendar_id="primary", event_id="synthetic", summary="request", start="", end="", channel_id="")
             calendar_gate.bind_approval_thread(draft, binding.channel_id, binding.guild_id)

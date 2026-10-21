@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-JOBS = ("budget-watch", "mail-attachment-drive-watch")
+JOBS = ("calendar-confirm-watch", "mail-attachment-drive-watch")
 
 
 @pytest.mark.parametrize("raw", [
-    b"", b"budget-watch", b"budget-watch\r\n", b" budget-watch\n",
-    b"budget-watch\nbudget-watch\n", b"mail-attachment-drive-watch\nbudget-watch\n",
-    b"budget-watch\n\n", b"Budget-watch\n", b"not-declared-watch\n", b"\xff\n",
+    b"", b"calendar-confirm-watch", b"calendar-confirm-watch\r\n", b" calendar-confirm-watch\n",
+    b"calendar-confirm-watch\ncalendar-confirm-watch\n", b"mail-attachment-drive-watch\ncalendar-confirm-watch\n",
+    b"calendar-confirm-watch\n\n", b"Calendar-confirm-watch\n", b"not-declared-watch\n", b"\xff\n",
 ])
 def test_malformed_host_switch_refuses_without_normalizing(tmp_path: Path, raw: bytes) -> None:
     # Given

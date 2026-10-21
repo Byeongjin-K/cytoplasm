@@ -3,7 +3,7 @@
 The pending migration ledger is empty; structural exceptions live separately in
 _PERMANENT_RAW_CONTENT_EXEMPT. RETAINED: deliver/notify_owner/notify_owner_dm
 keep content: str for approval_reminder._PointerSender, the cardless Obsidian
-gate_binding delegation, budget_confirm.dm_owner and calendar_confirm.send_owner_dm.
+gate_binding delegation and calendar_confirm.send_owner_dm.
 The callbacks consume already-rendered bodies or legacy fallback bytes; they must
 not render again. Meeting's isolated gateway plugin remains separately governed by
 origin-notice _THREAD_API_ALLOWED and test_meeting_runtime_root, not this scan's
@@ -81,7 +81,6 @@ _CARD_RENDER_ROOTS: Final = {
     "skills/calendar/scripts/calendar_approval.py::request_confirmation": "skills/calendar/scripts/calendar_card.py::render_envelope",
     "skills/coordination/scripts/coordination_approval.py::request_confirmation": "skills/coordination/scripts/coordination_lifecycle.py::render_owner_card",
     "skills/mail/scripts/triage_approval.py::request_approval": "skills/mail/scripts/triage_core.py::render_approvals_message",
-    "skills/budget/scripts/budget_approval.py::request_approval": "skills/budget/scripts/budget_core.py::render_approvals_message",
     "skills/patent-prep/scripts/patent_export.py::prepare_export": "skills/patent-prep/scripts/patent_export_render.py::render_approval",
     "automation/obsidian_write/gate_binding.py::request_approval": "automation/obsidian_write/gate_binding.py::request_approval",
     "automation/obsidian_write/note_request_cli.py::cmd_request": "automation/obsidian_write/note_request_render.py::render_note_approval",
@@ -103,7 +102,6 @@ _PERMANENT_RAW_CONTENT_EXEMPT: dict[str, str] = {
     "automation/interop/approval_reminder.py::_PointerSender.send": "영구 최소정보 포인터 — 대기시간·공용 정의 카드 링크 한 줄만 전송",
     "automation/interop/approval_reminder.py::dispatch_owner_approval_reminders": "공용 최소정보 리마인더 배치 — _PointerSender가 만든 한 줄들을 목적지별로 묶어 전송하며 승인 봉투로 다시 렌더하지 않는다",
     "automation/obsidian_write/gate_binding.py::request_approval": "영구 위임 경계 — 주입 ApprovalGate에 lifecycle을 위임하며 자체 카드·구체 게시 어댑터가 없다; 어댑터 도입 시 재감사",
-    "skills/budget/scripts/budget_confirm.py::dm_owner": "영구 문자열 수신 경계 — deliver가 목적지별 렌더한 본문 또는 import·능력 폴백의 기존 바이트를 notify_owner로 전달; 재렌더 금지",
     "skills/calendar/scripts/calendar_confirm.py::send_owner_dm": "영구 문자열 수신 경계 — deliver 폴백·워처의 렌더된 본문 또는 기존 바이트·공유 최소정보 리마인더를 수신; 목적지 선택은 호출자가 소유",
     "skills/doctype/scripts/doctype_review.py::send_review": "영구 문자열 발신 경계 — 스킬이 봉투를 렌더하고 옛 런타임·렌더 거부의 능력 폴백으로 기존 바이트를 보존한 뒤 notify_owner로 전달; message=는 폴백을 없애므로 재렌더 금지",
     "skills/procurement/scripts/procure_review.py::send_review": "영구 문자열 발신 경계 — 해석된 통지 채널 좌표로 렌더한 본문·레거시 폴백 바이트를 첨부와 함께 notify_owner로 전달; 재렌더하면 좌표와 폴백이 모두 사라진다",
@@ -132,8 +130,6 @@ _NOT_OWNER_FACING: dict[str, str] = {
     "automation/release_request_gate.py::ReleaseRequestGate._post_details": "릴리스 변경 상세 전송 내부 — 저장된 패치노트와 전체 번들 목록의 기계적 분할이며 승인 카드 생산자는 render_v6 경로가 검사한다",
 
     "automation/supply_chain_watch_cli.py::main.deliver": "승인 리마인더의 주입 전송 — approval_reminder 발신자가 봉투를 소유한다",
-
-    "skills/budget/scripts/budget_confirm.py::post_approval_request": "예산 승인 카드 전송 — budget 생산자의 렌더 경로가 검사 대상이다",
 
     "skills/calendar/scripts/calendar_confirm.py::post_confirmation_message": "일정 승인 카드 게시 — calendar 생산자의 렌더 루트로 별도 검사한다",
 

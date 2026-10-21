@@ -59,13 +59,6 @@ POLICY_TABLE: Final[tuple[PolicyEntry, ...]] = (
         reminder_source="automation/repair/repair_ops_reaction_watch.py:143",
     ),
     PolicyEntry(
-        kind="budget-mail",
-        ttl_seconds=86_400,
-        ttl_source="skills/budget/scripts/budget_confirm.py:173",
-        reminder=None,
-        reminder_source="UNKNOWN:skills/budget/scripts/budget_confirm.py",
-    ),
-    PolicyEntry(
         kind="calendar",
         ttl_seconds=None,
         ttl_source="UNKNOWN:skills/calendar/scripts/calendar_confirm.py",

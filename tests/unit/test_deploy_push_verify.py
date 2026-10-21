@@ -32,7 +32,6 @@ _DEPLOY_SCRIPTS = (
     "automation/state_backup/deploy.sh",
     "automation/stt_eval/deploy.sh",
     "automation/voice_catalog/deploy.sh",
-    "skills/budget/deploy.sh",
     "skills/calendar/deploy.sh",
     "skills/coordination/deploy.sh",
     "skills/mail/deploy.sh",

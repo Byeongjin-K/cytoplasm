@@ -50,7 +50,7 @@ _NODE_ENV_DEPLOYERS: Final = (
     "automation/plaud_sync", "automation/project_board",
     "automation/rag_ingest", "automation/rag_stack", "automation/regression_bank",
     "automation/repair", "automation/selfskill_audit", "automation/skill_generation",
-    "automation/state_backup", "automation/stt_eval", "automation/voice_catalog", "automation/yoodori_gate", "skills/budget", "skills/calendar",
+    "automation/state_backup", "automation/stt_eval", "automation/voice_catalog", "automation/yoodori_gate", "skills/calendar",
     "skills/coordination", "skills/mail", "skills/meeting", "skills/speechtotext", "skills/todo",
 )
 _NODE_ENV: Final = "evaluates NAME=value exports printed from node.toml by node_config_sh.py; it sources no file"

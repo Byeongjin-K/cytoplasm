@@ -1,5 +1,7 @@
 # cron 실패 가시성 + 주간 따라잡기 — 스트릭 통지와 delivered-week 워터마크
 
+> 이력: budget 스킬과 30분 워처 `budget-watch`는 2026-10-22 형의 요청으로 제거됐다([과제비 감시 제거](과제비-감시-제거.md)). 아래는 당시 기록이며 적힌 경로는 더는 없다.
+
 **완료:** 2026-08-24 · **계획:** `.omo/plans/cron-error-remediation.md` · **대상:** `notes-weekly-organize` · `budget-watch`
 
 > 이력: 당시 대상이던 노드 주간 연구 동향 작업은 이후 노드에서 제거됐다. 주간 연구동향 보고서와 키워드는 공도리가 맡는다.

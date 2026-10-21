@@ -26,7 +26,7 @@ __all__ = ("ApprovalReaction", "GitRepository", "ManualOwnerApproval", "SignedOw
 
 
 OFFLINE_SCENARIOS: Final = (
-    "w4-budget",
+    "w4-mail-triage",
 )
 SANDBOX_OUTPUT_TAIL: Final = 160
 _SCENARIO_ID_LINE: Final = re.compile(r"^id:\s*.*$", re.MULTILINE)

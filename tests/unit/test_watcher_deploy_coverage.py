@@ -138,18 +138,6 @@ def test_every_skill_watcher_is_carried_by_its_deploy_script() -> None:
     )
     assert not unused_exemptions, f"stale _KNOWN_UNDEPLOYED entries: {sorted(unused_exemptions)}"
 
-    # budget-watch is the skill-side adopter in this delivery cycle. Keep this in the
-    # existing replay-gated node so historical FS3 RED evidence remains reproducible.
-    budget_deploy = (_SKILLS / "budget" / "deploy.sh").read_text(encoding="utf-8")
-    budget_lines = [
-        line
-        for line in budget_deploy.splitlines()
-        if "budget-watch" in line and "hermes cron" in line
-    ]
-    assert budget_lines and all("--deliver discord" in line for line in budget_lines)
-    assert all("--deliver local" not in line for line in budget_lines)
-    assert 'hermes cron edit "$job_id"' in budget_deploy
-
 
 def test_mail_approval_loop_watcher_is_deployed() -> None:
     """메일 승인/발송 루프는 특히 못박는다 — 죽으면 소유자 ✅ 가 무효가 된다."""

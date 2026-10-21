@@ -31,7 +31,6 @@ HELPER_SOURCE: Final = 'source "$repo_root/automation/deploy_cron.sh"'
 TIMER_SOURCE: Final = 'source "$repo_root/automation/deploy_timer.sh"'
 PINNED: Final = frozenset({
     ("automation/notes_organize", "notes-weekly-organize"),
-    ("skills/budget", "budget-watch"),
     ("skills/mail", "mail-daily-digest"),
     ("skills/mail", "mail-triage-watch"),
 })
@@ -216,13 +215,13 @@ def _package(tmp_path: Path, manifest: str, deploy: str) -> Path:
     return tmp_path
 
 
-def _copy_budget(tmp_path: Path, old: str, new: str) -> Path:
-    package = tmp_path / "skills" / "budget"
+def _copy_notes(tmp_path: Path, old: str, new: str) -> Path:
+    package = tmp_path / "automation" / "notes_organize"
     package.mkdir(parents=True)
-    source = _REPO / "skills" / "budget"
+    source = _REPO / "automation" / "notes_organize"
     shutil.copy(source / "deploy-manifest.txt", package / "deploy-manifest.txt")
     text = (source / "deploy.sh").read_text(encoding="utf-8")
-    assert old in text, f"fixture anchor missing from skills/budget/deploy.sh: {old}"
+    assert old in text, f"fixture anchor missing from automation/notes_organize/deploy.sh: {old}"
     (package / "deploy.sh").write_text(text.replace(old, new), encoding="utf-8")
     return tmp_path
 
@@ -233,7 +232,7 @@ def test_every_registration_matches_its_declaration() -> None:
 
     assert check(_REPO) == ()
     names = {account: {job.name for job in declared if job.account == account} for account in ("agent", "peer")}
-    assert len(names["agent"]) == 27
+    assert len(names["agent"]) == 26
     assert "wiki-confirm-watch" not in names["agent"]
     assert names["peer"] == {"doctor-watch", "selfskill-audit-watch"}
     timers = {(r.job.account, r.job.name) for r in registered if r.via == "timer"}
@@ -272,19 +271,19 @@ def test_a_declaration_without_a_registration_is_rejected(tmp_path: Path) -> Non
     assert ("unregistered", "automation/pkg") in _rules(check(root))
 
 
-@pytest.mark.parametrize("old", ['"*/30 * * * *"', '--schedule "*/30 * * * *"'])
+@pytest.mark.parametrize("old", ['"0 8 * * 1-5"', '--schedule "0 8 * * 1-5"'])
 def test_a_pinned_raw_line_that_disagrees_with_its_declaration_is_rejected(tmp_path: Path, old: str) -> None:
-    root = _copy_budget(tmp_path, old, old.replace("*/30", "*/15"))
+    root = _copy_notes(tmp_path, old, old.replace("0 8", "0 9"))
 
     rules = _rules(check(root))
 
-    assert rules & {("mismatch", "skills/budget"), ("raw-branches-disagree", "skills/budget")}
+    assert rules & {("mismatch", "automation/notes_organize"), ("raw-branches-disagree", "automation/notes_organize")}
 
 
 def test_a_raw_listing_without_all_is_rejected(tmp_path: Path) -> None:
-    root = _copy_budget(tmp_path, "hermes cron list --all | awk", "hermes cron list | awk")
+    root = _copy_notes(tmp_path, "hermes cron list --all | awk", "hermes cron list | awk")
 
-    assert ("listing-without-all", "skills/budget") in _rules(check(root))
+    assert ("listing-without-all", "automation/notes_organize") in _rules(check(root))
 
 
 def test_pinned_mail_hermes_lines_skip_a_retired_or_hermes_free_account() -> None:

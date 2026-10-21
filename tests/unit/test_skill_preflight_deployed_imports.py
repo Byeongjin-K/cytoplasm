@@ -124,7 +124,6 @@ def test_repo_module_resolves_when_partial_automation_already_bound(
         ("coordination_binding", "coordination", "interop"),
         ("wiki_binding", "wiki", "interop"),
         ("calendar_approval", "calendar", "interop"),
-        ("budget_gate", "budget", "interop"),
         ("wiki_approval", "wiki", "interop"),
         ("scripts.patent_export_binding", "patent-prep", "interop"),
     ),

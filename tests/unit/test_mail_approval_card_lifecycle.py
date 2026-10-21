@@ -7,17 +7,15 @@ import pytest
 
 from automation.interop import owner_message
 from automation.interop.approval_lifecycle import Probe
-from tests.unit import test_budget_single_live_request as budget
 from tests.unit import test_calendar_single_live_request as calendar
 from tests.unit import test_coordination_single_live_request as coord
 from tests.unit import test_mail_single_live_request as mail
-from tests.unit.test_budget_single_live_request import budget_env as budget_env
 from tests.unit.test_calendar_single_live_request import calendar_env as calendar_env
 from tests.unit.test_coordination_single_live_request import coordination_env as coordination_env
 from tests.unit.test_mail_single_live_request import mail_env as mail_env
 
 
-@pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("producer", ["mail", "calendar", "coordination"])
 @pytest.mark.parametrize("available", [True, False])
 @pytest.mark.parametrize("binding_intact", [True, False])
 def test_card_version_and_probe_when_request_posts(producer: str, available: bool, binding_intact: bool,
@@ -41,13 +39,6 @@ def test_card_version_and_probe_when_request_posts(producer: str, available: boo
             stored = mail.triage_gate.load_draft(draft["id"])
             gate = mail.triage_approval.MailApprovalGate(stored)
             bound = mail.triage_approval.request_of(stored)
-            version = stored["render_version"]
-        case "budget":
-            draft = budget._draft()
-            budget.budget_approval.post_for_approval(draft)
-            stored = budget.budget_gate.load_draft(draft["id"])
-            gate = budget.budget_approval.BudgetApprovalGate(stored, budget.budget_approval.budget_binding.stored_binding(stored))
-            bound = gate.outstanding(budget.budget_approval.approval_key(stored))[0]
             version = stored["render_version"]
         case "calendar":
             draft = calendar._draft()
@@ -101,25 +92,23 @@ def test_card_version_and_probe_when_request_posts(producer: str, available: boo
         assert content.startswith("**🔔 ") is available
 
 
-@pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("producer", ["mail", "calendar", "coordination"])
 def test_zero_external_effects_when_both_card_versions_are_unpostable(producer: str, request: pytest.FixtureRequest,
                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
     # Given an unpostable card; lower the real length boundary, not the lifecycle or transport.
     from automation.interop import approval_card
     fake = request.getfixturevalue(producer + "_env")[0]
     monkeypatch.setattr(approval_card, "MAX_CONTENT", 1)
-    drafts = {"mail": mail._draft, "budget": budget._draft, "calendar": calendar._draft}
+    drafts = {"mail": mail._draft, "calendar": calendar._draft}
     draft = drafts[producer]() if producer in drafts else None
     root = request.getfixturevalue("tmp_path")
     before = {path: path.read_bytes() for path in root.rglob("*") if path.suffix in {".json", ".jsonl"}}
     # When the public producer refuses; then no record, journal, post or thread is changed.
-    with pytest.raises((mail.triage_gate.GateError, budget.budget_gate.GateError,
+    with pytest.raises((mail.triage_gate.GateError,
                         calendar.calendar_gate.GateError, coord.io.CoordinationError)):
         match producer:
             case "mail":
                 mail.triage_approval.post_for_approval(draft)
-            case "budget":
-                budget.budget_approval.post_for_approval(draft)
             case "calendar":
                 calendar._approval().request_confirmation(draft)
             case "coordination":
@@ -127,7 +116,7 @@ def test_zero_external_effects_when_both_card_versions_are_unpostable(producer: 
             case _:
                 raise AssertionError(producer)
     assert fake.posts == 0
-    threads = {"mail": "threads", "budget": "thread_names", "calendar": "request_threads", "coordination": "request_threads"}
+    threads = {"mail": "threads", "calendar": "request_threads", "coordination": "request_threads"}
     assert not getattr(fake, threads[producer])
     # Lease locks are synchronization, not pending records or posting receipts.
     assert {path: path.read_bytes() for path in root.rglob("*") if path.suffix in {".json", ".jsonl"}} == before
@@ -137,7 +126,7 @@ def test_zero_external_effects_when_both_card_versions_are_unpostable(producer: 
         assert not (root / "pending.jsonl").exists()
 
 
-@pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("producer", ["mail", "calendar", "coordination"])
 def test_existing_card_is_preserved_when_envelope_runtime_changes(producer: str, request: pytest.FixtureRequest,
                                                                 monkeypatch: pytest.MonkeyPatch) -> None:
     # Given a v1 card already carrying its owner's approval, and an upgraded renderer.
@@ -147,10 +136,6 @@ def test_existing_card_is_preserved_when_envelope_runtime_changes(producer: str,
             draft = mail._draft()
             def post():
                 return mail.triage_approval.post_for_approval(mail.triage_gate.load_draft(draft["id"]))
-        case "budget":
-            draft = budget._draft()
-            def post():
-                return budget.budget_approval.post_for_approval(budget.budget_gate.load_draft(draft["id"]))
         case "calendar":
             draft = calendar._draft()
             # The old stored version is explicit; new requests now require v3.
@@ -172,7 +157,7 @@ def test_existing_card_is_preserved_when_envelope_runtime_changes(producer: str,
     before = dict(fake.contents)
     fake.approved.add(message_id)
     # When the producer retries after upgrade; then the approved card is never replaced.
-    with pytest.raises((mail.triage_gate.GateError, budget.budget_gate.GateError,
+    with pytest.raises((mail.triage_gate.GateError,
                         calendar.calendar_gate.GateError, coord.io.CoordinationError)):
         post()
     assert fake.contents == before
@@ -180,7 +165,7 @@ def test_existing_card_is_preserved_when_envelope_runtime_changes(producer: str,
     assert not any(call.startswith("DELETE:") for call in fake.calls)
 
 
-@pytest.mark.parametrize("producer", ["mail", "budget", "calendar", "coordination"])
+@pytest.mark.parametrize("producer", ["mail", "calendar", "coordination"])
 @pytest.mark.parametrize("decided", [False, True])
 def test_bound_reuse_never_calls_renderer(producer: str, request: pytest.FixtureRequest,
                                                                 monkeypatch: pytest.MonkeyPatch, decided: bool) -> None:
@@ -191,10 +176,6 @@ def test_bound_reuse_never_calls_renderer(producer: str, request: pytest.Fixture
             draft = mail._draft()
             def post():
                 return mail.triage_approval.post_for_approval(mail.triage_gate.load_draft(draft["id"]))
-        case "budget":
-            draft = budget._draft()
-            def post():
-                return budget.budget_approval.post_for_approval(budget.budget_gate.load_draft(draft["id"]))
         case "calendar":
             draft = calendar._draft()
             def post():
@@ -219,7 +200,7 @@ def test_bound_reuse_never_calls_renderer(producer: str, request: pytest.Fixture
     result = None
     try:
         result = post()
-    except (mail.triage_gate.GateError, budget.budget_gate.GateError,
+    except (mail.triage_gate.GateError,
             calendar.calendar_gate.GateError, coord.io.CoordinationError) as caught:
         error = caught
     assert calls == [], "an intact binding must not invoke even a failing renderer"

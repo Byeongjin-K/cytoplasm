@@ -18,7 +18,7 @@ GWS_SERVICES: Final = (
     ("메일 발송", (f"{_G}gmail.send", "https://mail.google.com/")),
     ("메일 읽기", (f"{_G}gmail.readonly", f"{_G}gmail.modify", "https://mail.google.com/")),
     ("Drive", (f"{_G}drive",)),
-    ("과제비 시트", (f"{_G}spreadsheets",)),
+    ("시트", (f"{_G}spreadsheets",)),
     ("할 일", (f"{_G}tasks",)),
     ("회의 주소(Meet)", (f"{_G}meetings.space.created",)),
 )
@@ -83,7 +83,7 @@ def judge(f: GoogleFacts) -> tuple[Status, str, tuple[str, ...]]:
             case unreachable:
                 assert_never(unreachable)
     if not f.gws_files:
-        return Status.WARN, "미연결 — 메일 발송·캘린더·Drive·과제비·할 일 기능이 동작하지 않는다", ()
+        return Status.WARN, "미연결 — 메일 발송·캘린더·Drive·할 일 기능이 동작하지 않는다", ()
     if not f.gws_installed:
         return Status.FAIL, "자격증명은 있으나 gws 실행 파일이 없다", ()
     absent = tuple(name for name in GWS_FILES if name not in f.gws_files)

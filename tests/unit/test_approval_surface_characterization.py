@@ -147,21 +147,6 @@ def test_mail_delete_message_requires_an_explicit_channel() -> None:
 
 
 # ------------------------------------------------- intent channel sources (b), (e), (f), (g)
-def test_budget_intent_takes_its_channel_from_the_resolved_binding() -> None:
-    # Given: the budget intent builder.
-    relative = "skills/budget/scripts/budget_approval.py"
-    node = _definition(relative, "confirm_intent")
-    assert isinstance(node, ast.FunctionDef)
-
-    # When / Then: the channel is the binding it was HANDED — the intent resolves
-    # nothing itself, so the post lands where the record already says it will.
-    assert _channel_keyword_source(relative, "confirm_intent") == "binding.channel_id"
-    assert tuple(argument.arg for argument in node.args.args) == ("draft", "binding")
-    assert _called_names(node) == frozenset({
-        "ApprovalIntent", "GateError", "approval_key", "get", "isinstance", "lifecycle",
-    })
-
-
 def test_wiki_intent_takes_the_channel_from_its_resolved_binding() -> None:
     # Given / When / Then: the intent reads the binding it was HANDED, and the gate
     # helper it used to read the draft's raw channel field through now resolves —

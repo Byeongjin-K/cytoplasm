@@ -2,8 +2,8 @@
 """governed live 스킬 마운트 경로의 **단일 정의** — cron 래퍼는 여기서만 판정한다.
 
 관리자 배포본은 `/srv/autophagy-skills/live/<skill>` 심링크로만 산다. 그 사실을 아는
-곳이 여러 벌이면 한 벌이 낡아도 아무 신호가 없다 — 실제로 다섯 no-agent cron 래퍼
-(budget·report·coordination·calendar)가 각자 경로를 들고 있다가 마운트가
+곳이 여러 벌이면 한 벌이 낡아도 아무 신호가 없다 — 실제로 여러 no-agent cron 래퍼
+(그때는 budget·research-trends 도 있던 report·coordination·calendar)가 각자 경로를 들고 있다가 마운트가
 멀쩡한데도 `not mounted`·import 오류를 냈다(`docs/follow-ups.md`, 2026-08-17). 판정을
 한 곳으로 모으면 다음에 경로가 바뀔 때 고칠 자리도 한 곳이다.
 
@@ -18,7 +18,7 @@
 배포본을 담을 수 없고, 이름이 겹치면 승인 게이트를 가릴 수 있다(AGENTS.md 자가 스킬 루트 규칙).
 
 덮어쓰기는 둘 다 테스트·운영 주입용이며 기존 계약을 그대로 유지한다:
-  * 스킬별 `<SKILL>_SCRIPTS`(예: `BUDGET_SCRIPTS`) — 래퍼가 이미 갖고 있던 구멍.
+  * 스킬별 `<SKILL>_SCRIPTS`(예: `REPORT_SCRIPTS`) — 래퍼가 이미 갖고 있던 구멍.
   * 공용 `AUTOPHAGY_SKILL_LIVE_ROOT` — `skill_mount_probe.sh` 의
     `HEALTHCHECK_SKILL_LIVE_ROOT` 와 같은 목적(=/srv 가 아닌 트리를 가리켜 검증한다).
 

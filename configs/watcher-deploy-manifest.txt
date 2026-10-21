@@ -60,9 +60,6 @@ agent|automation/stt_eval/cron/stt_eval_capture_watch.py|.hermes/scripts/stt_eva
 # --- automation/voice_catalog/deploy-manifest.txt ---
 agent|automation/voice_catalog/cron/voice_catalog_enroll_watch.py|.hermes/scripts/voice_catalog_enroll_watch.py|required
 
-# --- skills/budget/deploy-manifest.txt ---
-agent|skills/budget/scripts/budget_watch.py|.hermes/scripts/budget_watch.py|required
-
 # --- skills/calendar/deploy-manifest.txt ---
 agent|skills/calendar/scripts/confirm_reaction_watch.py|.hermes/scripts/calendar_confirm_reaction_watch.py|required
 

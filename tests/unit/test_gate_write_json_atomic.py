@@ -17,7 +17,7 @@
 원자적 교체는 대상 이름을 **새 inode** 로 갈아끼우고 truncate 쓰기는 같은 inode 를
 유지한다 — 찢어진 읽기가 불가능한 이유가 바로 그 성질이므로, 그것을 직접 고정한다.
 
-같은 구현이 mail·budget·calendar 세 곳에 복제돼 있어 셋 다 고정한다.
+같은 구현이 mail·calendar 두 곳에 복제돼 있어 둘 다 고정한다(budget 사본은 2026-10-22 스킬과 함께 은퇴).
 """
 from __future__ import annotations
 
@@ -33,7 +33,6 @@ _REPO = Path(__file__).resolve().parents[2]
 #: (모듈 디렉터리, 임포트 이름) — 같은 결함의 세 사본
 _GATES = (
     ("skills/mail/scripts", "triage_mode"),
-    ("skills/budget/scripts", "budget_gate"),
     ("skills/calendar/scripts", "calendar_gate"),
 )
 

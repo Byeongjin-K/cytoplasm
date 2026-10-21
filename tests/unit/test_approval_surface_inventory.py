@@ -9,7 +9,7 @@ walk and the source glob are the shared ones in ``approval_conformance_ast``
 
 AS-1.x migrated EVERY approval flow onto the shared directory
 ``automation/interop/approval_directory.py``. Each one now reaches it through its
-own binding adapter — ``triage_binding`` / ``budget_binding`` /
+own binding adapter — ``triage_binding`` /
 ``patent_export_binding._directory`` /
 ``repair_ops_binding`` / ``calendar_binding`` / ``coordination_binding`` /
 ``wiki_binding`` / ``skill_gate_surface`` — so no flow defines an

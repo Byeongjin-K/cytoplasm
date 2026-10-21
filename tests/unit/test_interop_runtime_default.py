@@ -14,7 +14,6 @@ import pytest
 
 _REPO: Final = Path(__file__).resolve().parents[2]
 _COPIES: Final = (
-    "skills/budget/scripts/budget_confirm.py",
     "skills/calendar/scripts/calendar_confirm.py",
     "skills/coordination/scripts/coordinate_io.py",
     "skills/meeting/scripts/meeting_cli.py",
@@ -91,7 +90,7 @@ def test_an_empty_environment_variable_is_treated_as_unset(
     assert _call(relpath) == home / ".hermes" / "interop_runtime"
 
 
-def test_the_six_copies_are_identical() -> None:
+def test_the_five_copies_are_identical() -> None:
     dumps = {ast.dump(_function(relpath)) for relpath in _COPIES}
     assert len(dumps) == 1
 
@@ -103,9 +102,6 @@ _ALL_CALLERS: Final = (*_COPIES, _CALENDAR_INPUT)
 _CHANNEL: Final = ("123",)
 #: interop 런타임을 sys.path 에 설치하는 모든 함수와 그것을 부르는 인자(네트워크 전송은 하지 않는다).
 _CALLS: Final = {
-    "skills/budget/scripts/budget_confirm.py": {
-        "dm_owner": ("x",), "_origin_notice": (), "_thread_transport": _CHANNEL, "_adapter": (),
-    },
     "skills/calendar/scripts/calendar_confirm.py": {"_origin_notice": (), "_thread_transport": _CHANNEL},
     _CALENDAR_INPUT: {"_adapter": ()},
     "skills/coordination/scripts/coordinate_io.py": {"ensure_runtime": ()},

@@ -13,7 +13,7 @@ ops 체크아웃이 dirty해져 pull/peer-attest가 막힌다.
 | `~/.hermes/config.yaml`의 `approval_reminders` | `automation/interop/approval_reminder_config.py` → 공용 승인 watcher | 비밀이 아닌 런타임 정책. 파서 생략 기본은 enabled=true·3h·1h, 신규 provision 시드는 소유자 정책 1h·1h, 불량 간격=시작 실패 |
 | `mail-mode.default.json` | mail triage_mode | **시드 전용** — 런타임은 `~/.hermes/mail-triage/mail-mode.json`. 시드 경로 쓰기는 코드 가드가 거부 |
 | `routing-policy.md` | (코드 미파싱) | 모델 라우팅 정책의 문서 source of truth — 런북/배포 절차가 참조 |
-| `budget-sheet.md` · `inventory.md` · `templates/` | budget 스킬 / 문서 | — |
+| `inventory.md` · `templates/` | 문서 | — |
 
 Peer attestation의 신뢰 근원은 추적 시드와 분리된 `/etc/autophagy/peers.yaml`이다.
 `automation/skill_gate.py`만 공용 `load_bot_ids()`로 읽으며 root 또는 ops 소유, 정규 파일,

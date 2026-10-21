@@ -11,7 +11,6 @@ _WRITERS = (
     ("automation/plaud_sync/effects_live.py", "post"),
     ("automation/repair/repair_ops_posting.py", "permits"),
     ("skills/mail/scripts/triage_approval.py", "confirm_intent"),
-    ("skills/budget/scripts/budget_gate.py", "_binding_fields"),
     ("skills/calendar/scripts/calendar_approval.py", "request_confirmation"),
     ("skills/coordination/scripts/coordination_approval.py", "commit"),
     ("skills/patent-prep/scripts/patent_export_approval.py", "pending"),
