@@ -218,7 +218,7 @@ def test_status_cli_reports_clickable_thread_without_changing_existing_json_keys
     out = capsys.readouterr().out
     assert out.splitlines()[0] == "PLAUD-STATUS state=present"
     assert out.splitlines()[-1] == (
-        "  - rec-x · 스레드 https://discord.com/channels/111/222 · 2026-09-02-x--abcdef123456.md"
+        "  - rec-x · 스레드 [승인 스레드](<https://discord.com/channels/111/222>) · 2026-09-02-x--abcdef123456.md"
     )
     assert path.read_text(encoding="utf-8") == state
     assert sorted(p.name for p in tmp_path.iterdir()) == ["state.json"]

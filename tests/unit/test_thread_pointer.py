@@ -17,7 +17,7 @@ def test_line_links_the_request_thread_when_both_coordinates_are_known() -> None
     record = {"approval_guild_id": GUILD, "approval_thread_id": THREAD}
     # When / Then: the line names the key and the exact thread URL
     assert approval_thread_line("draft", "abc123", record) == (
-        f"APPROVAL-THREAD draft=abc123 url=https://discord.com/channels/{GUILD}/{THREAD}"
+        f"APPROVAL-THREAD draft=abc123 url=[승인스레드](<https://discord.com/channels/{GUILD}/{THREAD}>)"
     )
 
 

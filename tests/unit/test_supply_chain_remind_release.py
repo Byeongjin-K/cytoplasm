@@ -96,7 +96,7 @@ def test_release_older_than_interval_gets_one_reminder_per_interval(
     )
     assert delivered[0] == (
         _CHANNEL_ID,
-        f"⏰ 승인 대기 1시간 · {expected_link}",
+        f"⏰ 승인 대기 1시간 · [승인 카드](<{expected_link}>)",
     )
 
 
@@ -121,7 +121,7 @@ def test_skill_deploy_reminder_uses_shared_one_line(tmp_path: Path) -> None:
     assert delivered == [
         (
             _CHANNEL_ID,
-            f"⏰ 승인 대기 1시간 · {expected_link}",
+            f"⏰ 승인 대기 1시간 · [승인 카드](<{expected_link}>)",
         )
     ]
 

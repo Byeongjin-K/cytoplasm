@@ -17,7 +17,9 @@ from automation.interop.approval_lease import ApprovalLease, ReminderJournal
 from automation.interop.approval_reminder_config import ApprovalReminderConfig
 from .approval_types import ApprovalRequest, Probe
 from automation.interop.approval_surface import ApprovalKind
-from .owner_message import LinkResult as LinkResult, LinkStatus as LinkStatus, Space, discord_link
+from .owner_message import (
+    LinkResult as LinkResult, LinkStatus as LinkStatus, Space, discord_link, masked_discord_link,
+)
 
 
 class ReminderStatus(StrEnum):
@@ -298,7 +300,7 @@ def compose_reminder(reminder: ApprovalReminder) -> str:
     _request_type_text(reminder.request_type)
     link_line = ""
     if reminder.source_url is not None:
-        link_line = f" · {_validate_source_url(reminder.source_url)}"
+        link_line = f" · {masked_discord_link(_validate_source_url(reminder.source_url), '승인 카드')}"
     elapsed = _elapsed_text(reminder.elapsed)
     return f"⏰ 승인 대기 {elapsed}{link_line}"
 

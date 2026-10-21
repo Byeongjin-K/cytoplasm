@@ -35,7 +35,7 @@ PENDING = PendingRepairApproval(
 # Reminder wire bytes are shared minimum-information pointers, not approval cards.
 LEGACY_FALLBACK: Final = "⏰ 승인 대기 3시간"
 GUILD_FALLBACK: Final = (
-    "⏰ 승인 대기 3시간 · https://discord.com/channels/111/222/333"
+    "⏰ 승인 대기 3시간 · [승인 카드](<https://discord.com/channels/111/222/333>)"
 )
 
 
@@ -195,7 +195,7 @@ def test_reminder_sends_pointer_without_rendering_an_approval_envelope(
     assert path == "/channels/222/messages"
     expected = "⏰ 승인 대기 3시간"
     if guild_id:
-        expected += f" · https://discord.com/channels/{guild_id}/222/333"
+        expected += f" · [승인 카드](<https://discord.com/channels/{guild_id}/222/333>)"
     assert body == expected
     assert "@me" not in body
     assert len(body.splitlines()) == 1
