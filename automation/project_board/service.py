@@ -36,6 +36,7 @@ from .models import (
     proposal_from_dict,
     stricter,
 )
+from .orders import ORDERS_FILE, OrderStore
 from .proposals import REVISABLE_STATUSES, ProposalRecord, ProposalStore, atomic_write, new_record
 from .sources import MailRuntime, SourceDocument, new_mail, read_mail
 
@@ -58,6 +59,22 @@ class Board:
     @property
     def store(self) -> BoardStore:
         return BoardStore(self.root / "board.db")
+
+    @property
+    def orders(self) -> OrderStore:
+        return OrderStore(self.root / ORDERS_FILE)
+
+    def gate_token(self) -> str:
+        """The node gate's own key for ``/api/orders`` (``orders-gate.token``, 0600 in the private root)."""
+        path = self.root / "orders-gate.token"
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            value = ""
+        if len(value) < 32:
+            value = secrets.token_urlsafe(32)
+            atomic_write(path, value)
+        return value
 
     @property
     def dashboard_path(self) -> Path:

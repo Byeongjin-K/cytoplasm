@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from html import escape
@@ -23,6 +23,7 @@ from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
 from .models import (
     GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoExtra, TodoRow,
 )
+from .orders import Order
 from .sessions import SessionsState
 from .sessions_view import render_sessions, summary_line
 from .ledger_view import NAV_CSS, LedgerView, render_ledger
@@ -35,7 +36,7 @@ _SERVED_JS: Final = """
 (function(){
   var PB=window.PB=window.PB||{},token=document.querySelector('meta[name=pb-token]').content,live=document.getElementById('live');
   function say(text){if(live){live.textContent='';live.textContent=text;}}
-  PB.say=say;
+  PB.say=say;PB.post=post;PB.why=why;
   function attempt(path,body){
     return fetch(path,{method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json','X-PB-Token':token},
@@ -143,6 +144,7 @@ _TABS_JS: Final = """
     var q=hash.indexOf('?p=');
     if(hash.indexOf('todo/')===0){return {tab:'todo',proj:dec(hash.slice(5))};}
     if(hash.indexOf('person/')===0){return {tab:'person',proj:dec(hash.slice(7))};}
+    if(hash.indexOf('order/')===0){return {tab:'order',proj:dec(hash.slice(6))};}
     if(hash.indexOf('project/')===0){return {tab:'project',proj:dec(hash.slice(8))};}
     var sq=hash.indexOf('?s=');if(sq>=0){return {tab:hash.slice(0,sq),proj:'',status:dec(hash.slice(sq+3))};}
     if(q>=0){return {tab:hash.slice(0,q),proj:dec(hash.slice(q+3))};}
@@ -180,13 +182,13 @@ _TABS_JS: Final = """
   }
   function show(keep){
     var panels=document.querySelectorAll('main>[data-tab]'),links=document.querySelectorAll('nav a[data-tab]'),
-        names=[].map.call(links,function(a){return a.dataset.tab;}).concat(['archive']);
+        names=[].map.call(links,function(a){return a.dataset.tab;}).concat(['archive','orders']);
     var hash=location.hash.slice(1),r=parse(hash),tab=r.tab,page=null;
-    if(tab==='project'||tab==='todo'||tab==='person'){
+    if(tab==='project'||tab==='todo'||tab==='person'||tab==='order'){
       panels.forEach(function(s){if(s.dataset.tab===tab&&(tab==='project'?s.dataset.project:s.dataset.key)===r.proj){page=s;}});
-      if(!page){tab=tab==='project'?'projects':tab==='todo'?'todos':'summary';}
-    }else if(names.indexOf(tab)<0){tab='summary';}
-    var navTab=page?(page.dataset.tab==='project'?'projects':'todos'):tab==='archive'?'projects':tab;
+      if(!page){tab=tab==='project'?'projects':tab==='todo'?'todos':tab==='order'&&names.indexOf('orders')>=0&&document.getElementById('orders')?'orders':'summary';}
+    }else if(names.indexOf(tab)<0||(tab==='orders'&&!document.getElementById('orders'))){tab='summary';}
+    var navTab=page?(page.dataset.tab==='project'?'projects':page.dataset.tab==='order'?'summary':'todos'):tab==='archive'?'projects':tab==='orders'?'summary':tab;
     panels.forEach(function(s){s.hidden=page?s!==page:s.dataset.tab!==tab;});
     links.forEach(function(a){var on=a.dataset.tab===navTab;a.classList.toggle('on',on);
       if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
@@ -1091,7 +1093,9 @@ def _calendar_day(due: str) -> str:
     return f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
 
 
-def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date, extra: TodoExtra | None = None) -> str:
+def _todo_page(
+    todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date, extra: TodoExtra | None = None, orders: str = "",
+) -> str:
     """A todo's own screen: when, who, which project, why (the source and its summary), what else came with it, history."""
     source = next((s for s in full.sources if (s.source_kind, s.source_id) == (todo.source_kind, todo.source_id)), None)
     status = f"{todo.status} {todo.progress}%" if todo.status == "진행" else todo.status
@@ -1148,7 +1152,7 @@ def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date, extr
         f'<section data-tab="todo" data-key="{escape(todo.todo_id, quote=True)}" data-title="{escape(todo.title, quote=True)}">'
         f'<a class="back" href="#todos" data-back>{icon("chevron-left")}<span>할\u00a0일</span></a>'
         f'<div class="pv-head"><h2>{escape(todo.title)}</h2></div>'
-        f'<div class="card"><dl class="td-facts">{facts}</dl></div>{same}{log}</section>'
+        f'<div class="card"><dl class="td-facts">{facts}</dl></div>{same}{orders}{log}</section>'
     )
 
 
@@ -1175,7 +1179,10 @@ def render_dashboard(
     snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
     sessions: SessionsState = "missing", now: datetime | None = None,
     ledger: LedgerView | None = None, extras: Mapping[str, TodoExtra] | None = None,
+    orders: Sequence[Order] | None = None, order_receiver: str = "",
 ) -> str:
+    from .orders_view import ORDERS_CSS, ORDERS_JS, order_pages, orders_section, summary_box, todo_orders
+
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
     hidden = {view.name for view in shelf}
@@ -1192,14 +1199,24 @@ def render_dashboard(
     now_ms = int((now or datetime.now(UTC)).timestamp() * 1000)
     empty = ONBOARDING if not snapshot.todos and not snapshot.pending else ""
     served = mode == "served"
+    orders = orders if served else None  # the owner's own words never leave in the exported file
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">{_ETAG_META}' if served else ""
     # the refresh script runs first: it notes the page as the server sent it, before the others change it
     scripts = (_REFRESH_JS if served else "") + _FOLD_JS + _TABS_JS + _FILTER_JS + (_SERVED_JS + _BACK_MARK_JS if served else "")
+    scripts += ORDERS_JS if orders is not None else ""
     fresh = '<span id="pb-fresh" class="fresh" title="2분마다 바뀐 내용만 새로 받습니다">방금 갱신</span>' if served else ""
     pages = "".join(
         _project_page(i, view, full, mode, today, archived=view in shelf)
         for i, view in enumerate(snapshot.projects + shelf, 1)
-    ) + "".join(_todo_page(t, full, mode, today, (extras or {}).get(t.todo_id)) for t in full.todos)
+    ) + "".join(
+        _todo_page(t, full, mode, today, (extras or {}).get(t.todo_id),
+                   todo_orders(orders, t.todo_id) if orders is not None else "")
+        for t in full.todos
+    )
+    order_html = ""
+    if orders is not None:
+        pages += order_pages(orders, full)
+        order_html = orders_section(orders, snapshot, order_receiver)
     people: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in full.todos:
         if todo.owner:
@@ -1214,13 +1231,14 @@ def render_dashboard(
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
-        f"<style>{CSS}{ledger_css}</style></head><body>"
+        f"<style>{CSS}{ledger_css}{ORDERS_CSS if orders is not None else ''}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
         f'<nav aria-label="화면"{nav_class}>{_NAV}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
-        f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today, _shelf_link(shelf, new_in_shelf))}"
+        f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}"
+        f"{summary_box(orders, snapshot) if orders is not None else ''}{_projects(snapshot, today, _shelf_link(shelf, new_in_shelf))}"
         f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today, mode)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
-        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{_events(snapshot, mode)}{pages}</main>"
+        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{order_html}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span data-live>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"

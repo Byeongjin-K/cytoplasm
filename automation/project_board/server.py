@@ -41,6 +41,7 @@ from .board_store import BoardStore
 from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError, TodoExtra
+from .orders import OrderStore
 from .sessions import SessionsState
 from .ledger_view import load_ledger
 
@@ -52,6 +53,9 @@ _CSP: Final = (
     "form-action 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
 _MAX_BODY: Final = 4096
+# an order is up to 1000 characters; percent-encoded Hangul takes 9 bytes each
+_MAX_ORDER_BODY: Final = 16384
+GATE_HEADER: Final = "X-PB-Gate-Token"
 # opened from the dashboard: go back to that very screen and say its name; opened directly: the plain link
 _BACK_JS: Final = (
     "<script>(function(){var a=document.querySelector('[data-back]'),n='';"
@@ -79,6 +83,9 @@ class _Handler(BaseHTTPRequestHandler):
     brand: str = DEFAULT_BRAND
     sessions: Callable[[], SessionsState]
     extras: Callable[[], Mapping[str, TodoExtra]]
+    orders: OrderStore | None = None
+    order_receiver: str = ""
+    gate_token: str = ""
 
     def _via_tailnet(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -142,7 +149,41 @@ class _Handler(BaseHTTPRequestHandler):
         morsel = jar.get(COOKIE)
         return morsel is not None and self._matches(morsel.value)
 
+    def _gate_ok(self) -> bool:
+        """The node gate only: its own token, and never through ``tailscale serve`` (no tailnet header or host)."""
+        offered = self.headers.get(GATE_HEADER) or ""
+        return (bool(self.gate_token) and self.orders is not None and not self._via_tailnet()
+                and bool(offered) and hmac.compare_digest(offered.encode("utf-8"), self.gate_token.encode("utf-8")))
+
+    def _gate_api(self, method: str, parts: list[str]) -> None:
+        if not self._gate_ok():
+            self._text(403, "forbidden")
+            return
+        valid = len(parts) == 3 if method == "GET" else len(parts) == 4 and parts[3] == "use"
+        if not valid or parts[1] != "orders" or not parts[2].isdigit() or self.orders is None:
+            self._text(404, "not found")
+            return
+        number = int(parts[2])
+        try:
+            order = self.orders.record_use(number, by="gate") if method == "POST" else self.orders.get(number)
+        except ProjectBoardError:
+            order = None
+        if order is None:
+            self._text(404, "not found")
+            return
+        body = json.dumps({
+            "number": order.number, "created_at": order.created_at, "created_by": order.created_by,
+            "via": order.via, "body_sha256": order.body_sha256, "status": order.status,
+            "todo_id": order.todo_id, "project": order.project, "uses": order.uses,
+            "first_used_at": order.first_used_at,
+        }, ensure_ascii=False)
+        self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+
     def do_GET(self) -> None:  # noqa: N802 - http.server API
+        api = [unquote(part) for part in urlparse(self.path).path.split("/") if part]
+        if api[:1] == ["api"]:
+            self._gate_api("GET", api)
+            return
         if not self._identity_ok():
             self._page(403, "이 계정으로는 열 수 없습니다", "대시보드를 볼 수 있는 계정으로 다시 로그인해 주세요.", home=False)
             return
@@ -173,7 +214,8 @@ class _Handler(BaseHTTPRequestHandler):
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
         etag, page = stamp_etag(render_dashboard(
             snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
-            sessions=self.sessions(), ledger=load_ledger(), extras=self.extras()))
+            sessions=self.sessions(), ledger=load_ledger(), extras=self.extras(),
+            orders=self.orders.all() if self.orders is not None else None, order_receiver=self.order_receiver))
         offered = {tag.strip().removeprefix("W/") for tag in (self.headers.get("If-None-Match") or "").split(",")}
         if etag in offered:  # the open page's 2-minute check: nothing it shows has changed
             self.send_response(304)
@@ -229,16 +271,20 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, data, "application/octet-stream", {"Content-Disposition": disposition})
 
     def do_POST(self) -> None:  # noqa: N802 - http.server API
+        parts = [unquote(part) for part in urlparse(self.path).path.split("/") if part]
+        if parts[:1] == ["api"]:
+            self._gate_api("POST", parts)
+            return
         if not self._identity_ok():
             self._text(403, "forbidden")
             return
-        parts = [unquote(part) for part in urlparse(self.path).path.split("/") if part]
-        if len(parts) != 2 or parts[0] not in ("todo", "project"):
+        order = parts == ["order", "new"] and self.orders is not None
+        if not order and (len(parts) != 2 or parts[0] not in ("todo", "project")):
             self._text(404, "not found")
             return
-        act = self._record if parts[0] == "todo" else self._archive
+        act = self._order if order else self._record if parts[0] == "todo" else self._archive
         length = int(self.headers.get("Content-Length") or 0)
-        if length > _MAX_BODY:
+        if length > (_MAX_ORDER_BODY if order else _MAX_BODY):
             self._text(413, "request too large")
             return
         form = parse_qs(self.rfile.read(length).decode("utf-8", errors="replace"))
@@ -261,6 +307,29 @@ class _Handler(BaseHTTPRequestHandler):
             self._text(403, "forbidden")
             return
         act(parts[1], form)
+
+    def _order(self, _new: str, form: dict[str, list[str]]) -> None:
+        """도리에게 지시 — the same authority and recorded identity as a progress tick; linked todo/project must exist."""
+        assert self.orders is not None
+        todo_id = form.get("todo", [""])[0].strip()
+        project = form.get("project", [""])[0].strip()
+        try:
+            if todo_id:
+                todo = self.store.todo(todo_id)
+                if todo is None:
+                    raise ProjectBoardError("no approved todo with that id")
+                project = todo.project
+            elif project and project not in self.store.project_names():
+                raise ProjectBoardError("no approved project with that name")
+            order = self.orders.add(
+                form.get("text", [""])[0], receiver=self.order_receiver, by=self._actor(),
+                via="tailnet" if self._via_tailnet() else "local", todo_id=todo_id, project=project,
+            )
+        except ProjectBoardError as error:
+            self._text(400, str(error))
+            return
+        body = json.dumps({"ok": True, "number": order.number, "status": order.status}, ensure_ascii=False)
+        self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
 
     def _archive(self, project: str, form: dict[str, list[str]]) -> None:
         """보관 / 보관 해제 — the same authority and the same recorded identity as a progress tick."""
@@ -332,6 +401,9 @@ def make_server(
     brand: str = DEFAULT_BRAND,
     sessions: Callable[[], SessionsState] = lambda: "missing",
     extras: Callable[[], Mapping[str, TodoExtra]] = dict,
+    orders: OrderStore | None = None,
+    order_receiver: str = "",
+    gate_token: str = "",
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -355,6 +427,9 @@ def make_server(
             "brand": brand or DEFAULT_BRAND,
             "sessions": staticmethod(sessions),
             "extras": staticmethod(extras),
+            "orders": orders,
+            "order_receiver": order_receiver,
+            "gate_token": gate_token if len(gate_token) >= MIN_TOKEN else "",
         },
     )
     server = ThreadingHTTPServer((host, port), handler)

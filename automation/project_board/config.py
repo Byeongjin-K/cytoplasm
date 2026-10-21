@@ -58,6 +58,7 @@ class BoardConfig:
     tailnet_logins: tuple[str, ...] = ()
     tailnet_token: bool = False
     brand: str = DEFAULT_BRAND
+    order_receiver: str = ""
 
     def project_grade(self, project: str) -> str:
         """The configured default grade of a project (과제내부 when the catalog says nothing)."""
@@ -141,7 +142,20 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         tailnet_logins=_tailnet_logins(dashboard.get("tailnet")),
         tailnet_token=_tailnet_token(dashboard.get("tailnet")),
         brand=_brand(dashboard.get("brand")),
+        order_receiver=_order_receiver(raw.get("orders")),
     )
+
+
+def _order_receiver(raw: object) -> str:
+    """``orders.receiver``: the Dori that takes dashboard orders, named on the order form (one short line)."""
+    if raw is None:
+        return ""
+    receiver = raw.get("receiver") if isinstance(raw, dict) else None
+    if receiver is None:
+        return ""
+    if not isinstance(receiver, str) or len(" ".join(receiver.split())) > 40:
+        raise ProjectBoardError("config orders.receiver must be a name of at most 40 characters")
+    return " ".join(receiver.split())
 
 
 def _brand(raw: object) -> str:

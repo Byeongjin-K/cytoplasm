@@ -18,6 +18,7 @@ from typing import Final
 
 from .board_store import BoardStore, _live_board
 from .models import PendingView, ProjectBoardError, TodoExtra, proposal_from_dict
+from .orders import ORDERS_FILE, OrderStore
 from .sessions import Sessions, parse_sessions
 
 _PROJECTS: Final = (
@@ -77,6 +78,32 @@ def seed(store: BoardStore, today: date) -> None:
     store.apply_proposal("demo-9", proposal_from_dict(raw), message_id="demo-9", now=base)
     store.record_progress("demo-9-1", status="완료", now=base + timedelta(hours=1), by="데모 사용자")
     store.set_archived(project, True, by="데모 사용자", now=base + timedelta(days=1))
+
+
+DEMO_RECEIVER: Final = "관리 도리"
+_ORDERS: Final = (  # invented: (words, linked todo, project, then status, taking Dori, note)
+    ("시편 측정 결과를 표로 정리해서 내일 오전까지 올려 줘", "demo-1-2", "", "끝", "연구 도리", "표 올림"),
+    ("협력사 납품 검수 일정 잡아 줘. 다음 주 화요일 오후가 좋아", "demo-2-3", "", "처리 중", "일정 도리", ""),
+    ("스마트공장 표준화 관련 최근 해외 동향 조사해 줘", "", "스마트공장 데이터 표준화", "넘김", "연구 도리", ""),
+    ("이번 주 지연된 할 일 정리해서 알려 줘", "", "", "받음", "", ""),
+)
+
+
+def seed_orders(directory: Path, store: BoardStore, today: date) -> OrderStore:
+    """Invented orders beside the demo board, one in each step from 받음 to 끝."""
+    orders = OrderStore(directory / ORDERS_FILE)
+    base = datetime.combine(today - timedelta(days=1), datetime.min.time(), UTC) + timedelta(hours=1)
+    for index, (words, todo_id, project, status, dori, note) in enumerate(_ORDERS):
+        todo = store.todo(todo_id) if todo_id else None
+        at = base + timedelta(hours=3 * index)
+        order = orders.add(words, receiver=DEMO_RECEIVER, by="데모 사용자", via="tailnet", todo_id=todo_id,
+                           project=todo.project if todo else project, now=at)
+        if status != "받음":
+            orders.mark_delivered(order.number, DEMO_RECEIVER, now=at + timedelta(minutes=1))
+            orders.update(order.number, status=status, dori=dori, note=note or None,
+                          post_url=f"https://example.com/demo-room/{order.number}", by=DEMO_RECEIVER,
+                          now=at + timedelta(minutes=4))
+    return orders
 
 
 def pending(today: date) -> tuple[PendingView, ...]:
