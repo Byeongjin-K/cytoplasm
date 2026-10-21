@@ -166,6 +166,10 @@ a.todo-title:hover{color:var(--accent-ink);text-decoration:underline}
 .seg{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
 .seg-btn[aria-pressed=true]{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink);font-weight:650}
 .shelf-link{margin-top:var(--s5)}
+a.ss-pillar{color:inherit;text-decoration:none}
+a.ss-pillar:hover{border-color:var(--line-strong)}
+.ss-attention{margin:0 0 var(--s5)}
+.ss-attention li a{display:inline-block;padding:3px 0}
 .events .what a,.td-log .what a,.callout li a,.agenda .ag-title,.who-link,a.due{display:inline-block;padding:3px 0}
 a.todo-title{padding:3px 0}
 .td-list{list-style:none;margin:0;padding:0}

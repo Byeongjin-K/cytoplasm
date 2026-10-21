@@ -51,7 +51,7 @@ class BoardConfig:
     digest_to: tuple[str, ...] = ()
     digest_subject: str = "프로젝트 현황 일일 요약"
     projects: tuple[ProjectEntry, ...] = ()
-    prompt_version: str = "v3"
+    prompt_version: str = "v4"
     owner_names: tuple[str, ...] = ()
     team_names: tuple[str, ...] = ()
     tailnet_origins: tuple[str, ...] = ()
@@ -134,7 +134,7 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         digest_to=tuple(recipients),
         digest_subject=str(digest.get("subject") or "프로젝트 현황 일일 요약"),
         projects=_projects(raw.get("projects")),
-        prompt_version=str(analyze.get("prompt") or "v3"),
+        prompt_version=str(analyze.get("prompt") or "v4"),
         owner_names=_owner_names(raw.get("owner")),
         team_names=_owner_names(raw.get("team")),
         tailnet_origins=_tailnet_origins(dashboard.get("tailnet")),

@@ -76,7 +76,7 @@ def _analyse(
             row.update(
                 relevant=True, project=proposal.project, project_owner=proposal.project_owner,
                 summary=proposal.summary, model=f"{proposal.provider}/{proposal.model}",
-                todos=[{"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason}
+                todos=[{"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason, "time": t.time, "place": t.place}
                        for t in proposal.todos],
             )
     row["seconds"] = round(time.monotonic() - started, 1)

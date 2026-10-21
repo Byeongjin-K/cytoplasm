@@ -31,6 +31,7 @@ from .models import (
     ProjectBoardError,
     Proposal,
     ProposedTodo,
+    TodoExtra,
     grade_rank,
     proposal_from_dict,
     stricter,
@@ -95,6 +96,22 @@ def pending_views(board: Board) -> tuple[PendingView, ...]:
             )
         )
     return tuple(sorted(views, key=lambda v: v.created_at))
+
+
+def todo_extras(board: Board) -> dict[str, TodoExtra]:
+    """Per applied todo, what its frozen proposal said beyond the board row (due reason, time, place)."""
+    extras: dict[str, TodoExtra] = {}
+    for record in board.proposals.all():
+        if record.status != "applied":
+            continue
+        try:
+            proposal = board.proposals.frozen(record)
+        except ProjectBoardError:
+            continue  # an unreadable frozen copy only loses the extra lines, never the todo screen
+        for index, todo in enumerate(proposal.todos, start=1):
+            if todo.due_reason or todo.time or todo.place:
+                extras[f"{record.request_id}-{index}"] = TodoExtra(todo.due_reason, todo.time, todo.place)
+    return extras
 
 
 def open_and_pending(board: Board, limit: int = 40) -> tuple[str, ...]:
@@ -320,7 +337,7 @@ def revised_proposal(proposal: Proposal, change: Revision) -> Proposal:
     kept = [todo for number, todo in enumerate(todos, start=1) if number not in set(change.drop)]
     raw = proposal.to_dict()
     raw["todos"] = [
-        {"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason}
+        {"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason, "time": t.time, "place": t.place}
         for t in (*kept, *change.add)
     ]
     if change.grade is not None:

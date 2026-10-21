@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from html import escape
@@ -20,7 +20,9 @@ from urllib.parse import quote
 
 from .config import DEFAULT_BRAND
 from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
-from .models import GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoRow
+from .models import (
+    GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoExtra, TodoRow,
+)
 from .sessions import SessionsState
 from .sessions_view import render_sessions, summary_line
 from .ledger_view import NAV_CSS, LedgerView, render_ledger
@@ -144,7 +146,7 @@ _TABS_JS: Final = """
     if(hash.indexOf('project/')===0){return {tab:'project',proj:dec(hash.slice(8))};}
     var sq=hash.indexOf('?s=');if(sq>=0){return {tab:hash.slice(0,sq),proj:'',status:dec(hash.slice(sq+3))};}
     if(q>=0){return {tab:hash.slice(0,q),proj:dec(hash.slice(q+3))};}
-    return {tab:hash.indexOf('todo-')===0?'todos':hash.indexOf('sched-')===0?'schedule':hash==='events'?'summary':hash,proj:''};
+    return {tab:hash.indexOf('todo-')===0?'todos':hash.indexOf('sched-')===0?'schedule':hash.indexOf('ss-')===0?'sessions':hash==='events'?'summary':hash,proj:''};
   }
   function pick(panel,proj){
     var sel=panel?panel.querySelector('select[data-picker]'):null;if(!sel){return '';}
@@ -205,7 +207,7 @@ _TABS_JS: Final = """
     if(!('pbFrom' in st)){st={pbFrom:moves>0&&last!==here?last:''};try{history.replaceState(st,'');}catch(e){}}
     if(page){var b=page.querySelector('[data-back] span');if(b&&st.pbFrom){b.textContent=st.pbFrom;}}
     last=here;moves++;
-    var target=(hash.indexOf('todo-')===0||hash.indexOf('sched-')===0||hash==='pending'||hash==='events')&&document.getElementById(hash),fresh=jump;jump=false;
+    var target=(hash.indexOf('todo-')===0||hash.indexOf('sched-')===0||hash.indexOf('ss-')===0||hash==='pending'||hash==='events')&&document.getElementById(hash),fresh=jump;jump=false;
     if(!fresh&&hash in seen){window.scrollTo(0,seen[hash]);return;}
     if(target&&hash.indexOf('todo-')===0){reveal(target);}
     if(target&&target.tagName==='DETAILS'){target.open=true;}
@@ -895,7 +897,7 @@ def _source_card(
         f'<a href="{escape(todo_href(t.todo_id), quote=True)}">{_quoted_plain(t.title)}</a>'
         for t in produced
     ) or "없음"
-    top = [_md(row.source_date), kind] + ([escape(row.source_sender)] if row.source_sender else [])
+    top = [_md(row.source_date), kind] + ([escape(_sender(row.source_sender))] if row.source_sender else [])
     top += [f'<a href="{escape(project_href(row.project), quote=True)}">{escape(row.project)}</a>'] if with_project else []
     return (
         f'<div class="card src-card"><div class="top"><span>{_SEP.join(top)}</span>{_grade_badge(row.grade)}</div>'
@@ -1076,7 +1078,20 @@ def _project_page(
 _SETTABLE: Final = ("열림", "진행", "완료")
 
 
-def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date) -> str:
+def _sender(raw: str) -> str:
+    """A mail header's sender as people write it: ``"이름" <주소>`` (even with escaped quotes) reads 이름 <주소>."""
+    text = raw.replace('\\"', '"').strip()
+    match = re.match(r'^"([^"]*)"\s*(<[^>]*>)?$', text)
+    return f"{match.group(1)} {match.group(2) or ''}".strip() if match else text
+
+
+def _calendar_day(due: str) -> str:
+    """The owner's calendar opened on that day — the place to see what else is on it, or the meeting itself."""
+    day = date.fromisoformat(due)
+    return f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
+
+
+def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date, extra: TodoExtra | None = None) -> str:
     """A todo's own screen: when, who, which project, why (the source and its summary), what else came with it, history."""
     source = next((s for s in full.sources if (s.source_kind, s.source_id) == (todo.source_kind, todo.source_id)), None)
     status = f"{todo.status} {todo.progress}%" if todo.status == "진행" else todo.status
@@ -1093,7 +1108,11 @@ def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date) -> s
     if todo.due:
         label, css = _dday(todo.due, today)
         flag = f' <span class="badge {css}">{label}</span>' if todo.status in OPEN_STATUSES else ""
-        due = f'<a href="{schedule}">{_md(todo.due)}</a>{flag}'
+        clock = f" {escape(extra.time)}" if extra and extra.time else ""
+        due = f'<a href="{schedule}">{_md(todo.due)}{clock}</a>{flag}'
+        if mode == "served":
+            due += (f'<div><a href="{escape(_calendar_day(todo.due), quote=True)}" target="_blank" rel="noopener">'
+                    f'{icon("schedule")}캘린더에서 그날 보기</a></div>')
     else:
         due = f'<a href="{schedule}">마감 미정</a>'
     owner = _person_link(todo.owner) if todo.owner else '<span class="muted">담당 미정</span>'
@@ -1101,8 +1120,11 @@ def _todo_page(todo: TodoRow, full: BoardSnapshot, mode: Mode, today: date) -> s
     subject = escape(todo.source_subject or todo.source_id)
     where = f'<a href="{escape(href, quote=True)}">{icon("mail" if todo.source_kind == "mail" else "sources")}{subject}</a>' if href else subject
     if source is not None:
-        where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(source.source_sender)] if source.source_sender else []))}</div>'
-    rows = [("상태", badge), ("마감", due), ("담당", owner),
+        where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(_sender(source.source_sender))] if source.source_sender else []))}</div>'
+    rows = [("상태", badge), ("마감", due)]
+    rows += [("마감 근거", escape(extra.due_reason))] if extra and extra.due_reason else []
+    rows += [("장소", escape(extra.place))] if extra and extra.place else []
+    rows += [("담당", owner),
             ("프로젝트", f'<a href="{escape(project_href(todo.project), quote=True)}">{escape(todo.project)}</a>'),
             ("보안 등급", _grade_badge(todo.grade)), ("근거", where)]
     rows += [("메모", escape(todo.note))] if todo.note else []
@@ -1152,7 +1174,7 @@ def _person_page(name: str, todos: list[TodoRow], today: date) -> str:
 def render_dashboard(
     snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
     sessions: SessionsState = "missing", now: datetime | None = None,
-    ledger: LedgerView | None = None,
+    ledger: LedgerView | None = None, extras: Mapping[str, TodoExtra] | None = None,
 ) -> str:
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
@@ -1177,7 +1199,7 @@ def render_dashboard(
     pages = "".join(
         _project_page(i, view, full, mode, today, archived=view in shelf)
         for i, view in enumerate(snapshot.projects + shelf, 1)
-    ) + "".join(_todo_page(t, full, mode, today) for t in full.todos)
+    ) + "".join(_todo_page(t, full, mode, today, (extras or {}).get(t.todo_id)) for t in full.todos)
     people: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in full.todos:
         if todo.owner:

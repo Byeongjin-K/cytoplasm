@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Final
 
 from .board_store import BoardStore, _live_board
-from .models import PendingView, ProjectBoardError, proposal_from_dict
+from .models import PendingView, ProjectBoardError, TodoExtra, proposal_from_dict
 from .sessions import Sessions, parse_sessions
 
 _PROJECTS: Final = (
@@ -184,7 +184,16 @@ def demo_handlers(today: Callable[[], date]) -> dict[str, Callable[..., object]]
         "attachment_path": lambda kind, source_id, name: None,
         "on_change": lambda: None,
         "sessions": lambda: sessions(_feed_slot(datetime.now(UTC))),
+        "extras": lambda: _EXTRAS,
     }
+
+
+_EXTRAS: Final = {  # invented, like everything else here: what an analysed mail says beyond the row
+    "demo-1-2": TodoExtra("원문 기한", "14:00", "소재동 2층 측정실"),
+    "demo-2-1": TodoExtra("원문 기한", "", ""),
+    "demo-2-2": TodoExtra("협력사가 제안한 점검 주간", "10:30", "실증 부지 현장 사무소"),
+    "demo-3-1": TodoExtra("회의 당일 배포", "16:00", "온라인"),
+}
 
 
 def _feed_slot(now: datetime) -> datetime:
