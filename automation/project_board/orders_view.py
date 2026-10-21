@@ -13,7 +13,7 @@ from typing import Final
 
 from .dashboard_theme import icon
 from .models import BoardSnapshot, OPEN_STATUSES
-from .orders import DEFAULT_RECEIVER, MAX_BODY, ORDER_STATUSES, Order, order_href
+from .orders import DEFAULT_RECEIVER, LOCAL, MAX_BODY, ORDER_STATUSES, OWNER_DEVICE, Order, order_href
 
 _SEP: Final = "\u00a0· "
 _STATUS_CLASS: Final = {"받음": "st-open", "넘김": "st-held", "처리 중": "st-doing", "끝": "st-done"}
@@ -233,6 +233,16 @@ def order_pages(orders: Iterable[Order], snapshot: BoardSnapshot) -> str:
     return "".join(_order_page(order, titles) for order in orders)
 
 
+def _device(order: Order) -> str:
+    label = escape(order.device_name or order.device_ip or "")
+    if order.via == OWNER_DEVICE:
+        return f"형 기기 · {label}"
+    if order.via == LOCAL:
+        return '<span class="muted">노드에서 직접</span>'
+    return (f'다른 기기{" · " + label if label else ""}'
+            '<div class="small muted">형 기기에서 온 지시가 아니라 형 명령 근거로 쓰지 않습니다</div>')
+
+
 def _order_page(order: Order, titles: dict[str, str]) -> str:
     from .dashboard import project_href, todo_href
 
@@ -241,6 +251,7 @@ def _order_page(order: Order, titles: dict[str, str]) -> str:
     rows = [
         ("상태", _steps(order.status)),
         ("보낸 때", escape(_kst(order.created_at))),
+        ("보낸 기기", _device(order)),
         ("받는 도리", f"{escape(order.receiver)}<div class=\"small muted\">{delivered}</div>"),
         ("맡은 도리", escape(order.dori) if order.dori else '<span class="muted">아직 정해지지 않음</span>'),
     ]

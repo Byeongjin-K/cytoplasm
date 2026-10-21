@@ -32,6 +32,11 @@ MAX_DORI: Final = 20
 MAX_URL: Final = 300
 MAX_NOTE: Final = 300
 DEFAULT_RECEIVER: Final = "관리 도리"
+# Where an order came from. Only OWNER_DEVICE is evidence of the owner's own command (lead 2026-10-22):
+# the node itself is on the owner's tailnet account, so a tailnet login alone is not.
+OWNER_DEVICE: Final = "owner-device"
+TAILNET: Final = "tailnet"
+LOCAL: Final = "local"
 ORDERS_FILE: Final = "orders.db"
 
 _SCHEMA: Final = """
@@ -52,7 +57,10 @@ CREATE TABLE IF NOT EXISTS orders (
   delivered_at  TEXT NOT NULL DEFAULT '',
   delivered_to  TEXT NOT NULL DEFAULT '',
   uses          INTEGER NOT NULL DEFAULT 0,
-  first_used_at TEXT NOT NULL DEFAULT ''
+  first_used_at TEXT NOT NULL DEFAULT '',
+  device_id     TEXT NOT NULL DEFAULT '',
+  device_ip     TEXT NOT NULL DEFAULT '',
+  device_name   TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS order_events (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +102,9 @@ class Order:
     delivered_to: str
     uses: int
     first_used_at: str
+    device_id: str = ""
+    device_ip: str = ""
+    device_name: str = ""
     events: tuple[OrderEvent, ...] = ()
 
     @property
@@ -111,7 +122,8 @@ class Order:
             "receiver": self.receiver, "created_by": self.created_by, "via": self.via, "status": self.status,
             "dori": self.dori, "post_url": self.post_url, "note": self.note, "updated_at": self.updated_at,
             "delivered_at": self.delivered_at, "delivered_to": self.delivered_to, "uses": self.uses,
-            "first_used_at": self.first_used_at, "url": url,
+            "first_used_at": self.first_used_at, "device": self.device_id, "device_name": self.device_name, "device_ip": self.device_ip,
+            "url": url,
         }
 
 
@@ -164,6 +176,10 @@ class OrderStore:
                 self.path.chmod(0o600)
             connection.row_factory = sqlite3.Row
             connection.executescript(_SCHEMA)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(orders)")}
+            for column in ("device_id", "device_ip", "device_name"):
+                if column not in columns:
+                    connection.execute(f"ALTER TABLE orders ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
             yield connection
             connection.commit()
         finally:
@@ -171,7 +187,7 @@ class OrderStore:
 
     def add(
         self, body: str, *, receiver: str, by: str, via: str, todo_id: str = "", project: str = "",
-        now: datetime | None = None,
+        device_id: str = "", device_ip: str = "", device_name: str = "", now: datetime | None = None,
     ) -> Order:
         text = clean_body(body)
         stamp = _stamp(now)
@@ -179,10 +195,10 @@ class OrderStore:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             cursor = db.execute(
-                "INSERT INTO orders (created_at, body, todo_id, project, receiver, created_by, via, status, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO orders (created_at, body, todo_id, project, receiver, created_by, via, status, updated_at,"
+                " device_id, device_ip, device_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (stamp, text, todo_id, project, _line(receiver, 40, "receiver") or DEFAULT_RECEIVER, who, via,
-                 ORDER_STATUSES[0], stamp),
+                 ORDER_STATUSES[0], stamp, _line(device_id, 40, "device id"), _line(device_ip, 45, "device ip"), _line(device_name, 80, "device name")),
             )
             number = int(cursor.lastrowid or 0)
             db.execute(
@@ -301,6 +317,6 @@ def _order(row: sqlite3.Row, events: list[sqlite3.Row]) -> Order:
         created_by=str(row["created_by"]), via=str(row["via"]), status=str(row["status"]), dori=str(row["dori"]),
         post_url=str(row["post_url"]), note=str(row["note"]), updated_at=str(row["updated_at"]),
         delivered_at=str(row["delivered_at"]), delivered_to=str(row["delivered_to"]), uses=int(row["uses"]),
-        first_used_at=str(row["first_used_at"]),
+        first_used_at=str(row["first_used_at"]), device_id=str(row["device_id"]), device_ip=str(row["device_ip"]), device_name=str(row["device_name"]),
         events=tuple(OrderEvent(str(e["at"]), str(e["kind"]), str(e["detail"]), str(e["actor"])) for e in events),
     )

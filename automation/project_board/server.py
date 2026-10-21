@@ -27,6 +27,7 @@ import gzip
 import hmac
 import json
 import logging
+import subprocess
 import threading
 from collections.abc import Callable, Mapping
 from datetime import date
@@ -34,6 +35,7 @@ from html import escape
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
@@ -41,7 +43,7 @@ from .board_store import BoardStore
 from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, title_text, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError, TodoExtra
-from .orders import OrderStore
+from .orders import LOCAL, OWNER_DEVICE, TAILNET, OrderStore
 from .sessions import SessionsState
 from .ledger_view import load_ledger
 
@@ -86,6 +88,9 @@ class _Handler(BaseHTTPRequestHandler):
     orders: OrderStore | None = None
     order_receiver: str = ""
     gate_token: str = ""
+    owner_devices: Mapping[str, str] = MappingProxyType({})
+    peer_uid: Callable[[int, int], int | None]
+    whois: Callable[[str], tuple[str, str] | None]
 
     def _via_tailnet(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -175,7 +180,8 @@ class _Handler(BaseHTTPRequestHandler):
             "number": order.number, "created_at": order.created_at, "created_by": order.created_by,
             "via": order.via, "body_sha256": order.body_sha256, "status": order.status,
             "todo_id": order.todo_id, "project": order.project, "uses": order.uses,
-            "first_used_at": order.first_used_at,
+            "first_used_at": order.first_used_at, "device": order.device_id, "device_name": order.device_name,
+            "device_ip": order.device_ip,
         }, ensure_ascii=False)
         self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
 
@@ -311,6 +317,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _order(self, _new: str, form: dict[str, list[str]]) -> None:
         """도리에게 지시 — the same authority and recorded identity as a progress tick; linked todo/project must exist."""
         assert self.orders is not None
+        via, device_id, device_ip, device_name = self._order_source()
         todo_id = form.get("todo", [""])[0].strip()
         project = form.get("project", [""])[0].strip()
         try:
@@ -323,13 +330,35 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ProjectBoardError("no approved project with that name")
             order = self.orders.add(
                 form.get("text", [""])[0], receiver=self.order_receiver, by=self._actor(),
-                via="tailnet" if self._via_tailnet() else "local", todo_id=todo_id, project=project,
+                via=via, todo_id=todo_id, project=project, device_id=device_id, device_ip=device_ip, device_name=device_name,
             )
         except ProjectBoardError as error:
             self._text(400, str(error))
             return
         body = json.dumps({"ok": True, "number": order.number, "status": order.status}, ensure_ascii=False)
         self._send(200, body.encode("utf-8"), "application/json; charset=utf-8")
+
+    def _order_source(self) -> tuple[str, str, str, str]:
+        """(via, device stable id, device ip, device name) of this order's sender.
+
+        ``tailscale serve`` (tailscaled, root) replaces ``X-Forwarded-For`` with the real tailnet source and drops
+        what the client sent. Any other local process can forge that header, so the address is believed only when
+        the loopback peer socket belongs to root, and the device is then named by ``tailscale whois`` (its stable
+        node id). The owner's command is an allowlisted login from one of ``owner_devices``: the node itself is on
+        the owner's tailnet account too, so a login alone is not.
+        """
+        if not self._via_tailnet():
+            return LOCAL, "", "", ""
+        if self.peer_uid(int(self.client_address[1]), int(self.server.server_address[1])) != 0:
+            return TAILNET, "", "", ""
+        ip = (self.headers.get("X-Forwarded-For") or "").strip()[:45]
+        found = self.whois(ip) if ip else None
+        if found is None:
+            return TAILNET, "", ip, ""
+        stable_id, name = found
+        if stable_id in self.owner_devices and self._identity_ok():
+            return OWNER_DEVICE, stable_id, ip, self.owner_devices[stable_id] or name
+        return TAILNET, stable_id, ip, name
 
     def _archive(self, project: str, form: dict[str, list[str]]) -> None:
         """보관 / 보관 해제 — the same authority and the same recorded identity as a progress tick."""
@@ -384,6 +413,35 @@ def exit_on_new_release(server: ThreadingHTTPServer, pointer: Path, stop: thread
             return
 
 
+def loopback_peer_uid(client_port: int, server_port: int) -> int | None:
+    """The uid owning the other end of a loopback TCP connection (``/proc/net/tcp``), or ``None`` if not found."""
+    want = (f"{client_port:04X}", f"{server_port:04X}")
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table).read_text(encoding="ascii").splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if len(fields) > 7 and (fields[1].rsplit(":", 1)[-1], fields[2].rsplit(":", 1)[-1]) == want:
+                return int(fields[7])
+    return None
+
+
+def tailscale_whois(ip: str) -> tuple[str, str] | None:
+    """(stable node id, host name) of a tailnet address from the local tailscaled, or ``None``."""
+    try:
+        done = subprocess.run(["tailscale", "whois", "--json", ip], capture_output=True, text=True, timeout=5,
+                              check=False)
+        node = json.loads(done.stdout)["Node"] if done.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(node, dict) or not isinstance(node.get("StableID"), str) or not node["StableID"]:
+        return None
+    name = (node.get("Hostinfo") or {}).get("Hostname") or str(node.get("ComputedName") or "")
+    return node["StableID"], str(name)[:80]
+
+
 def make_server(
     *,
     host: str,
@@ -404,6 +462,9 @@ def make_server(
     orders: OrderStore | None = None,
     order_receiver: str = "",
     gate_token: str = "",
+    owner_devices: tuple[tuple[str, str], ...] = (),
+    peer_uid: Callable[[int, int], int | None] = loopback_peer_uid,
+    whois: Callable[[str], tuple[str, str] | None] = tailscale_whois,
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -430,6 +491,9 @@ def make_server(
             "orders": orders,
             "order_receiver": order_receiver,
             "gate_token": gate_token if len(gate_token) >= MIN_TOKEN else "",
+            "owner_devices": MappingProxyType(dict(owner_devices)),
+            "peer_uid": staticmethod(peer_uid),
+            "whois": staticmethod(whois),
         },
     )
     server = ThreadingHTTPServer((host, port), handler)
