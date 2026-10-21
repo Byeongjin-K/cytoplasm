@@ -433,7 +433,7 @@ _FILTER_JS: Final = """
     var rows=document.querySelectorAll('#todos ul.todos li'),text=q.value.trim().toLowerCase(),want=s.value,proj=document.body.dataset.project||'',shown=0,total=0;
     rows.forEach(function(li){
       var mine=!proj||li.dataset.project===proj;if(mine){total++;}
-      var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.toLowerCase().indexOf(text)>=0);
+      var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.replace(/\\u2060/g,'').toLowerCase().indexOf(text)>=0);
       li.hidden=!ok;if(ok){shown++;}
     });
     document.querySelectorAll('#todos .todo-group').forEach(function(g){
@@ -515,6 +515,20 @@ def _ago(stamp: str, now: str) -> str:
 _SEP: Final = "\u00a0· "  # a separator never starts a line
 
 
+def _glued(items: list[str]) -> str:
+    """``_SEP.join`` for rows whose items are links: a link drawn inline-block (for its touch height) leaves a line
+    break after itself that a no-break space does not close, so Safari began a line with 「·」. Each item and the
+    separator after it share one no-wrap span; the item itself still wraps inside."""
+    head = "".join(f'<span class="glue">{item}\u00a0·</span> ' for item in items[:-1])
+    return head + (items[-1] if items else "")
+
+
+def title_text(text: str) -> str:
+    """A title or mail subject as written: a word joiner before each 「·」 so no line begins with it (Chrome broke
+    「조직문화확산·법정의무교육·연구윤리교육」 before the dot under keep-all). Search ignores the joiner."""
+    return escape(text).replace("·", "\u2060·")
+
+
 def _keep(text: str) -> str:
     """Escaped text in which 「할 일」 never breaks across lines (Korean reads it as one word)."""
     return escape(text).replace("할 일", "할\u00a0일")
@@ -522,13 +536,15 @@ def _keep(text: str) -> str:
 
 def _quoted(title: str) -> str:
     """「title」 kept on one line when short enough to fit any screen; long titles may still wrap."""
-    inner = f"「{_keep(title)}」"
+    kept = _keep(title).replace("·", "\u2060·")
+    inner = f"「{kept}」"
     return f'<span class="q">{inner}</span>' if len(title) <= 18 else inner
 
 
 def _quoted_plain(title: str) -> str:
     """A short title kept on one line inside a comma list (no brackets)."""
-    return f'<span class="q">{_keep(title)}</span>' if len(title) <= 18 else _keep(title)
+    kept = _keep(title).replace("·", "\u2060·")
+    return f'<span class="q">{kept}</span>' if len(title) <= 18 else kept
 
 
 def _to(word: str) -> str:
@@ -591,6 +607,10 @@ def todo_href(todo_id: str) -> str:
 def person_href(name: str) -> str:
     """``#person/<name>``: everything one person owns, across projects."""
     return f"#person/{quote(name, safe='')}"
+
+
+def _project_link(name: str) -> str:
+    return f'<a href="{escape(project_href(name), quote=True)}">{escape(name)}</a>'
 
 
 def _person_link(name: str) -> str:
@@ -696,7 +716,7 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
                     if p.project in known else f"<b>{escape(p.project)}</b>")
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li>{name} {_grade_badge(p.grade)} · 할\u00a0일\u00a0{p.todo_count}건 · "
+                f"<li>{name} <span class=\"glue\">{_grade_badge(p.grade)}\u00a0·</span> 할\u00a0일\u00a0{p.todo_count}건 · "
                 f"근거 {_quoted(p.source_subject)}{link}</li>"
             )
         pending = (
@@ -770,7 +790,7 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -
         due = ""
     owner = _person_link(todo.owner) if todo.owner else '<span class="muted">담당 미정</span>'
     href = _source_href(mode, todo.source_kind, todo.source_id)
-    subject = escape(todo.source_subject or todo.source_id)
+    subject = title_text(todo.source_subject or todo.source_id)
     kind = "mail" if todo.source_kind == "mail" else "sources"
     source = (
         f'<a class="src-link" href="{escape(href, quote=True)}" title="근거 원문 열기">{icon(kind)}<span>{subject}</span></a>'
@@ -781,7 +801,7 @@ def _todo_item(todo: TodoRow, mode: Mode, today: date, *, anchor: bool = True) -
     ident = f'id="todo-{escape(todo.todo_id, quote=True)}" ' if anchor else ""
     return (
         f'<li {ident}data-project="{escape(todo.project, quote=True)}" data-status="{escape(todo.status, quote=True)}"'
-        f'{done_class}>{box}<div class="todo-main"><a class="todo-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{escape(todo.title)}</a>'
+        f'{done_class}>{box}<div class="todo-main"><a class="todo-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{title_text(todo.title)}</a>'
         f'<div class="meta">{badges}{_grade_badge(todo.grade)}{owner}{due}</div>{source}{note}</div></li>'
     )
 
@@ -846,16 +866,16 @@ def _agenda_cards(
             where = [project] if with_project else []
             where += [_person_link(todo.owner)] if todo.owner else []
             where += [_md(todo.due)] if todo.due else []
-            title = f'<a class="ag-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{escape(todo.title)}</a>'
+            title = f'<a class="ag-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{title_text(todo.title)}</a>'
             href = _source_href(mode, todo.source_kind, todo.source_id)
             kind = "mail" if todo.source_kind == "mail" else "sources"
-            subject = escape(todo.source_subject or todo.source_id)
+            subject = title_text(todo.source_subject or todo.source_id)
             source = (f'<a class="src-link" href="{escape(href, quote=True)}" title="근거 원문 열기">{icon(kind)}<span>{subject}</span></a>'
                       if href else f'<span class="src-link">{icon(kind)}<span>{subject}</span></span>')
             items.append(
                 f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
                 f'{title}{_grade_badge(todo.grade)}'
-                f'<span class="where">{_SEP.join(where)}</span>{source}</li>'
+                f'<span class="where">{_glued(where)}</span>{source}</li>'
             )
         fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
         parts.append(fold.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else fold)
@@ -884,7 +904,7 @@ def _source_card(
     row: SourceRow, produced: list[TodoRow], mode: Mode, *, with_project: bool = True
 ) -> str:
     href = _source_href(mode, row.source_kind, row.source_id)
-    subject = escape(row.source_subject or row.source_id)
+    subject = title_text(row.source_subject or row.source_id)
     title = f'<a class="title" href="{escape(href, quote=True)}">{subject}</a>' if href else f'<span class="title">{subject}</span>'
     kind = "기관 메일" if row.source_kind == "mail" else "회의록"
     files = []
@@ -965,8 +985,8 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
     def row(e: EventRow) -> str:
         return (
             f'<li><time data-live data-ago="{escape(e.at, quote=True)}" datetime="{escape(e.at, quote=True)}" title="{escape(_kst(e.at), quote=True)}">'
-            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><a class=\"ev-project\" "
-            f"href=\"{escape(project_href(e.project), quote=True)}\">{escape(e.project)}</a> · "
+            f"{_ago(e.at, snapshot.generated_at)}</time><div class=\"what\"><span class=\"glue\"><a class=\"ev-project\" "
+            f"href=\"{escape(project_href(e.project), quote=True)}\">{escape(e.project)}</a>\u00a0·</span> "
             f"{_event_text(e, titles)}{who(e)}</div></li>"
         )
 
@@ -1121,7 +1141,7 @@ def _todo_page(
         due = f'<a href="{schedule}">마감 미정</a>'
     owner = _person_link(todo.owner) if todo.owner else '<span class="muted">담당 미정</span>'
     href = _source_href(mode, todo.source_kind, todo.source_id)
-    subject = escape(todo.source_subject or todo.source_id)
+    subject = title_text(todo.source_subject or todo.source_id)
     where = f'<a href="{escape(href, quote=True)}">{icon("mail" if todo.source_kind == "mail" else "sources")}{subject}</a>' if href else subject
     if source is not None:
         where += f'<div class="small muted">{_SEP.join([_md(source.source_date)] + ([escape(_sender(source.source_sender))] if source.source_sender else []))}</div>'
@@ -1138,7 +1158,7 @@ def _todo_page(
     same = ""
     if siblings:
         items = "".join(
-            f'<li><a href="{escape(todo_href(t.todo_id), quote=True)}">{escape(t.title)}</a>'
+            f'<li><a href="{escape(todo_href(t.todo_id), quote=True)}">{title_text(t.title)}</a>'
             f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
             for t in siblings
         )
@@ -1151,7 +1171,7 @@ def _todo_page(
     return (
         f'<section data-tab="todo" data-key="{escape(todo.todo_id, quote=True)}" data-title="{escape(todo.title, quote=True)}">'
         f'<a class="back" href="#todos" data-back>{icon("chevron-left")}<span>할\u00a0일</span></a>'
-        f'<div class="pv-head"><h2>{escape(todo.title)}</h2></div>'
+        f'<div class="pv-head"><h2>{title_text(todo.title)}</h2></div>'
         f'<div class="card"><dl class="td-facts">{facts}</dl></div>{same}{orders}{log}</section>'
     )
 
@@ -1161,8 +1181,8 @@ def _person_page(name: str, todos: list[TodoRow], today: date) -> str:
     ordered = sorted(todos, key=_todo_order)
     items = "".join(
         f'<li data-project="{escape(t.project, quote=True)}"><a class="ag-title" href="{escape(todo_href(t.todo_id), quote=True)}">'
-        f'{escape(t.title)}</a><span class="where"><a href="{escape(project_href(t.project), quote=True)}">{escape(t.project)}</a>'
-        f'{_SEP + _md(t.due) if t.due else ""}</span>'
+        f'{title_text(t.title)}</a><span class="where">'
+        f'{_glued([_project_link(t.project)] + ([_md(t.due)] if t.due else []))}</span>'
         f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
         for t in ordered
     )

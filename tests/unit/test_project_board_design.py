@@ -38,6 +38,40 @@ def test_every_colour_and_size_comes_from_a_token_the_dark_appearance_overrides_
     assert not re.findall(r"#[0-9a-fA-F]{3,6}\b", rules)  # colours live in the token block only
 
 
+def test_no_row_or_link_gives_up_its_own_height_or_hides_its_text() -> None:
+    """Safari drew the 보안 등급 badge and a wrapped 근거 subject on one spot (2026-10-21): WebKit lifts a
+    baseline-aligned grid row holding a multi-line inline-flex link into the row above. Rows align to their
+    top, and a mail subject wraps instead of ending in an ellipsis. layout_audit.mjs measures the screens."""
+    rules = dict(re.findall(r"(?m)^([^{}@\n]+)\{([^{}]*)\}", dashboard_theme._PARTS))
+    assert "align-items:start" in rules[".td-facts"]
+    assert all("baseline" not in body for sel, body in rules.items() if ".td-facts" in sel)
+    assert all("ellipsis" not in body and "nowrap" not in body for sel, body in rules.items() if ".src-link" in sel)
+
+
+def test_a_separator_rides_with_the_link_before_it(tmp_path: Path) -> None:
+    """A link drawn inline-block leaves a break after it that a no-break space does not close: Safari began the
+    next line with 「·」. Every separator after a link sits inside the same no-wrap span as that link."""
+    page = _page(tmp_path, "served")
+    assert '<span class="glue"><a class="who-link"' in page or '<span class="glue"><a href="#project/' in page
+    assert not re.search(r"</a>[\u00a0 ]· ", page)
+    rules = dict(re.findall(r"(?m)^([^{}@\n]+)\{([^{}]*)\}", dashboard_theme._PARTS))
+    assert rules[".glue"] == "white-space:nowrap"
+
+
+def test_a_middle_dot_in_a_title_never_begins_a_line_and_search_still_finds_it(tmp_path: Path) -> None:
+    """Chrome broke 「조직문화확산·법정의무교육·연구윤리교육」 before a dot under keep-all; a word joiner holds the dot to the word before it."""
+    store = BoardStore(tmp_path / "board.db")
+    store.apply_proposal("pb-1", proposal_from_dict({
+        "project": "가상과제 알파", "summary": "요약", "todos": [{"title": "법정의무교육·연구윤리교육 이수", "due": "2026-10-20"}],
+        "source": {"kind": "mail", "source_id": "u-1", "subject": "조직문화확산·법정의무교육 안내"},
+    }), message_id="m1")
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served")
+    body = page.split("<body>", 1)[1].split("<script>", 1)[0]
+    assert "법정의무교육⁠·연구윤리교육" in body and "조직문화확산⁠·법정의무교육" in body
+    assert not re.search(r"[^\u2060]·연구", re.sub(r"<[^>]*>", "", body))  # visible text, not attributes
+    assert "li.textContent.replace(/\\u2060/g,'')" in page  # search matches what the owner types
+
+
 @pytest.mark.parametrize("mode", ["served", "file"])
 def test_the_page_has_no_inline_styles_dashes_or_emoji(tmp_path: Path, mode: str) -> None:
     page = _page(tmp_path, mode)

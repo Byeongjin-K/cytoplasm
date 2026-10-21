@@ -10,6 +10,7 @@ from urllib.request import HTTPCookieProcessor, build_opener
 import pytest
 
 from automation.project_board.cli import build_parser, cmd_demo, main
+from automation.project_board.dashboard import title_text
 from automation.project_board.demo import demo_handlers, demo_token, mail_text, make_demo_board, pending
 from automation.project_board.models import ProjectBoardError
 from automation.project_board.server import make_server
@@ -99,7 +100,7 @@ def test_demo_when_served_opens_invented_dashboard_and_mail(tmp_path: Path) -> N
             assert response.status == 200
             heading, _, body = (mail_text("demo-1") or "").partition("\n")
             page = response.read().decode()
-            assert f"<h1>{heading[2:]}</h1>" in page and body.strip().splitlines()[-1] in page
+            assert f"<h1>{title_text(heading[2:])}</h1>" in page and body.strip().splitlines()[-1] in page
     finally:
         server.shutdown()
         server.server_close()
