@@ -13,7 +13,7 @@ _NOW = datetime(2026, 8, 21, tzinfo=timezone.utc)
 
 def test_facade_derives_dates_reranks_and_includes_all_wiki() -> None:
     fake = FakeSources.from_fixture_dir(_FIXTURES)
-    pack = collect_evidence(KnowledgeQuery("배양 연구동향", purpose="cite"), clock=lambda: _NOW, env=fake)
+    pack = collect_evidence(KnowledgeQuery("배양 실험", purpose="cite"), clock=lambda: _NOW, env=fake)
     assert pack.verdict == "hit"
     stores = [item.store for item in pack.items]
     assert stores[0] == "wiki"

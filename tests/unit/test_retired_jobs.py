@@ -294,24 +294,52 @@ def test_deployer_skips_a_peer_account_the_owner_already_removed(
     assert any("sudo -n -u peer " in c[2] for c in calls) is not removed
 
 
-def test_research_timer_release_cleanup_preserves_reports_and_topic_state(tmp_path: Path) -> None:
+def test_research_release_cleanup_removes_node_leftovers_only(tmp_path: Path) -> None:
+    # Given: the retired units plus the node runtime, prompt state and topic list, beside other data.
     units = retired_jobs.unit_paths(tmp_path, "research-trends")
     units[0].parent.mkdir(parents=True)
     for path in units:
         path.write_bytes(b"old unit")
-    kept = (tmp_path / ".hermes/state/research-topics.yaml",
-            tmp_path / ".hermes/research-trends/research-trends-v1.md",
-            tmp_path / "notes/research-trends/report.md")
-    for path in kept:
+    removed = (tmp_path / ".hermes/scripts/research_trends.py",
+               tmp_path / ".hermes/state/research-topics.yaml",
+               tmp_path / ".hermes/research-trends/research-trends-v1.md",
+               tmp_path / ".hermes/research-trends/logs/run.log",
+               tmp_path / ".hermes/research_trends_runtime/research_trends_core.py")
+    kept = (tmp_path / ".hermes/state/other.yaml", tmp_path / "notes/meetings/m.md")
+    for path in (*removed, *kept):
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"keep")
+        path.write_bytes(b"x")
     calls: list[tuple[str, ...]] = []
     runner = _live_runner(calls, obeys=True)
     assert retired_jobs.check(tmp_path, "research-trends", runner) == "stale"
+
+    # When
     retired_jobs.install(tmp_path, "research-trends", runner)
-    assert all(not path.exists() for path in units)
-    assert all(path.read_bytes() == b"keep" for path in kept)
+
+    # Then: every leftover and both trees are gone; unrelated files stay.
+    assert all(not path.exists() for path in (*units, *removed))
+    assert not (tmp_path / ".hermes/research-trends").exists()
+    assert not (tmp_path / ".hermes/research_trends_runtime").exists()
+    assert all(path.read_bytes() == b"x" for path in kept)
     assert retired_jobs.check(tmp_path, "research-trends", runner) == "ok"
+
+
+def test_research_cleanup_refuses_a_symlink_inside_its_tree(tmp_path: Path) -> None:
+    # Given: a link planted inside the retired runtime tree that points outside the home.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_bytes(b"keep")
+    tree = tmp_path / "home/.hermes/research_trends_runtime"
+    tree.mkdir(parents=True)
+    (tree / "link").symlink_to(outside)
+    home = tmp_path / "home"
+
+    # When / Then: observation is unknown and install refuses before deleting anything.
+    assert retired_jobs.check(home, "research-trends", _runner(home, [])) == "unknown"
+    with pytest.raises(ValueError, match="RETIRED-JOB-REFUSED|GATEWAY-RETIRE-REFUSED"):
+        retired_jobs.install(home, "research-trends", _runner(home, []))
+    assert (outside / "keep.txt").read_bytes() == b"keep"
+    assert (tree / "link").is_symlink()
 
 
 def test_retired_wiki_watcher_removes_only_its_script_and_units(tmp_path: Path) -> None:

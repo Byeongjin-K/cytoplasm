@@ -71,8 +71,7 @@ def _pack() -> proposal_knowledge.EvidencePack:
                 0.8, None,
             ),
             proposal_knowledge.EvidenceItem(
-                "note:research-trends/weekly.md", "research-trends",
-                "weekly summary", 0.7, "2026-W34",
+                "note:personal/weekly.md", "rag", "weekly summary", 0.7, None,
             ),
         ),
         (),

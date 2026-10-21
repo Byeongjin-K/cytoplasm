@@ -105,8 +105,6 @@ TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
                     frozenset({"templates-list", "templates-show", "collect-status", "preflight", "verify"}),
                     frozenset({"collect-start", "collect-answer", "generate", "register", "review"})),
     "prompt": ("prompt/scripts/prompt_cli.py", frozenset({"search", "get"}), frozenset({"add"})),
-    "topics": ("topics/scripts/topics_cli.py", frozenset({"list", "evidence", "suggest"}),
-               frozenset({"add", "remove"})),
     "patent": ("patent-prep/scripts/patent_cli.py", frozenset({"status"}),
                frozenset({"create", "checklist", "draft", "export"})),
     "stt": ("speechtotext/scripts/speechtotext_cli.py", frozenset(),

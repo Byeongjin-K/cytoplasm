@@ -13,10 +13,8 @@ from typing import Final, Iterable, Literal, cast
 
 from . import proposal_knowledge, proposal_version
 
-SourceType = Literal["meeting", "note", "obsidian", "wiki", "research-trends"]
-_SOURCE_TYPES: Final = frozenset({
-    "meeting", "note", "obsidian", "wiki", "research-trends",
-})
+SourceType = Literal["meeting", "note", "obsidian", "wiki"]
+_SOURCE_TYPES: Final = frozenset({"meeting", "note", "obsidian", "wiki"})
 _VERSION_PREFIX: Final = "v"
 
 
@@ -160,8 +158,6 @@ def _source_type(item: proposal_knowledge.EvidenceItem) -> SourceType:
         return "obsidian"
     if item.bucket == "wiki-twin":
         return "wiki"
-    if item.bucket == "research-trends":
-        return "research-trends"
     # Meeting-produced facade records use an explicit source type, which
     # proposal_knowledge preserves as a ``meeting:`` source-key prefix.
     if item.source_key.startswith("meeting:"):
@@ -173,7 +169,6 @@ def _discover(knowledge: object | None) -> tuple[DeltaSource, ...]:
     pack = proposal_knowledge.gather_owner_evidence(
         "proposal improvement delta collection",
         limit=8,
-        trends_weeks=4,
         knowledge=knowledge,
     )
     discovered: list[DeltaSource] = []

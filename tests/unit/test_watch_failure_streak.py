@@ -17,7 +17,6 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _SOURCE = _REPO / "skills" / "mail" / "scripts" / "watch_failure_streak.py"
 _SHARED_HELPER_ADOPTERS = (
-    ("research-trends", _REPO / "automation" / "research_trends" / "research_trends.py", 1),
     ("notes-weekly-organize", _REPO / "automation" / "notes_organize" / "notes_organize.py", 1),
     ("budget-watch", _REPO / "skills" / "budget" / "scripts" / "budget_watch.py", 3),
 )

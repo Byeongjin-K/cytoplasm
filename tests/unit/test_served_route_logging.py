@@ -24,11 +24,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "skills" / "mail" / "scripts"))
 sys.path.insert(0, str(ROOT / "skills"))
 sys.path.insert(0, str(ROOT / "skills" / "patent-prep"))
-sys.path.insert(0, str(ROOT / "automation" / "research_trends"))
-os.environ.setdefault("TOPICS_SCRIPTS", str(ROOT / "skills" / "topics" / "scripts"))
 
 from automation import codex_llm  # noqa: E402
-from automation.research_trends import research_trends  # noqa: E402
 from skills.doctype.scripts import doctype_llm  # noqa: E402
 from skills.proposal.scripts import proposal_llm  # noqa: E402
 
@@ -153,22 +150,6 @@ def test_report_log_records_the_served_route(
 
     record = _last(tmp_path / ".hermes" / "report" / "logs" / "llm-calls.jsonl")
     assert text == "draft"
-    assert record["provider"] == "openai-codex"
-    assert (record["served_provider"], record["served_model"]) == ("xai-oauth", "grok-4.7")
-
-
-def test_research_trends_log_records_the_served_route(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("AUTOPHAGY_HERMES_BIN", str(_stub(tmp_path / "hermes", "summary")))
-    monkeypatch.setenv("RESEARCH_TRENDS_STATE_DIR", str(tmp_path / "state"))
-    monkeypatch.delenv("RESEARCH_TRENDS_FAKE_SYNTHESIS", raising=False)
-
-    text = research_trends._run_llm("synthesis", "topic", "prompt")
-
-    record = _last(tmp_path / "state" / "logs" / "llm-calls.jsonl")
-    assert text == "summary"
     assert record["provider"] == "openai-codex"
     assert (record["served_provider"], record["served_model"]) == ("xai-oauth", "grok-4.7")
 

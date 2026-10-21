@@ -26,6 +26,9 @@ from .sources.discord_team import DiscordFetchError, scan_discord
 from .sources.files import scan_directory
 from .sources.obsidian import ObsidianSyncError, mirror_is_healthy, scan_obsidian, sync_mirror
 
+# Weekly research trends moved off the node (owner 2026-10-21); drop its old vectors.
+_RETIRED_NOTE_DIR = "research-trends"
+
 
 def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -87,7 +90,7 @@ def collect_documents(
     if "notes" in sources:
         note_documents, note_keys = scan_directory(
             config.notes_dir, "note", "note", config.perspective, config.max_chunk_chars,
-            exclude_dirs=(config.meetings_dir,),
+            exclude_dirs=(config.meetings_dir, config.notes_dir / _RETIRED_NOTE_DIR),
         )
         documents.extend(note_documents)
         present["note"] = note_keys

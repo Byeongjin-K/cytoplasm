@@ -24,7 +24,7 @@ Sol 이 답하지 못하면(쿼터 소진·레이트리밋·인증·전송 실�
 - **민감도 게이트는 그대로**: 결정적 분류가 모든 호출 앞에 있다. 달라진 것은 patent-sensitive
   가 허용되는 경로가 "Codex 만"에서 "공용 Hermes 경로(Codex + 설정된 폴백)"로 넓어진 것이다.
   공용 클라이언트 밖의 경로는 여전히 호출 전에 거부된다(doctype `PatentRoutingError` 등).
-- **로그가 실제로 답한 모델을 적는다**: 메일·doctype·특허 초안·제안서·보고서·주간 연구 동향의
+- **로그가 실제로 답한 모델을 적는다**: 메일·doctype·특허 초안·제안서·보고서의
   `llm-calls.jsonl` 은 요청한 주 경로(`provider`·`model`) 옆에 Hermes 사용량 보고서에서 읽은
   `served_provider`·`served_model` 을 싣는다. Grok 이 답했으면 `xai-oauth`·`grok-4.7` 이 남으므로
   특허 민감 본문이 어디로 갔는지 로그만으로 확인할 수 있다. 보고서가 없으면 `unknown` 이다.

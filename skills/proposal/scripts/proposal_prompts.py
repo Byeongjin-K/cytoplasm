@@ -153,7 +153,7 @@ def _evidence_terms(evidence_pack: object) -> tuple[str, ...]:
     terms: set[str] = set()
     for item in _pack_items(evidence_pack):
         bucket = str(_value(item, "bucket", ""))
-        if bucket not in {"rag", "wiki-twin", "obsidian", "research-trends"}:
+        if bucket not in {"rag", "wiki-twin", "obsidian"}:
             continue
         material = " ".join((
             str(_value(item, "source_key", "")),

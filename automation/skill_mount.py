@@ -3,7 +3,7 @@
 
 관리자 배포본은 `/srv/autophagy-skills/live/<skill>` 심링크로만 산다. 그 사실을 아는
 곳이 여러 벌이면 한 벌이 낡아도 아무 신호가 없다 — 실제로 다섯 no-agent cron 래퍼
-(budget·report·coordination·calendar·research-trends)가 각자 경로를 들고 있다가 마운트가
+(budget·report·coordination·calendar)가 각자 경로를 들고 있다가 마운트가
 멀쩡한데도 `not mounted`·import 오류를 냈다(`docs/follow-ups.md`, 2026-08-17). 판정을
 한 곳으로 모으면 다음에 경로가 바뀔 때 고칠 자리도 한 곳이다.
 

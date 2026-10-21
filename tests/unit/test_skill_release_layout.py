@@ -38,19 +38,6 @@ def _run(entrypoint: Path, *args: str, env: dict[str, str] | None = None) -> sub
     )
 
 
-def test_topics_cli_runs_from_the_release_layout(tmp_path: Path) -> None:
-    release = _stage_release(tmp_path, "topics")
-
-    result = _run(
-        release / "scripts" / "topics_cli.py", "list",
-        env={"HOME": str(tmp_path), "TOPICS_STATE_FILE": str(tmp_path / "state.yaml")},
-    )
-
-    assert "No module named 'skills'" not in result.stderr, result.stderr
-    assert result.returncode == 0, result.stderr
-    assert "TOPICS-EMPTY" in result.stdout
-
-
 def test_prompt_cli_runs_from_the_release_layout(tmp_path: Path) -> None:
     release = _stage_release(tmp_path, "prompt")
 

@@ -24,8 +24,13 @@ SCRIPTS: Final = {
     "memory-curator-watch": ".hermes/scripts/memory_curator_watch.py",
     "memory-relocate-watch": ".hermes/scripts/memory_relocate_watch.py",
     "reminder-poller": ".hermes/scripts/poll_reminders.py",
+    "research-trends": ".hermes/scripts/research_trends.py",
     "wiki-confirm-watch": WIKI_SCRIPT,
 }
+# Weekly research trends moved to a separate research agent (owner 2026-10-21: no node
+# leftovers after the move). Old reports were deleted only after a byte match with its copy.
+RESEARCH_FILES: Final = (".hermes/state/research-topics.yaml",)
+RESEARCH_TREES: Final = (".hermes/research_trends_runtime", ".hermes/research-trends")
 INTEROP_FILES: Final = (
     ".hermes/interop/external-effect-tools.yaml",
     ".config/systemd/user/hermes-gateway.service.d/20-interop-guard.conf",
@@ -52,6 +57,19 @@ def interop_paths(home: Path) -> tuple[Path, ...]:
         if path.exists() and ((str(path.relative_to(home)) in INTEROP_FILES and not path.is_file())
                               or (str(path.relative_to(home)) in INTEROP_TREES and not path.is_dir())):
             raise ValueError("RETIRED-JOB-REFUSED: interop path type mismatch")
+        if path.is_dir():
+            for child in path.rglob("*"):
+                safe_path(home, str(child.relative_to(home)))
+    return paths
+
+
+def research_paths(home: Path) -> tuple[Path, ...]:
+    """Validate the exact research-trends leftovers, every tree child included, before use."""
+    paths = tuple(safe_path(home, relative) for relative in (*RESEARCH_FILES, *RESEARCH_TREES))
+    for path in paths:
+        relative = str(path.relative_to(home))
+        if path.exists() and (relative in RESEARCH_FILES) != path.is_file():
+            raise ValueError("RETIRED-JOB-REFUSED: research path type mismatch")
         if path.is_dir():
             for child in path.rglob("*"):
                 safe_path(home, str(child.relative_to(home)))
@@ -96,6 +114,8 @@ def check(home: Path, name: str, runner: Runner = run) -> str:
         scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
         live = [running(path.name, runner) for path in units]
         data = tuple(safe_path(home, path) for path in DATA) if name == "reminder-poller" else ()
+        if name == "research-trends":
+            data = research_paths(home)
         return "stale" if any(live) or any(path.exists() for path in (*units, *scripts, *data)) else "ok"
     except (OSError, ValueError, subprocess.SubprocessError):
         return "unknown"
@@ -135,12 +155,12 @@ def install(home: Path, name: str, runner: Runner = run) -> None:
             raise ValueError("RETIRED-JOB-REFUSED: interop removal not confirmed")
         return
     units = unit_paths(home, name)
-    # research-trends keeps its script: topics imports and retained data still use it.
     scripts = (safe_path(home, SCRIPTS[name]),) if name in SCRIPTS else ()
     # Validate every path before unlinking any of them, including data symlinks.
     if name == "reminder-poller":
         for path in DATA:
             safe_path(home, path)
+    research = research_paths(home) if name == "research-trends" else ()
     for path in units:
         quiesce(path.name, runner)
     if any(path.exists() for path in units):
@@ -157,6 +177,11 @@ def install(home: Path, name: str, runner: Runner = run) -> None:
         script.unlink(missing_ok=True)
     if name == "reminder-poller":
         remove_reminder_data(home)
+    for path in research:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
     if check(home, name, runner) != "ok":
         raise ValueError("RETIRED-JOB-REFUSED: read-back failed")
 

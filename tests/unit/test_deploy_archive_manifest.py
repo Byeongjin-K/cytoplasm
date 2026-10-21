@@ -62,7 +62,6 @@ def test_scoped_deploy_tar_streams_use_the_shared_git_manifest() -> None:
         ROOT / "automation" / "deploy-skill.sh",
         ROOT / "automation" / "hermes_compat" / "deploy.sh",
         ROOT / "automation" / "regression_bank" / "deploy.sh",
-        ROOT / "automation" / "research_trends" / "deploy.sh",
         ROOT / "automation" / "skill_generation" / "deploy.sh",
         ROOT / "skills" / "mail" / "deploy.sh",
     )

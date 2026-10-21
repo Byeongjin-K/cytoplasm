@@ -173,17 +173,17 @@ def _all_bucket_facade() -> _FakeFacade:
         (
             _facade_item("personal/project.md"),
             _facade_item("FAKE/demo.md", store="obsidian", source_type="obsidian"),
-            _facade_item("research-trends/research-trends-20260818.md"),
+            _facade_item("note:weekly.md"),
         ),
         (_facade_item("decision-demo", store="wiki", source_type="twin"),),
     )
 
 
-def test_gather_owner_evidence_collects_all_four_buckets() -> None:
+def test_gather_owner_evidence_collects_all_buckets() -> None:
     pack = proposal_knowledge.gather_owner_evidence("자율 굴착기", knowledge=_all_bucket_facade())
 
     assert all(pack.by_bucket()[bucket] for bucket in (
-        "rag", "wiki-twin", "obsidian", "research-trends",
+        "rag", "wiki-twin", "obsidian",
     ))
     assert pack.has_evidence()
 
@@ -199,23 +199,6 @@ def test_gather_continues_when_rag_facade_raises() -> None:
     assert "rag" in pack.unavailable
     assert any("근거 수집 불가" in note for note in pack.notes)
     assert pack.by_bucket()["wiki-twin"]
-
-
-def test_research_trends_keeps_only_newest_distinct_weeks() -> None:
-    trends = tuple(
-        _facade_item(f"research-trends/research-trends-2026{month:02d}{day:02d}.md")
-        for month, day in ((7, 1), (7, 8), (7, 15), (7, 22), (7, 29), (8, 5))
-    )
-
-    pack = proposal_knowledge.gather_owner_evidence(
-        "굴착 연구동향", trends_weeks=4, knowledge=_FakeFacade(rag_items=trends),
-    )
-
-    retained = pack.by_bucket()["research-trends"]
-    assert len({item.week for item in retained}) == 4
-    assert [item.source_key[-11:-3] for item in retained] == [
-        "20260805", "20260729", "20260722", "20260715",
-    ]
 
 
 def test_empty_facade_marks_no_evidence() -> None:
@@ -282,7 +265,7 @@ def test_gather_does_not_cache_facade_state_across_calls() -> None:
     assert second.items[0].summary == "second"
 
 
-def test_evidence_cli_fake_pack_prints_all_four_buckets(
+def test_evidence_cli_fake_pack_prints_available_buckets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     brief = tmp_path / "brief.md"
@@ -297,5 +280,5 @@ def test_evidence_cli_fake_pack_prints_all_four_buckets(
     payload = json.loads(capsys.readouterr().out)
     assert payload["goal"] == "자율 굴착기 연구 목표"
     assert {item["bucket"] for item in payload["items"]} == {
-        "rag", "wiki-twin", "obsidian", "research-trends",
+        "rag", "wiki-twin", "obsidian",
     }

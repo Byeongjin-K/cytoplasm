@@ -1,8 +1,7 @@
 """Aggregation and weekly reporting over PII-free entity-preflight quality records.
 
 This module reads only the operational log, computes rates and latency, and
-reports which alert conditions hold. It opens no surface and starts no watcher;
-the existing research-trends report is its sole periodic caller.
+reports which alert conditions hold. It opens no surface and starts no watcher.
 
 Every alert threshold lives in the same tracked immutable seed as the decision
 thresholds (``policy.POLICY_SEED_PATH`` = ``configs/entity-preflight.json``);
@@ -15,14 +14,11 @@ import json
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
 from .audit import (
-    DEFAULT_AUDIT_ROOT,
     DEFAULT_OPERATIONAL_ROOT,
-    rotate_entity_preflight_logs,
 )
 from .contracts import JsonValue, VerificationOutcome
 from .gate_quality import GateQualityRecord, QualityDecision, decode_quality_event
@@ -138,25 +134,6 @@ def load_quality_records(
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
         raise QualityLogError("entity-preflight operational quality log is unreadable") from error
     return tuple(records)
-
-
-def weekly_quality_section(
-    root: str | Path = DEFAULT_OPERATIONAL_ROOT,
-    private_root: str | Path = DEFAULT_AUDIT_ROOT,
-    *,
-    now: datetime | None = None,
-) -> str:
-    """Render the PII-free quality payload for the existing weekly report."""
-
-    rotate_entity_preflight_logs(private_root, root, now=now)
-    metrics = aggregate_quality(load_quality_records(root))
-    alerts = evaluate_alerts(metrics, load_metrics_thresholds())
-    payload = {
-        "metrics": metrics.to_event(),
-        "alerts": [alert.to_event() for alert in alerts],
-    }
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return f"## entity-preflight 품질 지표\n```json\n{encoded}\n```"
 
 
 def aggregate_quality(records: Iterable[GateQualityRecord]) -> QualityMetrics:

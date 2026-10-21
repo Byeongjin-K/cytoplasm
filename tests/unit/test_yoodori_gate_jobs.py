@@ -86,7 +86,7 @@ def test_doc_job_routes_outputs_and_marks_writes(staged: Path) -> None:
     report = gate.build_job(["doc", "report", "report", "--query", "실험", "--title", "주간", *ORIGIN])
     draft = gate.build_job(["doc", "doctype", "draft", "--name", "출장보고", "--inputs-json",
                             str(staged), "--out-name", "draft.md", *ORIGIN])
-    listing = gate.build_job(["doc", "topics", "list", *ORIGIN])
+    listing = gate.build_job(["doc", "prompt", "search", "실험", *ORIGIN])
     # Then: outputs land in the job directory, reads are not ledger writes.
     assert report.argv == [PY, f"{LIVE}/report/scripts/report_cli.py", "report", "--query", "실험",
                            "--title", "주간", "--outputs-root", "{OUT}"]
@@ -162,7 +162,9 @@ def test_origin_must_be_the_owners_recent_message() -> None:
 def test_write_job_needs_the_release_switch(staged: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: the node never received auto-write-yoodori.
     monkeypatch.setattr(auto_write, "state_root", lambda home=None: Path(gate.HOME) / ".hermes/auto-write")
-    job = gate.build_job(["doc", "topics", "add", "로봇", *ORIGIN])
+    with pytest.raises(gate.Refused):
+        gate.build_job(["doc", "topics", "add", "로봇", *ORIGIN])
+    job = gate.build_job(["doc", "prompt", "add", "로봇", *ORIGIN])
     # When / Then: nothing is created or run.
     with pytest.raises(gate.Refused, match="auto-write-yoodori"):
         gate.run_job(job)

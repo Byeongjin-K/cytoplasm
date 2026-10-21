@@ -5,13 +5,13 @@ from automation.knowledge.render import render_citations, render_verdict, valida
 
 
 def _pack(verdict: str = "hit") -> EvidencePack:
-    query = KnowledgeQuery("연구동향", purpose="cite")
-    item = EvidenceItem("E1", "rag", "note", "research-trends/research-trends-20260818.md", "동향", "2026-08-18", "path", 0.7, True, None, None, "본문", "a" * 64)
+    query = KnowledgeQuery("배양 실험", purpose="cite")
+    item = EvidenceItem("E1", "rag", "note", "lab-notes/20260818.md", "실험 기록", "2026-08-18", "path", 0.7, True, None, None, "본문", "a" * 64)
     return EvidencePack("knowledge-v1", query, verdict, (item,) if verdict == "hit" else (), {"rag": "hit" if verdict == "hit" else "no_memory", "wiki": "none", "twin": "none"}, ())
 
 
 def test_render_uses_the_single_source_format() -> None:
-    assert render_citations(_pack(), "sources") == "[E1] RAG/note: research-trends/research-trends-20260818.md (2026-08-18, path)"
+    assert render_citations(_pack(), "sources") == "[E1] RAG/note: lab-notes/20260818.md (2026-08-18, path)"
 
 
 def test_validate_removes_ids_outside_pack() -> None:

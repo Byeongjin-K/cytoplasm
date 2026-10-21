@@ -257,7 +257,6 @@ def test_manifest_parser_accepts_comments_and_blank_lines() -> None:
     assert rows == [
         ("agent", "automation/rag_ingest", ".hermes/rag_ingest_runtime/rag_ingest", "required"),
         ("agent", "automation/regression_bank", ".hermes/regression_bank_runtime", "required", "default", "python", "bank_state.py,weekly_bank.py"),
-        ("agent", "automation/research_trends", ".hermes/research_trends_runtime", "required", "default", "python", "research_trends.py,research_trends_core.py,topics_import.py"),
         ("ops", "configs/rag", "personal-rag", "required", "rag", "tree"),
     ]
 

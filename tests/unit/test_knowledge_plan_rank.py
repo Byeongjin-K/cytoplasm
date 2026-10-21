@@ -9,10 +9,10 @@ def _item(*, ref: str, store: str = "rag", source_type: str = "conversation", da
     return EvidenceItem("", store, source_type, ref, ref, date, "day" if date else "none", score, True, None, None, content, "")
 
 
-def test_intent_and_research_trends_hint_are_deterministic() -> None:
-    plan = analyze_query("최근 주간 연구동향을 인용해서 설명", "cite")
+def test_intent_and_source_hint_are_deterministic() -> None:
+    plan = analyze_query("최근 배양 결과를 인용해서 설명", "cite")
     assert plan.purpose == "cite"
-    assert plan.source_hint == "note:research-trends/"
+    assert plan.source_hint is None
     assert analyze_query("cha라면 평소 어떻게 결정했지", "cite").purpose == "judgment"
     assert analyze_query("김민준 박사와 최근 협업", "cite").purpose == "entity"
     assert analyze_query("내 노트를 종합해 제안서를 작성", "cite").purpose == "synthesize"

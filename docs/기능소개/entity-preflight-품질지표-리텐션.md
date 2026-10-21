@@ -1,8 +1,10 @@
 # entity-preflight 품질지표와 로그 보존
 
+> 이력: 이 지표를 싣던 노드 주간 연구 동향 작업은 이후 노드에서 제거됐다. 주간 연구동향 보고서와 키워드는 공도리가 맡는다. 아래 주간 배선은 그와 함께 사라졌고, 집계·보존 모듈만 남았다.
+
 ## 무엇을
 
-기존 월요일 09:00 KST 연구동향 보고서에 `entity-preflight` 품질 지표와 임계값 경보를 함께 싣는다. 같은 실행에서 감사 로그를 주간 단위로 회전하고, 개인 원문이 있는 private 감사 로그는 30일, PII가 없는 operational 로그는 180일 정책을 적용한다.
+당시 월요일 09:00 KST 주간 보고서에 `entity-preflight` 품질 지표와 임계값 경보를 함께 싣는다. 같은 실행에서 감사 로그를 주간 단위로 회전하고, 개인 원문이 있는 private 감사 로그는 30일, PII가 없는 operational 로그는 180일 정책을 적용한다.
 
 ## 왜
 
@@ -12,7 +14,7 @@
 
 ### 정상 경로
 
-1. 월요일 연구동향 작업이 기존 일정대로 실행된다.
+1. 월요일 주간 보고 작업이 일정대로 실행됐다.
 2. operational JSONL의 PII-free `GateQualityRecord`만 복원해 자동 정규화율·clarify 요청률·미해결률·검증 실패율·p95 지연·우회 건수를 집계한다.
 3. 추적 정책 임계값을 넘은 항목은 같은 보고서의 `entity-preflight 품질 지표` JSON 섹션에 경보로 표시된다.
 4. private/operational 활성 로그는 timestamped `0600` 보관본으로 회전되고 각각 30일/180일보다 오래된 보관본이 제거된다.
@@ -27,8 +29,7 @@
 
 - 품질 집계·경보·operational 로더: `automation/entity_preflight/gate_metrics.py`
 - 단일 보존정책·회전: `automation/entity_preflight/audit.py`
-- 기존 주간 보고서 진입점: `automation/research_trends/research_trends.py`
 - 정책 결정: `.omo/plans/parallel-followup-sweep.md` D2 / G6
-- 회귀: `tests/unit/test_entity_preflight_{weekly_metrics,retention}.py`, `tests/unit/test_research_trends_entity_preflight.py`
+- 회귀: `tests/unit/test_entity_preflight_{weekly_metrics,retention}.py`
 
 승인 게이트는 관여하지 않는다. 이 기능은 관측·로컬 로그 보존만 수행하며 외부 쓰기 판정은 기존 entity-preflight 계약 그대로다.

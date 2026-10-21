@@ -16,7 +16,7 @@ _CALLOUT_DATE: Final = re.compile(
     r"^>\s*(?P<key>created|modified|updated|date)\s*:\s*(?P<value>.+?)\s*$",
     re.IGNORECASE,
 )
-_PATH_DATE: Final = re.compile(r"^research-trends-20\d{6}\.md$")
+_PATH_DATE: Final = re.compile(r"^20\d{6}\.md$")
 
 
 def _normalize_explicit_date(value: str) -> str | None:

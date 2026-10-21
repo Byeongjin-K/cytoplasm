@@ -132,7 +132,7 @@ budget 스킬은 시트를 경로가 아니라 ID로 읽으므로 이동 후에�
 
 | periodicity | 키 | 예 |
 |---|---|---|
-| weekly | ISO 주 `YYYY-Www` | `2026-W34_주간연구동향` |
+| weekly | ISO 주 `YYYY-Www` | `2026-W34_주간보고` |
 | monthly | `YYYY-MM` | `2026-08_예산요약` |
 | oneshot | 최초 생성일 `YYYY-MM-DD` (고정) | `2026-08-23_회의록-킥오프.md` |
 
