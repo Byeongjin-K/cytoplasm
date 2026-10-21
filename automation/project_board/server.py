@@ -15,8 +15,10 @@ configured tailnet origin, or carries that header at all, must come from an allo
 By owner decision (2026-10-14) that login is enough on the tailnet path — no token — unless
 ``dashboard.tailnet.token`` turns the token back on. The accepted risk: a local process on the
 node or the gateway can reach the loopback port and forge the header. A tokenless progress POST
-must carry a configured tailnet ``Origin``, so another site open in the owner's browser cannot
-tick a todo through ``tailscale serve``.
+must carry a tailnet ``Origin`` — a configured one, or the page's own (``https://`` + the ``Host``
+the browser addressed) — so another site open in the owner's browser cannot tick a todo through
+``tailscale serve``. The same-origin rule keeps saving working after the node moves to another
+tailnet host and the configured origin goes stale (2026-10-21: every save was refused with 403).
 """
 
 from __future__ import annotations
@@ -84,6 +86,11 @@ class _Handler(BaseHTTPRequestHandler):
         """Who acted, recorded on every check and archive: the tailnet login, else the node-local address."""
         login = self.headers.get(IDENTITY_HEADER) if self._via_tailnet() else None
         return login.strip().lower() if login else f"{LOCAL_ACTOR}({self.client_address[0]})"
+
+    def _same_origin(self, origin: str | None) -> bool:
+        """The page's own tailnet origin: the browser sent ``Origin`` for the very ``Host`` it addressed."""
+        host = (self.headers.get("Host") or "").strip().lower()
+        return bool(host) and origin is not None and origin.strip().lower() == f"https://{host}"
 
     def _tokenless(self) -> bool:
         """An allowlisted tailnet login stands in for the token unless the config asks for both."""
@@ -212,7 +219,8 @@ class _Handler(BaseHTTPRequestHandler):
             return
         form = parse_qs(self.rfile.read(length).decode("utf-8", errors="replace"))
         if self._tokenless():
-            if self.headers.get("Origin") not in self.tailnet_origins:
+            origin = self.headers.get("Origin")
+            if origin not in self.tailnet_origins and not (self._via_tailnet() and self._same_origin(origin)):
                 self._text(403, "forbidden")
                 return
             act(parts[1], form)
@@ -224,7 +232,8 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         allowed = {f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}", f"http://[::1]:{self.port}",
                    *self.tailnet_origins}
-        if not self._matches(supplied) or (origin is not None and origin not in allowed):
+        cross = origin is not None and origin not in allowed and not (self._via_tailnet() and self._same_origin(origin))
+        if not self._matches(supplied) or cross:
             self._text(403, "forbidden")
             return
         act(parts[1], form)
