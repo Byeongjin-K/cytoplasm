@@ -130,6 +130,7 @@ _OUT_NAME = re.compile(r"(?!\.)[A-Za-z0-9._-]{1,120}")
 
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
+         "Institutional mail address by name: mail-resolve <name> (webmail autocomplete, read-only).\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
          "Obsidian read: note-get <PARA path>.\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
@@ -509,6 +510,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if not args or len(args) > 2 or not _UID.fullmatch(args[0]) or (len(args) == 2 and args[1] != "--body"):
             raise Refused("mail-get needs <uid> [--body]")
         return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "get", *args], HOME
+    if name == "mail-resolve":
+        if len(args) != 1 or args[0].startswith("-"):
+            raise Refused("mail-resolve needs exactly one <name>")
+        return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "resolve", "--name", _text(args, 40)], HOME
     if name == "note-get":
         if len(args) != 1:
             raise Refused("note-get needs exactly one PARA-relative path")
