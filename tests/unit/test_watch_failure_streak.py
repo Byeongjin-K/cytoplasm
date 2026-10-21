@@ -18,7 +18,6 @@ _REPO = Path(__file__).resolve().parents[2]
 _SOURCE = _REPO / "skills" / "mail" / "scripts" / "watch_failure_streak.py"
 _SHARED_HELPER_ADOPTERS = (
     ("notes-weekly-organize", _REPO / "automation" / "notes_organize" / "notes_organize.py", 1),
-    ("budget-watch", _REPO / "skills" / "budget" / "scripts" / "budget_watch.py", 3),
 )
 
 

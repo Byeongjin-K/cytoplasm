@@ -38,7 +38,7 @@ class TestFalsePositiveCap:
             )
             for path in sorted(GOVERNED.glob("*/SKILL.md"))
         }
-        assert len(corpus) >= 18  # 코퍼스가 비어 공허하게 통과하면 안 된다
+        assert len(corpus) >= 17  # 코퍼스가 비어 공허하게 통과하면 안 된다
         flagged = []
         best = 0.0
         for (name_a, tokens_a), (name_b, tokens_b) in itertools.combinations(

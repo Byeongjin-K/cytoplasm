@@ -37,7 +37,6 @@ automation/regression_bank/deploy_lab_node.sh|raw|hermes cron remove $LEGACY_CRO
 automation/regression_bank/deploy_lab_node.sh|raw|install -d -m 700|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외
 automation/regression_bank/deploy_lab_node.sh|raw|rsync -a --delete|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외
 automation/regression_bank/deploy_lab_node.sh|raw|scp "$repo_root/automation/regression_bank/remote_bank_runner.sh"|lab-node pre-push harness, not a production deployer — AGENTS.md 배포 provenance 예외
-skills/budget/deploy.sh|raw|--name budget-watch --no-agent|FS3-pinned test tests/unit/test_watcher_deploy_coverage.py fixes this registration text
 skills/mail/deploy.sh|dest|.hermes/mailon-vendor-staging/mailon_runtime_release.sh|derived build staging — declared as v2:derived
 skills/mail/deploy.sh|dest|.hermes/mailon-vendor-staging/mailon_vendor_digest.sh|derived build staging — declared as v2:derived
 skills/mail/deploy.sh|raw|--name mail-daily-digest --no-agent|FS3-pinned test tests/unit/test_watcher_deploy_coverage.py fixes this registration text

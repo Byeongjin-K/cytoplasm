@@ -29,7 +29,7 @@ tests/
 - 게이트/보안 경계(dori-gate, `effect_approval` 카드 검증, deadlock/재협상)는 mutation 로직 변경 시 반드시 단위 테스트 동반. Hermes 도구 분류기의 회귀는 은퇴했으며 저장된 카드의 해시·소유자 검증은 유지한다.
 - 테스트는 실시크릿·실외부효과를 유발하지 않는다 — 격리(`E2E_TEST_MODE`/DUMMY 시크릿/서명 주입) 경로만 사용.
 - **워크스테이션 PATH 의 `gws` 는 소유자 실 자격증명이다 — 워처 테스트는 실행 seam 을 반드시 가짜로 바꾼다.**
-  `shutil.which("gws")` 로 바이너리를 찾는 스킬(todo·calendar·budget)의 승인 워처는 ✅ 뒤 쓰기까지
+  `shutil.which("gws")` 로 바이너리를 찾는 스킬(todo·calendar)의 승인 워처는 ✅ 뒤 쓰기까지
   같은 틱에서 실행하므로, ✅ 픽스처를 주고 runner/`run_gws` 를 주입하지 않으면 단위 테스트가 **실제 Google API 에 쓴다**.
   2026-09-11 실측: `test_todo_watch.py` 두 테스트가 2026-08-25(63f5456aa) 이후 전량 스위트마다 "합성 워처 과제"·"만료 직전"
   2건을 소유자 Google Tasks 에 등록해 1,387건이 쌓였다.

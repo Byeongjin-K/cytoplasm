@@ -30,7 +30,6 @@ APPROVAL_PRODUCERS: Final[Mapping[str, str]] = {
     "skills/calendar/scripts/calendar_approval.py::request_confirmation": "skills/calendar/scripts/calendar_approval.py",
     "skills/coordination/scripts/coordination_approval.py::request_confirmation": "skills/coordination/scripts/coordination_approval.py",
     "skills/mail/scripts/triage_approval.py::request_approval": "skills/mail/scripts/triage_approval_gate.py",
-    "skills/budget/scripts/budget_approval.py::request_approval": "skills/budget/scripts/budget_approval.py",
     "skills/patent-prep/scripts/patent_export.py::prepare_export": "skills/patent-prep/scripts/patent_export_approval.py",
     "automation/obsidian_write/gate_binding.py::request_approval": "automation/obsidian_write/gate_binding.py",
     "automation/obsidian_write/note_request_cli.py::cmd_request": "automation/obsidian_write/note_request_gate.py",
@@ -48,7 +47,6 @@ _LIFECYCLE_HOSTS: Final[Mapping[str, str]] = {
     "skills/calendar/scripts/calendar_approval.py": "skills/calendar/scripts/calendar_approval.py",
     "skills/coordination/scripts/coordination_approval.py": "skills/coordination/scripts/coordination_approval.py",
     "skills/mail/scripts/triage_approval_gate.py": "skills/mail/scripts/triage_approval.py",
-    "skills/budget/scripts/budget_approval.py": "skills/budget/scripts/budget_approval.py",
     "skills/patent-prep/scripts/patent_export_approval.py": "skills/patent-prep/scripts/patent_export.py",
     "automation/obsidian_write/gate_binding.py": "automation/obsidian_write/gate_binding.py",
     "automation/obsidian_write/note_request_gate.py": "automation/obsidian_write/note_request_gate.py",
@@ -66,7 +64,6 @@ _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
     "skills/calendar/scripts/calendar_approval.py::CalendarApprovalGate.post",
     "skills/coordination/scripts/coordination_approval.py::CoordinationApprovalGate.post",
     "skills/mail/scripts/triage_approval_gate.py::MailApprovalGate.post",
-    "skills/budget/scripts/budget_approval.py::BudgetApprovalGate.post",
     "skills/patent-prep/scripts/patent_export_approval.py::PatentApprovalGate.post",
     "automation/obsidian_write/note_request_gate.py::NoteApprovalGate.post",
     "automation/plaud_sync/approval_gate.py::PlaudApprovalGate.post",
@@ -77,7 +74,6 @@ _ADAPTER_POSTERS: Final[frozenset[str]] = frozenset({
 
 _POSTING_PRIMITIVE_IMPLEMENTATIONS: Final[frozenset[str]] = frozenset({
     "automation/repair/repair_ops_discord.py::RepairDiscordApi.post_approval",
-    "skills/budget/scripts/budget_confirm.py::post_approval_request",
     "skills/calendar/scripts/calendar_confirm.py::post_confirmation_message",
     "skills/coordination/scripts/coordinate_io.py::post_message",
     "skills/mail/scripts/triage_confirm.py::post_approval_request",
@@ -88,7 +84,6 @@ _EXEMPT: Final[Mapping[str, str]] = {
     "automation/selfskill_audit/report.py::send_report": "자체 스킬 감사 알림이며 승인 포인터를 생성하지 않는다.",
     "skills/mail/scripts/triage_cli.py::_remind_pending": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
     "automation/repair/repair_ops_reaction_watch.py::RepairApprovalWatcher._process.deliver": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
-    "skills/budget/scripts/budget_confirm.py::notify_result": "발송/취소 결과 안내(원 채널 스레드, 소유자 DM 폴백)이며 승인 요청 메시지를 저장하지 않는다.",
     "skills/calendar/scripts/calendar_confirm.py::send_owner_dm": "확정 결과 알림 DM이며 pending 승인 메시지를 만들지 않는다.",
     "skills/calendar/scripts/calendar_confirm.py::post_message": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
     "skills/calendar/scripts/confirm_reaction_watch.py::DiscordApi.post_message": "기존 승인 원문을 가리키는 무반응 최소정보 리마인더이며 새 승인 포인터를 저장하지 않는다.",
@@ -129,7 +124,6 @@ APPROVAL_KINDS: Final[Mapping[str, str]] = {
     "skills/calendar/scripts/calendar_approval.py::request_confirmation": "calendar",
     "skills/coordination/scripts/coordination_approval.py::request_confirmation": "coordination",
     "skills/mail/scripts/triage_approval.py::request_approval": "mail-reply",
-    "skills/budget/scripts/budget_approval.py::request_approval": "budget-mail",
     "skills/patent-prep/scripts/patent_export.py::prepare_export": "patent-export",
     "automation/obsidian_write/gate_binding.py::request_approval": "obsidian-write",
     "automation/obsidian_write/note_request_cli.py::cmd_request": "obsidian-write",
@@ -149,7 +143,6 @@ _RECORD_WRITERS: Final[Mapping[str, str]] = {
     "skills/calendar/scripts/calendar_approval.py::CalendarApprovalGate.commit": "skills/calendar/scripts/calendar_pending.py",
     "skills/coordination/scripts/coordination_approval.py::CoordinationApprovalGate.commit": "skills/coordination/scripts/coordination_pending.py",
     "skills/mail/scripts/triage_approval_gate.py::MailApprovalGate.commit": "skills/mail/scripts/triage_gate.py",
-    "skills/budget/scripts/budget_approval.py::BudgetApprovalGate.commit": "skills/budget/scripts/budget_gate.py",
     "skills/patent-prep/scripts/patent_export_approval.py::PatentApprovalGate.commit": "skills/patent-prep/scripts/patent_export_manifest.py",
     "automation/obsidian_write/note_request_gate.py::NoteApprovalGate.commit": "automation/obsidian_write/note_request.py",
     "automation/plaud_sync/approval_gate.py::PlaudApprovalGate.commit": "automation/plaud_sync/model.py",
@@ -163,9 +156,8 @@ _RECORD_WRITERS: Final[Mapping[str, str]] = {
 _PENDING_MIGRATION: Final[Mapping[str, str]] = {
     # Empty, and kept that way by test_pending_migration_entries_are_not_stale: an
     # entry here exempts its file from the surface-naming guard, so one that outlives
-    # its reason silently un-guards the file it was written about. The last entry
-    # (budget_core.py, spent once AS-2.2 neutralised the outbound wording) was exactly
-    # that case — see docs/qa/AS-3/as-3-3-spent-ledger-entry-red.txt.
+    # its reason silently un-guards the file it was written about. For a historical
+    # spent-entry example, see docs/qa/AS-3/as-3-3-spent-ledger-entry-red.txt.
 }
 
 # `/users/@me/channels` call sites that are NOT approval surfaces (SI-2 scope

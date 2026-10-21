@@ -160,12 +160,12 @@ def test_second_run_is_a_noop(tmp_path: Path) -> None:
 
 def test_removed_jobs_have_no_schedule_and_cleanup_is_required() -> None:
     rows = all_declarations(ROOT)
-    removed = {"memory-curator-watch", "memory-relocate-watch", "reminder-poller",
+    removed = {"budget-watch", "memory-curator-watch", "memory-relocate-watch", "reminder-poller",
                "daily-cost-report", "research-trends"}
     assert not any(row.kind == "cron" and row.destination in removed for row in rows)
     assert not any(row.source.startswith("automation/reminder_poller/") for row in rows)
     cleanup = [row for row in rows if row.owner == "automation/retired_jobs" and row.kind == "derived"]
-    assert len(cleanup) == 10
+    assert len(cleanup) == 11
     assert all(row.kind == "derived" and row.policy == "required" for row in cleanup)
     assert {row.destination for row in cleanup if row.destination.startswith("state/")} == set(retired_jobs.DATA)
 
@@ -178,12 +178,12 @@ def test_memory_cleanup_preserves_native_files_and_archived_state(tmp_path: Path
     archive = tmp_path / ".hermes/memory-curator/state.json"
     archive.parent.mkdir()
     archive.write_bytes(b"archived")
-    for name in retired_jobs.JOBS[:2]:
+    for name in ("memory-curator-watch", "memory-relocate-watch"):
         for unit in retired_jobs.unit_paths(tmp_path, name):
             unit.parent.mkdir(parents=True, exist_ok=True)
             unit.write_bytes(b"unit")
     # When
-    for name in retired_jobs.JOBS[:2]:
+    for name in ("memory-curator-watch", "memory-relocate-watch"):
         retired_jobs.install(tmp_path, name, _runner(tmp_path, []))
     # Then
     assert memory.read_bytes() == b"owner memory"
@@ -225,7 +225,7 @@ def test_release_observer_dispatches_every_cleanup_declaration(status: str) -> N
         result = _derived(row, ROOT, call, {})
         assert result.state == ("unknown" if status == "unexpected" else status)
     assert [call[2] for call in calls] == [
-        "memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends",
+        "budget-watch", "memory-curator-watch", "memory-relocate-watch", "reminder-poller", "research-trends",
         "reminder-poller", "reminder-poller", "wiki-confirm-watch",
         "wiki-confirm-watch", "interop-plugin", "interop-plugin",
     ]
@@ -353,3 +353,50 @@ def test_retired_wiki_watcher_removes_only_its_script_and_units(tmp_path: Path) 
     retired_jobs.install(tmp_path, "wiki-confirm-watch", _runner(tmp_path, []))
     assert all(not path.exists() for path in (*units, script))
     assert other.read_bytes() == b"keep"
+
+
+def test_budget_release_cleanup_removes_the_watcher_its_data_and_the_sheet_setting(tmp_path: Path) -> None:
+    # Given: the budget-watch timer the owner retired (2026-10-22) with its wrapper, its node data
+    # and the sheet id line in the secrets file, beside files that must stay.
+    units = retired_jobs.unit_paths(tmp_path, "budget-watch")
+    units[0].parent.mkdir(parents=True)
+    for path in units:
+        path.write_bytes(b"old unit")
+    removed = (tmp_path / ".hermes/scripts/budget_watch.py", tmp_path / ".hermes/budget/config.json",
+               tmp_path / ".hermes/budget-gate/drafts/ab12cd.json", tmp_path / ".hermes/budget-gate/send-log.jsonl",
+               tmp_path / "state/budget.db")
+    kept = (tmp_path / ".hermes/scripts/watch_failure_streak.py", tmp_path / "state/reminders-other.db",
+            tmp_path / ".hermes/budget-other.txt")
+    for path in (*removed, *kept):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    secrets = tmp_path / ".env.secrets"
+    secrets.write_bytes(b"A=1\nBUDGET_SHEET_ID=sheet-1\nexport BUDGET_SHEET_ID=sheet-2\nB=2\n")
+    secrets.chmod(0o600)
+    calls: list[tuple[str, ...]] = []
+    runner = _live_runner(calls, obeys=True)
+    assert retired_jobs.check(tmp_path, "budget-watch", runner) == "stale"
+
+    # When
+    retired_jobs.install(tmp_path, "budget-watch", runner)
+
+    # Then: the timer was stopped first; units, wrapper, data and the sheet line are gone.
+    assert ("systemctl", "--user", "disable", "--now", units[0].name) in calls
+    assert all(not path.exists() for path in (*units, *removed))
+    assert not (tmp_path / ".hermes/budget").exists() and not (tmp_path / ".hermes/budget-gate").exists()
+    assert all(path.read_bytes() == b"x" for path in kept)
+    assert secrets.read_bytes() == b"A=1\nB=2\n"
+    assert secrets.stat().st_mode & 0o777 == 0o600
+    assert retired_jobs.check(tmp_path, "budget-watch", runner) == "ok"
+
+
+def test_budget_cleanup_refuses_a_symlink_inside_its_data(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".hermes/budget-gate").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (home / ".hermes/budget-gate/drafts").symlink_to(outside)
+    assert retired_jobs.check(home, "budget-watch", _runner(home, [])) == "unknown"
+    with pytest.raises(ValueError):
+        retired_jobs.install(home, "budget-watch", _runner(home, []))
+    assert outside.is_dir()

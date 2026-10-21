@@ -15,7 +15,7 @@ from approval_conformance_inventory import APPROVAL_PRODUCERS
 _REPO: Final = Path(__file__).resolve().parents[2]
 #: Outbound effect -> repository producers, or the runtime boundary owning it.
 GATED_RULES: Final[dict[str, tuple[str, ...] | str]] = {
-    "gws_gmail_send": ("skills/budget/scripts/budget_approval.py::request_approval",),
+    "gws_gmail_send": "dori-gate owns direct Gmail sends; the budget skill, its only repository producer, was retired 2026-10-22",
     "gws_calendar_external_invite": (
         "skills/calendar/scripts/calendar_approval.py::request_confirmation",
         "skills/coordination/scripts/coordination_approval.py::request_confirmation",
@@ -58,8 +58,6 @@ PRODUCER_WATCHERS: Final[dict[str, tuple[str, str]]] = {
         "cron:coordination-confirm-watch", "tests/unit/test_coordination_confirm_reactions.py"),
     "skills/mail/scripts/triage_approval.py::request_approval": (
         "cron:mail-triage-watch", "tests/unit/test_mail_triage.py"),
-    "skills/budget/scripts/budget_approval.py::request_approval": (
-        "cron:budget-watch", "tests/unit/test_budget_watch_wrapper.py"),
     "automation/effect_request/cli.py::cmd_request": (
         "cron:effect-request-watch", "tests/unit/test_effect_request.py"),
     "automation/release_approval.py::cmd_request": (

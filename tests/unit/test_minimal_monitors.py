@@ -118,7 +118,7 @@ def test_weekend_quiet_is_not_a_failure(tmp_path) -> None:
 
 @pytest.mark.parametrize("relative", [
     "skills/mail/scripts/mail_sync_watch.py", "skills/mail/scripts/mail_triage_watch.py",
-    "skills/mail/scripts/mail_digest_watch.py", "skills/budget/scripts/budget_watch.py",
+    "skills/mail/scripts/mail_digest_watch.py",
     "automation/notes_organize/notes_organize.py",
 ])
 def test_wrappers_do_not_write_retired_ledger(relative) -> None:

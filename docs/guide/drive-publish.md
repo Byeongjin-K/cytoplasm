@@ -119,12 +119,8 @@ mail `compose --drive-share` 뿐이다([소개](../기능소개/메일-Drive-공
 `gate_only` 카테고리(patent)는 일반 발행 경로에서 `TaxonomyError`로 거부된다. 특허 산출물은
 전용 반출 게이트(`patent_export`)만 만질 수 있고, 이 규약은 그 폴더의 **위치**만 정한다.
 
-`budget`은 발행 파사드가 만드는 파일이 아니라 **살아있는 Google Sheet**가 놓이는 카테고리다.
-과제별×년도별 시트 목록은 repo 밖 레지스트리 `~/.hermes/budget/sheets.json`
-(`BUDGET_SHEETS_FILE` 오버라이드, 형식은 `configs/budget-sheets.example.json`)이 정의하며,
-각 시트는 `<root>/예산/<등록 년도>/`에 놓인다. 배치는 아래 마이그레이션 CLI가 수행하고,
-budget 스킬은 시트를 경로가 아니라 ID로 읽으므로 이동 후에도 조회·감시는 그대로 동작한다
-(운영 규칙: `docs/guide/과제비-운영.md`).
+`budget` 카테고리(폴더 `예산`)는 분류 어휘로 남아 있다. 이 폴더에 시트를 옮기던 budget 스킬은
+2026-10-22 형의 요청으로 제거됐고, 마이그레이션 CLI도 더는 예산 시트를 옮기지 않는다.
 
 ## 기간 키
 
@@ -238,9 +234,7 @@ python3 -m automation.drive_migrate_outputs --apply    # 계획 실행 (MIGRATE-
   지우지 않으면 캐시가 옛 폴더 id를 가리킨다.
 - `MIGRATE-ERROR …` — 실패. rc 1로 멈추며, 남은 항목은 손대지 않는다.
 
-예산 시트는 레지스트리(`BUDGET_SHEETS_FILE`, 기본 `~/.hermes/budget/sheets.json`)의 전 항목이
-각자의 **등록 년도** 폴더로, 레거시 `BUDGET_SHEET_ID`는 레지스트리에 없을 때 **현재 년도**
-폴더로 간다. 특허 보관 폴더는 `PATENT_ARCHIVE_FOLDER_ID`로 찾는다. 모두 ID 참조라 이동
+예산 시트는 옮기지 않는다(budget 스킬 제거, 2026-10-22). 특허 보관 폴더는 `PATENT_ARCHIVE_FOLDER_ID`로 찾는다. 모두 ID 참조라 이동
 후에도 코드·게이트는 그대로 동작하며, 재실행 시 이미 년도 폴더 안에 있는 시트는
 `already-migrated`로 건너뛴다(멱등).
 

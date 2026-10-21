@@ -54,7 +54,6 @@ no TTL and no reminder: mail-compose, coordination, obsidian-write
 | --- | --- | --- | --- | --- |
 | todo | 86400 | `skills/todo/scripts/todo_approval_store.py:15` | yes | `skills/todo/scripts/todo_confirm_reaction_watch.py:141` |
 | repair | 86400 | `automation/repair/repair_ops_reaction_watch.py:40` | yes | `automation/repair/repair_ops_reaction_watch.py:143` |
-| budget-mail | 86400 | `skills/budget/scripts/budget_confirm.py:173` | UNKNOWN | `skills/budget/scripts/budget_confirm.py` 확인함 |
 | calendar | UNKNOWN | `skills/calendar/scripts/calendar_confirm.py` 확인함 | yes | `skills/calendar/scripts/confirm_reaction_watch.py:323` |
 | mail-reply | 900 | `skills/mail/scripts/triage_gate_gmail.py:20` (Gmail 발송 게이트가 승인 레코드에 stamp 하는 `expires_at`) | UNKNOWN | `skills/mail/scripts/mail_triage_watch.py` 확인함 |
 | mail-compose | UNKNOWN | `skills/mail/scripts/triage_approval.py` 확인함 | UNKNOWN | `skills/mail/scripts/mail_triage_watch.py` 확인함 |

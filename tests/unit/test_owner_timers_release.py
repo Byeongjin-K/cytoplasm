@@ -12,7 +12,7 @@ import pytest
 from automation import release_approval
 from tests.unit import test_release_authorize as auth
 
-JOBS = ("budget-watch", "mail-attachment-drive-watch")
+JOBS = ("calendar-confirm-watch", "mail-attachment-drive-watch")
 
 
 @pytest.mark.parametrize("reaction,covered,head,jobs,expected", [
@@ -75,12 +75,12 @@ def test_apply_authorizes_list_before_node_marker_write(tmp_path: Path, auth_rc:
     manifest = repo / "automation/xw/deploy-manifest.txt"
     manifest.parent.mkdir()
     manifest.write_text(
-        "agent|automation/xw/x.py|budget-watch|v2:cron;runner=systemd;"
+        "agent|automation/xw/x.py|calendar-confirm-watch|v2:cron;runner=systemd;"
         "schedule=17 * * * *;script=x.py;deliver=local;mode=no-agent\n",
     )
     flag = Path(env["HOME"]) / ".hermes/release-flags/owner-timers-off"
     flag.parent.mkdir(parents=True)
-    flag.write_bytes(b"budget-watch\n")
+    flag.write_bytes(b"calendar-confirm-watch\n")
     # When
     result = subprocess.run(["bash", str(repo / "automation/deploy_all.sh"), "--apply"],
                             env=env, capture_output=True, text=True, check=False, timeout=30)
@@ -132,5 +132,5 @@ def test_remote_approval_snapshot_contains_skill_job_declarations(tmp_path: Path
     assert result.returncode == 0, result.stderr
     with tarfile.open(archive) as snapshot:
         names = snapshot.getnames()
-    assert "skills/budget/deploy-manifest.txt" in names
+    assert "skills/calendar/deploy-manifest.txt" in names
     assert "skills/mail/deploy-manifest.txt" in names

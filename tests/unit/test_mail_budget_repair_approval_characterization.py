@@ -1,10 +1,9 @@
-"""Characterization tests pinning the CURRENT observable contracts of the three
+"""Characterization tests pinning the CURRENT observable contracts of the two
 owner-approval gates that already carry a partial duplicate guard: mail triage
-drafts (has_draft_for + repost-only-if-blank), budget drafts (SQLite
-claim_change + repost-only-if-blank), and the repair pending store (same-ticket
-guard). Pinned so the upcoming shared "exactly one live approval message per
-logical key" module cannot silently change them; "characterized, not endorsed"
-marks behavior locked as-is, not approved.
+drafts (has_draft_for + repost-only-if-blank) and the repair pending store
+(same-ticket guard). The budget gate was retired 2026-10-22. Pinned so the upcoming
+shared "exactly one live approval message per logical key" module cannot silently
+change them; "characterized, not endorsed" marks behavior locked as-is, not approved.
 """
 
 from __future__ import annotations
@@ -21,13 +20,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "skills" / "mail" / "scripts"))
-sys.path.insert(0, str(_REPO / "skills" / "budget" / "scripts"))
 
-import budget_cli  # noqa: E402
-import budget_confirm  # noqa: E402
-import budget_core  # noqa: E402
-import budget_gate  # noqa: E402
-import budget_store  # noqa: E402
 import triage_cli  # noqa: E402
 import triage_confirm  # noqa: E402
 import triage_gate  # noqa: E402
@@ -58,11 +51,6 @@ MAIL_DRAFT_KEYS = [
     "sha256", "status", "subject", "surface", "to", "uid",
     "uid_opaque",
 ]
-BUDGET_DRAFT_KEYS = [
-    "argv", "body", "changes", "claim_key", "created", "id", "mail_to",
-    "message_id", "new_hash", "origin_channel_id", "origin_message_id",
-    "prev_hash", "project", "sha256", "status", "subject", "year",
-]
 # RTS-4 added the four content-binding keys: the record must be able to reproduce
 # the approval message, and the message now names the changed files and the digest.
 REPAIR_PENDING_KEYS = [
@@ -70,9 +58,6 @@ REPAIR_PENDING_KEYS = [
     "message_id", "nonce", "patch_name", "patch_sha256", "patch_source_path", "policy_version",
     "render_version", "surface", "ticket_id",
 ]
-
-BUDGET_ROWS_A = [["인건비", "100", "10", "90", "2026-07-14"]]
-BUDGET_ROWS_B = [["인건비", "100", "20", "80", "2026-07-15"]]
 
 
 # ---------------------------------------------------------------------- mail
@@ -188,133 +173,6 @@ def test_mail_watch_reposts_a_blank_message_id_without_persisting_it(
         f"REPOSTED draft={record['id']} message={POSTED_MESSAGE_ID}\n"
     )
     assert _stored(drafts, record["id"])["message_id"] == ""
-
-
-# -------------------------------------------------------------------- budget
-
-def _budget_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Confine every budget gate path to tmp_path; never ~/.hermes, never gws."""
-    monkeypatch.setenv("BUDGET_GATE_DIR", str(tmp_path / "budget-gate"))
-    monkeypatch.setenv("BUDGET_DB", str(tmp_path / "budget.db"))
-    return tmp_path / "budget-gate" / "drafts"
-
-
-def _new_budget_draft() -> dict:
-    return budget_gate.create_draft(
-        changes=[budget_core.Change("재료비", "집행액", "0", "50")],
-        subject="s", body="b", recipient="owner@example.invalid",
-        prev_hash="p" * 64, new_hash="n" * 64, claim_key="k-1",
-    )
-
-
-def _write_sheet(path: Path, rows: list[list[str]]) -> Path:
-    values = [["[규칙]"], ["1"], ["2"], ["3"], [], list(budget_core.HEADER_EXPECTED), *rows]
-    payload = {"majorDimension": "ROWS", "values": values}
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    return path
-
-
-def _run_budget_watch(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    posted: list[str] = []
-
-    def post(draft: dict) -> str:
-        posted.append(draft["id"])
-        return POSTED_MESSAGE_ID
-
-    def refuse(_draft: dict) -> str:
-        raise budget_gate.GateError("승인 없음", 1)
-
-    monkeypatch.delenv("E2E_TEST_MODE", raising=False)
-    monkeypatch.setattr(budget_confirm, "owner_id", lambda: OWNER_ID)
-    monkeypatch.setattr(budget_cli, "_post_draft_for_approval", post)
-    monkeypatch.setattr(budget_confirm, "resolve_reaction", refuse)
-    monkeypatch.setattr(budget_cli, "cmd_snapshot", lambda _args: 0)
-    assert budget_cli.cmd_watch(argparse.Namespace(no_post=True)) == 0
-    return posted
-
-
-def test_budget_draft_record_has_exactly_these_fields(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Given: a budget gate rooted entirely under tmp_path
-    drafts = _budget_env(tmp_path, monkeypatch)
-    # When: the change-detection path freezes one request-mail draft
-    record = _new_budget_draft()
-    # Then: the record carries exactly this field set, byte-identical on disk
-    assert sorted(record) == BUDGET_DRAFT_KEYS
-    assert _stored(drafts, record["id"]) == record
-    assert record["message_id"] == "" and record["status"] == "pending"
-
-
-def test_budget_set_message_id_merges_and_persists_without_rehashing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Given: a freshly created, unposted budget draft
-    drafts = _budget_env(tmp_path, monkeypatch)
-    record = _new_budget_draft()
-    # When: the approval message id is bound to it
-    updated = budget_gate.set_message_id(record, "m-1")
-    # Then: only message_id changes, returned and stored shapes are identical, and
-    # the content hash is NOT recomputed (characterized, not endorsed)
-    assert updated == {**record, "message_id": "m-1"}
-    assert _stored(drafts, record["id"]) == updated
-    assert updated["sha256"] == record["sha256"]
-
-
-def test_budget_snapshot_refuses_a_second_claim_of_the_same_change_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Given: a stored baseline and a change whose claim key is already taken
-    _budget_env(tmp_path, monkeypatch)
-    sheet = _write_sheet(tmp_path / "sheet.json", BUDGET_ROWS_A)
-    monkeypatch.setenv("BUDGET_SHEET_FILE", str(sheet))
-    assert budget_cli._snapshot(post=False) == 0  # noqa: SLF001
-    _ = capsys.readouterr()
-    _write_sheet(sheet, BUDGET_ROWS_B)
-    db = tmp_path / "budget.db"
-    baseline = budget_store.latest_snapshot(db)
-    assert baseline is not None
-    new_rows = budget_core.data_rows(
-        budget_core.parse_balance_payload(sheet.read_text(encoding="utf-8"))
-    )
-    key = budget_core.claim_key(baseline[0], budget_core.snapshot_hash(new_rows))
-    assert budget_store.claim_change(db, key, "t0") is True
-    # When: the snapshot pipeline reaches the same change again
-    assert budget_cli._snapshot(post=False) == 0  # noqa: SLF001
-    # Then: it refuses to draft, advances the snapshot only, and prints this token
-    assert capsys.readouterr().out == (
-        f"ALREADY-CLAIMED key={key} (스냅샷만 전진, 초안 중복 없음)\n"
-    )
-    assert budget_gate.list_drafts() == []
-
-
-def test_budget_watch_leaves_a_draft_that_already_has_a_message_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Given: a pending draft already bound to an approval message
-    _budget_env(tmp_path, monkeypatch)
-    budget_gate.set_message_id(_new_budget_draft(), "m-1")
-    # When: the production watch tick runs with no owner reaction
-    posted = _run_budget_watch(monkeypatch)
-    # Then: nothing is reposted and nothing is printed
-    assert posted == []
-    assert capsys.readouterr().out == ""
-
-
-def test_budget_watch_reposts_a_blank_message_id_and_persists_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Given: a pending draft that was never posted
-    drafts = _budget_env(tmp_path, monkeypatch)
-    record = _new_budget_draft()
-    # When: the production watch tick runs with no owner reaction
-    posted = _run_budget_watch(monkeypatch)
-    # Then: it reposts once, prints exactly this token, and persists the new id
-    assert posted == [record["id"]]
-    assert capsys.readouterr().out == (
-        f"REPOSTED draft={record['id']} message={POSTED_MESSAGE_ID}\n"
-    )
-    assert _stored(drafts, record["id"])["message_id"] == POSTED_MESSAGE_ID
 
 
 # -------------------------------------------------------------------- repair

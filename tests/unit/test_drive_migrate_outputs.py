@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import json
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -120,7 +119,6 @@ def invoke(
         ["--apply"] if apply else [],
         client=client(tmp_path, fake),
         environ={} if env is None else env,
-        today=date(2026, 8, 24),
     )
     captured = capsys.readouterr()
     return code, captured.out, captured.err
@@ -146,7 +144,6 @@ def test_dry_run_snapshot_is_sorted_and_has_zero_mutation_argv(
         "MIGRATE-PLAN move id=b from=report/2026-02 to=autophagy/주간동향/2026\n"
         "MIGRATE-PLAN rename id=a from=20260101_alpha.txt to=2026-01-01_20260101_alpha.txt\n"
         "MIGRATE-PLAN rename id=b from=beta.txt to=2026-02-03_beta.txt\n"
-        "MIGRATE-PLAN skip reason=missing-env:BUDGET_SHEET_ID target=budget\n"
         "MIGRATE-PLAN skip reason=missing-env:PATENT_ARCHIVE_FOLDER_ID target=patent\n"
         "MIGRATE-PLAN trash id=legacy type=empty-folder name=report\n"
         "MIGRATE-PLAN trash id=month type=empty-folder name=2026-02\n"
@@ -202,78 +199,19 @@ def test_date_extraction_and_nfc(
         assert f"to={expected}" in stdout
 
 
-def test_budget_moves_into_its_year_folder_without_rename(
+def test_a_budget_sheet_is_left_where_it_is_after_the_budget_skill_retired(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # The budget skill and its sheet move were retired (owner 2026-10-22); the owner's
+    # sheet must not be touched even when the old setting is still present.
     fake = FakeGws([file("sheet", "예산 원장", "root")])
 
-    code, _, _ = invoke(tmp_path, fake, capsys, apply=True, env={"BUDGET_SHEET_ID": "sheet"})
+    code, stdout, _ = invoke(tmp_path, fake, capsys, apply=True, env={"BUDGET_SHEET_ID": "sheet"})
 
     assert code == 0
-    budget = next(
-        row for row in fake.rows.values() if row["name"] == "예산" and row["mimeType"] == _FOLDER
-    )
-    year = next(
-        row
-        for row in fake.rows.values()
-        if row["name"] == "2026" and row["mimeType"] == _FOLDER and row["parent"] == budget["id"]
-    )
-    move = next(call for call in fake.calls if '"fileId": "sheet"' in " ".join(call))
-    assert json.loads(move[move.index("--params") + 1]) == {
-        "fileId": "sheet",
-        "addParents": year["id"],
-        "removeParents": "root",
-    }
-    assert not any(
-        '"fileId": "sheet"' in " ".join(call) and "--json" in call for call in fake.calls
-    )
-    assert fake.rows["sheet"]["parent"] == year["id"]
-
-
-def test_registry_sheets_move_into_their_year_folders_and_stay_idempotent(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    registry = tmp_path / "sheets.json"
-    registry.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "projects": {
-                    "autophagy": {"2025": "sheet-old"},
-                    "무인굴착기": {"2026": "sheet-ex"},
-                },
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    fake = FakeGws(
-        [file("sheet-old", "과제비 원장", "root"), file("sheet-ex", "굴착기 예산", "root")]
-    )
-    env = {"BUDGET_SHEETS_FILE": str(registry), "BUDGET_SHEET_ID": "sheet-old"}
-
-    code, stdout, _ = invoke(tmp_path, fake, capsys, apply=True, env=env)
-
-    assert code == 0
-    budget = next(
-        row for row in fake.rows.values() if row["name"] == "예산" and row["mimeType"] == _FOLDER
-    )
-    years = {
-        row["name"]: row
-        for row in fake.rows.values()
-        if row["mimeType"] == _FOLDER and row.get("parent") == budget["id"]
-    }
-    assert fake.rows["sheet-old"]["parent"] == years["2025"]["id"]
-    assert fake.rows["sheet-ex"]["parent"] == years["2026"]["id"]
-    assert stdout.count("to=autophagy/예산/") == 2
-
-    before = len(fake.mutation_calls())
-    code, stdout, _ = invoke(tmp_path, fake, capsys, apply=True, env=env)
-
-    assert code == 0
-    assert len(fake.mutation_calls()) == before
-    assert stdout.count("reason=already-migrated") == 2
-
+    assert fake.rows["sheet"]["parent"] == "root"
+    assert not any('"fileId": "sheet"' in " ".join(call) for call in fake.calls)
+    assert "budget" not in stdout
 
 def test_patent_folder_moves_and_renames_with_id_preserved(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -319,7 +257,6 @@ def test_missing_env_skips_and_continues_legacy_apply(
     code, stdout, _ = invoke(tmp_path, fake, capsys, apply=True)
 
     assert code == 0
-    assert "missing-env:BUDGET_SHEET_ID" in stdout
     assert "missing-env:PATENT_ARCHIVE_FOLDER_ID" in stdout
     assert fake.rows["doc"]["parent"] != "legacy"
 
@@ -346,11 +283,10 @@ def test_apply_is_idempotent_on_second_run(
         [
             folder("legacy", "doctype"),
             file("doc", "memo.txt", "legacy"),
-            file("sheet", "Ledger", "root"),
             folder("patent-id", "archive"),
         ]
     )
-    env = {"BUDGET_SHEET_ID": "sheet", "PATENT_ARCHIVE_FOLDER_ID": "patent-id"}
+    env = {"PATENT_ARCHIVE_FOLDER_ID": "patent-id"}
 
     assert invoke(tmp_path, fake, capsys, apply=True, env=env)[0] == 0
     before = len(fake.mutation_calls())

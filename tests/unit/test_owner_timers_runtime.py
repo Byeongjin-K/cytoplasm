@@ -139,8 +139,8 @@ def test_host_list_projects_off_before_marker_exists(tmp_path: Path, monkeypatch
         "automation/owner_timers/deploy-manifest.txt",
         "agent|automation/owner_timers|.hermes/owner-timers/off|v2:derived;algorithm=owner-timers-v1\n",
     ) + parse_declaration_file(
-        "automation/budget/deploy-manifest.txt",
-        "agent|automation/budget/x.py|budget-watch|v2:cron;runner=systemd;"
+        "automation/xcal/deploy-manifest.txt",
+        "agent|automation/xcal/x.py|calendar-confirm-watch|v2:cron;runner=systemd;"
         "schedule=17 * * * *;script=x.py;deliver=local;mode=no-agent\n",
     )
     monkeypatch.setattr(deploy_all_observe, "all_declarations", lambda _root: declarations)
@@ -150,9 +150,9 @@ def test_host_list_projects_off_before_marker_exists(tmp_path: Path, monkeypatch
         calls.append((account, args))
         return (0, "stale") if args[0] == "owner-timers" else (64, "")
     # When
-    lines = deploy_all_observe.collect(tmp_path, runner, "ops", owner_timers_off="budget-watch")
+    lines = deploy_all_observe.collect(tmp_path, runner, "ops", owner_timers_off="calendar-confirm-watch")
     # Then
     assert not any(args[0] == "timer" for _account, args in calls)
     assert any(line.startswith("OBS|artifact|derived|agent|.hermes/owner-timers/off|"
                                "automation/owner_timers|required|none|stale|") for line in lines)
-    assert not any("|cron|agent|budget-watch|" in line for line in lines)
+    assert not any("|cron|agent|calendar-confirm-watch|" in line for line in lines)

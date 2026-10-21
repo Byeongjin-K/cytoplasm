@@ -28,7 +28,6 @@ machine-consumed form of this table and must cover the on-disk set.
 
     | skill           | verdict | evidence                                        |
     |-----------------|---------|-------------------------------------------------|
-    | budget          | UNSAFE  | successful mail leg replaces Gmail with a gws stub, so inclusion would only assert the stub call |
     | calendar        | UNSAFE  | successful insert/delete legs replace Calendar with a gws stub; already run by test_calendar_scenario.py |
     | coordination    | UNSAFE  | Discord CLI leg proves only tokenless refusal; no faithful transport execution |
     | doctype         | UNSAFE  | document prose and extraction are answers from a local Codex executable stub |
@@ -88,7 +87,6 @@ _EXECUTED: Final = (
 # scenario that is in neither mapping fails `test_every_scenario_is_classified`
 # rather than being silently skipped.
 _HELD_BACK: Final[Mapping[str, str]] = {
-    "budget": "successful Gmail leg substitutes a local gws stub",
     "calendar": "successful Calendar write/delete legs substitute a local gws stub",
     "coordination": "Discord leg stops at tokenless refusal",
     "doctype": "Codex prose and extraction come from a local executable stub",

@@ -3,7 +3,7 @@
 # autophagy-agents
 
 **연구자 한 사람이 자기 노드에서 돌리는 개인 에이전트 시스템.**<br>
-메일·일정·회의록·과제비·노트를 대신 처리하지만, **내가 ✅ 를 누르지 않은 일은 절대 하지 않습니다.**
+메일·일정·회의록·노트를 대신 처리하지만, **내가 ✅ 를 누르지 않은 일은 절대 하지 않습니다.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](#필요한-것)
@@ -109,7 +109,6 @@ action_hash : sha256:7f3c…a19b
 | `recall` | 개인 RAG 검색. 특허 민감 자료는 검증된 경로에서만 | 읽기 전용 |
 | `wiki` | 개인 위키와 의사결정 트윈(판단 근거) 관리 | ✅ 쓰기 |
 | `doctype` | 문서를 어디에 저장할지 결정론적으로 라우팅 | ✅ 저장 |
-| `budget` | 과제비 원장 조회와 변경 감지, 지출 리포트 | — |
 | `todo` | 할 일 등록·조회 | ✅ 등록 |
 | `proposal` | 제안서 워크스페이스와 HWPX 문서 렌더링 | ✅ 산출 |
 | `procurement` | 구매·조달 절차 안내와 서류 준비 | ✅ 산출 |

@@ -13,7 +13,6 @@ _REPO: Final = Path(__file__).resolve().parents[2]
 _GOVERNED_SKILLS: Final[tuple[str, ...]] = (
     "mail",
     "calendar",
-    "budget",
     "todo",
     "wiki",
     "coordination",
@@ -31,7 +30,6 @@ _EXEMPT: Final[dict[str, str]] = {}
 _MODULES: Final[dict[str, str]] = {
     "mail": "mail_runtime",
     "calendar": "calendar_governed",
-    "budget": "budget_governed",
     "todo": "todo_governed",
     "wiki": "wiki_governed",
     "coordination": "coordination_governed",
@@ -47,7 +45,6 @@ _MODULES: Final[dict[str, str]] = {
 _CLIS: Final[dict[str, str]] = {
     "mail": "triage_cli.py",
     "calendar": "calendar_cli.py",
-    "budget": "budget_cli.py",
     "todo": "todo_cli.py",
     "wiki": "wiki_cli.py",
     "coordination": "coordinate_cli.py",

@@ -2,7 +2,7 @@
 
 `tests/unit/test_skill_gate_rate_limit.py` 가 같은 결함을 배포 게이트에서 이미 고정했다.
 그런데 그 수정은 `automation/skill_gate.py` 한 곳에만 적용됐고, **소유자의 ✅/⛔ 를 읽어
-실제로 반영하는** 스킬 쪽 confirm 게이트 셋(wiki·mail·budget)은 맨 `urlopen` 그대로였다.
+실제로 반영하는** 스킬 쪽 confirm 게이트 둘(wiki·mail)은 맨 `urlopen` 그대로였다.
 
 2026-08-03 실측으로 그 대가가 드러났다. `wiki-confirm-watch` 는 1분 주기로 도는데,
 매 tick 이 대기 중인 초안마다 메시지 1회 + 리액션 2회를 조회한다. per-route 버킷이
@@ -34,16 +34,15 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
-for _skill in ("wiki", "mail", "budget"):
+for _skill in ("wiki", "mail"):
     sys.path.insert(0, str(_REPO / "skills" / _skill / "scripts"))
 
-import budget_confirm  # noqa: E402
 import triage_confirm  # noqa: E402
 import wiki_gate  # noqa: E402
 
 #: 소유자 결정을 읽는 게이트 전부. 하나라도 빠지면 그 표면만 조용히 결정을 잃는다.
-_GATES = (wiki_gate, triage_confirm, budget_confirm)
-_IDS = ("wiki", "mail", "budget")
+_GATES = (wiki_gate, triage_confirm)
+_IDS = ("wiki", "mail")
 
 
 class _Response:

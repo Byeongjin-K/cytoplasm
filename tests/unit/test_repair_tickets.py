@@ -201,7 +201,7 @@ def test_service_opens_a_new_card_when_the_deduplicated_card_is_closed(tmp_path:
     service = RepairService(
         kanban, FakePrivateLogs(), RepairRegistry(tmp_path / "repair-state.json"), kanban.is_closed
     )
-    event = RepairEvent(source="cron", location="budget-watch", raw_log="ValueError: boom")
+    event = RepairEvent(source="cron", location="mail-triage-watch", raw_log="ValueError: boom")
     first = service.record(event)
 
     # When: the owner closes that card and the same failure recurs.
@@ -221,7 +221,7 @@ def test_superseding_card_names_the_closed_card_and_asks_a_distinct_dedup_key(tm
     service = RepairService(
         kanban, FakePrivateLogs(), RepairRegistry(tmp_path / "repair-state.json"), kanban.is_closed
     )
-    event = RepairEvent(source="cron", location="budget-watch", raw_log="ValueError: boom")
+    event = RepairEvent(source="cron", location="mail-triage-watch", raw_log="ValueError: boom")
     first = service.record(event)
     kanban.closed.add(first.ticket_id)
 

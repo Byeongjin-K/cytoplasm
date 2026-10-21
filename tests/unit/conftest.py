@@ -103,7 +103,6 @@ _NODE_ENV = {
         (
             "APPROVAL_LOG_PATH",
             "EXTERNAL_EFFECT_APPROVAL_LOG",
-            "BUDGET_APPROVAL_LOG",
             "CALENDAR_APPROVAL_LOG",
             "TODO_APPROVAL_LOG",
             "TRIAGE_APPROVAL_LOG",

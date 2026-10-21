@@ -1,6 +1,6 @@
-"""승인 요청 CLI 마다 게시 직후 `APPROVAL-THREAD` 줄을 내는지 고정한다(todo·calendar·budget·coordination).
+"""승인 요청 CLI 마다 게시 직후 `APPROVAL-THREAD` 줄을 내는지 고정한다(todo·calendar·coordination).
 
-mail 은 `test_mail_approval_thread_link.py` 가 소유한다. 여기 네 스킬은 2026-09-23 todo 답장이
+mail 은 `test_mail_approval_thread_link.py` 가 소유한다. 여기 세 스킬은 2026-09-23 todo 답장이
 "생성된 승인 스레드에서 ✅" 로만 끝나 소유자가 스레드를 찾아야 했던 사건과 같은 결함을 닫는다.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO))
-for _skill in ("todo", "calendar", "budget", "coordination"):
+for _skill in ("todo", "calendar", "coordination"):
     sys.path.insert(0, str(_REPO / "skills" / _skill / "scripts"))
 
 GUILD = "300000000000000001"
@@ -58,22 +58,6 @@ def test_calendar_post_confirm_prints_the_request_thread(
     assert calendar_cli.cmd_post_confirm(argparse.Namespace(draft="c1")) == 0
     # Then: the thread link follows the PENDING-OWNER marker
     assert capsys.readouterr().out.splitlines()[-1] == f"APPROVAL-THREAD draft=c1 url={URL}"
-
-
-def test_budget_posted_draft_prints_the_request_thread(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Given: a budget draft whose approval post bound a thread
-    budget_cli = import_module("budget_cli")
-    monkeypatch.setattr(budget_cli, "_post_draft_for_approval", lambda draft: "9")
-    monkeypatch.setattr(budget_cli.budget_gate, "set_message_id", lambda draft, message_id: None)
-    monkeypatch.setattr(budget_cli.budget_gate, "load_draft", lambda draft_id: dict(COORDS, id=draft_id))
-    # When: the posting tail runs
-    budget_cli.post_and_report({"id": "b1", "sha256": "s"}, changes=2)
-    # Then: DRAFT-CREATED is followed by the thread link
-    out = capsys.readouterr().out.splitlines()
-    assert out[0] == "DRAFT-CREATED id=b1 sha256=s changes=2 message=9"
-    assert out[1] == f"APPROVAL-THREAD draft=b1 url={URL}"
 
 
 def test_coordination_pending_owner_prints_the_request_thread(

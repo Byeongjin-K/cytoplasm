@@ -47,18 +47,18 @@ skills/<name>/
 - 참조 구현: [hello-autophagy/scripts/scenario.sh](hello-autophagy/scripts/scenario.sh).
 
 ## 스킬 목록 (17 기능 + hello-autophagy 데모 = 18 디렉터리)
-calendar · coordination · mail · budget · repair · patent-prep · proposal · report ·
+calendar · coordination · mail · repair · patent-prep · proposal · report ·
 prompt · meeting · recall · wiki · todo · doctype · procurement · speechtotext ·
 plaud · (hello-autophagy=데모).
 
 ## 예외 매트릭스 (표준 계약 밖)
-- 승인 워처 보유: calendar(외부 참석자 초대) · coordination · mail(triage+digest 2개) · budget · patent-prep(export confirm). wiki의 새 배포·확인 워처는 은퇴했으며 저장 형식·지식 조회 라이브러리만 보존한다.
+- 승인 워처 보유: calendar(외부 참석자 초대) · coordination · mail(triage+digest 2개) · patent-prep(export confirm). wiki의 새 배포·확인 워처는 은퇴했으며 저장 형식·지식 조회 라이브러리만 보존한다.
 - CLI 명명 예외: mail=`triage_cli.py`, coordination=`coordinate_cli.py`, procurement=`procure_cli.py`+`procure_registry_cli.py`(2개), recall=`recall_cli.py`+`recall_reference.py`(2개 — 후자는 소유자 참고자료 폴더 조회. `recall_cli.py` 가 250 pure-LOC 상한에 정확히 붙어 있어 서브커맨드를 넣으면 F2 등록부에 자기 예외를 쌓게 된다).
 - meeting: 워처 대신 게이트웨이 **플러그인 훅**(`meeting/plugin/plugin.yaml`).
 - plaud: **읽기 전용** 상태 보고만(`plaud_cli.py status`, stdlib 전용). 워처·승인 카드·재게시는 스킬이 아니라 `automation/plaud_sync/`(홈 배포물 `plaud_sync_watch.py`)가 소유한다 — 스킬은 그 상태 파일을 읽을 뿐이다.
 - repair: repo-local CLI 아님 — `~/.hermes/repair/automation/repair/repair_cli.py` 외부 런타임 호출.
 - wiki: 본문·제목은 owner DM 밖 유출 금지. 트윈 판단은 `review_after` 만료 시 자율 행동에 사용 금지(`docs/guide/decision-twin-스키마.md`).
-- automation 공유 코드: calendar/coordination/mail/budget/wiki/meeting/todo는 `automation.interop.*`(injection_adapter · discord_transport · coordination)에 의존 — interop 시그니처 변경 시 동반 갱신. Hermes 전용 도구 호출 게이트는 은퇴했다.
+- automation 공유 코드: calendar/coordination/mail/wiki/meeting/todo는 `automation.interop.*`(injection_adapter · discord_transport · coordination)에 의존 — interop 시그니처 변경 시 동반 갱신. Hermes 전용 도구 호출 게이트는 은퇴했다.
 - **지식 읽기 경계(R3)**: 스킬은 Obsidian/wiki/RAG를 직접 검색하지 않고 `automation.knowledge` 파사드만 호출한다. wiki 자체 CLI, rag_ingest, twin_* 쓰기 측만 예외다. `search_memory()`/`query_notes()`/`consult()` 직접 호출과 스킬별 `[En]` 출처 렌더 구현은 금지하며 `tests/unit/test_knowledge_adoption_conformance.py`가 강제한다. 정본은 [지식 계층 규약](../docs/guide/지식-계층-규약.md)이다.
 
 ## 이 디렉터리의 필수 규칙

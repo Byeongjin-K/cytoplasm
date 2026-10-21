@@ -203,7 +203,7 @@ roster principal로 해석하고 `sender_id`와 exact-match한다. 관리자 pri
 - **속도 제한(Rate Limit)**: Discord API의 429 응답 수신 시, `Retry-After` 헤더를 준수하여 백오프(Backoff)를 수행해야 합니다.
 
 ### 3.4. 승인 격리 (Approval Isolation)
-- **승인 표면은 두 가지**: **스킬 공급망 승인**(skill-deploy + Peer Attestation, skill-publish, managed 활성화)은 연구자별 **개인 서버**의 `#approvals`에서 수행하여 소유자별로 격리합니다. **소유자 전용 승인**(메일·과제비·특허 반출·수리·Drive 아카이빙 등)은 **행위 봇과 소유자의 DM**입니다. 표면은 `automation/interop/approval_surface.py`가 단일 결정하고 conformance 테스트가 강제합니다. 이관 진행 중(AS) — 순서는 `.omo/plans/approval-surface-ssot.md`.
+- **승인 표면은 두 가지**: **스킬 공급망 승인**(skill-deploy + Peer Attestation, skill-publish, managed 활성화)은 연구자별 **개인 서버**의 `#approvals`에서 수행하여 소유자별로 격리합니다. **소유자 전용 승인**(메일·특허 반출·수리·Drive 아카이빙 등)은 **행위 봇과 소유자의 DM**입니다. 표면은 `automation/interop/approval_surface.py`가 단일 결정하고 conformance 테스트가 강제합니다. 이관 진행 중(AS) — 순서는 `.omo/plans/approval-surface-ssot.md`.
 - **Peer는 자기 두 번째 봇**: 배포 attestation의 peer는 타 연구자가 아닌 자기 노드의 peer 봇이므로, 자기 agent와 peer가 함께 있는 개인 서버 `#approvals`만으로 2자 통제가 충족됩니다. 공유 Lab에는 `#approvals`가 없습니다.
 - **채널 식별**: 해석은 `automation/interop/approval_directory.py` 한 곳에서만 이뤄집니다. 설정 ID가 있으면 이름과 무관하게 그 ID를 쓰며, 설정이 없는 레거시 설치만 캐시 → 유일한 `approvals` 이름 검색을 사용합니다. 공급망 표면은 type=0과 설정 ID(또는 호출자가 명시한 공급망 ID) 일치로 검증하고, DM은 type=1·소유자 수신을 확인합니다. 저장된 바인딩도 같은 ID 기준으로 재검증하며 정책 버전·저장 형식은 바꾸지 않습니다. 흐름별 env override는 AS-3.2에서 제거됐습니다.
 ---

@@ -251,7 +251,7 @@ def deliver(
     반환은 단일/다중 조각 모두 마지막 message_id, 폴백은 호출자 반환값 그대로다.
     기존 주입 인자들은 호출부 호환 계약이므로 묶거나 제거하지 않는다.
 
-    RETAINED: content: str 경로는 영구 예외가 있어 퇴역하지 않는다. budget_confirm.dm_owner와
+    RETAINED: content: str 경로는 영구 예외가 있어 퇴역하지 않는다.
     calendar_confirm.send_owner_dm은 여기서 렌더한 문자열(또는 구 런타임 폴백)을 받는 경계다.
     approval_reminder._PointerSender의 최소정보 계약과 obsidian_write.gate_binding의 카드 없는
     위임도 영구 예외다. meeting 게이트웨이는 INTEROP_RUNTIME을 보장받지 못해 별도 문자열

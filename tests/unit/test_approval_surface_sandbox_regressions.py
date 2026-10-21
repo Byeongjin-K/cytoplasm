@@ -69,15 +69,6 @@ def _scenario(skill: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_budget_scenario_completes_the_signed_confirm_leg() -> None:
-    # Given: the isolated deploy environment with the injection adapter available
-    # When: the budget scenario exercises its signed owner confirmation
-    result = _scenario("budget")
-    # Then: its already-posted fixture supplies a persisted approval binding
-    assert result.returncode == 0, result.stderr
-    assert "SCENARIO-PASS leg=signed-confirm" in result.stdout
-
-
 def test_wiki_persisted_channel_id_requires_all_binding_fields() -> None:
     # Given: a complete persisted approval binding and incomplete variants
     binding = {

@@ -22,7 +22,6 @@ _REPO = Path(__file__).resolve().parents[2]
 _RESOLVERS = (
     ("todo_cli", "skills/todo/scripts", "TODO_GWS_BIN"),
     ("calendar_gate", "skills/calendar/scripts", "CALENDAR_GWS_BIN"),
-    ("budget_gate", "skills/budget/scripts", "BUDGET_GWS_BIN"),
 )
 
 

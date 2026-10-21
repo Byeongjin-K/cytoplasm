@@ -197,7 +197,6 @@ _BUILDERS = (
     ("automation.managed_sync.cron.managed_sync_watch", "staged_message", ("body",)),
     ("automation.healthcheck_notify", "notice_message", (None, None)),
     ("skills.todo.scripts.todo_result_message", "result_message", ({}, "body", "DONE")),
-    ("skills.budget.scripts.budget_result_message", "result_message", ({}, "body", "DONE")),
     ("skills.coordination.scripts.coordination_result_notice", "result_message", ({}, "body", "done")),
     ("skills.calendar.scripts.calendar_result_message", "build", ({}, "body", "done")),
     ("skills.mail.scripts.triage_result_notice", "result_message", ({}, "body", "DONE")),

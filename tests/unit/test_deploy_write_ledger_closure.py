@@ -37,7 +37,6 @@ _APPROVED: Final = {
     ("automation/notes_organize/deploy.sh", "raw"): 1,
     ("automation/rag_stack/deploy_runtime.sh", "raw"): 2,
     ("automation/regression_bank/deploy_lab_node.sh", "raw"): 8,
-    ("skills/budget/deploy.sh", "raw"): 1,
     ("skills/mail/deploy.sh", "dest"): 2,
     ("skills/mail/deploy.sh", "raw"): 5,
 }
@@ -131,10 +130,10 @@ def test_a_migrating_exemption_is_rejected(tmp_path: Path) -> None:
 
 def test_a_migrating_row_in_a_copy_of_the_real_ledger_is_rejected() -> None:
     lines = _ledger().splitlines()
-    index = next(i for i, line in enumerate(lines) if line.startswith("skills/budget/deploy.sh|raw|"))
+    index = next(i for i, line in enumerate(lines) if line.startswith("automation/notes_organize/deploy.sh|raw|"))
     lines[index] = lines[index].rsplit("|", 1)[0] + "|migrating: todo 99"
 
-    assert {(p.rule, p.deployer) for p in check(_REPO, "\n".join(lines) + "\n")} == {("R6", "skills/budget/deploy.sh")}
+    assert {(p.rule, p.deployer) for p in check(_REPO, "\n".join(lines) + "\n")} == {("R6", "automation/notes_organize/deploy.sh")}
 
 
 def test_an_unapproved_exception_identity_is_rejected() -> None:

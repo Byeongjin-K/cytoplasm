@@ -53,7 +53,7 @@ class SubprocessGitRunner:
 
 ALLOWED_PREFIXES: Final = ("automation/", "configs/", "tests/", "docs/")
 FORBIDDEN_PARTS: Final = ("secret", "credential", ".ssh", "/home/", "/srv/autophagy-private/")
-OFFLINE_SCENARIOS: Final = ("w4-budget",)
+OFFLINE_SCENARIOS: Final = ("w4-mail-triage",)
 
 
 @dataclass(frozen=True, slots=True)
