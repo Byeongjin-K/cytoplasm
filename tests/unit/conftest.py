@@ -16,6 +16,7 @@ import importlib.abc
 import importlib.machinery
 import os
 import shutil
+import site
 import sys
 import tempfile
 import types
@@ -30,6 +31,18 @@ import pytest
 _UNIT_NODE = Path(tempfile.mkdtemp(prefix="autophagy-unit-node-"))
 (_UNIT_NODE / "tmp").mkdir()
 os.environ["TMPDIR"] = tempfile.tempdir = str(_UNIT_NODE / "tmp")
+
+# The interpreter's user site (~/.local/lib/pythonX.Y/site-packages) is found through HOME.
+# Where pytest and pytest-xdist are installed only there (`pip install --user`), every child
+# python3 a test starts would lose them once HOME moves, and fail before the code under
+# test runs: 2026-10-19 and twice on 2026-10-21 the same 16 tests failed that way on the
+# primary node (test_local_ci_push_gate, test_release_complete_bound,
+# test_repair_residuals_e2e: "No module named pytest"). Pin the base this interpreter
+# already uses, read before HOME moves; it names installed packages, not home state, and
+# HOME itself stays redirected. test_unit_user_site_isolation.py pins it.
+# Children that inherit os.environ get it; it is not a node redirect, so it stays out of
+# _NODE_ENV (whose values all live under the unit root).
+os.environ["PYTHONUSERBASE"] = os.environ.get("PYTHONUSERBASE") or site.getuserbase()
 
 _UNIT_HOME = Path(tempfile.mkdtemp(prefix="autophagy-unit-home-"))
 os.environ["HOME"] = str(_UNIT_HOME)
