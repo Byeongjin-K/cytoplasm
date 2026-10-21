@@ -86,7 +86,7 @@ def test_compose_has_card_url_when_owner_thread_supplies_guild(
     assert draft["approval_guild_id"] == GUILD
     link = discord_link(space="guild", guild_id=GUILD, channel_id=THREAD, message_id=CARD)
     assert capsys.readouterr().out.splitlines()[-1] == (
-        f"APPROVAL-THREAD draft={draft['id']} url={link.url}"
+        f"APPROVAL-THREAD draft={draft['id']} url=[승인스레드](<{link.url}>)"
     )
 
 

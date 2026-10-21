@@ -1049,7 +1049,7 @@ def test_a_card_within_the_limit_is_posted_with_the_version_it_recorded(
         f"/channels/{_THREAD_ID}/messages/{detail_id}" for detail_id in detail_ids
     ]
     assert all(
-        f"https://discord.com/channels/{wire.guild_id}/{_THREAD_ID}/{stored['message_id']}"
+        f"[승인 카드](<https://discord.com/channels/{wire.guild_id}/{_THREAD_ID}/{stored['message_id']}>)"
         in str(payload["content"])
         for _path, payload in wire.patches
     )

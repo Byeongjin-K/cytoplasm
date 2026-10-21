@@ -170,7 +170,10 @@ def render(summary: StatusSummary) -> str:
         f"- 승인 대기(posted) {len(summary.pending)}건:",
     ]
     lines.extend(
-        f"  - {p.recording_id} · 스레드 {p.thread_url or p.thread_id} · {p.note_name}"
+        # This standalone sandbox CLI has no interop runtime; only human text is masked.
+        f"  - {p.recording_id} · 스레드 "
+        + (f"[승인 스레드](<{p.thread_url}>)" if p.thread_url else p.thread_id)
+        + f" · {p.note_name}"
         for p in summary.pending
     )
     if summary.approved:

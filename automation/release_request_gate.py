@@ -13,7 +13,7 @@ from automation.interop.approval_lifecycle import (
 )
 from automation.interop.approval_directory import DiscordApi
 from automation.interop.approval_types import ApprovalRequest, Probe
-from automation.interop.owner_message import LinkStatus, discord_link
+from automation.interop.owner_message import LinkStatus, discord_link, masked_discord_link
 from automation.interop.origin_notice import ThreadOutcome
 from automation.release_card import CARD_REFUSED_PREFIX, finalize_card
 from automation.release_spec import ReleaseSpec
@@ -265,7 +265,7 @@ class ReleaseRequestGate:
             message_id=card_id,
         )
         reference = (
-            link.url
+            masked_discord_link(link.url, "승인 카드")
             if link.status is LinkStatus.AVAILABLE and link.url is not None
             else f"검색: 승인 카드 / {self.spec.version} {self.spec.head_sha[:12]}"
         )

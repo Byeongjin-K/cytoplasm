@@ -133,7 +133,7 @@ def test_the_same_owner_reaction_seen_on_every_tick_posts_the_body_once(
     under_card = [body for channel, body in posted if channel == "thread-1"]
     in_thread = [body for channel, body in posted if channel == BODY_THREAD]
     assert len(under_card) == 1  # the digest thread gets one link line, not the text
-    assert under_card[0] == f"📄 전문은 별도 스레드에 있습니다: https://discord.com/channels/{GUILD}/{BODY_THREAD}"
+    assert under_card[0] == f"📄 전문은 별도 스레드에 있습니다: [전문](<https://discord.com/channels/{GUILD}/{BODY_THREAD}>)"
     assert in_thread[0] == "## 📄 전문 · 합성 제목"  # the big title opens the thread
     assert in_thread[1].startswith("📄 **전문** · 합성 제목") and "합성 본문입니다" in in_thread[1]
     assert in_thread[2] == "📎 첨부 2건 (이름만)\n- 계획서.pdf\n- 예산 표.xlsx"

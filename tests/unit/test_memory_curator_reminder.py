@@ -89,8 +89,8 @@ def test_the_reminder_names_the_file_and_links_the_message() -> None:
     text = render(_pending(2))
     assert "USER.md" in text
     assert "어떤 판단 근거" in text
-    assert "https://discord.com/channels/@me/1/1" in text
-    assert "https://discord.com/channels/@me/1/2" in text
+    assert "[승인 카드](<https://discord.com/channels/@me/1/1>)" in text
+    assert "[승인 카드](<https://discord.com/channels/@me/1/2>)" in text
     assert "2건" in text
 
 

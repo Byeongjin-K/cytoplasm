@@ -183,14 +183,15 @@ def body_link_line(thread: dict[str, str], subject: str) -> str:
     """The one line under the card that points at its full-text thread."""
     try:
         triage_confirm._origin_notice()  # noqa: SLF001 — puts the interop runtime on the path
-        from automation.interop.owner_message import discord_link
+        from automation.interop.owner_message import discord_link, masked_discord_link
     except ImportError:
         url = None
     else:
         url = discord_link(space="guild" if thread["guild_id"] else "unknown",
                            channel_id=thread["thread_id"],
                            guild_id=thread["guild_id"] or None).url
-    where = url or f"스레드 「📄 {BODY_THREAD_LABEL} · {' '.join(subject.split())[:_SUBJECT_LIMIT]}」"
+    where = (masked_discord_link(url, BODY_THREAD_LABEL) if url
+             else f"스레드 「📄 {BODY_THREAD_LABEL} · {' '.join(subject.split())[:_SUBJECT_LIMIT]}」")
     return _inert(f"📄 전문은 별도 스레드에 있습니다: {where}")
 
 

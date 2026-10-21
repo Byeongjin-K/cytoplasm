@@ -56,7 +56,7 @@ def test_due_cards_send_one_line_per_card_in_one_message_per_channel(
     expected: dict[str, list[str]] = {}
     for index, channel in enumerate(channels):
         expected.setdefault(channel, []).append(
-            f"⏰ 승인 대기 3시간 · https://discord.com/channels/111/{channel}/{333 + index}"
+            f"⏰ 승인 대기 3시간 · [승인 카드](<https://discord.com/channels/111/{channel}/{333 + index}>)"
         )
     assert posts == [(channel, "\n".join(lines)) for channel, lines in expected.items()]
     assert all(verdict.outcome is ReminderOutcome.SENT for verdict in verdicts)

@@ -20,7 +20,7 @@ for _skill in ("todo", "calendar", "coordination"):
 
 GUILD = "300000000000000001"
 THREAD = "300000000000000002"
-URL = f"https://discord.com/channels/{GUILD}/{THREAD}"
+URL = f"[승인스레드](<https://discord.com/channels/{GUILD}/{THREAD}>)"
 COORDS = {"approval_guild_id": GUILD, "approval_thread_id": THREAD}
 
 

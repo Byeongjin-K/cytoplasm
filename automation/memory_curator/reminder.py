@@ -73,7 +73,7 @@ def due(
 
 def render(pending: tuple[PendingApproval, ...]) -> str:
     """소유자가 스크롤로 찾지 못한 것이 문제였으므로, 링크가 본문이다."""
-    from automation.interop.owner_message import discord_link
+    from automation.interop.owner_message import discord_link, masked_discord_link
 
     from .notice import ReminderContent
 
@@ -84,7 +84,8 @@ def render(pending: tuple[PendingApproval, ...]) -> str:
         ref = item.ref
         link = discord_link(space=ref.space, channel_id=ref.channel_id,
                             message_id=ref.message_id, guild_id=ref.guild_id)
-        target = link.url or " / ".join(ref.search or ("Discord 검색", item.draft_id))
+        target = (masked_discord_link(link.url, "승인 카드") if link.url
+                  else " / ".join(ref.search or ("Discord 검색", item.draft_id)))
         entry = f"- `{item.draft_id}` [{item.source_file}] '{item.preview}'"
         lines.append(f"{entry} → {target}")
         facts.append(entry if ref.scope == "resource" else lines[-1])

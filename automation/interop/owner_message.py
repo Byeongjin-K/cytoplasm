@@ -18,7 +18,7 @@ from .owner_message_text import (
 
 __all__: Final = (
     "Ref", "Action", "Approval", "Result", "Periodic", "OwnerMessage", "render", "render_report",
-    "discord_link", "LinkStatus", "LinkResult", "OwnerMessageError", "Space",
+    "discord_link", "masked_discord_link", "LinkStatus", "LinkResult", "OwnerMessageError", "Space",
 )
 
 
@@ -154,6 +154,12 @@ def discord_link(
     return LinkResult(LinkStatus.AVAILABLE, f"https://discord.com/channels/{root}/{channel_id}{suffix}")
 
 
+def masked_discord_link(url: str, label: str) -> str:
+    """Display a known URL without Discord's reader-cache channel mention label."""
+    label = " ".join(label.replace("[", "").replace("]", "").split()) or "스레드"
+    return f"[{label}](<{url}>)"
+
+
 def _reference(ref: Ref, destination: Ref) -> str:
     match ref.scope:
         case "none":
@@ -220,7 +226,9 @@ def _report_evidence(location: Ref, destination: Ref, what: str) -> str | None:
         return None
     reference = _reference(location, destination)
     if reference.startswith("https://"):
-        return f"<{reference}>"
+        return masked_discord_link(reference, "원글") if reference.startswith(
+            "https://discord.com/channels/",
+        ) else f"<{reference}>"
     if reference == "여기" or location.search is None:
         return None
     label, key = location.search
