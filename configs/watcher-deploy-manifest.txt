@@ -43,9 +43,6 @@ agent|automation/rag_ingest/cron/rag_ingest_watch.py|.hermes/scripts/rag_ingest_
 # --- automation/repair/deploy-manifest.txt ---
 agent|automation/repair/cron/repair_report_consume_watch.py|.hermes/scripts/repair_report_consume_watch.py|required
 
-# --- automation/research_trends/deploy-manifest.txt ---
-agent|automation/research_trends/research_trends.py|.hermes/scripts/research_trends.py|required
-
 # --- automation/selfskill_audit/deploy-manifest.txt ---
 agent|automation/selfskill_audit/cron/selfskill_audit_watch.py|.hermes/scripts/selfskill_audit_watch.py|required
 peer|automation/selfskill_audit/cron/selfskill_audit_watch.py|.hermes/scripts/selfskill_audit_watch.py|required

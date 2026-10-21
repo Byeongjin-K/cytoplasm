@@ -21,8 +21,8 @@
 + `source_type` + 출처 필드)가 붙는다. Markdown frontmatter의 `created`, `modified`,
 `updated`, `date`도 보존한다. Obsidian은 YAML 또는 `>[!info]` callout에 명시된 날짜만
 `event_date`/`document_updated`(ISO date)로 정규화한다. 파일 mtime은 쓰지 않으며,
-`research-trends-YYYYMMDD.md` 같은 경로 날짜는 `date_basis=path`로만 표시하고
-`event_date`로 승격하지 않는다. 팀 지식의 인별 중복 적재는 의도된 설계(사용자 결정
+경로 날짜는 `date_basis=path`로만 표시하고 `event_date`로 승격하지 않는다.
+`notes/research-trends/`는 적재하지 않으며 남은 옛 벡터는 지운다(주간 연구동향 보고서와 키워드는 공도리가 맡는다). 팀 지식의 인별 중복 적재는 의도된 설계(사용자 결정
 2026-07-13). W2-5 recall은 `source`/`metadata`(위키 경로, `task_id`, `message_id`,
 `session_id`)로 출처를 표기할 수 있다.
 

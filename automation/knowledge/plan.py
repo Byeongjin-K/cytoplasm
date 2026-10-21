@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 from automation.knowledge.pack import Purpose
 
-_RESEARCH = ("연구동향", "연구 동향", "주간 동향", "research trends")
 _JUDGMENT = ("cha라면", "평소", "어떻게 결정", "판단 원칙", "의사결정")
 _ENTITY = ("협업", "관계", "함께", "같이", "동료", "최근 누구")
 _SYNTHESIZE = ("종합", "합성", "제안서", "보고서", "초안", "요약해")
@@ -30,5 +29,4 @@ def analyze_query(text: str, purpose: Purpose = "cite") -> QueryPlan:
         resolved = "entity"
     elif any(marker in lowered for marker in _SYNTHESIZE):
         resolved = "synthesize"
-    hint = "note:research-trends/" if any(marker in lowered for marker in _RESEARCH) else None
-    return QueryPlan(resolved, hint)
+    return QueryPlan(resolved, None)

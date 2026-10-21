@@ -23,7 +23,7 @@
 
 ## 적용 범위 · 관련
 
-실제 실행 대상은 hello-autophagy·plaud·prompt·recall·repair·report·topics다.
+실제 실행 대상은 hello-autophagy·plaud·prompt·recall·repair·report다.
 모든 스킬의 실제 외부 서비스가 검증됐다는 뜻은 아니다.
 Ubuntu CI는 배포판의 bwrap 전용 AppArmor 프로필을 사용하며 네트워크 격리를 끄지 않는다.
 새 릴리스 분할기 변경(PR #502)은 동결 해제 대기라 이 완료 범위에 포함하지 않는다.

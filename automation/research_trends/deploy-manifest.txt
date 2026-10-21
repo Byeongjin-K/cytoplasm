@@ -1,3 +1,0 @@
-agent|automation/research_trends/research_trends.py|.hermes/scripts/research_trends.py|required
-agent|automation/research_trends|.hermes/research_trends_runtime|v2:tree;files=research_trends.py,research_trends_core.py,topics_import.py
-agent|prompts/research-trends-v1.md|.hermes/research-trends/research-trends-v1.md|v2:file

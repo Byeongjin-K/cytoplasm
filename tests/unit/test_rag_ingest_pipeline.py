@@ -8,6 +8,7 @@ from automation.rag_ingest import queuefile, statefile
 from automation.rag_ingest.config import DiscordSourceConfig, IngestConfig
 from automation.rag_ingest.mcp_client import McpUnreachableError
 from automation.rag_ingest.pipeline import run_pipeline
+from automation.rag_ingest.hashing import document_id
 
 PERSPECTIVE = {
     "agent_id": "agent",
@@ -146,6 +147,28 @@ def test_deleted_file_removes_its_vectors(tmp_path: Path) -> None:
     assert len(client.points) == 0
     state = statefile.load_state(config.state_path)
     assert "wiki:a.md" not in state["documents"]
+
+
+def test_excluded_research_trends_folder_removes_ingested_note(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    folder_name = "research-trends"
+    folder = config.notes_dir / folder_name
+    folder.mkdir()
+    _ = (folder / "x.md").write_text("기존 노트", encoding="utf-8")
+    source_key = f"note:{folder_name}/x.md"
+    point = document_id(source_key + "#c0000", "기존 노트")
+    client = FakeMcpClient()
+    client.points[point] = {"content": "기존 노트", "source": source_key + "#c0000", "metadata": {}}
+    state = statefile.empty_state()
+    statefile.record_document(state, source_key, "old-fingerprint", [point], "2026-01-01T00:00:00Z")
+    statefile.save_state(config.state_path, state)
+
+    # Simulate the old folder still existing after the feature moved elsewhere.
+    # Its scan exclusion makes the old key absent and queues its vector deletion.
+    _ = run_pipeline(config, LOCAL_SOURCES, client=client)  # type: ignore[arg-type]
+
+    assert source_key not in statefile.load_state(config.state_path)["documents"]
+    assert client.points == {}
 
 
 def test_rag_down_queues_then_recovery_delivers_without_loss(tmp_path: Path) -> None:

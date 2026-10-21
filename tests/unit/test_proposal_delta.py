@@ -31,9 +31,7 @@ def _sources():
             "obsidian", "obsidian:Projects/proposal.md", b"owner note revision\n"
         ),
         proposal_delta.DeltaSource(
-            "research-trends",
-            "note:research-trends/research-trends-20260823.md",
-            b"weekly research report\n",
+            "note", "note:personal/weekly.md", b"weekly note\n"
         ),
     )
 
@@ -102,7 +100,7 @@ def test_three_source_types_are_byte_identical_indexed_and_route_safe(
     )
 
     assert report.collected_count == 3
-    assert report.counts == {"meeting": 1, "obsidian": 1, "research-trends": 1}
+    assert report.counts == {"meeting": 1, "obsidian": 1, "note": 1}
     index_path = destination / "delta" / "INDEX.json"
     entries = json.loads(index_path.read_text(encoding="utf-8"))
     assert_route_allowed(

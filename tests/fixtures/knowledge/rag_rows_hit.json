@@ -1,5 +1,5 @@
 [
-  {"score": 0.71, "source": "note:research-trends/research-trends-20260818.md#c0000", "content": "배양 연구동향 공개 근거", "metadata": {"source_type": "note", "path": "research-trends/research-trends-20260818.md", "title": "주간 연구동향"}},
+  {"score": 0.71, "source": "note:lab-notes/20260818.md#c0000", "content": "배양 실험 공개 근거", "metadata": {"source_type": "note", "path": "lab-notes/20260818.md", "title": "실험 기록"}},
   {"score": 0.65, "source": "obsidian:projects/cell.md#c0000", "content": "배양 프로젝트 원천 노트", "metadata": {"source_type": "obsidian", "path": "projects/cell.md", "folder": "projects", "created": "2026-05-02", "title": "배양 프로젝트"}},
   {"score": 0.62, "source": "conversation:s1:2026-08-20#c0000", "content": "배양 대화 기록", "metadata": {"source_type": "conversation", "session_id": "s1", "day": "2026-08-20", "title": "대화"}}
 ]

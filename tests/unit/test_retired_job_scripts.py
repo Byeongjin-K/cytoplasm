@@ -14,6 +14,7 @@ CASES = (
     ("memory-curator-watch", "memory_curator_watch.py"),
     ("memory-relocate-watch", "memory_relocate_watch.py"),
     ("reminder-poller", "poll_reminders.py"),
+    ("research-trends", "research_trends.py"),
 )
 
 
@@ -42,21 +43,6 @@ def test_retired_wrapper_is_removed_when_its_timer_is_already_absent(
     assert not path.exists()
     assert live.read_bytes() == b"keep"
     assert retired_jobs.check(tmp_path, job, _stopped) == "ok"
-
-
-def test_research_trends_retirement_keeps_its_script(tmp_path: Path) -> None:
-    # Given: the research-trends timer is retired but its script is still a required file.
-    script = tmp_path / ".hermes/scripts/research_trends_watch.py"
-    script.parent.mkdir(parents=True)
-    script.write_bytes(b"kept")
-
-    # When: its required derived job declaration is observed and converged.
-    assert retired_jobs.check(tmp_path, "research-trends", _stopped) == "ok"
-    retired_jobs.install(tmp_path, "research-trends", _stopped)
-
-    # Then: no wrapper lookup fails and the script stays.
-    assert script.read_bytes() == b"kept"
-    assert retired_jobs.check(tmp_path, "research-trends", _stopped) == "ok"
 
 
 @pytest.mark.parametrize(("job", "script"), CASES)

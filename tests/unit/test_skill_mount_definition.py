@@ -1,7 +1,7 @@
 """다섯 no-agent cron 래퍼가 governed live 마운트 정의 **하나**를 쓰는지 고정한다.
 
 배경(`docs/follow-ups.md`, 2026-08-17): budget·report·coordination·calendar·
-research-trends 가 각자 마운트 경로를 들고 있어, 심링크가 멀쩡한데도 `not mounted`
+(그때는 research-trends 도)가 각자 마운트 경로를 들고 있어, 심링크가 멀쩡한데도 `not mounted`
 또는 import 오류를 냈다. 판정은 `automation/skill_mount_drift.py`·`skill_mount_probe.sh`
 와 같은 `/srv/autophagy-skills/live/<skill>` 정의 하나여야 한다.
 
@@ -32,7 +32,6 @@ _STRIPPED_ENV: Final = (
     "REPORT_SCRIPTS",
     "CALENDAR_SCRIPTS",
     "COORDINATION_SCRIPTS",
-    "TOPICS_SCRIPTS",
     "NOTES_ORGANIZE_STATE_DIR",
     "WATCH_FAILURE_ROOT",
     _LIVE_ROOT_ENV,
@@ -44,7 +43,6 @@ _WRAPPERS: Final = (
     ("automation/notes_organize/notes_organize.py", "report", "_SCRIPTS"),
     ("skills/coordination/scripts/confirm_reaction_watch.py", "coordination", "_SCRIPTS"),
     ("skills/calendar/scripts/confirm_reaction_watch.py", "calendar", "_SCRIPTS"),
-    ("automation/research_trends/research_trends.py", "topics", "SCRIPTS_DIR"),
 )
 
 
@@ -53,10 +51,8 @@ def _environment(home: Path, live_root: Path) -> dict[str, str]:
     environment["HOME"] = str(home)
     environment[_LIVE_ROOT_ENV] = str(live_root)
     # 배포된 래퍼는 `~/.hermes/scripts/` 에서 평평하게 돌지만, 체크아웃에서는 리포가
-    # 코드 루트다. research_trends 는 자기 패키지 모듈을 평평하게 임포트한다.
-    environment["PYTHONPATH"] = os.pathsep.join(
-        (str(_REPO), str(_REPO / "automation" / "research_trends"))
-    )
+    # 코드 루트다.
+    environment["PYTHONPATH"] = str(_REPO)
     return environment
 
 
@@ -210,7 +206,6 @@ def test_watcher_when_neither_path_exists_then_reports_not_mounted(
     (
         ("skills/coordination/scripts/confirm_reaction_watch.py", "_SCRIPTS", "coordinate_io"),
         ("skills/calendar/scripts/confirm_reaction_watch.py", "_SCRIPTS", "calendar_confirm"),
-        ("automation/research_trends/research_trends.py", "SCRIPTS_DIR", "topics_registry"),
     ),
 )
 def test_import_watcher_when_neither_path_exists_then_fails_closed(

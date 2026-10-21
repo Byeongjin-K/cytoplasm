@@ -28,7 +28,7 @@ class FakeSources:
     @classmethod
     def from_fixture_dir(cls, root: Path) -> FakeSources:
         payload = json.loads((root / "rag_rows_hit.json").read_text(encoding="utf-8"))
-        rag_items = tuple(item_from_rag(row, grounded) for row, grounded in grounded_rows("배양 연구동향", payload))
+        rag_items = tuple(item_from_rag(row, grounded) for row, grounded in grounded_rows("배양 실험", payload))
         wiki_items: list[EvidenceItem] = []
         twin_items: list[EvidenceItem] = []
         for path in sorted((root / "wiki_vault").glob("*.md")):

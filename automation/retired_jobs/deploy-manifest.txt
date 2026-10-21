@@ -8,6 +8,7 @@ agent|automation/retired_jobs|state/milestones.yaml|v2:derived;algorithm=retired
 agent|automation/retired_jobs.py|.hermes/scripts/memory_curator_watch.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
 agent|automation/retired_jobs.py|.hermes/scripts/memory_relocate_watch.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
 agent|automation/retired_jobs.py|.hermes/scripts/poll_reminders.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
+agent|automation/retired_jobs.py|.hermes/scripts/research_trends.py|v2:file;policy=retired;reason=retired-job-v1-removes-the-wrapper
 agent|automation/retired_jobs|.config/systemd/user/autophagy-cron-wiki-confirm-watch.timer|v2:derived;algorithm=retired-job-v1
 agent|automation/retired_jobs|.hermes/scripts/wiki_confirm_reaction_watch.py|v2:derived;algorithm=retired-wiki-script-v1
 agent|automation/retired_jobs|.hermes/plugins/interop-protocol|v2:derived;algorithm=retired-interop-v1

@@ -23,7 +23,7 @@ _NOW = datetime(2026, 8, 21, tzinfo=timezone.utc)
 
 def test_doc_date_uses_only_explicit_metadata_or_supported_path() -> None:
     assert derive_doc_date({"created": "2026-05-02T01:02:03Z"}, "x") == ("2026-05-02", "created")
-    assert derive_doc_date({}, "research-trends-20260818.md") == ("2026-08-18", "path")
+    assert derive_doc_date({}, "20260818.md") == ("2026-08-18", "path")
     assert derive_doc_date({}, "meeting-about-2026.md") == (None, "none")
 
 
@@ -64,9 +64,9 @@ def test_missing_wiki_scripts_is_fail_closed_unavailable() -> None:
     assert pack.layers["wiki"] == pack.layers["twin"] == "unavailable"
 
 
-def test_source_hint_does_not_expand_requested_sources() -> None:
-    query = KnowledgeQuery("연구동향", sources=frozenset({"rag"}))
-    assert analyze_query(query.text, query.purpose).source_hint == "note:research-trends/"
+def test_query_does_not_expand_requested_sources() -> None:
+    query = KnowledgeQuery("배양", sources=frozenset({"rag"}))
+    assert analyze_query(query.text, query.purpose).source_hint is None
     assert query.sources == frozenset({"rag"})
 
 

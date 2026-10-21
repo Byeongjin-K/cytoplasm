@@ -48,7 +48,6 @@ skills/proposal/scripts/proposal_research.py | Research brief generation, Hermes
 skills/proposal/scripts/proposal_version.py | Version-store locking, promotion, reuse, and recovery form one atomic persistence contract.
 automation/drive_migrate_outputs.py | one-shot owner-run migration CLI: enumeration+dedupe+normalize+move plan is one cohesive procedure; splitting would sever the dry-run/apply symmetry
 skills/report/scripts/report_cli.py | report skill CLI aggregating report/slides/script subcommands; crossed ceiling via facade conversion
-automation/research_trends/research_trends.py | Weekly report orchestration entrypoint; source collection and report emission share the operational contract.
 skills/proposal/engine/agents/critic.py | internalized render-engine module carried byte-for-byte from the retired kimm-docbot upstream (2026-09-08); splitting it here would diverge from the structure the output-equivalence measurement compares against
 skills/proposal/engine/contract/planner.py | internalized render-engine module carried byte-for-byte from the retired kimm-docbot upstream (2026-09-08); splitting it here would diverge from the structure the output-equivalence measurement compares against
 skills/proposal/engine/hwpx/figure_density.py | internalized render-engine module carried byte-for-byte from the retired kimm-docbot upstream (2026-09-08); splitting it here would diverge from the structure the output-equivalence measurement compares against

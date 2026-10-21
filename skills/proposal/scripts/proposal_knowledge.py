@@ -5,10 +5,8 @@ from __future__ import annotations
 import importlib
 import json
 import os
-import re
 import sys
 from dataclasses import asdict, dataclass
-from datetime import date
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, ClassVar, Literal, Protocol, cast
@@ -55,9 +53,8 @@ class _UnavailablePack:
     notes: tuple[str, ...]
 
 
-Bucket = Literal["rag", "wiki-twin", "obsidian", "research-trends"]
-_BUCKETS: tuple[Bucket, ...] = ("rag", "wiki-twin", "obsidian", "research-trends")
-_TREND_DATE = re.compile(r"(?:^|/)research-trends-(20\d{6})(?:\.md)?(?:$|#)")
+Bucket = Literal["rag", "wiki-twin", "obsidian"]
+_BUCKETS: tuple[Bucket, ...] = ("rag", "wiki-twin", "obsidian")
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,10 +114,6 @@ class _BuiltInFakeFacade:
             items = (
                 _FakeFacadeItem("rag", "note", "FAKE/personal.md", "FAKE 개인 RAG 근거"),
                 _FakeFacadeItem("obsidian", "obsidian", "FAKE/demo.md", "FAKE Obsidian 근거"),
-                _FakeFacadeItem(
-                    "rag", "note", "research-trends/research-trends-20260818.md",
-                    "FAKE 주간 연구동향 근거",
-                ),
             )
             return _FakeFacadePack(items, {"rag": "hit", "wiki": "skipped", "twin": "skipped"})
         items = (_FakeFacadeItem("wiki", "twin", "FAKE/decision", "FAKE wiki 트윈 판단"),)
@@ -189,8 +182,6 @@ def _source_key(item: object) -> str:
 
 
 def _bucket(source_key: str, item: object) -> Bucket:
-    if source_key.startswith("note:research-trends/"):
-        return "research-trends"
     if source_key.startswith("obsidian:"):
         return "obsidian"
     if source_key.startswith("wiki:") or str(getattr(item, "source_type", "")) in {
@@ -198,18 +189,6 @@ def _bucket(source_key: str, item: object) -> Bucket:
     }:
         return "wiki-twin"
     return "rag"
-
-
-def _week(source_key: str) -> str | None:
-    match = _TREND_DATE.search(source_key)
-    if match is None:
-        return None
-    raw = match.group(1)
-    try:
-        year, week, _ = date(int(raw[:4]), int(raw[4:6]), int(raw[6:])).isocalendar()
-    except ValueError:
-        return None
-    return f"{year:04d}-W{week:02d}"
 
 
 def _normalize(items: object) -> tuple[EvidenceItem, ...]:
@@ -230,7 +209,7 @@ def _normalize(items: object) -> tuple[EvidenceItem, ...]:
             bucket=bucket,
             summary=str(summary if summary is not None else content or ""),
             score=float(score) if isinstance(score, (int, float)) else None,
-            week=_week(source_key) if bucket == "research-trends" else None,
+            week=None,
             doc_date=str(doc_date) if doc_date is not None else None,
             date_basis=str(date_basis) if date_basis is not None else None,
             source_sha256=(
@@ -241,24 +220,8 @@ def _normalize(items: object) -> tuple[EvidenceItem, ...]:
     return tuple(normalized)
 
 
-def _latest_trends(items: tuple[EvidenceItem, ...], weeks: int) -> tuple[EvidenceItem, ...]:
-    trend_weeks = sorted({item.week for item in items if item.week is not None}, reverse=True)
-    retained = set(trend_weeks[:max(weeks, 0)])
-    trends = sorted(
-        (item for item in items if item.bucket == "research-trends" and item.week in retained),
-        key=lambda item: item.week or "",
-        reverse=True,
-    )
-    trend_index = iter(trends)
-    return tuple(
-        next(trend_index) if item.bucket == "research-trends" and item.week in retained else item
-        for item in items
-        if item.bucket != "research-trends" or item.week in retained
-    )
-
-
 def gather_owner_evidence(
-    goal: str, *, section: str | None = None, limit: int = 8, trends_weeks: int = 4,
+    goal: str, *, section: str | None = None, limit: int = 8,
     knowledge: object | None = None,
 ) -> EvidencePack:
     """Gather owner evidence only through the shared read-only knowledge facade."""
@@ -279,7 +242,7 @@ def gather_owner_evidence(
         facade = None
 
     queries = (
-        (("rag", "obsidian", "research-trends"), "synthesize", frozenset({"rag"})),
+        (("rag", "obsidian"), "synthesize", frozenset({"rag"})),
         (("wiki-twin",), "judgment", frozenset({"wiki", "twin"})),
     )
     for affected, purpose, sources in queries:
@@ -301,7 +264,7 @@ def gather_owner_evidence(
                 unavailable.append(bucket)
                 notes.append(f"근거 수집 불가: {bucket}")
 
-    selected = _latest_trends(tuple(items), trends_weeks)
+    selected = tuple(items)
     if not selected:
         notes.append("근거 없음")
     return EvidencePack(

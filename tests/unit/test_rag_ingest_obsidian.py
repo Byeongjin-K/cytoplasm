@@ -158,8 +158,8 @@ def test_scan_obsidian_normalizes_only_explicit_frontmatter_and_callout_dates(
 def test_scan_obsidian_never_promotes_path_or_file_mtime_to_event_date(
     tmp_path: Path,
 ) -> None:
-    note = tmp_path / "000_PARA" / "research-trends-20260816.md"
-    _write(tmp_path, "000_PARA/research-trends-20260816.md", "날짜 없는 본문")
+    note = tmp_path / "000_PARA" / "20260816.md"
+    _write(tmp_path, "000_PARA/20260816.md", "날짜 없는 본문")
     note.touch()
 
     documents, _present = _scan(tmp_path)

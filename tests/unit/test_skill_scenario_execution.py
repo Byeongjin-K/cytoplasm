@@ -45,7 +45,6 @@ machine-consumed form of this table and must cover the on-disk set.
     | report          | SAFE    | recorded response/evidence fixtures exercise outputs; DRIVE_PUBLISH_ENABLED=0 is explicit and deniers stay untouched |
     | speechtotext    | UNSAFE  | transcript is recorded or emitted by fake whisper/ffmpeg; API leg points at a closed port |
     | todo            | UNSAFE  | successful Google Tasks insert/get uses an in-memory fake gws executable |
-    | topics          | SAFE    | local YAML state under mktemp; KNOWLEDGE_FAKE_PACK is a read-only evidence fixture |
     | wiki            | SAFE    | no effect transport, but already run by test_wiki_scenario.py with a staged INTEROP_RUNTIME |
 
 Determinism: no sleeps and no polling. The only time bound is the subprocess
@@ -82,7 +81,7 @@ _NAMESPACE_SANDBOX: Final = Path("/tmp/scenario")
 # add a skill only after reading it end to end and confirming the SAFE criteria
 # in the table above.
 _EXECUTED: Final = (
-    "hello-autophagy", "plaud", "prompt", "recall", "repair", "report", "topics",
+    "hello-autophagy", "plaud", "prompt", "recall", "repair", "report",
 )
 
 # Everything else, with the effect that keeps it out. Fail-closed: a new

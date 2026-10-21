@@ -49,7 +49,7 @@ _NODE_ENV_DEPLOYERS: Final = (
     "automation/notes_organize", "automation/obsidian_write", "automation/omo_relay", "automation/owner_timers",
     "automation/plaud_sync", "automation/project_board",
     "automation/rag_ingest", "automation/rag_stack", "automation/regression_bank",
-    "automation/repair", "automation/research_trends", "automation/selfskill_audit", "automation/skill_generation",
+    "automation/repair", "automation/selfskill_audit", "automation/skill_generation",
     "automation/state_backup", "automation/stt_eval", "automation/voice_catalog", "automation/yoodori_gate", "skills/budget", "skills/calendar",
     "skills/coordination", "skills/mail", "skills/meeting", "skills/speechtotext", "skills/todo",
 )

@@ -70,7 +70,7 @@ def _pack_from_brief(path: Path) -> proposal_knowledge.EvidencePack:
         if match is None:
             continue
         source_key, bucket, _, summary = match.groups()
-        if bucket not in {"rag", "wiki-twin", "obsidian", "research-trends"}:
+        if bucket not in {"rag", "wiki-twin", "obsidian"}:
             raise CorpusError(f"invalid owner evidence bucket: {bucket}")
         items.append(proposal_knowledge.EvidenceItem(
             source_key,

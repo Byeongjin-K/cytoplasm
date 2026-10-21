@@ -12,7 +12,6 @@ KNOWLEDGE_ADOPTERS: Final[dict[str, str]] = {
     "meeting": "skills/meeting/scripts/meeting_knowledge.py",
     "proposal": "skills/proposal/scripts/proposal_knowledge.py",
     "report": "skills/report/scripts/report_knowledge.py",
-    "topics": "skills/topics/scripts/topics_knowledge.py",
     "wiki": "skills/wiki/scripts/wiki_knowledge.py",
 }
 _EXEMPT: Final[dict[str, str]] = {

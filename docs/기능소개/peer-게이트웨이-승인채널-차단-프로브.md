@@ -7,7 +7,7 @@ healthcheck의 읽기 전용 LOCAL 프로브 `peer_ignored_channels`가 peer 설
 peer의 `channel_directory.json`에서 이름이 `approvals`인 유일한 항목으로 해석하며,
 설정이 없거나 읽을 수 없으면 PASS로 추측하지 않고 **FAIL-closed** 한다.
 **2026-09-21**: 같은 디렉터리에 이름이 `notifications`인 채널이 보이면 그 id 도 함께
-요구한다 — peer 게이트웨이가 소유자 통지 채널을 수신하면 통지(주간 연구 동향 청크·헬스체크·
+요구한다 — peer 게이트웨이가 소유자 통지 채널을 수신하면 통지(헬스체크·
 릴리스)마다 스레드를 열어 논평과 `/sethome` nag 를 남겼다([소개](주간-연구동향-한-메시지-발송과-peer-통지채널-차단.md)).
 채널이 없는 설치는 approvals 만으로 PASS, 이름이 둘이면 fail-closed.
 

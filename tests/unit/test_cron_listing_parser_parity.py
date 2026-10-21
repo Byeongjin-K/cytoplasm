@@ -67,8 +67,8 @@ _REAL_AGENT: Final = _BOX + (
     f"    Mode:      {_MODE}\n"
     "    Last run:  2026-10-01T09:00:40.708998+09:00  error: Script exited with code 1\nstdout:\n"
     "cost-report error: <masked>  (28 failures in a row)\n\n"
-    "  aaaaaaaaaaa2 [active]\n    Name:      research-trends\n    Schedule:  0 9 * * 1-5\n    Repeat:    ∞\n"
-    "    Next run:  2026-10-02T09:00:00+09:00\n    Deliver:   discord\n    Script:    research_trends.py\n"
+    "  aaaaaaaaaaa2 [active]\n    Name:      notes-weekly-organize\n    Schedule:  0 9 * * 1-5\n    Repeat:    ∞\n"
+    "    Next run:  2026-10-02T09:00:00+09:00\n    Deliver:   discord\n    Script:    notes_organize.py\n"
     f"    Mode:      {_MODE}\n    Last run:  2026-10-01T09:00:40.735212+09:00  ok\n\n"
     "  aaaaaaaaaaa3 [active]\n    Name:      mail-triage-repair-daily\n    Schedule:  10 9 * * *\n"
     "    Repeat:    ∞\n    Next run:  2026-10-02T09:10:00+09:00\n    Deliver:   local\n    Skills:    mail, repair\n"
@@ -98,7 +98,7 @@ _FIXTURE_ROW: Final = declared_cron("automation/effect_request")
 _CASES: Final[dict[str, tuple[str, list[Job] | None]]] = {
     "real-agent": (_REAL_AGENT, [
         ("aaaaaaaaaaa1", "daily-cost-report", "0 9 * * *", "local", "send_cost_report.py", _MODE, "", "active"),
-        ("aaaaaaaaaaa2", "research-trends", "0 9 * * 1-5", "discord", "research_trends.py", _MODE, "", "active"),
+        ("aaaaaaaaaaa2", "notes-weekly-organize", "0 9 * * 1-5", "discord", "notes_organize.py", _MODE, "", "active"),
         ("aaaaaaaaaaa3", "mail-triage-repair-daily", "10 9 * * *", "local", "", "", "mail, repair", "active"),
     ]),
     "real-peer": (_REAL_PEER, [

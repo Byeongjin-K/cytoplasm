@@ -46,9 +46,9 @@ skills/<name>/
 - 성공 시 stdout에 `SCENARIO-PASS` + exit 0. 그 외 전부 실패.
 - 참조 구현: [hello-autophagy/scripts/scenario.sh](hello-autophagy/scripts/scenario.sh).
 
-## 스킬 목록 (18 기능 + hello-autophagy 데모 = 19 디렉터리)
+## 스킬 목록 (17 기능 + hello-autophagy 데모 = 18 디렉터리)
 calendar · coordination · mail · budget · repair · patent-prep · proposal · report ·
-topics · prompt · meeting · recall · wiki · todo · doctype · procurement · speechtotext ·
+prompt · meeting · recall · wiki · todo · doctype · procurement · speechtotext ·
 plaud · (hello-autophagy=데모).
 
 ## 예외 매트릭스 (표준 계약 밖)

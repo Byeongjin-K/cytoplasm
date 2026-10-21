@@ -67,12 +67,12 @@ def test_vendor_only_change_runs_mail_deployer() -> None:
 def test_package_only_change_runs_its_deployer() -> None:
     plan = parse_observations(
         _obs(
-            _artifact("tree", "automation/research_trends", "stale"),
+            _artifact("tree", "automation/rag_ingest", "stale"),
             "OBS|artifact-detail|tree|agent|.hermes/x|different-file|trends.py",
         )
     )
     assert not plan.clean
-    assert plan.packages_to_deploy == ("automation/research_trends",)
+    assert plan.packages_to_deploy == ("automation/rag_ingest",)
     assert plan.artifacts[0].details == (("different-file", "trends.py"),)
 
 

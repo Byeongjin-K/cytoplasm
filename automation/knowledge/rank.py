@@ -9,7 +9,7 @@ from typing import Any
 
 from automation.knowledge.pack import DateBasis, EvidenceItem, Store
 
-_PATH_DATE = re.compile(r"(?:research-trends-)?(20\d{2})(\d{2})(\d{2})")
+_PATH_DATE = re.compile(r"(20\d{2})(\d{2})(\d{2})")
 _CHUNK = re.compile(r"#c\d+$")
 
 
