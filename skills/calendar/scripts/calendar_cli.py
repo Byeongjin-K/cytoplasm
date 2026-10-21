@@ -128,7 +128,7 @@ def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
 
 
 def cmd_draft_create(args: argparse.Namespace) -> int:
-    record = _build_create_draft(args)
+    record = import_module("calendar_dedupe").annotate(_build_create_draft(args))
     # 다이제스트 건(--digest-day)은 저장에서 끝나지 않고 그날 승인 스레드에 카드까지 올린다.
     _print_draft(import_module("calendar_digest").submit(record, args.digest_day))
     return 0
@@ -195,8 +195,13 @@ def cmd_confirm(args: argparse.Namespace) -> int:
             ref = calendar_confirm.confirm_via_reaction(draft)
             method = "owner_dm_reaction"
     approval = calendar_gate.Approval(ref=ref, method=method, owner=calendar_confirm.owner_id())
+    calendar_dedupe = import_module("calendar_dedupe")
     try:
         event_id = calendar_preflight.guarded_execute_draft(draft, approval)
+    except calendar_dedupe.AlreadyExists as found:
+        calendar_confirm.clear_pending(args.draft)
+        print(f"ALREADY-EXISTS draft={args.draft} event={found.existing.event_id} method={method} ref={ref}")
+        return 0
     except calendar_preflight.CalendarPreflightError as error:
         if error.should_render:
             print(error)

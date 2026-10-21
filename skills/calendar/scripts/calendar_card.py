@@ -14,6 +14,7 @@ import calendar_gate
 
 if TYPE_CHECKING:
     from automation.entity_preflight.contracts import JsonValue
+    from calendar_dedupe import Existing
 from calendar_confirm_input import DraftRecord
 
 
@@ -23,7 +24,9 @@ def prepare_draft(draft: DraftRecord) -> DraftRecord:
     version = draft.get("render_version", "1" if draft.get("approval_thread_id") else "4")
     try:
         if "render_version" not in draft and not draft.get("approval_thread_id"):
-            if _changes(draft).color is not None:
+            if _duplicate(draft) is not None:
+                version = "6"
+            elif _changes(draft).color is not None:
                 version = "5"
         card = prepare(lambda selected: calendar_confirm.render_confirmation(
             {**draft, "render_version": selected},
@@ -40,7 +43,7 @@ def render_envelope(draft: DraftRecord) -> str:
     from calendar_binding import reaction_instruction
 
     version = draft.get("render_version")
-    if version not in {"2", "3", "4", "5"}:
+    if version not in {"2", "3", "4", "5", "6"}:
         raise CardRenderError("unknown calendar card render version")
     if not callable(getattr(owner_message, "render", None)):
         raise CardRenderError("owner envelope unavailable")
@@ -50,13 +53,13 @@ def render_envelope(draft: DraftRecord) -> str:
         location=here, owner=owner_message.Action("react", here, reaction_instruction()),
         agent_next="승인된 캘린더 변경만 실행", recovery="not_applicable",
         detail=owner_message.Approval(None, "캘린더를 변경하지 않음"),
-        render_version="owner-ko-v2" if version in {"4", "5"} else "owner-ko-v1",
+        render_version="owner-ko-v2" if version in {"4", "5", "6"} else "owner-ko-v1",
     )
     try:
         body = owner_message.render(envelope, destination=here)
     except owner_message.OwnerMessageError as error:
         raise CardRenderError("calendar envelope cannot render") from error
-    if version in {"4", "5"}:
+    if version in {"4", "5", "6"}:
         return f"{body}\n해시: `sha256:{draft['sha256']}`"
     return f"{body}\nsha256:{draft['sha256']}"
 
@@ -180,7 +183,7 @@ def change_details(draft: DraftRecord) -> str:
         case "3":
             changed = _changes(draft)
             multiline = False
-        case "4" | "5":
+        case "4" | "5" | "6":
             changed = _changes(draft)
             multiline = True
         case _:
@@ -193,6 +196,8 @@ def change_details(draft: DraftRecord) -> str:
     )
     markers = ("", "")
     match changed.action:
+        case CalendarAction.CREATE if draft.get("render_version") == "6":
+            action = "생성 안 함: 같은 시간에 비슷한 일정이 이미 있음 (✅ 해도 새로 만들지 않음)"
         case CalendarAction.CREATE:
             action = "생성: 아래 일정 추가"
         case CalendarAction.UPDATE:
@@ -213,12 +218,26 @@ def change_details(draft: DraftRecord) -> str:
         from automation.calendar_default_color import color_label
         from automation.interop.approval_card import CardRenderError
 
-        if draft.get("render_version") != "5":
+        if draft.get("render_version") not in {"5", "6"}:
             raise CardRenderError("calendar color requires card version 5")
         lines.append(f"색: {color_label(changed.color)}")
+    if draft.get("render_version") == "6":
+        existing = _duplicate(draft)
+        if existing is None:
+            from automation.interop.approval_card import CardRenderError
+
+            raise CardRenderError("calendar duplicate card needs the existing event")
+        lines.append(f"이미 있음: {existing.label()}")
     if not multiline:
         return " · ".join(lines)
     return "\n".join((f"작업: {lines[0]}", *lines[1:]))
+
+
+def _duplicate(draft: DraftRecord) -> Existing | None:
+    """The existing event a v6 card shows; it is outside the hash and only narrows ✅."""
+    import calendar_dedupe
+
+    return calendar_dedupe.flagged(draft) if draft.get("action") == "create" else None
 
 
 def _display_time(value: str) -> str:

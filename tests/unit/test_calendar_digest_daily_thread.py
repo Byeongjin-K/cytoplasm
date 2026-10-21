@@ -79,6 +79,8 @@ def flow(calendar_env, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     def run(argv, **kwargs):
         if argv[0] == "fixture-gws":
+            if argv[3] == "list":  # same-event check before cards and inserts: an empty day
+                return subprocess.CompletedProcess(argv, 0, json.dumps({"items": []}), "")
             if argv[3] == "insert":
                 event = json.loads(argv[argv.index("--json") + 1])
                 events.append({**event, "id": f"event-{len(events) + 1}"})

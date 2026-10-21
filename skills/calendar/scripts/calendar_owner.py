@@ -64,8 +64,14 @@ def create(draft: DraftRecord) -> int:
     # write is running or its result is uncertain. execute_draft seals success.
     draft = {**draft, "status": "executing"}
     calendar_gate.persist_draft(draft)
+    import calendar_dedupe
+
     try:
         calendar_preflight.guarded_execute_draft(draft, approval)
+    except calendar_dedupe.AlreadyExists as found:
+        calendar_confirm.clear_pending(str(draft["id"]))
+        print(f"OWNER-COMMAND-ALREADY-EXISTS calendar {draft['id']} existing={found.existing.label()}")
+        return 0
     except calendar_preflight.CalendarPreflightError as error:
         raise calendar_gate.GateError(str(error), error.exit_code) from error
     calendar_confirm.clear_pending(str(draft["id"]))

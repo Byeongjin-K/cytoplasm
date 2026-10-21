@@ -24,7 +24,8 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 캘린더 기본색은 `calendar_default_color`의 기본 꺼짐 릴리스 스위치다.
 `release-flags/calendar-default-color`의 정확한 Google id `1`~`11`과 HEAD를
 기존 승인에 묶고, 선언된 `push_file`로 agent 표식을 배포·재조회한다.
-노드 생성 초안만 그 값을 읽으며 기존 카드·초안·수정 일정은 바꾸지 않는다.
+노드 생성 초안이 그 값을 동결하고, 색 없이 동결된 생성 초안은 실행 직후 그 새 일정에만
+`colorId`를 patch한다(해시·카드 불변). 기존 카드 바이트·수정 일정은 바꾸지 않는다.
 카드 staging에는 이 모듈을 포함한다([소개](../docs/기능소개/캘린더-새-일정-기본색.md)).
 
 문서 글자 읽기는 `document_ocr`의 기본 꺼짐 릴리스 스위치다. `release-flags/document-ocr`의

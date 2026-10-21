@@ -77,6 +77,8 @@ Hermes 실행 파일·게이트웨이·무멘션 응답 및 운영자 peer 진�
 
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|
+| `calendar_dedupe` | module | `skills/calendar/scripts/calendar_dedupe.py` · `calendar_preflight.py` · `calendar_card.py` | 생성 전 같은 일정 판정(같은 캘린더·KST 날짜·겹치는 시간·제목 유사도 0.6, 숫자 불일치 제외). 초안 때 `duplicate_of`(해시 밖)·v6 카드 `이미 있음`, 실행 직전 재조회(조회 실패=거부) 뒤 `duplicate` 봉인. |
+| `calendar_after_insert` | module | `skills/calendar/scripts/calendar_after_insert.py` | 승인된 insert 직후 그 일정 하나만: 먼저 있던 같은 일정이 있으면 새 것 삭제(참석자 있으면 삭제 카드, Q62), 없으면 노드 기본색 `colorId` patch. 동결 argv·해시 불변. |
 | `calendar_default_color` | module | `automation/calendar_default_color.py` · `skills/calendar/scripts/calendar_cli.py` · `calendar_card.py` | 정확한 Google id의 릴리스 승인·선언 표식 배포. 새 insert와 v5 카드에 색을 동결하며 미설정 argv·해시·v1~v4는 보존. 개인 일정 예외는 후속. |
 | `document_ocr` | module | `automation/document_ocr.py` · `automation/document_ocr/deploy.sh` | 문서 글자 읽기의 기본 꺼짐 릴리스 스위치. 호스트 `release-flags/document-ocr` 정확한 `on` → 같은 HEAD 승인 표면 `document-ocr:on`(카드 한 줄) → 선언된 `push_file` 로 agent 표식 `.hermes/document-ocr.mode`. 표식이 정확히 `on` 이면 `document_text.ocr_command` 가 같은 파일의 `relay`(stdlib 단독 실행)를 부른다 — `~/outbox/ocr/<숫자>-<숫자>-<숫자>.<형식>` → 운영자 계정 중계기 → `~/inbox/ocr/<id>.md|.err`, 2 입력·4 실패·5 무응답, 끝나면 요청·답을 지운다. 게이트·nft·sudoers 무변경 |
 | `assemble_report` | fn | `skills/report/scripts/report_core.py` | 보고서가 유일한 문서 제목을 소유한다. 모델 초안 맨 앞 H1만 빼고 본문·하위 절·근거 노트는 보존한다. [사용 규약](skills/report/SKILL.md#재료-파일과-입력-한도-2026-10-19) |

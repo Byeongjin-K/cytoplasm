@@ -51,6 +51,8 @@ esac
 SH
 chmod +x "$work/gws-stub"
 calls() { if [ -f "$work/gws-calls.log" ]; then wc -l < "$work/gws-calls.log"; else echo 0; fi; }
+# Creates read the same day first (same-event check); only writes count as mutations.
+mutations() { if [ -f "$work/gws-calls.log" ]; then grep -cE 'events (insert|patch|update|delete)' "$work/gws-calls.log" || true; else echo 0; fi; }
 
 # --- 1) ambiguous time is re-asked, nothing recorded -------------------------
 set +e
@@ -70,14 +72,14 @@ grep -q "CHANGE-SUMMARY" <<<"$out" || fail "change summary missing"
 grep -q "제목: 실험 미팅" <<<"$out" || fail "summary title wrong"
 draft_id="$(sed -n 's/^DRAFT-CREATED id=\([0-9a-f]*\) .*/\1/p' <<<"$out")"
 [[ -n "$draft_id" ]] || fail "draft id missing from output"
-[[ "$(calls)" -eq 0 ]] || fail "draft stage invoked gws (mutation before confirm)"
+[[ "$(mutations)" -eq 0 ]] || fail "draft stage invoked gws (mutation before confirm)"
 [[ ! -f "$CALENDAR_APPROVAL_LOG" ]] || fail "draft stage wrote an approval record"
 
 # --- 3) confirm without any confirmation fails closed ------------------------
 if cli confirm --draft "$draft_id" >/dev/null 2>&1; then
   fail "confirm succeeded without owner confirmation"
 fi
-[[ "$(calls)" -eq 0 ]] || fail "fail-closed confirm still invoked gws"
+[[ "$(mutations)" -eq 0 ]] || fail "fail-closed confirm still invoked gws"
 [[ ! -f "$CALENDAR_APPROVAL_LOG" ]] || fail "fail-closed confirm wrote an approval record"
 
 # --- 4) signed injected confirm (only when W1-6 adapter is importable) -------
@@ -102,13 +104,13 @@ import automation.interop.injection_adapter' 2>/dev/null; then
   if cli confirm --draft "$draft_id" --injection-file "$work/wrong-owner.json" >/dev/null 2>&1; then
     fail "non-owner confirmation was accepted"
   fi
-  [[ "$(calls)" -eq 0 ]] || fail "rejected confirm still invoked gws"
+  [[ "$(mutations)" -eq 0 ]] || fail "rejected confirm still invoked gws"
   [[ ! -f "$CALENDAR_APPROVAL_LOG" ]] || fail "rejected confirm wrote an approval record"
 
   cli sign --draft "$draft_id" --out "$work/ok.json" --user-id "$test_owner" >/dev/null
   cli confirm --draft "$draft_id" --injection-file "$work/ok.json" \
     | grep -q '^EXECUTED action=create event=stub-event-1' || fail "signed confirm did not execute"
-[[ "$(calls)" -eq 2 ]] || fail "expected write plus readback after confirm"
+[[ "$(mutations)" -eq 1 ]] || fail "expected exactly one write after confirm"
 grep -q "events insert" "$work/gws-calls.log" || fail "executed call is not events insert"
 grep -q "events get" "$work/gws-calls.log" || fail "post-write events get missing"
   grep -q '"action":"external_effect.approval"' "$CALENDAR_APPROVAL_LOG" \
@@ -129,14 +131,14 @@ grep -q "events get" "$work/gws-calls.log" || fail "post-write events get missin
   grep -q '"action":"calendar.delete"' "$CALENDAR_APPROVAL_LOG" || fail "calendar.delete audit missing"
 
   # --- refusal → zero change --------------------------------------------------
-  before_calls="$(calls)"
+  before_calls="$(mutations)"
   ref_out="$(cli draft-create --text "모레 14:30 거부 테스트")"
   ref_id="$(sed -n 's/^DRAFT-CREATED id=\([0-9a-f]*\) .*/\1/p' <<<"$ref_out")"
   cli discard --draft "$ref_id" | grep -q "^DISCARDED" || fail "discard failed"
   if cli confirm --draft "$ref_id" >/dev/null 2>&1; then
     fail "confirm succeeded on a discarded draft"
   fi
-  [[ "$(calls)" -eq "$before_calls" ]] || fail "refused draft changed the calendar"
+  [[ "$(mutations)" -eq "$before_calls" ]] || fail "refused draft changed the calendar"
 
   unset E2E_TEST_MODE INTEROP_E2E_SECRET INTEROP_CONFIG
   confirm_leg="signed-confirm"

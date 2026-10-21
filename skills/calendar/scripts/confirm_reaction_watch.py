@@ -2,6 +2,7 @@
 """Poll owner-only reactions on pending standalone calendar confirmation DMs."""
 from __future__ import annotations
 
+import json
 import os
 import sys
 from collections.abc import Callable, Mapping
@@ -168,6 +169,23 @@ def _executed_notice(record: Mapping[str, object], draft_id: str) -> str:
     return f"✅ 캘린더 {_action_label(record)} 실행 완료 (draft {draft_id}) — 소유자 ✅ 승인"
 
 
+def _duplicate_notice(record: Mapping[str, object], draft_id: str) -> str:
+    """Masked like every result: the card above already shows which event exists."""
+    return (
+        f"🔁 캘린더 {_action_label(record)} 안 함 (draft {draft_id}) — 이미 있음: "
+        "같은 날 같은 시간에 비슷한 일정이 있어 새로 만들지 않았습니다."
+    )
+
+
+def _sealed_status(draft_id: str) -> str:
+    """The status the child confirm sealed (load_draft refuses non-pending records)."""
+    try:
+        path = calendar_gate._draft_path(draft_id)
+        return str(json.loads(path.read_text(encoding="utf-8")).get("status", ""))
+    except (calendar_gate.GateError, OSError, ValueError, AttributeError):
+        return ""
+
+
 def _cancelled_notice(record: Mapping[str, object], draft_id: str) -> str:
     return (
         f"⛔ 캘린더 {_action_label(record)} 취소 (draft {draft_id}) — "
@@ -228,10 +246,13 @@ class OwnerDecision:
                     raise
                 # 승인 스레드(또는 채널 지시)로 결과를 돌려주고 닫는다.
                 # 둘 다 없는 옛 초안도 기존 소유자 DM 경로로 실행 결과를 알린다.
+                notice = (
+                    _duplicate_notice if _sealed_status(self.entry.draft_id) == "duplicate" else _executed_notice
+                )
                 _notify_result(
                     self.discord,
                     record,
-                    _executed_notice(record, self.entry.draft_id),
+                    notice(record, self.entry.draft_id),
                     calendar_confirm.OUTCOME_DONE,
                 )
             case state.CANCELLED:

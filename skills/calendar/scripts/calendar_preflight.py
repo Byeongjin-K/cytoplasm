@@ -155,8 +155,20 @@ def guarded_execute_draft(
     *,
     guard_request: GuardRequest | None = None,
 ) -> str:
-    """Run preflight directly before the frozen Calendar argv reaches ``gws``."""
+    """Run preflight directly before the frozen Calendar argv reaches ``gws``.
 
+    A create first checks the calendar for the same event and raises
+    ``calendar_dedupe.AlreadyExists`` instead of inserting. After the insert, the
+    race cleanup and the node default color run on that one new event only.
+    """
+
+    import calendar_after_insert
+    import calendar_dedupe
+
+    existing = calendar_dedupe.before_insert(draft)
+    if existing is not None:
+        calendar_dedupe.record_skip(draft, approval, existing)
+        raise calendar_dedupe.AlreadyExists(existing)
     gate = _gate()
     try:
         result = gate.guarded_write(
@@ -170,7 +182,20 @@ def guarded_execute_draft(
         raise CalendarPreflightError(str(error), 3) from None
     except gate.PostWriteVerificationFailed as error:
         raise CalendarPreflightError(str(error), 6) from None
-    return result.receipt.resource_id
+    event_id = result.receipt.resource_id
+    if _text(draft, "action") == "create" and event_id:
+        # The approved insert is already sealed as executed; a failed follow-up must not
+        # turn it into a retried (and refused) confirm, so it only leaves a marker.
+        try:
+            outcome, keep = calendar_after_insert.settle_race(draft, event_id)
+            if keep is None:
+                calendar_after_insert.fill_color(draft, event_id)
+        except calendar_gate.GateError as error:
+            print(f"AFTER-INSERT-FAILED draft={_text(draft, 'id')} event={event_id} reason={error}")
+        else:
+            if outcome == "removed" and keep is not None:
+                raise calendar_dedupe.AlreadyExists(keep)
+    return event_id
 
 
 def read_event(calendar_id: str, event_id: str) -> Mapping[str, JsonValue] | None:

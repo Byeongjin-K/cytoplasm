@@ -48,6 +48,8 @@ def _fake_gws(monkeypatch: pytest.MonkeyPatch, *, failure: str = "") -> list[lis
 
     def run(argv: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
         calls.append(argv)
+        if argv[1:4] == ["calendar", "events", "list"]:
+            return subprocess.CompletedProcess(argv, 0, json.dumps({"items": []}), "")
         if argv[1:4] == ["calendar", "calendars", "get"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps({"id": OWNER_EMAIL}), "")
         if argv[1:4] == ["calendar", "events", "insert"]:
@@ -91,7 +93,7 @@ def test_calendar_owner_create_writes_and_verifies_solo_event(
 
     # Then: one insert and read-back, consumed draft, origin-bound audit and marker.
     assert result == 0
-    assert [call[3] for call in calls if call[2] == "events"] == ["insert", "get"]
+    assert [call[3] for call in calls if call[2] == "events"] == ["list", "insert", "get", "list"]
     record, = calendar_gate.list_drafts()
     assert record["summary"] == "소유자 일정"
     assert record["status"] == "executed"
