@@ -232,7 +232,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
         tailnet_token=config.tailnet_token, brand=config.brand, sessions=lambda: load_sessions(board.root),
         extras=lambda: todo_extras(board), orders=board.orders, order_receiver=config.order_receiver,
-        gate_token=board.gate_token(),
+        gate_token=board.gate_token(), owner_devices=config.owner_devices,
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,7 @@ class BoardConfig:
     tailnet_token: bool = False
     brand: str = DEFAULT_BRAND
     order_receiver: str = ""
+    owner_devices: tuple[tuple[str, str], ...] = ()
 
     def project_grade(self, project: str) -> str:
         """The configured default grade of a project (과제내부 when the catalog says nothing)."""
@@ -143,6 +145,7 @@ def load_config(env: Mapping[str, str] | None = None) -> BoardConfig:
         tailnet_token=_tailnet_token(dashboard.get("tailnet")),
         brand=_brand(dashboard.get("brand")),
         order_receiver=_order_receiver(raw.get("orders")),
+        owner_devices=_owner_devices(dashboard.get("tailnet")),
     )
 
 
@@ -195,6 +198,27 @@ def _tailnet_origins(raw: object) -> tuple[str, ...]:
     if not all(o.startswith("https://") and o[len("https://"):] and "/" not in o[len("https://"):] for o in normalized):
         raise ProjectBoardError("config dashboard.tailnet.origins must be https://host[:port] strings")
     return normalized
+
+
+_STABLE_ID: Final = re.compile(r"n[A-Za-z0-9]{6,30}CNTRL")
+
+
+def _owner_devices(raw: object) -> tuple[tuple[str, str], ...]:
+    """``dashboard.tailnet.owner_devices``: the owner's own phone and laptops as ``{"id", "name"}``, ``id`` being the
+    tailnet stable node id (``tailscale status --json`` Peer.ID). Only an order sent from one of these is the owner's
+    command; servers on the same tailnet account are not.
+    """
+    devices = _tailnet_block(raw).get("owner_devices") or []
+    if not isinstance(devices, list):
+        raise ProjectBoardError("config dashboard.tailnet.owner_devices must be a list of {id, name}")
+    out: list[tuple[str, str]] = []
+    for item in devices:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not isinstance(item.get("name", ""), str):
+            raise ProjectBoardError("config dashboard.tailnet.owner_devices must be a list of {id, name}")
+        if not _STABLE_ID.fullmatch(item["id"].strip()):
+            raise ProjectBoardError("config dashboard.tailnet.owner_devices id must be a tailnet stable node id")
+        out.append((item["id"].strip(), " ".join(item.get("name", "").split())[:80]))
+    return tuple(out)
 
 
 def _tailnet_token(raw: object) -> bool:

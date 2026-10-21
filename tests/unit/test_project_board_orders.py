@@ -17,7 +17,7 @@ from automation.project_board.board_store import BoardStore
 from automation.project_board.dashboard import render_dashboard
 from automation.project_board.models import ProjectBoardError, proposal_from_dict
 from automation.project_board.orders import OrderStore
-from automation.project_board.server import make_server
+from automation.project_board.server import loopback_peer_uid, make_server
 from automation.yoodori_gate import yoodori_read_gate as gate
 
 TODAY = date(2026, 10, 21)
@@ -179,3 +179,80 @@ def test_the_yoodori_gate_writes_order_status_through_fixed_argv() -> None:
                   ["order-status", "1", "끝", "--dori", "x" * 21], ["order-status", "1", "끝", "--note"]):
         with pytest.raises(gate.Refused):
             gate.build(words)
+
+
+PHONE, PHONE_IP, SERVER, SERVER_IP = "nPhoneAAAA11CNTRL", "192.0.2.23", "nServerBBB11CNTRL", "192.0.2.95"
+WHOIS = {PHONE_IP: (PHONE, "iphone"), SERVER_IP: (SERVER, "node-a")}
+
+
+def _device_server(tmp_path: Path, peer: int | None) -> tuple[object, int, OrderStore]:
+    store, orders = _store(tmp_path), OrderStore(tmp_path / "orders.db")
+    server = make_server(
+        host="127.0.0.1", port=0, token=TOKEN, store=store, today=lambda: TODAY, pending=lambda: (),
+        read_source=lambda *a: None, attachment_path=lambda *a: None, on_change=lambda: None,
+        tailnet_origins=(ORIGIN,), tailnet_logins=(OWNER,), orders=orders, order_receiver="유돌", gate_token=GATE,
+        owner_devices=((PHONE, "형 폰"),), peer_uid=lambda client, srv: peer, whois=WHOIS.get,
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, int(server.server_address[1]), orders
+
+
+@pytest.mark.parametrize("peer, sent_from, via, device", [
+    (0, PHONE_IP, "owner-device", PHONE),      # tailscale serve (root) says the owner's phone sent it
+    (0, SERVER_IP, "tailnet", SERVER),          # the node itself on the owner's account is not the owner
+    (0, "192.0.2.9", "tailnet", ""),           # an address whois does not know
+    (1001, PHONE_IP, "tailnet", ""),            # a local process forging the header: not tailscaled, not believed
+    (None, PHONE_IP, "tailnet", ""),            # peer socket not found: not believed
+])
+def test_only_an_owner_device_through_tailscale_serve_is_the_owners_command(
+    tmp_path: Path, peer: int | None, sent_from: str, via: str, device: str,
+) -> None:
+    server, port, orders = _device_server(tmp_path, peer)
+    try:
+        status, _ = _fetch(port, "POST", "/order/new", {**TAILNET, "X-Forwarded-For": sent_from}, _form("지시"))
+        assert status == 200
+        data = json.loads(_fetch(port, "GET", "/api/orders/1", {"X-PB-Gate-Token": GATE})[1])
+        assert (data["via"], data["device"]) == (via, device)
+        assert orders.get(1).via == via  # type: ignore[union-attr]
+    finally:
+        server.shutdown()  # type: ignore[attr-defined]
+        server.server_close()  # type: ignore[attr-defined]
+
+
+def test_a_forged_login_from_a_non_owner_device_is_still_refused(tmp_path: Path) -> None:
+    server, port, orders = _device_server(tmp_path, 0)
+    try:
+        headers = {**TAILNET, "Tailscale-User-Login": "someone@example.com", "X-Forwarded-For": PHONE_IP}
+        assert _fetch(port, "POST", "/order/new", headers, _form("지시"))[0] == 403
+        assert orders.all() == ()
+    finally:
+        server.shutdown()  # type: ignore[attr-defined]
+        server.server_close()  # type: ignore[attr-defined]
+
+
+def test_the_peer_socket_owner_is_read_from_the_kernel_table() -> None:
+    import os
+    import socket
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    client = socket.create_connection(listener.getsockname())
+    accepted, _ = listener.accept()
+    try:
+        assert loopback_peer_uid(client.getsockname()[1], listener.getsockname()[1]) == os.getuid()
+        assert loopback_peer_uid(client.getsockname()[1], 1) is None
+    finally:
+        for sock in (accepted, client, listener):
+            sock.close()
+
+
+def test_owner_devices_config_takes_stable_node_ids_only(tmp_path: Path) -> None:
+    from automation.project_board.config import load_config
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"dashboard": {"tailnet": {"owner_devices": [{"id": PHONE, "name": "형 폰"}]}}}))
+    assert load_config({"PROJECT_BOARD_CONFIG": str(path)}).owner_devices == ((PHONE, "형 폰"),)
+    path.write_text(json.dumps({"dashboard": {"tailnet": {"owner_devices": [{"id": PHONE_IP}]}}}))
+    with pytest.raises(ProjectBoardError):
+        load_config({"PROJECT_BOARD_CONFIG": str(path)})
