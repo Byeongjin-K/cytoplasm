@@ -7,6 +7,7 @@ posted (reason printed), 4 the model or a source was unavailable (retry later).
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 import threading
@@ -23,6 +24,7 @@ from . import minutes, sources
 from .config import load_config
 from .llm import describe, provider_from_config
 from .models import GRADES, STATUSES, ProjectBoardError
+from .orders import ORDER_STATUSES, order_href
 from .proposals import ProposalRecord
 from .sessions import load_sessions
 from .service import (
@@ -151,6 +153,42 @@ def cmd_progress(args: argparse.Namespace) -> int:
     return 0
 
 
+def _order_url(number: int) -> str:
+    """The order's own screen on the owner's tailnet address, when the node config names one."""
+    origins = load_config().tailnet_origins
+    return f"{origins[0]}/{order_href(number)}" if origins else ""
+
+
+def cmd_orders(args: argparse.Namespace) -> int:
+    board = Board.default()
+    orders = [o for o in board.orders.all()
+              if (not args.status or o.status == args.status) and not (args.undelivered and o.delivered_at)]
+    orders.reverse()  # oldest first: a relay hands them on in the order the owner wrote them
+    if args.json:
+        titles = {t.todo_id: t.title for t in board.store.snapshot(today=today_kst()).todos} if orders else {}
+        print(json.dumps([{**o.as_dict(url=_order_url(o.number)), "todo_title": titles.get(o.todo_id, "")}
+                          for o in orders], ensure_ascii=False))
+        return 0
+    for order in orders:
+        print(f"ORDER #{order.number} status={order.status} dori={order.dori or '-'} "
+              f"delivered={order.delivered_to or '-'} created={order.created_at}")
+    return 0
+
+
+def cmd_order_update(args: argparse.Namespace) -> int:
+    order = Board.default().orders.update(
+        args.number, status=args.status, dori=args.dori, post_url=args.post_url, note=args.note, by=args.by,
+    )
+    print(f"ORDER-UPDATED #{order.number} status={order.status} dori={order.dori or '-'}")
+    return 0
+
+
+def cmd_order_delivered(args: argparse.Namespace) -> int:
+    first = Board.default().orders.mark_delivered(args.number, args.to)
+    print(f"ORDER-DELIVERED #{args.number} to={args.to} first={first}")
+    return 0
+
+
 def cmd_grade(args: argparse.Namespace) -> int:
     board = Board.default()
     task_key = board.store.raise_grade(args.todo, args.grade)
@@ -193,7 +231,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         on_change=lambda: rebuild_dashboard(board, today=today_kst()),
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
         tailnet_token=config.tailnet_token, brand=config.brand, sessions=lambda: load_sessions(board.root),
-        extras=lambda: todo_extras(board),
+        extras=lambda: todo_extras(board), orders=board.orders, order_receiver=config.order_receiver,
+        gate_token=board.gate_token(),
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()
@@ -209,7 +248,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
-    from .demo import demo_handlers, demo_token, make_demo_board
+    from .demo import DEMO_RECEIVER, demo_handlers, demo_token, make_demo_board, seed_orders
     from .server import make_server
 
     directory = nullcontext(args.root) if args.root is not None else tempfile.TemporaryDirectory(
@@ -217,10 +256,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
     )
     with directory as root:
         store = make_demo_board(Path(root).expanduser(), today_kst())
+        orders = seed_orders(Path(root).expanduser(), store, today_kst())
         token = demo_token()
         server = make_server(
             host="127.0.0.1", port=args.port, token=token, store=store, today=today_kst,
-            **demo_handlers(today_kst),
+            orders=orders, order_receiver=DEMO_RECEIVER, **demo_handlers(today_kst),
         )
         try:
             print(f"DEMO http://127.0.0.1:{server.server_address[1]}/?t={token}", flush=True)
@@ -332,6 +372,26 @@ def build_parser() -> argparse.ArgumentParser:
     progress.add_argument("--progress", type=int)
     progress.add_argument("--note")
     progress.set_defaults(handler=cmd_progress)
+
+    orders = commands.add_parser("orders", help="list dashboard orders (newest last)")
+    orders.add_argument("--status", choices=ORDER_STATUSES)
+    orders.add_argument("--undelivered", action="store_true", help="only orders the relay has not handed on")
+    orders.add_argument("--json", action="store_true")
+    orders.set_defaults(handler=cmd_orders)
+
+    update = commands.add_parser("order-update", help="write back who took a dashboard order and how far it got")
+    update.add_argument("number", type=int)
+    update.add_argument("--status", choices=ORDER_STATUSES)
+    update.add_argument("--dori", help="the Dori that took it")
+    update.add_argument("--post-url", help="the https link of its post in the Dori room")
+    update.add_argument("--note")
+    update.add_argument("--by", required=True, help="who writes this (the receiving Dori)")
+    update.set_defaults(handler=cmd_order_update)
+
+    delivered = commands.add_parser("order-delivered", help="record that the relay handed an order to its receiver")
+    delivered.add_argument("number", type=int)
+    delivered.add_argument("--to", required=True)
+    delivered.set_defaults(handler=cmd_order_delivered)
 
     grade = commands.add_parser("grade", help="raise the security grade of an approved todo's 업무 (all its todos)")
     grade.add_argument("todo")

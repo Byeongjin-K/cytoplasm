@@ -125,6 +125,11 @@ DENIED_FLAGS = frozenset({
 })
 _FLAG = re.compile(r"--[a-z][a-z0-9-]{0,40}")
 _OUT_NAME = re.compile(r"(?!\.)[A-Za-z0-9._-]{1,120}")
+# Dashboard orders (owner 2026-10-21 Q351): YooDori writes back who took an order and how far it got.
+ORDER_STATUSES = ("받음", "넘김", "처리 중", "끝")
+_ORDER_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
+_POST_URL = re.compile(r"https://[A-Za-z0-9._~:/?#@!+,=%-]{1,290}")
+_ORDER_FLAGS = {"--dori": 20, "--post-url": 300, "--note": 300}
 
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
@@ -134,6 +139,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>. Plaud notes written: plaud-written <n 1-50>.\n"
+         "Dashboard order: order-status <n> <" + "|".join(ORDER_STATUSES) + ">"
+         " [--dori <name>] [--post-url <https link>] [--note <text>].\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
          "Received attachment: mail-attachment <uid> <file name as mail-get shows it> + origin\n"
          "  (copies that file of the owner's mail into staging; prints its staged path).\n"
@@ -454,10 +461,32 @@ def build_job(words: list[str]) -> Job:
     return Job(name, argv, sub in writes, _label(tool, sub, args), timeout, channel, message)
 
 
+def order_status(args: list[str]) -> list[str]:
+    """``order-update`` argv for one dashboard order; the writer is always 유돌."""
+    if len(args) < 2 or not _ORDER_NUMBER.fullmatch(args[0]) or args[1] not in ORDER_STATUSES:
+        raise Refused("order-status needs <n> <" + "|".join(ORDER_STATUSES) + ">")
+    rest, values = args[2:], {}
+    if len(rest) % 2:
+        raise Refused("order-status flags take one value each")
+    for flag, value in zip(rest[::2], rest[1::2]):
+        if flag not in _ORDER_FLAGS or flag in values:
+            raise Refused("unknown or repeated order-status flag")
+        if not value.strip() or len(value) > _ORDER_FLAGS[flag] or _CTRL.search(value):
+            raise Refused(f"{flag} must be 1-{_ORDER_FLAGS[flag]} characters on one line")
+        if flag == "--post-url" and not _POST_URL.fullmatch(value):
+            raise Refused("--post-url must be one https:// link")
+        values[flag] = value
+    pairs = [word for pair in values.items() for word in pair]
+    return ["/usr/bin/python3", "-m", "automation.project_board", "order-update", args[0],
+            "--status", args[1], *pairs, "--by", "유돌"]
+
+
 def build(words: list[str]) -> tuple[str, list[str], Path]:
     if not words:
         raise Refused("empty command")
     name, args = words[0], words[1:]
+    if name == "order-status":
+        return name, order_status(args), RELEASE
     if name == "release-notes":
         if len(args) != 1 or _RELEASE_TAG.fullmatch(args[0]) is None:
             raise Refused("release-notes needs <vX.Y.Z>")
@@ -651,7 +680,7 @@ def main() -> int:
             words = shlex.split(raw)
         except ValueError as exc:
             raise Refused(f"cannot parse: {exc}") from None
-        if words and words[0] not in (*CARD_COMMANDS, *JOB_COMMANDS) and len(raw) > 600:
+        if words and words[0] not in (*CARD_COMMANDS, *JOB_COMMANDS, "order-status") and len(raw) > 600:
             raise Refused("read command too long")
         job = build_job(words) if words and words[0] in JOB_COMMANDS else None
         if job is not None:
