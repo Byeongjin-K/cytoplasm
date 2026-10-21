@@ -91,7 +91,10 @@ def test_timer_runner_sends_warning_lines_to_pair_and_the_rest_to_owner(
     assert cron_timer_run.run(home, job) == 0
 
     assert ("fixture-token", "222", HUMAN[2]) in sent
-    assert [target for _, target, body in sent if MACHINE[2] in body] == ["333"]
+    assert [target for _, target, body in sent if "경고를 남겼어요" in body] == ["333"]
+    assert not any(owner_text.findings(line) for *_, body in sent for line in body.splitlines()), "코드 줄은 출력 기록에만"
+    kept = next((home / ".hermes" / "cron-timers" / "output" / "m-watch").glob("*.txt")).read_text()
+    assert MACHINE[2] in kept
 
 
 def test_timer_runner_without_pair_channel_keeps_the_legacy_destination(
