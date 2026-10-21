@@ -355,19 +355,24 @@ def test_retired_wiki_watcher_removes_only_its_script_and_units(tmp_path: Path) 
     assert other.read_bytes() == b"keep"
 
 
-def test_budget_release_cleanup_removes_the_watcher_and_keeps_owner_budget_data(tmp_path: Path) -> None:
-    # Given: the budget-watch timer the owner retired (2026-10-22) and its wrapper, beside the
-    # budget skill's own data, which the owner said to leave alone.
+def test_budget_release_cleanup_removes_the_watcher_its_data_and_the_sheet_setting(tmp_path: Path) -> None:
+    # Given: the budget-watch timer the owner retired (2026-10-22) with its wrapper, its node data
+    # and the sheet id line in the secrets file, beside files that must stay.
     units = retired_jobs.unit_paths(tmp_path, "budget-watch")
     units[0].parent.mkdir(parents=True)
     for path in units:
         path.write_bytes(b"old unit")
-    wrapper = tmp_path / ".hermes/scripts/budget_watch.py"
-    kept = (tmp_path / ".hermes/budget/config.json", tmp_path / ".hermes/budget-gate/send-log.jsonl",
-            tmp_path / ".hermes/scripts/watch_failure_streak.py")
-    for path in (wrapper, *kept):
+    removed = (tmp_path / ".hermes/scripts/budget_watch.py", tmp_path / ".hermes/budget/config.json",
+               tmp_path / ".hermes/budget-gate/drafts/ab12cd.json", tmp_path / ".hermes/budget-gate/send-log.jsonl",
+               tmp_path / "state/budget.db")
+    kept = (tmp_path / ".hermes/scripts/watch_failure_streak.py", tmp_path / "state/reminders-other.db",
+            tmp_path / ".hermes/budget-other.txt")
+    for path in (*removed, *kept):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"x")
+    secrets = tmp_path / ".env.secrets"
+    secrets.write_bytes(b"A=1\nBUDGET_SHEET_ID=sheet-1\nexport BUDGET_SHEET_ID=sheet-2\nB=2\n")
+    secrets.chmod(0o600)
     calls: list[tuple[str, ...]] = []
     runner = _live_runner(calls, obeys=True)
     assert retired_jobs.check(tmp_path, "budget-watch", runner) == "stale"
@@ -375,8 +380,23 @@ def test_budget_release_cleanup_removes_the_watcher_and_keeps_owner_budget_data(
     # When
     retired_jobs.install(tmp_path, "budget-watch", runner)
 
-    # Then: the timer was stopped first, the units and wrapper are gone, the data stays.
+    # Then: the timer was stopped first; units, wrapper, data and the sheet line are gone.
     assert ("systemctl", "--user", "disable", "--now", units[0].name) in calls
-    assert all(not path.exists() for path in (*units, wrapper))
+    assert all(not path.exists() for path in (*units, *removed))
+    assert not (tmp_path / ".hermes/budget").exists() and not (tmp_path / ".hermes/budget-gate").exists()
     assert all(path.read_bytes() == b"x" for path in kept)
+    assert secrets.read_bytes() == b"A=1\nB=2\n"
+    assert secrets.stat().st_mode & 0o777 == 0o600
     assert retired_jobs.check(tmp_path, "budget-watch", runner) == "ok"
+
+
+def test_budget_cleanup_refuses_a_symlink_inside_its_data(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".hermes/budget-gate").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (home / ".hermes/budget-gate/drafts").symlink_to(outside)
+    assert retired_jobs.check(home, "budget-watch", _runner(home, [])) == "unknown"
+    with pytest.raises(ValueError):
+        retired_jobs.install(home, "budget-watch", _runner(home, []))
+    assert outside.is_dir()

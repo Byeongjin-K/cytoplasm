@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from automation.gateway_retirement import Runner, checked, run, safe_path, stopped
+from automation.gateway_retirement import Runner, atomic_write, checked, run, safe_path, stopped
 
 if TYPE_CHECKING:
     from automation.node_config import NodeConfig
@@ -50,6 +50,42 @@ INTEROP_TREES: Final = (
     ".hermes/interop_runtime/automation/interop/hermes_plugin",
     ".hermes/interop_runtime/automation/interop/plugin_shim",
 )
+
+
+# The budget skill's node data goes with its timer (owner 2026-10-22 "시트도 그냥 삭제해").
+BUDGET_FILES: Final = ("state/budget.db", "state/budget.db-wal", "state/budget.db-shm", "state/budget.db-journal")
+BUDGET_TREES: Final = (".hermes/budget", ".hermes/budget-gate")
+BUDGET_ENV: Final = ".env.secrets"
+BUDGET_ENV_KEY: Final = b"BUDGET_SHEET_ID="
+
+
+def budget_paths(home: Path) -> tuple[Path, ...]:
+    """Validate the exact budget data files and trees, every tree child included, before use."""
+    paths = tuple(safe_path(home, relative) for relative in (*BUDGET_FILES, *BUDGET_TREES))
+    for path in paths:
+        relative = str(path.relative_to(home))
+        if path.exists() and (relative in BUDGET_FILES) != path.is_file():
+            raise ValueError("RETIRED-JOB-REFUSED: budget path type mismatch")
+        if path.is_dir():
+            for child in path.rglob("*"):
+                safe_path(home, str(child.relative_to(home)))
+    return paths
+
+
+def _budget_line(line: bytes) -> bool:
+    return line.removeprefix(b"export ").lstrip().startswith(BUDGET_ENV_KEY)
+
+
+def budget_env(home: Path) -> tuple[Path, bytes] | None:
+    """The secrets file without its BUDGET_SHEET_ID lines, or None when no such line is left."""
+    path = safe_path(home, BUDGET_ENV)
+    if not path.exists():
+        return None
+    if not path.is_file():
+        raise ValueError("RETIRED-JOB-REFUSED: secrets path is not a regular file")
+    lines = path.read_bytes().splitlines(keepends=True)
+    kept = [line for line in lines if not _budget_line(line)]
+    return None if len(kept) == len(lines) else (path, b"".join(kept))
 
 
 def interop_paths(home: Path) -> tuple[Path, ...]:
@@ -118,6 +154,10 @@ def check(home: Path, name: str, runner: Runner = run) -> str:
         data = tuple(safe_path(home, path) for path in DATA) if name == "reminder-poller" else ()
         if name == "research-trends":
             data = research_paths(home)
+        if name == "budget-watch":
+            data = budget_paths(home)
+            if budget_env(home) is not None:
+                return "stale"
         return "stale" if any(live) or any(path.exists() for path in (*units, *scripts, *data)) else "ok"
     except (OSError, ValueError, subprocess.SubprocessError):
         return "unknown"
@@ -162,7 +202,10 @@ def install(home: Path, name: str, runner: Runner = run) -> None:
     if name == "reminder-poller":
         for path in DATA:
             safe_path(home, path)
-    research = research_paths(home) if name == "research-trends" else ()
+    leftovers = research_paths(home) if name == "research-trends" else ()
+    if name == "budget-watch":
+        leftovers = budget_paths(home)
+        budget_env(home)
     for path in units:
         quiesce(path.name, runner)
     if any(path.exists() for path in units):
@@ -179,11 +222,13 @@ def install(home: Path, name: str, runner: Runner = run) -> None:
         script.unlink(missing_ok=True)
     if name == "reminder-poller":
         remove_reminder_data(home)
-    for path in research:
+    for path in leftovers:
         if path.is_dir():
             shutil.rmtree(path)
         else:
             path.unlink(missing_ok=True)
+    if name == "budget-watch" and (stripped := budget_env(home)) is not None:
+        atomic_write(*stripped)
     if check(home, name, runner) != "ok":
         raise ValueError("RETIRED-JOB-REFUSED: read-back failed")
 
