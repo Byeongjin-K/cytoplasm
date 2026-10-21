@@ -523,6 +523,10 @@ def _glued(items: list[str]) -> str:
     return head + (items[-1] if items else "")
 
 
+_DOT: Final = "·"
+_HELD_DOT: Final = "\u2060·"  # a word joiner keeps the dot off the start of a line
+
+
 def title_text(text: str) -> str:
     """A title or mail subject as written: a word joiner before each 「·」 so no line begins with it (Chrome broke
     「조직문화확산·법정의무교육·연구윤리교육」 before the dot under keep-all). Search ignores the joiner."""
@@ -923,7 +927,7 @@ def _source_card(
     top += [f'<a href="{escape(project_href(row.project), quote=True)}">{escape(row.project)}</a>'] if with_project else []
     return (
         f'<div class="card src-card"><div class="top"><span>{_SEP.join(top)}</span>{_grade_badge(row.grade)}</div>'
-        f'{title}<p>{_keep(row.summary)}</p>{attachments}'
+        f'{title}<p>{_keep(row.summary).replace(_DOT, _HELD_DOT)}</p>{attachments}'
         f'<div class="names">{icon("list")}<span>만든 할\u00a0일: {todos}</span></div></div>'
     )
 

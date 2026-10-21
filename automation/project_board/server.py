@@ -236,7 +236,7 @@ class _Handler(BaseHTTPRequestHandler):
         body = (
             f'<main class="reader"><a class="back" href="/#sources" data-back>{icon("chevron-left")}<span>근거 목록</span></a>'
             f'{self._source_links(kind, source_id)}'
-            f'<div class="card">{title}<pre>{escape(rest.strip() if heading else text)}</pre></div></main>{_BACK_JS}'
+            f'<div class="card">{title}<pre>{title_text(rest.strip() if heading else text)}</pre></div></main>{_BACK_JS}'
         )
         self._send(200, page_shell(heading or "원문", body, self.brand).encode("utf-8"), "text/html; charset=utf-8")
 
