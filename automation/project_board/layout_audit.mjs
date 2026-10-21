@@ -10,6 +10,7 @@
 //   hscroll    the page scrolls sideways
 //   smalltext  text under 11px
 //   lead-sep   a 「·」 separator begins a line (it belongs at the end of the item before it)
+//   unopened   a screen did not load (it is reported, and the audit goes on)
 //   under-nav  at the end of the page, content sits under the fixed bottom tab bar
 //
 // Usage (node 18+ with the playwright package; nothing is installed into the repository):
@@ -176,7 +177,10 @@ try {
           const keys = new Set([...document.querySelectorAll('nav a[href^="#"]')].map((a) => a.getAttribute('href')));
           keys.add('#archive');
           if (document.querySelector('a[href="#orders"]')) keys.add('#orders');
-          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="#order/"], a[href^="/source/"]')) keys.add(a.getAttribute('href'));
+          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="#order/"], a[href^="/source/"]')) {
+            const href = a.getAttribute('href');
+            if (href.startsWith('#') || /^\/source\/[^/]+\/[^/]+$/.test(href)) keys.add(href); // a source page, never its attachment download
+          }
           return [...keys];
         });
         const only = args.only ? args.only.split(',') : null;
@@ -187,7 +191,12 @@ try {
             await page.evaluate((h) => { location.hash = h; }, key);
             await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
           } else {
-            await page.goto(origin + key, { waitUntil: 'networkidle' });
+            try {
+              await page.goto(origin + key, { waitUntil: 'networkidle' });
+            } catch (error) {
+              results.push({ engine: engineName, view: view.name, scheme, screen: decodeURIComponent(key), findings: [{ type: 'unopened', a: String(error).split('\n')[0] }] });
+              continue;
+            }
           }
           await page.evaluate(() => document.fonts.ready);
           const findings = await page.evaluate(probe);
