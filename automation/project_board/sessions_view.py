@@ -249,7 +249,7 @@ def _group(key: str, name: str, glyph: str, count: str, summary: str, members: l
             else f'<p class="note">{escape(empty)}</p>')
     badge = _badge(_worst(states)) if members else ""
     return (
-        f'<details class="card fold ss-group" data-fold="ss-{key}" data-count="{len(members)}"><summary>'
+        f'<details class="card fold ss-group" id="ss-g-{escape(key, quote=True)}" data-fold="ss-{key}" data-count="{len(members)}"><summary>'
         f'<span class="ss-icon">{icon(glyph)}</span><span class="ss-gname"><b>{escape(name)}</b>'
         f'<span class="ss-gsum">{escape(count)}{" · " + escape(summary) if summary else ""}</span></span>{badge}</summary>'
         f"{body}</details>"
@@ -258,16 +258,16 @@ def _group(key: str, name: str, glyph: str, count: str, summary: str, members: l
 
 def _branch(kind: str, glyph: str, title: str, sub: str, total: int, groups: list[str]) -> str:
     return (
-        f'<div class="ss-branch" data-kind="{kind}" data-count="{total}">'
+        f'<div class="ss-branch" data-kind="{kind}" data-count="{total}" id="ss-{kind}">'
         f'<div class="ss-hub"><span class="ss-icon">{icon(glyph)}</span><span><b>{title}</b>'
         f'<span class="ss-hubsub">{sub}</span></span></div>'
         f'<div class="ss-spine">{"".join(groups)}</div></div>'
     )
 
 
-def _pillar(glyph: str, label: str, big: str, unit: str, sub: str) -> str:
-    return (f'<div class="card ss-pillar"><span class="tile-top">{icon(glyph)}{label}</span>'
-            f'<b class="ss-big">{big}<small>{unit}</small></b><p class="ss-line muted">{sub}</p></div>')
+def _pillar(glyph: str, label: str, big: str, unit: str, sub: str, href: str) -> str:
+    return (f'<a class="card ss-pillar" href="{href}"><span class="tile-top">{icon(glyph)}{label}</span>'
+            f'<b class="ss-big">{big}<small>{unit}</small></b><p class="ss-line muted">{sub}</p></a>')
 
 
 def _bars(title: str, unit: str, days: list[int], values: list[int], peak: int) -> str:
@@ -284,11 +284,29 @@ def _freshness(data: Sessions, now_ms: int) -> str:
     age = max(0, now_ms - data.now)
     # the open page keeps the age current itself (data-ago); data-live keeps it out of the page's ETag
     since = f'<span data-live data-ago="{data.now}" data-ago-unit="dur">{_dur(age)}</span>'
-    line = f'<p class="note ss-fresh">{icon("clock")}{_day(data.now)} {_clock(data.now)} 기준, {since} 전에 받은 집계입니다</p>'
+    line = f'<p class="note ss-fresh">{icon("clock")}<span>{_day(data.now)} {_clock(data.now)} 기준, {since} 전에 받은 집계입니다</span></p>'
     if age <= STALE_MS:
         return line
     return line + (f'<div class="callout">{icon("alert")}<div><b>세션 집계가 {since} 동안 새로 오지 않았습니다</b>'
                    '<p class="note">작업 컴퓨터가 꺼져 있거나 전송이 멈췄을 수 있습니다. 아래 숫자는 마지막으로 받은 집계입니다.</p></div></div>')
+
+
+def _attention(lanes: list[Lane], services: list[Service]) -> str:
+    """What needs a look first: stopped or waiting lanes and failing timers, each opening its group below."""
+    rows = []
+    for key, name, _ in _DEPTS:
+        g = [x for x in lanes if x.dept == key and x.st in ("block", "fail", "wait")]
+        if g:
+            rows.append((f"#ss-g-lane-{key}", name, _lane_counts(x.st for x in g)))
+    for key, name, _ in _SERVICE_GROUPS:
+        bad = [s for s in services if s.group == key and s.last_ok is False]
+        if bad:
+            rows.append((f"#ss-g-svc-{key}", name, f"마지막 실행 실패 {_n(len(bad))}종"))
+    if not rows:
+        return ""
+    items = "".join(f'<li><a href="{escape(href, quote=True)}"><b>{escape(name)}</b> · {escape(what)}</a></li>' for href, name, what in rows)
+    return (f'<div class="callout ss-attention">{icon("alert")}<div><b>먼저 볼 것 {len(rows)}곳</b>'
+            f'<ul class="small">{items}</ul></div></div>')
 
 
 def _board(data: Sessions, now_ms: int) -> str:
@@ -327,11 +345,11 @@ def _board(data: Sessions, now_ms: int) -> str:
         f'<div class="ss-branch ss-overview" data-kind="overview" data-count="{total}">'
         f'<div class="ss-hub"><span class="ss-icon">{icon("network")}</span><span><b>지난 7일 모든 세션 {_n(total)}개</b>'
         f'<span class="ss-hubsub">지금 진행 중 {_n(running)}개</span></span></div><div class="ss-spine">'
-        + _pillar("layers", "작업 레인", _n(len(lanes)), "건", _lane_counts(x.st for x in lanes) or "기록 없음")
+        + _pillar("layers", "작업 레인", _n(len(lanes)), "건", _lane_counts(x.st for x in lanes) or "기록 없음", "#ss-lanes")
         + _pillar("sessions", "에이전트 세션", _n(len(agents)), "개",
-                  f"누적 {_hours(sum(a.dur for a in agents))}, 응답 {_n(sum(a.calls for a in agents))}회, 상주 창 {_n(len(data.windows))}개")
+                  f"누적 {_hours(sum(a.dur for a in agents))}, 응답 {_n(sum(a.calls for a in agents))}회, 상주 창 {_n(len(data.windows))}개", "#ss-agents")
         + _pillar("eye", "감시·서비스", _n(len(services)), "종",
-                  f"상시 가동 {_n(sum(s.tag == '상시' for s in services))}종, 예약 실행 {_n(sum(s.runs or 0 for s in services))}회")
+                  f"상시 가동 {_n(sum(s.tag == '상시' for s in services))}종, 예약 실행 {_n(sum(s.runs or 0 for s in services))}회", "#ss-services")
         + "</div></div>"
     )
     trend = (
@@ -341,7 +359,7 @@ def _board(data: Sessions, now_ms: int) -> str:
         f'{_bars("새 작업 레인", "건", days, lane_by_day, peak)}{_bars("새 에이전트 세션", "개", days, agent_by_day, peak)}</div></div>'
     )
     return (
-        _freshness(data, now_ms) + overview + trend
+        _freshness(data, now_ms) + _attention(lanes, services) + overview + trend
         + _branch("lanes", "layers", "작업 레인", f"{_n(len(lanes))}건, 맡긴 일을 비슷한 일끼리 묶었습니다", len(lanes), lane_groups)
         + _branch("agents", "sessions", "에이전트 세션", f"{_n(len(agents))}개, 플랫폼과 모델별로 묶었습니다", len(agents), agent_groups)
         + _branch("services", "eye", "감시·서비스", f"{_n(len(services))}종, 사람 없이 도는 감시와 예약 실행입니다", len(services), service_groups)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
@@ -45,6 +46,14 @@ class ProjectBoardError(RuntimeError):
     def __init__(self, message: str, retryable: bool = False) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+_CLOCK: Final = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
+
+
+def _clock(value: object) -> str:
+    """An optional HH:MM; anything else (a range, prose, a wrong hour) is dropped rather than refused."""
+    return value.strip() if isinstance(value, str) and _CLOCK.match(value.strip()) else ""
 
 
 def _text(value: object, limit: int, what: str, *, required: bool = True) -> str:
@@ -91,6 +100,17 @@ class ProposedTodo:
     owner: str = ""
     due: str | None = None
     due_reason: str = ""
+    time: str = ""
+    place: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class TodoExtra:
+    """What the approved proposal said about a todo beyond the board row: why that due date, at what time, where."""
+
+    due_reason: str = ""
+    time: str = ""
+    place: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +130,7 @@ class Proposal:
             "project_owner": self.project_owner,
             "summary": self.summary,
             "todos": [
-                {"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason}
+                {"title": t.title, "owner": t.owner, "due": t.due, "due_reason": t.due_reason, "time": t.time, "place": t.place}
                 for t in self.todos
             ],
             "source": {
@@ -147,6 +167,8 @@ def proposal_from_dict(raw: dict[str, object]) -> Proposal:
                 owner=_text(entry.get("owner"), 60, "todo owner", required=False),
                 due=valid_due(entry.get("due")),
                 due_reason=_text(entry.get("due_reason"), 200, "due reason", required=False),
+                time=_clock(entry.get("time")),
+                place=_text(entry.get("place"), 80, "todo place", required=False),
             )
         )
     attachments = source.get("attachments") or []

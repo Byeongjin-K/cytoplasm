@@ -32,6 +32,7 @@ from .service import (
     digest_snapshot,
     parse_todo,
     pending_views,
+    todo_extras,
     propose,
     rebuild_dashboard,
     request_digest_mail,
@@ -192,6 +193,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         on_change=lambda: rebuild_dashboard(board, today=today_kst()),
         tailnet_origins=config.tailnet_origins, tailnet_logins=config.tailnet_logins,
         tailnet_token=config.tailnet_token, brand=config.brand, sessions=lambda: load_sessions(board.root),
+        extras=lambda: todo_extras(board),
     )
     print(f"DASHBOARD-SERVE http://{args.host}:{server.server_address[1]}/ (token: {board.root / 'serve.token'})")
     sys.stdout.flush()

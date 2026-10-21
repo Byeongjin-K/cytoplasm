@@ -28,7 +28,7 @@ import hmac
 import json
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date
 from html import escape
 from http.cookies import SimpleCookie
@@ -40,7 +40,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from .board_store import BoardStore
 from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
-from .models import STATUSES, PendingView, ProjectBoardError
+from .models import STATUSES, PendingView, ProjectBoardError, TodoExtra
 from .sessions import SessionsState
 from .ledger_view import load_ledger
 
@@ -78,6 +78,7 @@ class _Handler(BaseHTTPRequestHandler):
     tailnet_token: bool = False
     brand: str = DEFAULT_BRAND
     sessions: Callable[[], SessionsState]
+    extras: Callable[[], Mapping[str, TodoExtra]]
 
     def _via_tailnet(self) -> bool:
         host = (self.headers.get("Host") or "").strip().lower()
@@ -172,7 +173,7 @@ class _Handler(BaseHTTPRequestHandler):
         snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
         etag, page = stamp_etag(render_dashboard(
             snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
-            sessions=self.sessions(), ledger=load_ledger()))
+            sessions=self.sessions(), ledger=load_ledger(), extras=self.extras()))
         offered = {tag.strip().removeprefix("W/") for tag in (self.headers.get("If-None-Match") or "").split(",")}
         if etag in offered:  # the open page's 2-minute check: nothing it shows has changed
             self.send_response(304)
@@ -330,6 +331,7 @@ def make_server(
     tailnet_token: bool = False,
     brand: str = DEFAULT_BRAND,
     sessions: Callable[[], SessionsState] = lambda: "missing",
+    extras: Callable[[], Mapping[str, TodoExtra]] = dict,
 ) -> ThreadingHTTPServer:
     if host not in LOOPBACK_HOSTS:
         raise ProjectBoardError(f"dashboard is local only; refusing to bind {host}")
@@ -352,6 +354,7 @@ def make_server(
             "tailnet_token": tailnet_token,
             "brand": brand or DEFAULT_BRAND,
             "sessions": staticmethod(sessions),
+            "extras": staticmethod(extras),
         },
     )
     server = ThreadingHTTPServer((host, port), handler)

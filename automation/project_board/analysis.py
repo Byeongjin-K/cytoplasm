@@ -21,8 +21,9 @@ PROMPT_VERSIONS: Final = {
     "v1": _PROMPTS / "project-analysis-v1.md",
     "v2": _PROMPTS / "project-analysis-v2.md",
     "v3": _PROMPTS / "project-analysis-v3.md",
+    "v4": _PROMPTS / "project-analysis-v4.md",
 }
-DEFAULT_PROMPT: Final = "v3"
+DEFAULT_PROMPT: Final = "v4"
 UNCLASSIFIED: Final = "미분류"
 
 
