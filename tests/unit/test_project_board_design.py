@@ -58,6 +58,20 @@ def test_a_separator_rides_with_the_link_before_it(tmp_path: Path) -> None:
     assert rules[".glue"] == "white-space:nowrap"
 
 
+def test_a_middle_dot_in_a_title_never_begins_a_line_and_search_still_finds_it(tmp_path: Path) -> None:
+    """Chrome broke 「조직문화확산·법정의무교육·연구윤리교육」 before a dot under keep-all; a word joiner holds the dot to the word before it."""
+    store = BoardStore(tmp_path / "board.db")
+    store.apply_proposal("pb-1", proposal_from_dict({
+        "project": "가상과제 알파", "summary": "요약", "todos": [{"title": "법정의무교육·연구윤리교육 이수", "due": "2026-10-20"}],
+        "source": {"kind": "mail", "source_id": "u-1", "subject": "조직문화확산·법정의무교육 안내"},
+    }), message_id="m1")
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served")
+    body = page.split("<body>", 1)[1].split("<script>", 1)[0]
+    assert "법정의무교육⁠·연구윤리교육" in body and "조직문화확산⁠·법정의무교육" in body
+    assert not re.search(r"[^\u2060]·연구", re.sub(r"<[^>]*>", "", body))  # visible text, not attributes
+    assert "li.textContent.replace(/\\u2060/g,'')" in page  # search matches what the owner types
+
+
 @pytest.mark.parametrize("mode", ["served", "file"])
 def test_the_page_has_no_inline_styles_dashes_or_emoji(tmp_path: Path, mode: str) -> None:
     page = _page(tmp_path, mode)

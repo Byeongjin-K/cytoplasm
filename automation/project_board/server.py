@@ -38,7 +38,7 @@ from typing import Final
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from .board_store import BoardStore
-from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, todo_href
+from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, title_text, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
 from .models import STATUSES, PendingView, ProjectBoardError, TodoExtra
 from .orders import OrderStore
@@ -232,7 +232,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         first, _, rest = text.partition("\n")
         heading = first[2:].strip() if first.startswith("# ") else ""
-        title = f"<h1>{escape(heading)}</h1>" if heading else ""
+        title = f"<h1>{title_text(heading)}</h1>" if heading else ""
         body = (
             f'<main class="reader"><a class="back" href="/#sources" data-back>{icon("chevron-left")}<span>근거 목록</span></a>'
             f'{self._source_links(kind, source_id)}'
@@ -248,7 +248,7 @@ class _Handler(BaseHTTPRequestHandler):
             return ""
         project = made[0].project
         todos = ", ".join(
-            f'<a href="/{escape(todo_href(t.todo_id), quote=True)}">{escape(t.title)}</a>'
+            f'<a href="/{escape(todo_href(t.todo_id), quote=True)}">{title_text(t.title)}</a>'
             for t in made
         )
         link = f'<a href="/{escape(project_href(project), quote=True)}">{escape(project)}</a>'
