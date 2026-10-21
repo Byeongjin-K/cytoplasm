@@ -10,6 +10,7 @@
 //   hscroll    the page scrolls sideways
 //   smalltext  text under 11px
 //   lead-sep   a 「·」 separator begins a line (it belongs at the end of the item before it)
+//   unopened   a screen did not load (it is reported, and the audit goes on)
 //   under-nav  at the end of the page, content sits under the fixed bottom tab bar
 //
 // Usage (node 18+ with the playwright package; nothing is installed into the repository):
@@ -131,7 +132,8 @@ function probe() {
         if (dot.width < 1 || mid < i.r.top || mid > i.r.bottom) continue;
         const before = items.some((o) => o !== i && block.contains(o.el) && o.r.right <= dot.left + 1 && o.r.top < mid && o.r.bottom > mid);
         const sameNodeBefore = (() => { if (k === 0) return false; const q = document.createRange(); q.setStart(n, 0); q.setEnd(n, k); return [...q.getClientRects()].some((x) => x.width > 1 && x.top < mid && x.bottom > mid && x.right <= dot.left + 1 && /\S/.test(n.textContent.slice(0, k).split('\n').pop())); })();
-        if (!before && !sameNodeBefore) found.push({ type: 'lead-sep', a: name(i.el) });
+        const authored = /\n[ \t\u00a0]*$/.test(n.textContent.slice(0, k)); // a bullet the writer put at a line start
+        if (!before && !sameNodeBefore && !authored) found.push({ type: 'lead-sep', a: name(i.el) });
       }
     }
   }
@@ -176,7 +178,10 @@ try {
           const keys = new Set([...document.querySelectorAll('nav a[href^="#"]')].map((a) => a.getAttribute('href')));
           keys.add('#archive');
           if (document.querySelector('a[href="#orders"]')) keys.add('#orders');
-          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="#order/"], a[href^="/source/"]')) keys.add(a.getAttribute('href'));
+          for (const a of document.querySelectorAll('a[href^="#todo/"], a[href^="#person/"], a[href^="#project/"], a[href^="#order/"], a[href^="/source/"]')) {
+            const href = a.getAttribute('href');
+            if (href.startsWith('#') || /^\/source\/[^/]+\/[^/]+$/.test(href)) keys.add(href); // a source page, never its attachment download
+          }
           return [...keys];
         });
         const only = args.only ? args.only.split(',') : null;
@@ -187,7 +192,12 @@ try {
             await page.evaluate((h) => { location.hash = h; }, key);
             await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
           } else {
-            await page.goto(origin + key, { waitUntil: 'networkidle' });
+            try {
+              await page.goto(origin + key, { waitUntil: 'networkidle' });
+            } catch (error) {
+              results.push({ engine: engineName, view: view.name, scheme, screen: decodeURIComponent(key), findings: [{ type: 'unopened', a: String(error).split('\n')[0] }] });
+              continue;
+            }
           }
           await page.evaluate(() => document.fonts.ready);
           const findings = await page.evaluate(probe);
@@ -197,7 +207,9 @@ try {
           const label = decodeURIComponent(key);
           if (SHOTS && findings.length) {
             fs.mkdirSync(SHOTS, { recursive: true });
-            await page.screenshot({ path: path.join(SHOTS, `${engineName}-${view.name}-${scheme}-${label.replace(/[^\w가-힣-]+/g, '_')}.png`), fullPage: true });
+            const shot = path.join(SHOTS, `${engineName}-${view.name}-${scheme}-${label.replace(/[^\w가-힣-]+/g, '_')}.png`);
+            // a page taller than the 32767px image limit gets the first screen instead of failing the run
+            await page.screenshot({ path: shot, fullPage: true }).catch(() => page.screenshot({ path: shot }));
           }
           results.push({ engine: engineName, view: view.name, scheme, screen: label, findings });
         }
