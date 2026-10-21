@@ -150,6 +150,13 @@ li.saving{opacity:.55}
 .agenda li:first-child{border-top:0}
 .agenda li b{font-weight:600}
 .agenda .where{flex-basis:100%;font-size:var(--t-sm);color:var(--text-3);padding-left:0}
+.agenda .ag-title{font-weight:600;color:var(--text)}
+.agenda .ag-title:hover{color:var(--accent-ink);text-decoration:underline}
+.agenda .where a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:3px}
+.agenda .where a:hover{color:var(--accent-ink)}
+.agenda li>.src-link{flex-basis:100%;margin-top:0}
+ul.todos li[id]{scroll-margin:96px 0 112px}
+ul.todos li:target{background:var(--accent-wash);box-shadow:inset 3px 0 0 var(--accent);border-radius:var(--r-sm)}
 .src-card .top{display:flex;flex-wrap:wrap;gap:6px var(--s2);align-items:center;font-size:var(--t-sm);color:var(--text-3)}
 .src-card .title{display:block;margin-top:6px;font-size:var(--t-lg);font-weight:650;color:var(--text)}
 a.title:hover{color:var(--accent-ink)}

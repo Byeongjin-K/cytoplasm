@@ -142,7 +142,7 @@ _TABS_JS: Final = """
   }
   PB.pickers=function(root){
     root.querySelectorAll('select[data-picker]').forEach(function(sel){
-      sel.addEventListener('change',function(){location.hash=sel.value;});
+      sel.addEventListener('change',function(){jump=true;location.hash=sel.value;});
     });
   };
   PB.pickers(document);
@@ -181,9 +181,21 @@ _TABS_JS: Final = """
       a.setAttribute('href','#'+n+(sticky?'?p='+encodeURIComponent(sticky):''));}});
     document.title=page?r.proj+' · '+title:title;
     if(keep===true){return;}
-    var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash);
+    var target=(hash.indexOf('todo-')===0||hash==='pending')&&document.getElementById(hash),fresh=jump;jump=false;
+    if(!fresh&&hash in seen){window.scrollTo(0,seen[hash]);return;}
+    if(target&&hash.indexOf('todo-')===0){reveal(target);}
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
   }
+  // a todo opened from 일정·근거·기록 must be on screen: lift a search or status filter that hides it, open its fold
+  function reveal(li){
+    if(li.hidden){var q=document.getElementById('todo-q'),s=document.getElementById('todo-s');
+      if(q){q.value='';}if(s){s.value='';}if(PB.filter){PB.filter();}}
+    for(var d=li.closest('details');d;d=d.parentElement&&d.parentElement.closest('details')){d.open=true;}
+  }
+  // back and forward return to where that screen was left; a link or a picker opens its screen fresh
+  var seen={},jump=false;
+  document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');if(a){jump=true;}},true);
+  window.addEventListener('scroll',function(){seen[location.hash.slice(1)]=window.scrollY;},{passive:true});
   PB.show=show;
   window.addEventListener('hashchange',show);show();
 })();
@@ -727,9 +739,14 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
 
 
 def _agenda_cards(
-    todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s", *, with_project: bool = True
+    todos: tuple[TodoRow, ...] | list[TodoRow], today: date, key: str = "s", *, with_project: bool = True,
+    mode: Mode = "served", linked: bool = True,
 ) -> str:
-    """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket."""
+    """Open todos bucketed by due date (지연·이번 주·다음 주·이후·미정), one card per bucket.
+
+    Every part of a row leads somewhere: the title to that todo on the 할 일 screen (``linked`` is off only where
+    the todo is not listed there, an archived project), the project to its page, the subject to the source.
+    """
     buckets: dict[str, list[TodoRow]] = defaultdict(list)
     for todo in todos:
         if todo.status in OPEN_STATUSES:
@@ -742,20 +759,28 @@ def _agenda_cards(
         items = []
         for todo in rows:
             label, css = _dday(todo.due, today)
-            where = [escape(todo.project)] if with_project else []
+            project = f'<a href="{escape(project_href(todo.project), quote=True)}">{escape(todo.project)}</a>'
+            where = [project] if with_project else []
             where += [escape(todo.owner)] if todo.owner else []
             where += [_md(todo.due)] if todo.due else []
+            title = (f'<a class="ag-title" href="#todo-{escape(todo.todo_id, quote=True)}">{escape(todo.title)}</a>'
+                     if linked else f'<b>{escape(todo.title)}</b>')
+            href = _source_href(mode, todo.source_kind, todo.source_id)
+            kind = "mail" if todo.source_kind == "mail" else "sources"
+            subject = escape(todo.source_subject or todo.source_id)
+            source = (f'<a class="src-link" href="{escape(href, quote=True)}" title="근거 원문 열기">{icon(kind)}<span>{subject}</span></a>'
+                      if href else f'<span class="src-link">{icon(kind)}<span>{subject}</span></span>')
             items.append(
                 f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
-                f'<b>{escape(todo.title)}</b>{_grade_badge(todo.grade)}'
-                f'<span class="where">{_SEP.join(where)}</span></li>'
+                f'{title}{_grade_badge(todo.grade)}'
+                f'<span class="where">{_SEP.join(where)}</span>{source}</li>'
             )
         parts.append(_fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold"))
     return "".join(parts)
 
 
-def _agenda(snapshot: BoardSnapshot, today: date) -> str:
-    cards = _agenda_cards(snapshot.todos, today)
+def _agenda(snapshot: BoardSnapshot, today: date, mode: Mode = "served") -> str:
+    cards = _agenda_cards(snapshot.todos, today, mode=mode)
     fallback = (
         f'<div class="card empty">{icon("schedule")}<b>남은 마감이 없습니다</b><p>열린 할 일에 모두 마감이 지났거나 끝났습니다.</p></div>'
         if snapshot.todos else EMPTY_SECTION
@@ -923,7 +948,7 @@ def _project_page(
         f'<div class="card empty">{icon("todos")}<b>할 일이 없습니다</b><p>이 프로젝트에서 승인된 할 일이 아직 없습니다.</p></div>'
     )
     key = f"p:{view.name}"
-    agenda = _agenda_cards(todos, today, f"{key}:s", with_project=False) or (
+    agenda = _agenda_cards(todos, today, f"{key}:s", with_project=False, mode=mode, linked=not archived) or (
         f'<div class="card empty">{icon("schedule")}<b>남은 마감이 없습니다</b><p>열린 할 일이 없거나 모두 끝났습니다.</p></div>'
     )
     by_proposal: dict[str, list[TodoRow]] = defaultdict(list)
@@ -1002,7 +1027,7 @@ def render_dashboard(
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
         f'<nav aria-label="화면"{nav_class}>{_nav(shelf, new_in_shelf)}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
         f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}{_projects(snapshot, today)}"
-        f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
+        f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today, mode)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
         f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span data-live>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
