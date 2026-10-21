@@ -102,6 +102,29 @@ def is_large_file_link(href: str) -> bool:
         return True
     return parts.hostname in LARGE_FILE_HOSTS
 URLLIB_CHUNK_SIZE = 1024 * 1024                  # 1 MB per read
+# 2026-10-21: two sync runs in a row hit the wrapper's 900 s limit while large-file links were
+# being downloaded: one external host stopped at 8 MiB until its 300 s read timeout, and the
+# webmail's own large-file server sent a 22 MB file at about 32 KB/s for 11 minutes. The sync's
+# job is to save new mails, so it gives each large download this long; a file that is still
+# coming stays 'fail' for the next retry and for the attachment archive's own recovery run,
+# which keeps no budget (see mail_attachment_retry.py).
+SYNC_LARGE_DOWNLOAD_BUDGET_S = 90.0
+# Longest single socket wait when a budget is set, so a stalled server cannot hold one read
+# far past the budget.
+BUDGETED_READ_TIMEOUT_S = 30.0
+# A failed attachment waits before the sync tries it again (30 min, doubling per attempt, at
+# most 6 h), so the same slow file is not re-fetched on every 10-minute tick.
+RETRY_BACKOFF_BASE_S = 30 * 60
+RETRY_BACKOFF_MAX_S = 6 * 60 * 60
+
+
+def retry_due(rec: dict | None, now: float | None = None) -> bool:
+    """True unless this attachment failed recently enough to wait (no record = due)."""
+    if not rec or rec.get("status", "fail") != "fail" or not rec.get("last_attempt"):
+        return True
+    attempts = max(1, int(rec.get("attempts") or 1))
+    wait = min(RETRY_BACKOFF_BASE_S * 2 ** (attempts - 1), RETRY_BACKOFF_MAX_S)
+    return (time.time() if now is None else now) - int(rec["last_attempt"]) >= wait
 MAX_MAIL_FETCH_ATTEMPTS = 3
 MAIL_FETCH_RETRY_DELAY_S = 2.0
 
@@ -315,12 +338,17 @@ class InboxScraper:
     def __init__(
         self, browser: AgentBrowser, attachments_dir: Path,
         *, folder_label: str = "inbox", all_folders: bool = False,
+        large_download_budget_s: float | None = None,
     ) -> None:
         self.browser = browser
         self.attachments_dir = attachments_dir
         self.folder_label = folder_label
         self.all_folders = all_folders
         self.folder_uid: str | None = None
+        self.large_download_budget_s = large_download_budget_s
+
+    #: Seconds one urllib download may take in total; None keeps no limit.
+    large_download_budget_s: float | None = None
 
     # ------------------------------------------------------------ setup
 
@@ -610,6 +638,11 @@ class InboxScraper:
                               ref.uid, filename)
                     continue
 
+            if state_db is not None and not retry_due(
+                    state_db.attachment_record(ref.uid, filename)):
+                log.info("attachment waits for its retry time: uid=%s %s", ref.uid, filename)
+                continue
+
             try:
                 saved = self._download_attachment(
                     ref.uid, filename, full_url, declared_size=declared_size,
@@ -715,24 +748,35 @@ class InboxScraper:
 
         # urllib.request.urlopen streams the response; copy to disk in chunks
         tmp_path = target.with_suffix(target.suffix + ".part")
+        budget = self.large_download_budget_s
+        deadline = None if budget is None else time.monotonic() + budget
+        read_timeout = 300 if budget is None else min(300, BUDGETED_READ_TIMEOUT_S, budget)
         try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
+            with urllib.request.urlopen(req, timeout=read_timeout) as resp:
                 # An expired large-file link answers 200 with MailOn's HTML notice page, not the file.
                 if not cookies and resp.headers.get_content_type() == "text/html":
                     raise RuntimeError("large-file link returned an HTML page (expired link)")
                 with tmp_path.open("wb") as f:
+                    # read1 returns after one socket read, so the budget is checked often.
+                    read = resp.read if deadline is None else resp.read1
                     while True:
-                        chunk = resp.read(URLLIB_CHUNK_SIZE)
+                        chunk = read(URLLIB_CHUNK_SIZE)
                         if not chunk:
                             break
                         f.write(chunk)
+                        if deadline is not None and time.monotonic() > deadline:
+                            raise TimeoutError(
+                                f"large download still unfinished after {budget:.0f}s "
+                                f"({f.tell()} bytes); left for a later retry")
             tmp_path.replace(target)
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
             if tmp_path.exists():
                 try:
                     tmp_path.unlink()
                 except OSError:
                     pass
+            if isinstance(e, TimeoutError):
+                raise RuntimeError(str(e)) from e
             raise RuntimeError(f"urllib download failed: {e}") from e
 
     def _get_cookie_header_from_browser(self) -> str:
@@ -808,7 +852,8 @@ class InboxScraper:
         """Retry attachments previously marked 'fail'. Returns (succeeded, still_failing)."""
         failed = [
             rec for rec in state_db.all_failed_attachments(max_attempts=EXTERNAL_MAX_ATTEMPTS)
-            if rec["attempts"] < max_attempts or is_large_file_link(rec["href"])
+            if (rec["attempts"] < max_attempts or is_large_file_link(rec["href"]))
+            and retry_due(rec)
         ]
         if not failed:
             return (0, 0)

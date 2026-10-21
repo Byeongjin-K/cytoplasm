@@ -196,6 +196,16 @@ class StateDB:
             ).fetchone()
             return row is not None
 
+    def attachment_record(self, uid: str, filename: str) -> dict | None:
+        """Status, attempts and last attempt time of one attachment, or None."""
+        with self._conn() as c:
+            row = c.execute(
+                """SELECT status, attempts, last_attempt FROM attachments
+                   WHERE uid=? AND filename=?""",
+                (uid, filename),
+            ).fetchone()
+            return dict(row) if row else None
+
     def failed_attachments_for(
         self, uid: str, max_attempts: int = 5
     ) -> list[dict]:
@@ -213,7 +223,8 @@ class StateDB:
         """All retryable failed attachments across the DB."""
         with self._conn() as c:
             rows = c.execute(
-                """SELECT uid, filename, href, size_bytes, attempts, error_msg
+                """SELECT uid, filename, href, size_bytes, attempts, error_msg,
+                          status, last_attempt
                    FROM attachments
                    WHERE status='fail' AND attempts < ?
                    ORDER BY first_seen""",

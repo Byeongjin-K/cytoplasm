@@ -33,7 +33,7 @@ from .login import LoginError, login
 from .folders import resolve_folder_uid
 from .heal import backfill_large_links, prune_buttons
 from .resolve import parse_candidates, resolve_name
-from .scraper import InboxScraper
+from .scraper import SYNC_LARGE_DOWNLOAD_BUDGET_S, InboxScraper
 from .send import (
     ComposeSender,
     SendRequest,
@@ -256,6 +256,7 @@ def cmd_sync(args) -> int:
             cfg.attachments_dir,
             folder_label="all" if all_folders else "inbox",
             all_folders=all_folders,
+            large_download_budget_s=SYNC_LARGE_DOWNLOAD_BUDGET_S,
         )
         # Inbox uid is resolved unconditionally: cheap, proven, and the sent
         # folder inference (allFolder histogram) needs it as the exclusion uid.
@@ -279,7 +280,8 @@ def cmd_sync(args) -> int:
             if sent_uid:
                 folder_uids["sent"] = sent_uid
                 sent_scraper = InboxScraper(
-                    browser, cfg.attachments_dir, folder_label="sent", all_folders=False)
+                    browser, cfg.attachments_dir, folder_label="sent", all_folders=False,
+                    large_download_budget_s=SYNC_LARGE_DOWNLOAD_BUDGET_S)
                 sent_scraper.folder_uid = sent_uid
                 new_count += _sync_folder(db, sent_scraper, cfg, limit, PROJECT_ROOT, full_scan)
             # unresolvable -> warning already logged; sync stays fail-open
