@@ -206,7 +206,9 @@ try {
           const label = decodeURIComponent(key);
           if (SHOTS && findings.length) {
             fs.mkdirSync(SHOTS, { recursive: true });
-            await page.screenshot({ path: path.join(SHOTS, `${engineName}-${view.name}-${scheme}-${label.replace(/[^\w가-힣-]+/g, '_')}.png`), fullPage: true });
+            const shot = path.join(SHOTS, `${engineName}-${view.name}-${scheme}-${label.replace(/[^\w가-힣-]+/g, '_')}.png`);
+            // a page taller than the 32767px image limit gets the first screen instead of failing the run
+            await page.screenshot({ path: shot, fullPage: true }).catch(() => page.screenshot({ path: shot }));
           }
           results.push({ engine: engineName, view: view.name, scheme, screen: label, findings });
         }
