@@ -1,5 +1,9 @@
 # 보류·인계 후속 과제
 
+## 유돌 이름→기관메일 주소 조회 (2026-10-21) — 소유자
+
+- **중간 · 유돌 게이트에 이름으로 주소를 찾는 읽기 명령이 없다**: 예전에는 Hermes 가 `agent` 계정에서 `mail_wrapper.py resolve --name` 을 바로 불렀는데, 유돌은 강제명령 게이트(`automation/yoodori_gate/yoodori_read_gate.py`)로만 `agent` 에 닿고 그 게이트에는 resolve 명령이 없으며 `resolve` 낱말 자체를 거부한다 → 강제명령에 읽기 전용 `mail-resolve <이름>` 을 더할지 소유자 카드로 정한다(게이트 허용 범위 변경이라 카드 없이 바꾸지 않는다).
+
 ## 문서 글자 읽기(OCR) 연결 후속 (2026-10-21)
 
 - **중간 · 메일 첨부 본문 추출 없음**: 기관메일은 첨부를 `data/attachments/<UID>/` 에 저장만 하고 본문을 뽑지 않는다(`skills/mail/vendor/mailon/scraper.py` 저장 경로) → 첨부 요약·검색이 필요해지면 저장 뒤 공용 `extract_document` 를 부르는 단계를 vendor 밖 래퍼에 두고(vendor 바이트 유지), 글자 읽기는 같은 설정을 따른다.
