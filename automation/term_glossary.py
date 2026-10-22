@@ -14,6 +14,7 @@ Drive 조회는 다른 모든 Drive 접촉과 같은 옵트인(`DRIVE_PUBLISH_EN
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import tempfile
@@ -34,6 +35,9 @@ FILE_MODE: Final = 0o600
 #: Drive 산출물이 아니어서 taxonomy 에 없는 문서 종류. 노트는 Obsidian 으로 가지만 교정
 #: 참고 문서는 소유자가 한자리에서 관리해야 하므로 같은 나무에 자리를 준다.
 EXTRA_FOLDERS: Final[Mapping[str, str]] = {"lifelog": "라이프로그"}
+#: Kinds YooDori may add a row to from the owner's correction (owner 2026-10-22 Q359).
+WRITABLE_KINDS: Final = ("lifelog", "meeting")
+WORD_LIMIT: Final = 40
 
 
 class TermGlossaryError(Exception):
@@ -173,3 +177,92 @@ def glossary_for(
     pairs = tuple(fetched.items())
     _write_cache(path, pairs)
     return pairs
+
+
+def _checked_word(word: str) -> str:
+    cleaned = unicodedata.normalize("NFC", word).strip()
+    if (not cleaned or len(cleaned) > WORD_LIMIT
+            or any(char in cleaned for char in ",=\n\r\t\"#")):
+        raise TermGlossaryError("a glossary word is one line of at most 40 characters without , = \" #")
+    return cleaned
+
+
+def add_pair(
+    kind: str,
+    wrong: str,
+    right: str,
+    *,
+    project: str = "",
+    client: object | None = None,
+    env: Mapping[str, str] | None = None,
+) -> str:
+    """One owner correction into the kind's own layer (Drive when publishing is on) and the node cache.
+
+    The owner's newest word wins: a wrong spelling already in the layer gets the new right
+    spelling. Returns ``added``, ``updated`` or ``unchanged``.
+    """
+    if kind not in WRITABLE_KINDS:
+        raise TermGlossaryError(f"glossary rows are added only for: {', '.join(WRITABLE_KINDS)}")
+    wrong, right = _checked_word(wrong), _checked_word(right)
+    if wrong == right:
+        raise TermGlossaryError("the wrong and right spellings are the same")
+    source = os.environ if env is None else env
+    drive = client
+    if drive is None and source.get("DRIVE_PUBLISH_ENABLED") == "1":
+        drive = _client()
+    parts = layers(kind, project)[-1]
+    cache = cache_path(kind, project, source)
+    if drive is not None:
+        text = _layer_text(drive, parts)
+        rows = list(term_correction.parse_glossary(text)) if text is not None else []
+    else:
+        rows = list(_read_file(cache))
+    current = dict(rows)
+    if current.get(wrong) == right:
+        return "unchanged"
+    action = "updated" if wrong in current else "added"
+    rows = [(w, right if w == wrong else r) for w, r in rows] if wrong in current else [*rows, (wrong, right)]
+    if drive is not None:
+        from automation import drive_outputs  # noqa: PLC0415 - lazy: Drive 접촉은 옵트인 뒤에만
+
+        with tempfile.TemporaryDirectory(prefix="term-glossary-") as tmp:
+            local = Path(tmp) / FILES[0]
+            local.write_text(term_correction.format_glossary(rows), encoding="utf-8")
+            _ = drive_outputs.publish_state_file(parts, FILES[0], local, client=drive)
+        merged = dict(_read_file(cache))
+        merged[wrong] = right
+        _write_cache(cache, tuple(merged.items()))
+    else:
+        _write_cache(cache, tuple(rows))
+    return action
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """`add` for YooDori's glossary-add; `list` prints `wrong,right` rows (every writable kind, later kinds win)."""
+    parser = argparse.ArgumentParser(prog="term_glossary")
+    sub = parser.add_subparsers(dest="command", required=True)
+    add = sub.add_parser("add")
+    add.add_argument("--kind", choices=WRITABLE_KINDS, default="lifelog")
+    add.add_argument("wrong")
+    add.add_argument("right")
+    show = sub.add_parser("list")
+    show.add_argument("--kind", choices=WRITABLE_KINDS, default=None)
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "add":
+            action = add_pair(args.kind, args.wrong, args.right)
+            print(f"용어집({folder_for(args.kind)})에 {args.wrong} → {args.right} "
+                  f"{ {'added': '추가함', 'updated': '고침', 'unchanged': '이미 있음'}[action] }")
+            return 0
+        merged: dict[str, str] = {}
+        for kind in (args.kind,) if args.kind else WRITABLE_KINDS:
+            merged.update((w, r) for w, r in glossary_for(kind) if w != r)
+        sys.stdout.write(term_correction.format_glossary(tuple(merged.items())))
+        return 0
+    except TermGlossaryError as error:
+        print(f"용어집 쓰기 거절: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
