@@ -55,7 +55,6 @@ MARKER: Final = "PLAUD-RECALL-CORRECT"
 _TITLE_STAMP: Final = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_?")
 _HANGUL: Final = re.compile(r"[가-힣]{2,}")
 _KEYWORD: Final = re.compile(r"[가-힣]{3,}")
-_EVIDENCE_REF: Final = re.compile(r"R(\d+)")
 #: (받침 뒤, 받침 없는 뒤) 조사 짝. 긴 것을 먼저 본다(`이랑` 안의 `이`, `으로` 안의 `로`).
 PARTICLES: Final = (("이랑", "랑"), ("으로", "로"), ("은", "는"), ("이", "가"), ("을", "를"), ("과", "와"))
 _PARTICLE_FORMS: Final = tuple(
@@ -63,6 +62,10 @@ _PARTICLE_FORMS: Final = tuple(
 )
 _RIEUL: Final = 8
 _MARKS: Final = re.compile(r"[.,?!…]+$")
+_ENDINGS: Final = (
+    "에서의", "에서", "에게", "에는", "에도", "으로", "이랑", "에", "의", "도",
+    "는", "은", "이", "가", "을", "를", "과", "와", "랑", "로",
+)
 _TOKEN_END: Final = r"(?=[\s.,?!…)\]\"'」』]|$)"
 
 INSTRUCTIONS: Final = """\
@@ -261,10 +264,29 @@ def correct(
     return Outcome("".join(lines), tuple(applied), rejected)
 
 
-def evidence_label(edit: Edit, memories: Sequence[Memory]) -> str:
-    found = _EVIDENCE_REF.search(edit.evidence)
-    if found is not None and 1 <= int(found.group(1)) <= len(memories):
-        return f"기억: {memories[int(found.group(1)) - 1].title}"
+def _core(word: str) -> str:
+    bare = _MARKS.sub("", word)
+    ending = next((e for e in _ENDINGS if bare.endswith(e) and len(bare) - len(e) >= 2), "")
+    return bare[: len(bare) - len(ending)]
+
+
+def evidence_label(edit: Edit, memories: Sequence[Memory], raw: str) -> str:
+    """Why the new word is right, read from the bytes, not from the model's own claim.
+
+    A memory snippet that spells the new word is the evidence; failing that, the same
+    transcript already spelling it elsewhere; otherwise the model judged from context.
+    """
+    cores = [
+        core for word in edit.after.split()
+        if word not in edit.before.split() and len(core := _core(word)) >= 2
+    ]
+    if not cores:
+        return "문맥"
+    for memory in memories:
+        if any(core in f"{memory.title} {memory.excerpt}" for core in cores):
+            return f"기억: {memory.title}"
+    if all(core in raw for core in cores):
+        return "같은 전사 다른 곳"
     return "문맥"
 
 
@@ -310,12 +332,13 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         return EXIT_MODEL
     known = " ".join(f"{memory.title} {memory.excerpt}" for memory in memories)
     outcome = correct(markdown, edits, editable, known)
+    raw_words = "\n".join(words for _, words in editable.values())
     report = source.get(REPORT_ENV, "")
     if report:
         Path(report).write_text(json.dumps({
             "evidence": [
                 {"before": edit.before, "after": edit.after,
-                 "evidence": evidence_label(edit, memories)}
+                 "evidence": evidence_label(edit, memories, raw_words)}
                 for edit in outcome.applied
             ],
             "rejected": outcome.rejected,

@@ -189,3 +189,18 @@ def test_command_fits_the_particle_in_the_transcript(tmp_path, monkeypatch, caps
     out = capsys.readouterr().out
     assert code == 0 and out == raw.replace("가나다는", "가나닥은")
     assert preserves_structure(raw, out)
+
+
+
+@pytest.mark.parametrize("raw_words,memory,claimed,expected", [
+    ("가나다 회의", "가나닥 과제 노트", "문맥", "기억: 합성 노트"),
+    ("가나다 회의", "무관한 내용", "R1", "문맥"),
+    ("가나다 회의 가나닥은 맞다", "무관한 내용", "R1", "같은 전사 다른 곳"),
+    ("가나다 회의", "무관한 내용", "문맥", "문맥"),
+])
+def test_evidence_is_read_from_bytes_not_from_the_model_claim(raw_words, memory, claimed, expected):
+    # Given a fix 가나다는 -> 가나닥은 and what memory and the transcript actually spell.
+    edit = recall_correct.Edit(5, "가나다는", "가나닥은", claimed)
+    memories = (recall_correct.Memory("합성 노트", memory),)
+    # When the table reason is chosen, then it follows the bytes, not the claim.
+    assert recall_correct.evidence_label(edit, memories, raw_words) == expected
