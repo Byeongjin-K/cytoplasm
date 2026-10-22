@@ -111,7 +111,9 @@ TOOLS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
             frozenset({"transcribe", "ingest", "polish"})),
     "meeting": ("meeting/scripts/meeting_cli.py", frozenset({"evidence"}), frozenset({"ingest"})),
 }
-JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync", "mail-attachment-text")
+JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync", "mail-attachment-text", "glossary-add")
+# Owner Q359 (2026-10-22 11:19 KST): YooDori keeps the transcript correction ledger (the term glossary).
+GLOSSARY_KINDS = ("lifelog", "meeting")
 # Read jobs still start only from the owner's own recent message, but never touch the write ledger.
 ORIGIN_READ_JOBS = frozenset({"mail-sync", "mail-attachment-text"})
 LONG = frozenset({"proposal", "stt", "meeting"})
@@ -139,6 +141,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>. Plaud notes written: plaud-written <n 1-50>.\n"
+         "Correction ledger read: glossary-list [--kind lifelog|meeting].\n"
          "Dashboard order: order-status <n> <" + "|".join(ORDER_STATUSES) + ">"
          " [--dori <name>] [--post-url <https link>] [--note <text>].\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
@@ -150,6 +153,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
          "  meeting <ingest|evidence> [args],\n"
          "  mail-sync (collect institutional mail now; waits for a running collection);\n"
+         "  glossary-add <wrong> <right> [--kind lifelog|meeting] (the owner's transcript correction,\n"
+         "  one row of the term glossary; later transcripts use it before the model);\n"
          "  mail-attachment-text <uid> <file name as mail-get shows it> (that attachment as text; scans,\n"
          "  old hwp and photos only when the node's OCR release switch is on);\n"
          "  each ends with --origin-channel-id N --origin-message-id N. Files: staged paths only;\n"
@@ -438,6 +443,14 @@ def build_job(words: list[str]) -> Job:
         argv = [py, runtime, "attachment-text", rest[0], _value(rest[1], "short"), "{OUT}"]
         # OCR may take its own 1800 s budget; the job keeps a margin above it.
         return Job(name, argv, False, f"메일 첨부 글 읽기 {rest[0]}", 2400, channel, message)
+    if name == "glossary-add":
+        kind, rest = _glossary_kind(rest)
+        if len(rest) != 2 or any(word.startswith("-") for word in rest):
+            raise Refused("glossary-add needs <wrong> <right> [--kind lifelog|meeting] "
+                          "--origin-channel-id N --origin-message-id N")
+        wrong, right = (_value(word, "short") for word in rest)
+        argv = [py, "-m", "automation.term_glossary", "add", "--kind", kind, wrong, right]
+        return Job(name, argv, True, f"용어집 {wrong} → {right}"[:160], 120, channel, message)
     if name == "doc":
         if not rest or rest[0] not in TOOLS or rest[0] in {"patent", "stt", "meeting"}:
             raise Refused("doc needs one of: " + ", ".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}))
@@ -459,6 +472,16 @@ def build_job(words: list[str]) -> Job:
     argv = [py, str(LIVE / script), cli_sub, *args]
     timeout = 4 * 3600 if tool in LONG else 1800
     return Job(name, argv, sub in writes, _label(tool, sub, args), timeout, channel, message)
+
+
+def _glossary_kind(args: list[str]) -> tuple[str, list[str]]:
+    """``--kind`` anywhere in the words; the transcript ledger (lifelog) when it is not given."""
+    if "--kind" not in args:
+        return "lifelog", args
+    at = args.index("--kind")
+    if at + 1 >= len(args) or args[at + 1] not in GLOSSARY_KINDS:
+        raise Refused("--kind is lifelog or meeting")
+    return args[at + 1], [*args[:at], *args[at + 2:]]
 
 
 def order_status(args: list[str]) -> list[str]:
@@ -547,6 +570,11 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         return name, ["/usr/bin/cat", "--", str(note_path(args[0]))], HOME
     if name == "recall":
         return name, [py, str(LIVE / "recall/scripts/recall_cli.py"), "search", _text(args, 300)], HOME
+    if name == "glossary-list":
+        kind, rest = _glossary_kind(args)
+        if rest:
+            raise Refused("glossary-list takes only [--kind lifelog|meeting]")
+        return name, [py, "-m", "automation.term_glossary", "list", "--kind", kind], RELEASE
     if name == "status":
         if args:
             raise Refused("status takes no arguments")
