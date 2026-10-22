@@ -56,6 +56,14 @@ _TITLE_STAMP: Final = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_?")
 _HANGUL: Final = re.compile(r"[가-힣]{2,}")
 _KEYWORD: Final = re.compile(r"[가-힣]{3,}")
 _EVIDENCE_REF: Final = re.compile(r"R(\d+)")
+#: (받침 뒤, 받침 없는 뒤) 조사 짝. 긴 것을 먼저 본다(`이랑` 안의 `이`, `으로` 안의 `로`).
+PARTICLES: Final = (("이랑", "랑"), ("으로", "로"), ("은", "는"), ("이", "가"), ("을", "를"), ("과", "와"))
+_PARTICLE_FORMS: Final = tuple(
+    sorted({form for pair in PARTICLES for form in pair}, key=len, reverse=True)
+)
+_RIEUL: Final = 8
+_MARKS: Final = re.compile(r"[.,?!…]+$")
+_TOKEN_END: Final = r"(?=[\s.,?!…)\]\"'」』]|$)"
 
 INSTRUCTIONS: Final = """\
 너는 회의 전사본 교정자다. 음성 인식이 잘못 받아 적은 사람 이름·기관명·과제명·장비명·전문 용어만 고친다.
@@ -192,6 +200,43 @@ def allowed(edit: Edit, words: str, known: str) -> bool:
     )
 
 
+def fit_particle(stem: str, particle: str) -> str:
+    """The particle form that follows the stem's last syllable; anything not in a pair stays."""
+    code = ord(stem[-1]) - 0xAC00 if stem else -1
+    if not 0 <= code < 11172:
+        return particle
+    batchim = code % 28
+    for with_batchim, without in PARTICLES:
+        if particle in (with_batchim, without):
+            if particle in ("으로", "로") and batchim == _RIEUL:
+                return "로"
+            return with_batchim if batchim else without
+    return particle
+
+
+def _replace(words: str, before: str, after: str) -> str:
+    """Every `before` becomes `after`, with the particle after it fitted to the new ending."""
+    mark = _MARKS.search(before)
+    tail = mark.group(0) if mark is not None and after.endswith(mark.group(0)) else ""
+    core_before, core_after = before[: len(before) - len(tail)], after[: len(after) - len(tail)]
+    shared = next(
+        (form for form in _PARTICLE_FORMS
+         if core_before.endswith(form) and core_after.endswith(form)
+         and len(core_after) > len(form)),
+        "",
+    )
+    stem = core_after[: len(core_after) - len(shared)]
+    following = "|".join(form for form in _PARTICLE_FORMS)
+    pattern = re.compile(re.escape(before) + f"(?:({following}){_TOKEN_END})?")
+
+    def fitted(match: re.Match[str]) -> str:
+        if shared:
+            return stem + fit_particle(stem, shared) + tail + (match.group(1) or "")
+        return after + fit_particle(after, match.group(1) or "")
+
+    return pattern.sub(fitted, words)
+
+
 def correct(
     markdown: str, edits: Sequence[Edit], editable: Mapping[int, tuple[str, str]], known: str
 ) -> Outcome:
@@ -211,7 +256,7 @@ def correct(
         if slot is None or not allowed(edit, words, known):
             rejected += 1
             continue
-        lines[edit.line - 1] = prefix + words.replace(edit.before, edit.after)
+        lines[edit.line - 1] = prefix + _replace(words, edit.before, edit.after)
         applied.append(edit)
     return Outcome("".join(lines), tuple(applied), rejected)
 

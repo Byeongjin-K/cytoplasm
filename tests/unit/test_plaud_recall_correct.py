@@ -141,3 +141,51 @@ def test_every_occurrence_in_the_line_is_fixed_once(tmp_path, monkeypatch, capsy
     assert code == 0
     assert capsys.readouterr().out == raw.replace("오토파즈", "오토파지")
     assert json.loads(report.read_text(encoding="utf-8"))["rejected"] == 0
+
+
+
+@pytest.mark.parametrize("words,before,after,expected", [
+    ("가나다는 왔다", "가나다는", "가나닥는", "가나닥은 왔다"),
+    ("가나다를 본다", "가나다", "가나닥", "가나닥을 본다"),
+    ("가나닥이 왔다", "가나닥", "가나다", "가나다가 왔다"),
+    ("가나닥과 함께", "가나닥", "가나다", "가나다와 함께"),
+    ("가나다랑 같이", "가나다", "가나닥", "가나닥이랑 같이"),
+    ("가나다로 간다", "가나다", "가나닥", "가나닥으로 간다"),
+    ("가나다로 간다", "가나다", "가나달", "가나달로 간다"),
+    ("가나닥으로.", "가나닥", "가나달", "가나달로."),
+    ("가나다는.", "가나다는.", "가나닥는.", "가나닥은."),
+])
+def test_particle_follows_the_new_final_consonant(words, before, after, expected):
+    # Given a fix that adds, drops or changes the final consonant before a particle.
+    # When it is applied, then the particle pair matches the new ending (ㄹ takes 로).
+    assert recall_correct._replace(words, before, after) == expected
+
+
+@pytest.mark.parametrize("words,before,after,expected", [
+    ("가나다의 일", "가나다", "가나닥", "가나닥의 일"),
+    ("가나다에서", "가나다", "가나닥", "가나닥에서"),
+    ("가나다이야기", "가나다", "가나닥", "가나닥이야기"),
+    ("가나닥이야기", "가나닥", "가나다", "가나다이야기"),
+    ("가나다이라고", "가나다", "가나닥", "가나닥이라고"),
+    ("가나다는 왔다", "가나다", "ABC", "ABC는 왔다"),
+])
+def test_words_that_are_not_paired_particles_are_left_alone(words, before, after, expected):
+    # Given text after the fix that is not one of the paired particles.
+    # When the fix is applied, then only the fixed word changes.
+    assert recall_correct._replace(words, before, after) == expected
+
+
+def test_command_fits_the_particle_in_the_transcript(tmp_path, monkeypatch, capsys):
+    # Given a transcript line where the fixed word gains a final consonant before 는.
+    raw = "# synthetic\n\n---\n\n[00:00:01] 화자1: 가나다는 왔다\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(raw))
+    monkeypatch.setattr(codex_llm, "complete_served", lambda prompt, **_: codex_llm.Served(
+        text=_edits((5, "가나다", "가나닥", "문맥")), provider="synthetic", model="synthetic",
+    ))
+    env = {**unit_node.env(), "HOME": str(tmp_path), REPORT_ENV: str(tmp_path / "r.json")}
+    # When the command runs through its guard.
+    code = recall_correct.main(["--recall-cli", str(_recall(tmp_path, []))], env)
+    # Then the transcript reads 은, and the structure check still accepts it.
+    out = capsys.readouterr().out
+    assert code == 0 and out == raw.replace("가나다는", "가나닥은")
+    assert preserves_structure(raw, out)
