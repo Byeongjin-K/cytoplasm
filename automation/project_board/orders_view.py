@@ -15,10 +15,10 @@ from .dashboard_theme import icon
 from .models import BoardSnapshot, OPEN_STATUSES
 from .orders import DEFAULT_RECEIVER, LOCAL, MAX_BODY, ORDER_STATUSES, OWNER_DEVICE, Order, order_href
 
-_SEP: Final = "\u00a0· "
 _STATUS_CLASS: Final = {"받음": "st-open", "넘김": "st-held", "처리 중": "st-doing", "끝": "st-done"}
 _EVENT_WORDS: Final = {"created": "대시보드에 지시를 남김", "delivered": "에게 전달됨", "used": "쓰기 근거로 확인됨"}
-_FIELD_WORDS: Final = {"dori": "맡은 도리", "post_url": "도리 방 글", "note": "메모"}
+_FIELD_WORDS: Final = {"dori": "맡은 도리 ", "post_url": "도리 방 글 연결", "note": "메모: "}
+_SHOWN: Final = 3  # orders on the summary box: open ones first, then the latest finished (their result)
 
 ORDERS_CSS: Final = (
     ".order-form textarea{font:inherit;font-size:var(--t-md);color:var(--text);background:var(--surface);"
@@ -27,7 +27,15 @@ ORDERS_CSS: Final = (
     ".order-form textarea:hover{border-color:var(--text-3)}"
     ".order-form{display:flex;flex-direction:column;gap:var(--s4)}"
     ".order-links{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}"
-    ".order-links select{width:100%;min-height:44px}"
+    ".order-hint{font-weight:400}"
+    ".order-steps .past{color:var(--text-2)}"
+    ".order-steps .step{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}"
+    ".order-steps .past::before{content:'\u2713\u00a0'}"
+    ".agenda li>.order-note{flex-basis:100%;margin:0;color:var(--text-2);font-size:var(--t-sm);"
+    "white-space:pre-wrap;overflow-wrap:anywhere}"
+    ".order-card{margin-top:var(--s4)}"
+    ".order-sent{margin-top:var(--s4);background:var(--accent-wash);border-color:transparent;color:var(--accent-ink)}"
+    "main>section[data-tab=order]>.card+.card{margin-top:var(--s4)}"
     ".order-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3)}"
     ".order-actions .btn{min-height:44px}"
     ".order-actions .row-error{flex-basis:100%;margin-top:0}"
@@ -53,6 +61,16 @@ ORDERS_JS: Final = """
   function linked(f){
     var todo=f.querySelector('select[name=todo]'),proj=f.querySelector('select[name=project]');if(!todo||!proj){return;}
     var o=todo.options[todo.selectedIndex];if(o&&o.dataset.p){proj.value=o.dataset.p;}proj.disabled=!!todo.value;
+    var hint=f.querySelector('.order-hint');if(hint){hint.hidden=!todo.value;}
+    if(PB.findSync){PB.findSync();}
+  }
+  // a sent order opens on its own screen with one line saying it went out (the reload drops any live message)
+  function sent(){
+    var n='';try{n=sessionStorage.getItem('pb-order-sent')||'';sessionStorage.removeItem('pb-order-sent');}catch(x){}
+    var page=n&&document.querySelector('main>section[data-tab=order][data-key="'+n+'"]');if(!page||page.querySelector('.order-sent')){return;}
+    var b=document.createElement('div');b.className='card note order-sent';b.setAttribute('role','status');
+    b.textContent='보냈습니다. '+(page.dataset.receiver||'받는 도리')+'에게 곧 전달되고, 누가 맡았는지와 진행이 이 화면에 적힙니다.';
+    page.querySelector('.pv-head').after(b);
   }
   function note(f,text){
     var old=f.querySelector('.row-error');if(old){old.remove();}if(!text){return;}
@@ -63,8 +81,9 @@ ORDERS_JS: Final = """
   document.addEventListener('input',function(e){var f=form();if(f&&f.contains(e.target)){count(f);}});
   document.addEventListener('change',function(e){var f=form();if(f&&e.target.name==='todo'&&f.contains(e.target)){linked(f);}});
   document.addEventListener('click',function(e){
-    var a=e.target.closest&&e.target.closest('a[data-order-todo]'),f=form();if(!a||!f){return;}
-    var todo=f.querySelector('select[name=todo]');todo.value=a.dataset.orderTodo;linked(f);
+    var a=e.target.closest&&e.target.closest('a[data-order-todo],a[data-order-project]'),f=form();if(!a||!f){return;}
+    var todo=f.querySelector('select[name=todo]');todo.value=a.dataset.orderTodo||'';linked(f);
+    if(a.dataset.orderProject){f.querySelector('select[name=project]').value=a.dataset.orderProject;}
     window.requestAnimationFrame(function(){f.querySelector('textarea').focus();});
   });
   document.addEventListener('submit',function(e){
@@ -77,10 +96,11 @@ ORDERS_JS: Final = """
     var body='text='+encodeURIComponent(text.value)+'&todo='+encodeURIComponent(todo.value)
       +'&project='+encodeURIComponent(todo.value?'':proj.value);
     PB.post('/order/new',body).then(function(r){return r.json();}).then(function(d){
+      try{sessionStorage.setItem('pb-order-sent',String(d.number));}catch(x){}
       location.hash='order/'+d.number;location.reload();
     }).catch(function(error){btn.disabled=false;var w=PB.why?PB.why(error):'보내지 못했습니다.';note(f,w);if(PB.say){PB.say(w);}});
   });
-  var f=form();if(f){count(f);linked(f);}
+  var f=form();if(f){count(f);linked(f);}sent();
 })();
 """
 
@@ -119,17 +139,35 @@ def _links(order: Order, titles: dict[str, str]) -> list[str]:
     return out
 
 
+def _who(order: Order) -> str:
+    """Who has it now, said once: the Dori that took it, else the receiver once it got there, else not yet."""
+    def name(text: str) -> str:  # a Dori name never splits across two lines
+        return escape(text).replace(" ", "\u00a0")
+
+    if order.dori:
+        return f"맡은\u00a0도리\u00a0{name(order.dori)}"
+    if order.delivered_at:
+        return f"{name(order.delivered_to or order.receiver)}에게 전달됨"
+    return "아직 전달 전"
+
+
 def _row(order: Order, titles: dict[str, str]) -> str:
-    where = [escape(_kst(order.created_at))]
-    where += [f"맡은 도리 {escape(order.dori)}"] if order.dori else []
+    from .dashboard import _glued
+
+    where = [_badge(order.status), escape(_kst(order.created_at)), _who(order)]
     where += _links(order, titles)
     if order.post_url:
         where.append(f'<a href="{escape(order.post_url, quote=True)}" target="_blank" rel="noopener noreferrer">도리 방 글</a>')
+    note = f'<p class="order-note">메모: {escape(order.note)}</p>' if order.note else ""
     return (
         f'<li><a class="ag-title" href="{escape(order_href(order.number), quote=True)}">#{order.number} '
-        f'{escape(_first_line(order.body))}</a>{_badge(order.status)}'
-        f'<span class="where">{_SEP.join(where)}</span></li>'
+        f'{escape(_first_line(order.body))}</a>'
+        f'<span class="where">{_glued(where)}</span>{note}</li>'
     )
+
+
+def _latest_first(orders: Iterable[Order]) -> list[Order]:
+    return sorted(orders, key=lambda o: (o.updated_at, o.number), reverse=True)
 
 
 def _titles(snapshot: BoardSnapshot) -> dict[str, str]:
@@ -141,8 +179,9 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
     done = len(orders) - len(open_)
     line = f"진행 중 {len(open_)}건{' · 끝 ' + str(done) + '건' if done else ''}" if orders else "아직 보낸 지시가 없습니다"
     titles = _titles(snapshot)
-    items = "".join(_row(o, titles) for o in open_[:3])
-    more = f'<div class="small"><a href="#orders">지시 {len(orders)}건 모두 보기</a></div>' if len(orders) > 3 else ""
+    shown = (open_ + _latest_first(o for o in orders if not o.is_open))[:_SHOWN]
+    items = "".join(_row(o, titles) for o in shown)
+    more = f'<div class="small"><a href="#orders">지시 {len(orders)}건 모두 보기</a></div>' if len(orders) > _SHOWN else ""
     body = f'<ul>{items}</ul>{more}' if items else more
     return (
         '<section id="order-box" data-tab="summary"><div class="card agenda">'
@@ -153,14 +192,18 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
 
 
 def _options(snapshot: BoardSnapshot) -> tuple[str, str]:
+    """Open todos under their project (board order), the ones in progress first, then the nearest deadline."""
     groups: dict[str, list[str]] = {}
-    for todo in snapshot.todos:
-        if todo.status in OPEN_STATUSES:
-            groups.setdefault(todo.project, []).append(
-                f'<option value="{escape(todo.todo_id, quote=True)}" data-p="{escape(todo.project, quote=True)}">'
-                f"{escape(todo.title)}</option>"
-            )
-    todos = "".join(f'<optgroup label="{escape(p, quote=True)}">{"".join(rows)}</optgroup>' for p, rows in sorted(groups.items()))
+    open_todos = sorted((t for t in snapshot.todos if t.status in OPEN_STATUSES),
+                        key=lambda t: (t.status != "진행", t.due or "9999", t.title))
+    for todo in open_todos:
+        groups.setdefault(todo.project, []).append(
+            f'<option value="{escape(todo.todo_id, quote=True)}" data-p="{escape(todo.project, quote=True)}">'
+            f"{escape(todo.title)}</option>"
+        )
+    rank = {view.name: i for i, view in enumerate(snapshot.projects)}
+    todos = "".join(f'<optgroup label="{escape(p, quote=True)}">{"".join(groups[p])}</optgroup>'
+                    for p in sorted(groups, key=lambda name: (rank.get(name, len(rank)), name)))
     projects = "".join(
         f'<option value="{escape(v.name, quote=True)}">{escape(v.name)}</option>' for v in snapshot.projects
     )
@@ -176,7 +219,8 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
         'required placeholder="예: 공정 회의 자료를 모아서 요약해 줘"></textarea></label>'
         '<div class="order-links">'
         f'<label class="field" for="order-todo">관련 할\u00a0일<select id="order-todo" name="todo"><option value="">없음</option>{todos}</select></label>'
-        f'<label class="field" for="order-project">프로젝트<select id="order-project" name="project"><option value="">없음</option>{projects}</select></label>'
+        f'<label class="field" for="order-project">프로젝트<select id="order-project" name="project"><option value="">없음</option>{projects}</select>'
+        '<span class="order-hint small muted" hidden>고른 할\u00a0일의 프로젝트로 정해집니다</span></label>'
         "</div>"
         f'<p class="small muted">{escape(_subject(who))} 받아 맞는 도리에게 넘기고, 누가 맡았는지와 어디까지 됐는지를 여기에 적습니다.</p>'
         '<div class="order-actions"><button class="btn primary" type="submit">도리에게 보내기</button>'
@@ -184,48 +228,69 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
     )
     titles = _titles(snapshot)
     open_ = [o for o in orders if o.is_open]
-    done = [o for o in orders if not o.is_open]
+    done = _latest_first(o for o in orders if not o.is_open)
     lists = ""
     if open_:
         lists += (f'<div class="card agenda"><h3>진행 중인 지시 <span class="cnt">{len(open_)}</span></h3>'
                   f'<ul>{"".join(_row(o, titles) for o in open_)}</ul></div>')
     if done:
-        lists += (f'<details class="card agenda" data-fold="orders-done"><summary><h3>끝난 지시 '
+        lists += (f'<details class="card agenda fold" data-fold="orders-done"{"" if open_ else " open"}><summary><h3>끝난 지시 '
                   f'<span class="cnt">{len(done)}</span></h3></summary><ul>{"".join(_row(o, titles) for o in done)}</ul></details>')
     if not orders:
         lists = ('<div class="card empty">' + icon("inbox") + "<b>아직 보낸 지시가 없습니다</b>"
                  "<p>위 칸에 도리에게 맡길 일을 쓰면 여기에 쌓이고, 누가 맡아 어디까지 했는지 함께 보입니다.</p></div>")
     return (
-        '<section id="orders" data-tab="orders"><a class="back" href="#summary" data-back>'
+        '<section id="orders" data-tab="orders" data-title="도리에게 지시"><a class="back" href="#summary" data-back>'
         f'{icon("chevron-left")}<span>요약</span></a>'
         f'<div class="pv-head"><h2>도리에게 지시</h2></div>{form}{lists}</section>'
     )
 
 
 def _steps(status: str) -> str:
-    return '<div class="order-steps">' + '<span aria-hidden="true">→</span>'.join(
-        f"<b>{escape(s)}</b>" if s == status else f"<span>{escape(s)}</span>" for s in ORDER_STATUSES
+    at = ORDER_STATUSES.index(status) if status in ORDER_STATUSES else 0
+    steps = (f"<b>{escape(s)}</b>" if i == at else f'<span class="past">{escape(s)}</span>' if i < at else f"<span>{escape(s)}</span>"
+             for i, s in enumerate(ORDER_STATUSES))
+    # each arrow travels with the step after it, so a narrow screen never ends a line on a bare arrow
+    return '<div class="order-steps">' + "".join(
+        step if i == 0 else f'<span class="step"><span aria-hidden="true">→</span>{step}</span>' for i, step in enumerate(steps)
     ) + "</div>"
 
 
-def _event(order: Order, at: str, kind: str, detail: str, actor: str) -> str:
+def _event(at: str, kind: str, detail: str, actor: str, times: int = 1) -> str:
+    """One history line in plain words. The sender is on the 보낸 기기 row and the receiver is named in the line,
+    so only a change says who made it, on its own line (a login address or 127.0.0.1 is not a name)."""
+    who = ""
     if kind == "created":
         what = _EVENT_WORDS["created"]
     elif kind == "delivered":
         what = escape(detail) + _EVENT_WORDS["delivered"]
     elif kind == "used":
-        what = _EVENT_WORDS["used"]
+        what = _EVENT_WORDS["used"] + (f" ({times}번)" if times > 1 else "")
     else:
         parts = []
         for piece in detail.split(" · "):
             key, sep, value = piece.partition("=")
             if sep and key in _FIELD_WORDS:
-                parts.append(f"{_FIELD_WORDS[key]} {'바꿈' if key == 'post_url' else escape(value)}")
+                parts.append(_FIELD_WORDS[key] + ("" if key == "post_url" else escape(value)))
             else:
                 parts.append(f"상태 {escape(piece)}")
         what = ", ".join(parts)
-    who = f' <span class="muted">{escape(actor)}</span>' if actor and kind != "used" else ""
-    return f'<li><time datetime="{escape(at, quote=True)}">{escape(_kst(at))}</time><div class="what">{what}{who}</div></li>'
+        who = f'<div class="small muted">{escape(actor)}</div>' if actor else ""
+    return f'<li><time datetime="{escape(at, quote=True)}">{escape(_kst(at))}</time><div class="what">{what}</div>{who}</li>'
+
+
+def _history(order: Order) -> str:
+    """Newest first; the gate's uses in one stretch are one line with a count, not a row each."""
+    rows: list[str] = []
+    events = list(reversed(order.events))
+    i = 0
+    while i < len(events):
+        e, run = events[i], 1
+        while e.kind == "used" and i + run < len(events) and events[i + run].kind == "used":
+            run += 1
+        rows.append(_event(e.at, e.kind, e.detail, e.actor, run))
+        i += run
+    return "".join(rows)
 
 
 def order_pages(orders: Iterable[Order], snapshot: BoardSnapshot) -> str:
@@ -246,8 +311,7 @@ def _device(order: Order) -> str:
 def _order_page(order: Order, titles: dict[str, str]) -> str:
     from .dashboard import project_href, todo_href
 
-    delivered = (f"{escape(order.delivered_to)} · {escape(_kst(order.delivered_at))} 전달됨" if order.delivered_at
-                 else '<span class="muted">아직 전달 전</span>')
+    delivered = f"{escape(_kst(order.delivered_at))} 전달됨" if order.delivered_at else "아직 전달 전"
     rows = [
         ("상태", _steps(order.status)),
         ("보낸 때", escape(_kst(order.created_at))),
@@ -265,28 +329,35 @@ def _order_page(order: Order, titles: dict[str, str]) -> str:
     if order.project:
         rows.append(("프로젝트", f'<a href="{escape(project_href(order.project), quote=True)}">{escape(order.project)}</a>'))
     if order.note:
-        rows.append(("메모", escape(order.note)))
+        rows.append(("메모", f'<span class="order-body">{escape(order.note)}</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
-    history = "".join(_event(order, e.at, e.kind, e.detail, e.actor) for e in reversed(order.events))
     return (
-        f'<section data-tab="order" data-key="{order.number}" data-title="지시 #{order.number}">'
+        f'<section data-tab="order" data-key="{order.number}" data-title="지시 #{order.number}" '
+        f'data-receiver="{escape(order.receiver, quote=True)}">'
         f'<a class="back" href="#orders" data-back>{icon("chevron-left")}<span>도리에게 지시</span></a>'
         f'<div class="pv-head"><h2>지시 #{order.number}</h2></div>'
         f'<div class="card"><h3>지시 내용</h3><p class="order-body">{escape(order.body)}</p></div>'
         f'<div class="card"><dl class="td-facts">{facts}</dl></div>'
-        f'<div class="card"><h3>기록</h3><ul class="td-log">{history}</ul></div></section>'
+        f'<div class="card"><h3>기록</h3><ul class="td-log">{_history(order)}</ul></div></section>'
     )
 
 
-def todo_orders(orders: Sequence[Order], todo_id: str) -> str:
-    mine = [o for o in orders if o.todo_id == todo_id]
+def _order_card(mine: Sequence[Order], heading: str, link: str, words: str) -> str:
     items = "".join(
         f'<li><a href="{escape(order_href(o.number), quote=True)}">#{o.number} {escape(_first_line(o.body, 40))}</a>'
         f"{_badge(o.status)}</li>" for o in mine
     )
     listed = f'<ul class="td-list">{items}</ul>' if items else ""
-    return (
-        f'<div class="card"><h3>이 할\u00a0일에 대한 도리 지시</h3>{listed}'
-        f'<a class="order-new" href="#orders" data-order-todo="{escape(todo_id, quote=True)}">'
-        f'{icon("inbox")}이 할\u00a0일로 도리에게 지시</a></div>'
-    )
+    return (f'<div class="card order-card"><h3>{heading}</h3>{listed}'
+            f'<a class="order-new" href="#orders" {link}>{icon("inbox")}{words}</a></div>')
+
+
+def todo_orders(orders: Sequence[Order], todo_id: str) -> str:
+    return _order_card([o for o in orders if o.todo_id == todo_id], "이 할\u00a0일에 대한 도리 지시",
+                       f'data-order-todo="{escape(todo_id, quote=True)}"', "이 할\u00a0일로 도리에게 지시")
+
+
+def project_orders(orders: Sequence[Order], project: str) -> str:
+    """The orders about one project (directly or through one of its todos) and a way to write one more."""
+    return _order_card([o for o in orders if o.project == project], "이 프로젝트에 대한 도리 지시",
+                       f'data-order-project="{escape(project, quote=True)}"', "이 프로젝트로 도리에게 지시")
