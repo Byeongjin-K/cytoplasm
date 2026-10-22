@@ -6,7 +6,7 @@ from html import escape
 from typing import TypedDict
 
 from automation.ledger.store import Document, LedgerError, Store
-from .dashboard_theme import icon
+from .dashboard_theme import fold, icon
 
 NAV_CSS = "@media(max-width:640px){nav.ledger-nav{grid-template-columns:repeat(7,minmax(0,1fr))}}"
 
@@ -52,12 +52,8 @@ def render_ledger(view: LedgerView | None) -> str:
                 f'<div class="small muted">{escape(str(card["id"]))}</div></div></li>'
             )
         body = '<ul class="todos">' + "".join(rows) + "</ul>" if rows else '<p class="note">등록된 카드가 없습니다.</p>'
-        groups.append(
-            '<details class="fold" open><summary><h3>'
-            f'{escape(str(board.get("name") or board.get("slug", "")))} '
-            f'<span class="badge d-none">{len(cards)}</span></h3></summary>'
-            f'<div class="card">{body}</div></details>'
-        )
+        name = escape(str(board.get("name") or board.get("slug", "")))
+        groups.append(fold(f"ledger:{board.get('project_id', '')}", name, len(cards), body))
     body = "".join(groups) or f'<div class="card empty">{icon("todos")}<b>등록된 장부 카드가 없습니다.</b></div>'
     if "error" in view:
         body = f'<div class="card" role="alert">{escape(view["error"])}</div>'

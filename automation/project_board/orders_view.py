@@ -12,7 +12,7 @@ from collections.abc import Iterable, Sequence
 from html import escape
 from typing import Final
 
-from .dashboard_theme import icon
+from .dashboard_theme import fold, icon
 from .models import BoardSnapshot, OPEN_STATUSES
 from .orders import DEFAULT_RECEIVER, LOCAL, MAX_BODY, ORDER_STATUSES, OWNER_DEVICE, Order, order_href
 
@@ -62,10 +62,6 @@ ORDERS_CSS: Final = (
     ".order-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}"
     ".order-steps{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;font-size:var(--t-sm);color:var(--text-3)}"
     ".order-steps b{color:var(--accent-ink);background:var(--accent-wash);padding:2px 8px;border-radius:var(--r-sm)}"
-    ".order-box-head{display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}"
-    ".order-box-head>div{flex:1 1 180px;min-width:0}"
-    ".order-box-head p{margin:2px 0 0}"
-    ".order-box-head .btn{min-height:44px}"
     "a.order-new{display:inline-flex;align-items:center;gap:6px;min-height:44px}"
     "main>section[data-tab=orders],main>section[data-tab=order]{max-width:820px}"
     "#orders>.card,#orders>details.card{margin-top:var(--gap-card)}#order-box{margin-top:var(--gap-card)}"
@@ -232,12 +228,11 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
         more = len(real) - shown
         count = f'<span class="muted">({more}건 더)</span>' if more else ""
         body += f'<a class="order-more" href="#orders">지시 탭에서 전부 보기{count}{icon("chevron-right")}</a>'
-    return (
-        '<section id="order-box" data-tab="summary"><div class="card agenda">'
-        f'<div class="order-box-head">{icon("inbox")}<div><b>도리에게 지시</b><p class="small muted">{line}</p></div>'
-        '<a class="btn primary" href="#orders">지시 쓰기</a></div>'
-        f"{body}</div></section>"
-    )
+    if not real:
+        body = '<p class="small muted order-none">「지시 쓰기」로 맡긴 일이 여기에 쌓이고, 누가 맡아 어디까지 했는지 보입니다.</p>'
+    write = '<a class="btn primary" href="#orders">지시 쓰기</a>'
+    box = fold("orders-box", "도리에게 지시", len(open_), body, cls="agenda", glyph="inbox", sub=line, trail=write)
+    return f'<section id="order-box" data-tab="summary">{box}</section>'
 
 
 def _options(snapshot: BoardSnapshot) -> tuple[str, str]:
@@ -281,16 +276,15 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
     trials = _latest_first(o for o in orders if is_trial(o))
     lists = ""
     if open_:
-        lists += (f'<div class="card agenda"><h3>진행 중인 지시 <span class="cnt">{len(open_)}</span></h3>'
-                  f'<ul>{"".join(_row(o, titles) for o in open_)}</ul></div>')
+        lists += fold("orders-open", "진행 중인 지시", len(open_), f'<ul>{"".join(_row(o, titles) for o in open_)}</ul>',
+                      cls="agenda")
     if done:
-        lists += (f'<details class="card agenda fold" data-fold="orders-done"{"" if open_ else " open"}><summary><h3>끝난 지시 '
-                  f'<span class="cnt">{len(done)}</span></h3></summary><ul>{"".join(_row(o, titles) for o in done)}</ul></details>')
+        lists += fold("orders-done", "끝난 지시", len(done), f'<ul>{"".join(_row(o, titles) for o in done)}</ul>',
+                      cls="agenda", open_=not open_)
     if trials:
-        lists += ('<details class="card agenda fold" data-fold="orders-trial"><summary><h3>시험 지시 '
-                  f'<span class="cnt">{len(trials)}</span></h3></summary>'
-                  '<p class="small muted order-trial-why">도리 경로를 확인하려고 보낸 것이라 맡길 일은 없습니다.</p>'
-                  f'<ul>{"".join(_row(o, titles) for o in trials)}</ul></details>')
+        lists += fold("orders-trial", "시험 지시", len(trials),
+                      '<p class="small muted order-trial-why">도리 경로를 확인하려고 보낸 것이라 맡길 일은 없습니다.</p>'
+                      f'<ul>{"".join(_row(o, titles) for o in trials)}</ul>', cls="agenda", open_=False)
     if not orders:
         lists = ('<div class="card empty">' + icon("inbox") + "<b>아직 보낸 지시가 없습니다</b>"
                  "<p>위 칸에 도리에게 맡길 일을 쓰면 여기에 쌓이고, 누가 맡아 어디까지 했는지 함께 보입니다.</p></div>")
@@ -394,6 +388,8 @@ def _order_page(order: Order, titles: dict[str, str]) -> str:
     if is_trial(order):
         rows.append(("시험", '<span class="muted">도리 경로를 확인하려고 보낸 지시라 맡길 일은 없습니다</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
+    history = _history(order)
+    log = fold(f"order-log:{order.number}", "기록", history.count("<li"), f'<ul class="td-log">{history}</ul>')
     return (
         f'<section data-tab="order" data-key="{order.number}" data-title="지시 #{order.number}" '
         f'data-receiver="{escape(order.receiver, quote=True)}">'
@@ -401,26 +397,26 @@ def _order_page(order: Order, titles: dict[str, str]) -> str:
         f'<div class="pv-head"><h2>지시 #{order.number}</h2></div>'
         f'<div class="card"><h3>지시 내용</h3><p class="order-body">{escape(order.body)}</p></div>'
         f'<div class="card"><dl class="td-facts">{facts}</dl></div>'
-        f'<div class="card"><h3>기록</h3><ul class="td-log">{_history(order)}</ul></div></section>'
+        f"{log}</section>"
     )
 
 
-def _order_card(mine: Sequence[Order], heading: str, link: str, words: str) -> str:
+def _order_card(key: str, mine: Sequence[Order], heading: str, link: str, words: str) -> str:
     items = "".join(
         f'<li><a href="{escape(order_href(o.number), quote=True)}">#{o.number} {escape(_first_line(o.body, 40))}</a>'
         f"{_badge(o.status)}</li>" for o in mine
     )
     listed = f'<ul class="td-list">{items}</ul>' if items else ""
-    return (f'<div class="card order-card"><h3>{heading}</h3>{listed}'
-            f'<a class="order-new" href="#orders" {link}>{icon("inbox")}{words}</a></div>')
+    return fold(key, heading, len(mine), f'{listed}<a class="order-new" href="#orders" {link}>{icon("inbox")}{words}</a>',
+                cls="order-card")
 
 
 def todo_orders(orders: Sequence[Order], todo_id: str) -> str:
-    return _order_card([o for o in orders if o.todo_id == todo_id], "이 할\u00a0일에 대한 도리 지시",
+    return _order_card(f"todo-orders:{todo_id}", [o for o in orders if o.todo_id == todo_id], "이 할\u00a0일에 대한 도리 지시",
                        f'data-order-todo="{escape(todo_id, quote=True)}"', "이 할\u00a0일로 도리에게 지시")
 
 
 def project_orders(orders: Sequence[Order], project: str) -> str:
     """The orders about one project (directly or through one of its todos) and a way to write one more."""
-    return _order_card([o for o in orders if o.project == project], "이 프로젝트에 대한 도리 지시",
+    return _order_card(f"project-orders:{project}", [o for o in orders if o.project == project], "이 프로젝트에 대한 도리 지시",
                        f'data-order-project="{escape(project, quote=True)}"', "이 프로젝트로 도리에게 지시")

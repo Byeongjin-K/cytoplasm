@@ -55,7 +55,7 @@ def test_session_cards_and_the_look_first_list_open_their_groups() -> None:
     assert re.findall(r'<a class="card ss-pillar" href="(#ss-\w+)">', page) == ["#ss-lanes", "#ss-agents", "#ss-services"]
     ids = set(re.findall(r'\bid="([^"]+)"', page))
     assert {"ss-lanes", "ss-agents", "ss-services"} <= ids
-    targets = re.findall(r'<div class="callout ss-attention">.*?</div></div>', page, re.S)[0]
+    targets = re.findall(r'data-fold="ss-attention".*?</details>', page, re.S)[0]
     assert all(href[1:] in ids for href in re.findall(r'<a href="(#[^"]+)"', targets))
 
 

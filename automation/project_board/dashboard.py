@@ -19,7 +19,7 @@ from typing import Final, Literal
 from urllib.parse import quote
 
 from .config import DEFAULT_BRAND
-from .dashboard_theme import CSS, brand_mark, favicon, icon, sprite
+from .dashboard_theme import CSS, brand_mark, favicon, fold, icon, sprite
 from .models import (
     GRADES, NEVER_EXPORTED, OPEN_STATUSES, BoardSnapshot, EventRow, ProjectView, SourceRow, TodoExtra, TodoRow,
 )
@@ -126,9 +126,13 @@ _FOLD_JS: Final = """
   var key='pb-fold:',PB=window.PB=window.PB||{};
   PB.fold=function(root){
   root.querySelectorAll('details[data-fold]').forEach(function(d){
-    try{if(localStorage.getItem(key+d.dataset.fold)==='0'){d.open=false;}}catch(e){}
+    var head=d.querySelector(':scope>summary');
+    function mark(){if(head){head.setAttribute('aria-expanded',d.open?'true':'false');}}
+    try{var kept=localStorage.getItem(key+d.dataset.fold);if(kept==='0'){d.open=false;}else if(kept==='1'){d.open=true;}}catch(e){}
+    mark();
     d.addEventListener('toggle',function(){
-      try{if(d.open){localStorage.removeItem(key+d.dataset.fold);}else{localStorage.setItem(key+d.dataset.fold,'0');}}catch(e){}
+      mark();
+      try{localStorage.setItem(key+d.dataset.fold,d.open?'1':'0');}catch(e){}
     });
   });
   };
@@ -649,14 +653,6 @@ def _picker(tab: str, snapshot: BoardSnapshot) -> str:
     return f'<label class="picker">프로젝트<select data-picker aria-label="프로젝트 고르기">{"".join(options)}</select></label>'
 
 
-def _fold(key: str, title: str, count: int, body: str, *, cls: str = "fold sect") -> str:
-    """A list block whose heading folds it; the count stays in the heading, the state is kept per browser."""
-    return (
-        f'<details class="{cls}" data-fold="{escape(key, quote=True)}" open><summary><h3>{title} '
-        f'<span class="badge d-none cnt">{count}</span></h3></summary>{body}</details>'
-    )
-
-
 def _head(title: str, sub: str = "", extra: str = "") -> str:
     lead = f'<p class="sub">{sub}</p>' if sub else ""
     return f'<div class="head"><div><h2>{title}</h2>{lead}</div>{extra}</div>'
@@ -722,14 +718,15 @@ def _summary(snapshot: BoardSnapshot, today: date, sessions: str = "") -> str:
                     if p.project in known else f"<b>{escape(p.project)}</b>")
             link = f' · <a href="{escape(p.thread_url, quote=True)}">승인 스레드 열기</a>' if p.thread_url else ""
             items.append(
-                f"<li>{name} <span class=\"glue\">{_grade_badge(p.grade)}\u00a0·</span> 할\u00a0일\u00a0{p.todo_count}건 · "
+                f"<li>{name} <span class=\"glue\">{_grade_badge(p.grade)}\u00a0·</span> 할\u00a0일\u00a0{p.todo_count}건\u00a0· "
                 f"근거 {_quoted(p.source_subject)}{link}</li>"
             )
-        pending = (
-            f'<div class="callout" id="pending">{icon("inbox")}<div><b>승인을 기다리는 제안 {len(items)}건</b>'
+        pending = fold(
+            "pending", "승인을 기다리는 제안", len(items),
             '<p class="note">아직 할 일로 들어오지 않았습니다. 승인 카드에서 승인하면 반영됩니다.</p>'
-            f'<ul class="small">{"".join(items)}</ul></div></div>'
-        )
+            f'<ul class="small">{"".join(items)}</ul>',
+            kind="callout", glyph="inbox",
+        ).replace("<details ", '<details id="pending" ', 1)
     withheld = (
         f'<p class="note">보안 등급(대외비·기관지정) 할\u00a0일\u00a0{snapshot.withheld}건은 이 사본에서 뺐습니다.</p>'
         if snapshot.withheld
@@ -830,8 +827,8 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         items = sorted(groups[project], key=_todo_order)
         heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)}</a>'
         body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
-        fold = _fold(f"t:{project}", heading, len(items), body, cls="todo-group card fold")
-        blocks.append(fold.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))
+        block = fold(f"t:{project}", heading, len(items), body, cls="todo-group")
+        blocks.append(block.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))
     have = Counter(t.status for t in snapshot.todos)
     options = "".join(f'<option value="{s}">{s} {have[s]}건</option>' for s in ("열림", "진행", "완료", "보류") if have[s] or s != "보류")
     filters = (
@@ -883,8 +880,8 @@ def _agenda_cards(
                 f'{title}{_grade_badge(todo.grade)}'
                 f'<span class="where">{_glued(where)}</span>{source}</li>'
             )
-        fold = _fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="card bucket fold")
-        parts.append(fold.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else fold)
+        block = fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="bucket")
+        parts.append(block.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else block)
     return "".join(parts)
 
 
@@ -942,9 +939,9 @@ def _sources(snapshot: BoardSnapshot, mode: Mode) -> str:
     for row in snapshot.sources:
         groups[row.project].append(row)
     body = "".join(
-        _fold(f"e:{project}", escape(project), len(rows),
-              '<div class="stack">' + "".join(_source_card(row, by_proposal[row.proposal_id], mode, with_project=False)
-                                              for row in rows) + "</div>")
+        fold(f"e:{project}", escape(project), len(rows),
+             '<div class="stack">' + "".join(_source_card(row, by_proposal[row.proposal_id], mode, with_project=False)
+                                             for row in rows) + "</div>", kind="sect")
         for project, rows in ((name, groups[name]) for name in _in_project_order(groups, snapshot))
     ) or EMPTY_SECTION
     hint = (
@@ -1005,10 +1002,9 @@ def _events(snapshot: BoardSnapshot, mode: Mode) -> str:
         if rest
         else ""
     )
-    return (
-        '<section id="events" data-tab="summary"><div class="section-title"><h3>최근 기록</h3></div>'
-        f'<div class="card"><ul class="events">{first}</ul>{more}</div></section>'
-    )
+    body = f'<ul class="events">{first}</ul>{more}'
+    shown = len(ordered[:8]) + len(rest)
+    return f'<section id="events" data-tab="summary">{fold("events", "최근 기록", shown, body)}</section>'
 
 
 def _actor_label(actor: str) -> str:
@@ -1077,9 +1073,9 @@ def _project_page(
     evidence = "".join(_source_card(row, by_proposal[row.proposal_id], mode, with_project=False) for row in sources) or (
         f'<div class="card empty">{icon("sources")}<b>근거가 없습니다</b><p>이 프로젝트에 연결된 메일이나 회의록이 아직 없습니다.</p></div>'
     )
-    todo_fold = _fold(key + ":t", "할 일", len(todos), todo_block)
-    agenda_fold = _fold(key + ":s", "일정", len(open_todos), '<div class="agenda">' + agenda + "</div>")
-    evidence_fold = _fold(key + ":e", "근거 (메일·회의록)", len(sources), '<div class="stack">' + evidence + "</div>")
+    todo_fold = fold(key + ":t", "할 일", len(todos), todo_block, kind="sect")
+    agenda_fold = fold(key + ":s", "일정", len(open_todos), '<div class="agenda">' + agenda + "</div>", kind="sect")
+    evidence_fold = fold(key + ":e", "근거 (메일·회의록)", len(sources), '<div class="stack">' + evidence + "</div>", kind="sect")
     name_attr = escape(view.name, quote=True)
     button = (
         f'<button type="button" class="btn" data-archive="{"0" if archived else "1"}" data-archive-project="{name_attr}">'
@@ -1169,12 +1165,12 @@ def _todo_page(
             f'<span class="badge {_STATUS_CLASS.get(t.status, "st-open")}">{escape(t.status)}</span></li>'
             for t in siblings
         )
-        same = f'<div class="card"><h3>같은 근거에서 나온 할\u00a0일</h3><ul class="td-list">{items}</ul></div>'
+        same = fold(f"todo-same:{todo.todo_id}", "같은 근거에서 나온 할\u00a0일", len(siblings), f'<ul class="td-list">{items}</ul>')
     titles = {t.todo_id: t.title for t in full.todos}
     mine = sorted((e for e in full.events if e.todo_id == todo.todo_id), key=lambda e: e.at, reverse=True)
     history = "".join(f'<li><time datetime="{escape(e.at, quote=True)}">{_keep(_kst(e.at))}</time>'
                       f'<div class="what">{_event_text(e, titles)}</div></li>' for e in mine[:12])
-    log = f'<div class="card"><h3>기록</h3><ul class="td-log">{history}</ul></div>' if history else ""
+    log = fold(f"todo-log:{todo.todo_id}", "기록", len(mine[:12]), f'<ul class="td-log">{history}</ul>') if history else ""
     return (
         f'<section data-tab="todo" data-key="{escape(todo.todo_id, quote=True)}" data-title="{escape(todo.title, quote=True)}">'
         f'<a class="back" href="#todos" data-back>{icon("chevron-left")}<span>할\u00a0일</span></a>'

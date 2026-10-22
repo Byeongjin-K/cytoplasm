@@ -14,6 +14,8 @@
 //   under-nav  at the end of the page, content sits under the fixed bottom tab bar
 //   gap        two neighbouring cards (one below or beside the other, nothing between) sit closer or further apart than
 //              the --gap-card token; a gap of 2.5 tokens or more holds a heading and is not counted
+//   fold       a details group breaks the common fold structure, or a headed list card is not folded
+//              (details.more expanders and unfolded groups marked with data-nofold are excluded)
 //
 // Usage (node 18+ with the playwright package; nothing is installed into the repository):
 //   PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node automation/project_board/layout_audit.mjs \
@@ -98,6 +100,24 @@ function probe() {
     if (chip || ['svg', 'IMG', 'INPUT', 'SELECT', 'BUTTON'].includes(el.tagName)) items.push({ el, r: el.getBoundingClientRect(), text: false, icon: el.tagName === 'svg' });
   }
   const found = [];
+  for (const el of document.querySelectorAll('details')) {
+    if (!visible(el) || el.matches('details.more')) continue;
+    const head = el.firstElementChild;
+    if (!el.matches('details.fold[data-fold]') || !head?.matches('summary.fold-head')
+      || head.querySelectorAll('.fold-title').length !== 1 || head.querySelectorAll('.cnt').length !== 1) {
+      found.push({ type: 'fold', a: name(el), b: 'expected details.fold[data-fold] > summary.fold-head with one .fold-title and one .cnt' });
+    }
+  }
+  for (const el of document.querySelectorAll('.card, .callout')) {
+    if (!visible(el) || el.matches('details') || el.closest('details.fold, [data-nofold]') || !el.querySelector('ul > li')) continue;
+    const text = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let firstText;
+    while ((firstText = text.nextNode()) && !firstText.textContent.trim()) {}
+    const bold = firstText?.parentElement.closest('b');
+    if (el.querySelector('h3') || (el.matches('.callout') && bold && el.contains(bold))) {
+      found.push({ type: 'fold', a: name(el), b: 'unfolded headed list group; use details.fold or documented data-nofold' });
+    }
+  }
   const flow = items.filter((i) => !pinned(i.el)).map((i) => ({ ...i, t: i.r.top + scrollY, b: i.r.bottom + scrollY, l: i.r.left, rt: i.r.right }));
   flow.sort((x, y) => x.t - y.t);
   for (let i = 0; i < flow.length; i++) {

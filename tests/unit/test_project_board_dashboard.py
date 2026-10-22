@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import re
 import threading
 from collections.abc import Iterator
 from datetime import date
@@ -52,7 +53,8 @@ def test_pending_proposals_are_waiting_not_data(tmp_path: Path) -> None:
     pending = (PendingView("pb-9", "프로젝트B", 3, "새 요청", "2026-10-13T00:00:00Z"),)
     snapshot = _store(tmp_path).snapshot(today=TODAY, pending=pending)
     page = render_dashboard(snapshot, mode="file")
-    assert "승인을 기다리는 제안 1건" in page and "프로젝트B" in page
+    assert re.search(r'data-fold="pending".*?승인을 기다리는 제안</span> <span class="badge d-none cnt">1</span>', page)
+    assert "프로젝트B" in page
     assert all(todo.project == "프로젝트A" for todo in snapshot.todos)
 
 
