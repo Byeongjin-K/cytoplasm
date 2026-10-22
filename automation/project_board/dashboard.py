@@ -321,7 +321,7 @@ _REFRESH_JS: Final = """
     if(m.s){[].some.call(main.querySelectorAll(m.s),function(x){if(visible(x)){e=x;return true;}return false;});}
     if(e){window.scrollBy(0,e.getBoundingClientRect().top-m.t);}else{window.scrollTo(0,m.y);}
   }
-  function wire(node){['fold','pickers','bind','filterBind'].forEach(function(n){if(PB[n]){PB[n](node);}});}
+  function wire(node){['fold','pickers','bind','filterBind','find'].forEach(function(n){if(PB[n]){PB[n](node);}});}
   function folds(root){
     var out=[],i=0;
     root.querySelectorAll('details').forEach(function(d){out.push([d.dataset.fold?'f:'+d.dataset.fold:'i:'+(i++),d]);});
@@ -362,7 +362,7 @@ _REFRESH_JS: Final = """
     var foot=document.querySelector('body>footer'),nf=doc.querySelector('body>footer');
     if(foot&&nf&&foot.innerHTML!==nf.innerHTML){foot.innerHTML=nf.innerHTML;}
     tag=held.tag||tag;held=null;
-    if(changed){if(PB.show){PB.show(true);}if(PB.filter){PB.filter();}restore(mark);}
+    if(changed){if(PB.show){PB.show(true);}if(PB.filter){PB.filter();}if(PB.findSync){PB.findSync();}restore(mark);}
     tick();
   }
   function busy(){
@@ -1209,6 +1209,7 @@ def render_dashboard(
     orders: Sequence[Order] | None = None, order_receiver: str = "",
 ) -> str:
     from .orders_view import ORDERS_CSS, ORDERS_JS, order_pages, orders_section, project_orders, summary_box, todo_orders
+    from .select_find import FIND_CSS, FIND_JS
 
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
@@ -1230,7 +1231,7 @@ def render_dashboard(
     meta = f'<meta name="pb-token" content="{escape(token, quote=True)}">{_ETAG_META}' if served else ""
     # the refresh script runs first: it notes the page as the server sent it, before the others change it
     scripts = (_REFRESH_JS if served else "") + _FOLD_JS + _TABS_JS + _FILTER_JS + (_SERVED_JS + _BACK_MARK_JS if served else "")
-    scripts += ORDERS_JS if orders is not None else ""
+    scripts += (ORDERS_JS if orders is not None else "") + FIND_JS
     fresh = '<span id="pb-fresh" class="fresh" title="2분마다 바뀐 내용만 새로 받습니다">방금 갱신</span>' if served else ""
     pages = "".join(
         _project_page(i, view, full, mode, today, archived=view in shelf,
@@ -1259,7 +1260,7 @@ def render_dashboard(
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
-        f"<style>{CSS}{ledger_css}{ORDERS_CSS if orders is not None else ''}</style></head><body>"
+        f"<style>{CSS}{ledger_css}{ORDERS_CSS if orders is not None else ''}{FIND_CSS}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
         f'<nav aria-label="화면"{nav_class}>{_NAV}{ledger_nav}</nav>{fresh}</div></header><main id="main">'

@@ -19,9 +19,6 @@ _STATUS_CLASS: Final = {"받음": "st-open", "넘김": "st-held", "처리 중": 
 _EVENT_WORDS: Final = {"created": "대시보드에 지시를 남김", "delivered": "에게 전달됨", "used": "쓰기 근거로 확인됨"}
 _FIELD_WORDS: Final = {"dori": "맡은 도리 ", "post_url": "도리 방 글 연결", "note": "메모: "}
 _SHOWN: Final = 3  # orders on the summary box: open ones first, then the latest finished (their result)
-# a select drawn the same in WebKit and Chromium (WebKit's own grey select looked disabled next to a disabled one)
-_CHEVRON: Final = ("url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E"
-                   "%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='2'/%3E%3C/svg%3E\")")
 
 ORDERS_CSS: Final = (
     ".order-form textarea{font:inherit;font-size:var(--t-md);color:var(--text);background:var(--surface);"
@@ -30,9 +27,6 @@ ORDERS_CSS: Final = (
     ".order-form textarea:hover{border-color:var(--text-3)}"
     ".order-form{display:flex;flex-direction:column;gap:var(--s4)}"
     ".order-links{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}"
-    ".order-links select{width:100%;min-height:44px;-webkit-appearance:none;appearance:none;padding-right:36px;"
-    f"background:var(--surface) {_CHEVRON} no-repeat right 14px center}}"
-    ".order-links select:disabled{background-color:var(--surface-2);color:var(--text-3);cursor:not-allowed}"
     ".order-hint{font-weight:400}"
     ".order-steps .past{color:var(--text-2)}"
     ".order-steps .step{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}"
@@ -68,6 +62,7 @@ ORDERS_JS: Final = """
     var todo=f.querySelector('select[name=todo]'),proj=f.querySelector('select[name=project]');if(!todo||!proj){return;}
     var o=todo.options[todo.selectedIndex];if(o&&o.dataset.p){proj.value=o.dataset.p;}proj.disabled=!!todo.value;
     var hint=f.querySelector('.order-hint');if(hint){hint.hidden=!todo.value;}
+    if(PB.findSync){PB.findSync();}
   }
   // a sent order opens on its own screen with one line saying it went out (the reload drops any live message)
   function sent(){
@@ -197,14 +192,18 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
 
 
 def _options(snapshot: BoardSnapshot) -> tuple[str, str]:
+    """Open todos under their project (board order), the ones in progress first, then the nearest deadline."""
     groups: dict[str, list[str]] = {}
-    for todo in snapshot.todos:
-        if todo.status in OPEN_STATUSES:
-            groups.setdefault(todo.project, []).append(
-                f'<option value="{escape(todo.todo_id, quote=True)}" data-p="{escape(todo.project, quote=True)}">'
-                f"{escape(todo.title)}</option>"
-            )
-    todos = "".join(f'<optgroup label="{escape(p, quote=True)}">{"".join(rows)}</optgroup>' for p, rows in sorted(groups.items()))
+    open_todos = sorted((t for t in snapshot.todos if t.status in OPEN_STATUSES),
+                        key=lambda t: (t.status != "진행", t.due or "9999", t.title))
+    for todo in open_todos:
+        groups.setdefault(todo.project, []).append(
+            f'<option value="{escape(todo.todo_id, quote=True)}" data-p="{escape(todo.project, quote=True)}">'
+            f"{escape(todo.title)}</option>"
+        )
+    rank = {view.name: i for i, view in enumerate(snapshot.projects)}
+    todos = "".join(f'<optgroup label="{escape(p, quote=True)}">{"".join(groups[p])}</optgroup>'
+                    for p in sorted(groups, key=lambda name: (rank.get(name, len(rank)), name)))
     projects = "".join(
         f'<option value="{escape(v.name, quote=True)}">{escape(v.name)}</option>' for v in snapshot.projects
     )
