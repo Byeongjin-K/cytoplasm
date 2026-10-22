@@ -254,10 +254,32 @@ def test_memory_check_is_capped_and_blocked_fixes_go_first(monkeypatch):
     edits = [recall_correct.Edit(line, f"낱말{line:02d}", f"낱말{line:02d}다", "문맥") for line in range(1, 12)]
     edits.append(recall_correct.Edit(12, "낱말12", "바사아다", "문맥"))
     asked: list[str] = []
-    monkeypatch.setattr(recall_correct, "search", lambda _cli, word, **_: asked.append(word) or ())
+    limits: list[float] = []
+    monkeypatch.setattr(recall_correct, "search", lambda _cli, word, **kw: asked.append(word) or limits.append(kw["timeout"]) or ())
     # When the new words are checked against memory.
     words = recall_correct.candidates(edits, editable, "")
-    recall_correct.confirm(Path("unused"), words, (), timeout=1, env={})
+    recall_correct.confirm(Path("unused"), words, (), timeout=90, env={})
     # Then the blocked word is first in line and at most ten searches run.
     assert words[0] == "바사아다"
     assert len(asked) == recall_correct.CONFIRM_LIMIT and "바사아다" in asked
+    assert max(limits) <= recall_correct.CONFIRM_BUDGET
+
+
+@pytest.mark.parametrize("words,before,after,expected", [
+    ("6m 발로 서브", "발로", "관로", "6m 관로 서브"),
+    ("발로를 묻는다", "발로", "관로", "관로를 묻는다"),
+    ("발이 늦다", "발", "바", "바이 늦다"),
+])
+def test_a_one_syllable_stem_is_not_split_into_a_particle(words, before, after, expected):
+    # Given a noun whose last syllable looks like a particle (관로), or a one-syllable word.
+    # When the fix is applied, then the noun is kept whole and nothing is re-fitted.
+    assert recall_correct._replace(words, before, after) == expected
+
+
+def test_a_title_inside_the_original_word_keeps_the_strict_guard():
+    # Given a far fix whose original word ends in a title and whose new word memory spells.
+    edit = recall_correct.Edit(5, "가나위원", "가나연구", "문맥")
+    confirmed = {"가나연구": recall_correct.Memory("합성 노트", "가나연구")}
+    # When the guard decides, then the title marks a person and the wider guard is not used.
+    assert recall_correct.name_like(edit, "가나위원 쪽에") is True
+    assert recall_correct.allowed(edit, "가나위원 쪽에", "", confirmed) is False

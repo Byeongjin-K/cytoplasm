@@ -56,6 +56,10 @@ RELAXED_GUARD: Final = 5
 #: At most this many new words are checked against memory, all at once.
 CONFIRM_LIMIT: Final = 10
 CONFIRM_RESULTS: Final = 3
+#: The searches run at once, so each one's limit is the whole step's added time; a late one is no evidence.
+CONFIRM_BUDGET: Final = 30.0
+#: A one-syllable stem is a noun ending in 로·이·가 more often than a stem plus a particle (관로).
+MIN_STEM: Final = 2
 _TITLE: Final = re.compile(
     r"(?:님|씨|박사|교수|위원|연구원|실장|팀장|부장|과장|대리|이사|대표|원장|소장|책임|선임|수석)"
 )
@@ -202,9 +206,10 @@ def new_cores(edit: Edit) -> tuple[str, ...]:
 
 
 def name_like(edit: Edit, words: str) -> bool:
-    """A person's name: a title follows the word in the line, or the new word carries one."""
+    """A person's name: a title follows the word in the line, or either word carries one."""
     return bool(
         re.search(re.escape(edit.before) + r"\s*" + _TITLE.pattern, words)
+        or _TITLE.search(edit.before)
         or _TITLE.search(edit.after)
     )
 
@@ -261,7 +266,7 @@ def _replace(words: str, before: str, after: str) -> str:
     shared = next(
         (form for form in _PARTICLE_FORMS
          if core_before.endswith(form) and core_after.endswith(form)
-         and len(core_after) > len(form)),
+         and len(core_after) - len(form) >= MIN_STEM),
         "",
     )
     stem = core_after[: len(core_after) - len(shared)]
@@ -271,7 +276,10 @@ def _replace(words: str, before: str, after: str) -> str:
     def fitted(match: re.Match[str]) -> str:
         if shared:
             return stem + fit_particle(stem, shared) + tail + (match.group(1) or "")
-        return after + fit_particle(after, match.group(1) or "")
+        following_particle = match.group(1) or ""
+        if len(after) < MIN_STEM:
+            return after + following_particle
+        return after + fit_particle(after, following_particle)
 
     return pattern.sub(fitted, words)
 
@@ -359,7 +367,8 @@ def confirm(
     with ThreadPoolExecutor(max_workers=len(pending)) as pool:
         results = pool.map(
             lambda word: (word, search(
-                recall_cli, word, limit=CONFIRM_RESULTS, timeout=timeout, env=env,
+                recall_cli, word, limit=CONFIRM_RESULTS, timeout=min(timeout, CONFIRM_BUDGET),
+                env=env,
             )),
             pending,
         )
