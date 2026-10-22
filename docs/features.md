@@ -267,7 +267,7 @@
 완료 기능: [전사본 화자 경계 문장 분할](기능소개/전사본-화자-경계-문장-분할.md) (후속 과제 스윕 4 · speechtotext v1.1.1)
 완료 기능: [Plaud lifelog 동기화 — MCP 무등록 워처·건별 승인·vault 저장](기능소개/plaud-lifelog-동기화.md) (automation/plaud_sync · plaud skill v1.0.0 · 2026-09-02)
 완료 기능: [Plaud 전문 첫 저장 전 교정 — 기본 꺼짐 노드 명령 훅, 원본 보존·실패 시 원문](기능소개/plaud-전사-동결전-교정.md) (automation/plaud_sync · 2026-10-20)
-완료 기능: [Plaud 전문 recall 교정 — 기억 근거·주 모델로 이름·용어를 고치고 이름 가드·바뀐 낱말 표, 기본 꺼짐](기능소개/plaud-전사-recall-교정.md) (automation/plaud_sync/recall_correct.py · 2026-10-22)
+완료 기능: [Plaud 전문 장부 교정 — 형이 지적한 낱말 장부와 주 모델로 이름·용어를 고치고 이름 가드·바뀐 낱말 표, 기본 꺼짐](기능소개/plaud-전사-장부-교정.md) (automation/plaud_sync/glossary_correct.py · 유돌 glossary-add · 2026-10-22)
 완료 기능: [Plaud 녹음 로컬 전사 — 오디오를 내려받아 노드에서 화자 분리 전사, lifelog·회의록이 그 파일을 소비](기능소개/plaud-녹음-로컬-전사.md) (plaud_sync `transcribing` 스테이지 · plaud skill v1.1.0 · 2026-09-04)
 완료 기능: [용어집을 Drive 에 두고 문서 종류별로 중첩시킨다](기능소개/용어집-drive-중첩-계층.md) (automation/term_glossary · 소유자 지시 2026-09-05)
 완료 기능: [교정 로그 — 무엇이 무엇으로 바뀌었는지 남긴다](기능소개/교정-로그.md) (automation/term_correction_log · 소유자 지시 2026-09-05)
