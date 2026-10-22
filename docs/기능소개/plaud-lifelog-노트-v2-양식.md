@@ -5,7 +5,7 @@
 `plaud_sync` 가 만드는 lifelog 노트(`000_PARA/Area/Lifelog/<연도>/`)가 **소유자의 Obsidian Linter 가 그대로 두는
 형식**으로 나온다. 노트는 YAML frontmatter(`tags → title → source → created → modified`)로 시작하고, `# 제목` 아래
 `## 한눈에`(녹음·화자 교정 양식·진단 — Dataview 인라인 필드) → `## 요약`(Plaud 우선, 없으면 같은 추출 호출의 요약) →
-`## 결정 · 할 일`(`- 결정:` / `- [ ] … — 담당 · 기한 [MM:SS]`, 없으면 절 생략) → `## 전문`(`> [!quote]-` 접힌
+`## 결정 · 할 일`(`- 결정:` / `- [ ] … — 담당 · 기한 [MM:SS]`, 없으면 절 생략) → `## 교정 기록`(동결 전 교정이 바꾼 낱말 표, [바꾼 곳이 있을 때만](plaud-전사-동결전-교정.md)) → `## 전문`(`> [!quote]-` 접힌
 callout) → `---` 출처 순이다. 사람·장소·결정·할 일·요약은 Codex OAuth 단일 호출로 **로컬 전사**에서 뽑는다.
 
 ```markdown

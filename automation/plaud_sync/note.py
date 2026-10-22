@@ -17,6 +17,7 @@ from typing import assert_never
 from automation import term_correction
 from automation.obsidian_write.note import NotePlan
 from .lifelog_fields import (
+    CORRECTION_HEADING,
     DECISIONS_HEADING,
     DEFAULT_TIMEZONE,
     GLANCE_HEADING,
@@ -37,7 +38,7 @@ from .lifelog_fields import (
 )
 from .lifelog_model import ExtractionOutcome, ExtractionSkipped, LifelogExtraction, LifelogRecording
 from .note_paths import PlaudNoteError, note_destination, note_title, recording_stamp
-from .transcript_corrector import Corrector, TranscriptContext
+from .transcript_corrector import CorrectedTranscript, Corrector, TranscriptChange, TranscriptContext
 
 __all__ = [
     "SOURCE_RULE",
@@ -103,14 +104,15 @@ def corrected_lifelog_note(
         destination, title_corrections = note_destination(
             recording, stamp, glossary, generated=_generated_title(extraction), taken=taken
         )
+    corrected = CorrectedTranscript(recording.transcript_text)
     if transcript_corrector is not None:
-        recording = replace(
-            recording,
-            transcript_text=transcript_corrector(
-                recording.transcript_text, TranscriptContext(recording.id, destination.stem)
-            ),
+        corrected = transcript_corrector(
+            recording.transcript_text, TranscriptContext(recording.id, destination.stem)
         )
-    body, corrections = _render(recording, extraction, stamp, glossary, title=destination.stem)
+        recording = replace(recording, transcript_text=corrected.text)
+    body, corrections = _render(
+        recording, extraction, stamp, glossary, title=destination.stem, corrected=corrected
+    )
     return CorrectedNote(
         plan=NotePlan(relpath=destination, title=destination.stem, body=body),
         corrections=(*title_corrections, *corrections),
@@ -165,6 +167,7 @@ def _render(
     glossary: term_correction.Glossary,
     *,
     title: str,
+    corrected: CorrectedTranscript | None = None,
 ) -> tuple[str, tuple[term_correction.Correction, ...]]:
     summary_source = recording.summary_markdown
     if not summary_source.strip():
@@ -195,6 +198,8 @@ def _render(
     decisions = decisions_block(extraction)
     if decisions:
         parts += [DECISIONS_HEADING, decisions]
+    if corrected is not None and (corrected.changes or corrected.rejected):
+        parts += [CORRECTION_HEADING, correction_block(corrected.changes, corrected.rejected)]
     source_timestamp = (
         stamp.isoformat(timespec="seconds")
         if "로컬 전사" in recording.transcript_source
@@ -207,6 +212,29 @@ def _render(
         source_line += f" · 전사: {recording.transcript_source}"
     parts += [TRANSCRIPT_HEADING, transcript_block(recording.transcript_text), SOURCE_RULE, source_line]
     return "\n\n".join(parts), (*corrections, *field_corrections)
+
+
+def _cell(text: str) -> str:
+    return " ".join(text.split()).replace("|", "\\|") or "(없음)"
+
+
+def correction_block(changes: tuple[TranscriptChange, ...], rejected: int) -> str:
+    """전문에서 바뀐 낱말 표 — 「원래」 칸이 고치기 전 전사다.
+
+    표는 명령의 보고가 아니라 원문과 교정본의 바이트 차이에서 나온다. 그래서 바뀐 곳이 표에서
+    빠질 수 없고, 표를 거꾸로 되돌리면 원문이 된다.
+    """
+    lines = [f"전문에서 {len(changes)}곳을 고쳤다. 「원래」가 고치기 전 전사다."]
+    if rejected:
+        lines.append(f"이름 가드가 막은 교정 {rejected}건은 원문 그대로 뒀다.")
+    if changes:
+        lines += ["", "| 시각 | 원래 | 바뀐 | 근거 |", "|---|---|---|---|"]
+        lines += [
+            f"| {_cell(change.at)} | {_cell(change.before)} | {_cell(change.after)} "
+            f"| {_cell(change.evidence or '문맥')} |"
+            for change in changes
+        ]
+    return "\n".join(lines)
 
 
 def _generated_title(extraction: ExtractionOutcome) -> str:
