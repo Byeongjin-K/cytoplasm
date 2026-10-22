@@ -184,14 +184,13 @@ def _parse_report(text: str) -> tuple[tuple[_Evidence, ...], int]:
 
 
 def _reason(before: str, after: str, evidence: tuple[_Evidence, ...]) -> str:
-    return next(
-        (
-            item.reason
-            for item in evidence
-            if item.before and item.after and item.before in before and item.after in after
-        ),
-        "",
+    """The reported reason for this change; the applied word may differ (a fitted particle)."""
+    exact = (
+        item.reason for item in evidence
+        if item.before and item.after and item.before in before and item.after in after
     )
+    same_original = (item.reason for item in evidence if item.before and item.before in before)
+    return next(exact, "") or next(same_original, "")
 
 
 def changes_between(

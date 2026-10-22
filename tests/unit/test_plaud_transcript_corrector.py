@@ -331,3 +331,20 @@ def test_note_carries_change_table_before_the_transcript(tmp_path, monkeypatch, 
         assert "synthetic term" in transcript and "교정 기록" not in transcript
     else:
         assert "## 교정 기록" not in body
+
+
+def test_memory_evidence_survives_a_fitted_particle(tmp_path, monkeypatch):
+    # Given a command that reports 홍길둥는 -> 홍길동는 but writes the fitted 홍길동은.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _command(tmp_path, (
+        "import json,os,sys;t=sys.stdin.read();"
+        "open(os.environ['PLAUD_CORRECTION_REPORT'],'w').write(json.dumps("
+        "{'evidence':[{'before':'홍길둥는','after':'홍길동는','evidence':'기억: 합성 노트'}],'rejected':0}));"
+        "sys.stdout.write(t.replace('홍길둥는 박사님','홍길동은 박사님'))"
+    ))
+    # When the hook builds the table.
+    result = CommandCorrector(os.environ)(MEETING.replace("홍길둥 박사님", "홍길둥는 박사님"), CONTEXT)
+    # Then the row keeps the memory evidence instead of falling back to context.
+    assert [(c.before, c.after, c.evidence) for c in result.changes] == [
+        ("홍길둥는", "홍길동은", "기억: 합성 노트"),
+    ]
