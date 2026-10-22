@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -50,6 +51,14 @@ DEFAULT_RECALL_LIMIT: Final = 8
 PROMPT_LIMIT: Final = 240 * 1024
 EDIT_LIMIT: Final = 40
 MIN_GUARD: Final = 2
+#: A new word memory already spells may be farther in sound (blocked right fixes measured 3-5).
+RELAXED_GUARD: Final = 5
+#: At most this many new words are checked against memory, all at once.
+CONFIRM_LIMIT: Final = 10
+CONFIRM_RESULTS: Final = 3
+_TITLE: Final = re.compile(
+    r"(?:님|씨|박사|교수|위원|연구원|실장|팀장|부장|과장|대리|이사|대표|원장|소장|책임|선임|수석)"
+)
 KEYWORDS: Final = 8
 MARKER: Final = "PLAUD-RECALL-CORRECT"
 _TITLE_STAMP: Final = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}_?")
@@ -184,8 +193,34 @@ def parse_answer(answer: str) -> tuple[Edit, ...]:
     return tuple(edits)
 
 
-def allowed(edit: Edit, words: str, known: str) -> bool:
-    """The name guard: close in sound, and the original is not a word recall already knows."""
+def new_cores(edit: Edit) -> tuple[str, ...]:
+    """The new words an edit introduces, without particles or punctuation."""
+    return tuple(
+        core for word in edit.after.split()
+        if word not in edit.before.split() and len(core := _core(word)) >= 2
+    )
+
+
+def name_like(edit: Edit, words: str) -> bool:
+    """A person's name: a title follows the word in the line, or the new word carries one."""
+    return bool(
+        re.search(re.escape(edit.before) + r"\s*" + _TITLE.pattern, words)
+        or _TITLE.search(edit.after)
+    )
+
+
+def confirmed_by(edit: Edit, confirmed: Mapping[str, Memory]) -> Memory | None:
+    return next((confirmed[core] for core in new_cores(edit) if core in confirmed), None)
+
+
+def allowed(
+    edit: Edit, words: str, known: str, confirmed: Mapping[str, Memory] | None = None
+) -> bool:
+    """The name guard: close in sound, and the original is not a word recall already knows.
+
+    A new word that memory spells may sit farther in sound, unless it looks like a person's
+    name: a name stays on the strict guard even when memory knows it.
+    """
     before, after = edit.before, edit.after
     if (
         not before.strip() or not after.strip() or before == after or before not in words
@@ -194,9 +229,10 @@ def allowed(edit: Edit, words: str, known: str) -> bool:
     ):
         return False
     spelled = term_correction.jamo(after)
-    if term_correction.distance(term_correction.jamo(before), spelled) > max(
-        term_correction.tolerance(spelled), MIN_GUARD
-    ):
+    limit = max(term_correction.tolerance(spelled), MIN_GUARD)
+    if confirmed and confirmed_by(edit, confirmed) is not None and not name_like(edit, words):
+        limit = max(limit, RELAXED_GUARD)
+    if term_correction.distance(term_correction.jamo(before), spelled) > limit:
         return False
     return not any(
         run in known and run not in after for run in _HANGUL.findall(before)
@@ -241,7 +277,8 @@ def _replace(words: str, before: str, after: str) -> str:
 
 
 def correct(
-    markdown: str, edits: Sequence[Edit], editable: Mapping[int, tuple[str, str]], known: str
+    markdown: str, edits: Sequence[Edit], editable: Mapping[int, tuple[str, str]], known: str,
+    confirmed: Mapping[str, Memory] | None = None,
 ) -> Outcome:
     lines = markdown.splitlines(keepends=True)
     applied: list[Edit] = []
@@ -256,7 +293,7 @@ def correct(
         current = lines[edit.line - 1] if slot is not None else ""
         prefix = slot[0] if slot is not None else ""
         words = current[len(prefix):]
-        if slot is None or not allowed(edit, words, known):
+        if slot is None or not allowed(edit, words, known, confirmed):
             rejected += 1
             continue
         lines[edit.line - 1] = prefix + _replace(words, edit.before, edit.after)
@@ -270,24 +307,67 @@ def _core(word: str) -> str:
     return bare[: len(bare) - len(ending)]
 
 
-def evidence_label(edit: Edit, memories: Sequence[Memory], raw: str) -> str:
+def evidence_label(
+    edit: Edit, memories: Sequence[Memory], raw: str,
+    confirmed: Mapping[str, Memory] | None = None,
+) -> str:
     """Why the new word is right, read from the bytes, not from the model's own claim.
 
     A memory snippet that spells the new word is the evidence; failing that, the same
     transcript already spelling it elsewhere; otherwise the model judged from context.
     """
-    cores = [
-        core for word in edit.after.split()
-        if word not in edit.before.split() and len(core := _core(word)) >= 2
-    ]
+    cores = new_cores(edit)
     if not cores:
         return "문맥"
-    for memory in memories:
+    for memory in (*([found] if confirmed and (found := confirmed_by(edit, confirmed)) else []),
+                   *memories):
         if any(core in f"{memory.title} {memory.excerpt}" for core in cores):
             return f"기억: {memory.title}"
     if all(core in raw for core in cores):
         return "같은 전사 다른 곳"
     return "문맥"
+
+
+def candidates(
+    edits: Sequence[Edit], editable: Mapping[int, tuple[str, str]], known: str
+) -> tuple[str, ...]:
+    """New words to check in memory, the ones the strict guard would block first."""
+    blocked: list[str] = []
+    passing: list[str] = []
+    for edit in edits:
+        slot = editable.get(edit.line)
+        strict = slot is not None and allowed(edit, slot[1], known)
+        for core in new_cores(edit):
+            if core not in blocked and core not in passing:
+                (passing if strict else blocked).append(core)
+    return (*blocked, *passing)
+
+
+def confirm(
+    recall_cli: Path, words: Sequence[str], memories: Sequence[Memory], *,
+    timeout: float, env: Mapping[str, str],
+) -> dict[str, Memory]:
+    """Each new word and the memory snippet that spells it; the searches run at the same time."""
+    found: dict[str, Memory] = {}
+    for memory in memories:
+        for word in words:
+            if word in f"{memory.title} {memory.excerpt}":
+                found.setdefault(word, memory)
+    pending = [word for word in words if word not in found][:CONFIRM_LIMIT]
+    if not pending:
+        return found
+    with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+        results = pool.map(
+            lambda word: (word, search(
+                recall_cli, word, limit=CONFIRM_RESULTS, timeout=timeout, env=env,
+            )),
+            pending,
+        )
+        for word, rows in results:
+            match = next((m for m in rows if word in f"{m.title} {m.excerpt}"), None)
+            if match is not None:
+                found[word] = match
+    return found
 
 
 def _arguments(argv: Sequence[str]) -> argparse.Namespace:
@@ -331,14 +411,20 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         print(f"{MARKER} failed reason={reason}", file=sys.stderr)
         return EXIT_MODEL
     known = " ".join(f"{memory.title} {memory.excerpt}" for memory in memories)
-    outcome = correct(markdown, edits, editable, known)
+    checking = time.monotonic()
+    confirmed = confirm(
+        args.recall_cli, candidates(edits, editable, known), memories,
+        timeout=args.recall_timeout, env=source,
+    )
+    confirm_secs = time.monotonic() - checking
+    outcome = correct(markdown, edits, editable, known, confirmed)
     raw_words = "\n".join(words for _, words in editable.values())
     report = source.get(REPORT_ENV, "")
     if report:
         Path(report).write_text(json.dumps({
             "evidence": [
                 {"before": edit.before, "after": edit.after,
-                 "evidence": evidence_label(edit, memories, raw_words)}
+                 "evidence": evidence_label(edit, memories, raw_words, confirmed)}
                 for edit in outcome.applied
             ],
             "rejected": outcome.rejected,
@@ -348,7 +434,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         f"{MARKER} ok memories={len(memories)} proposed={len(edits)} "
         f"applied={len(outcome.applied)} rejected={outcome.rejected} "
         f"prompt_chars={len(prompt)} answer_chars={len(served.text)} "
-        f"recall_secs={recall_secs:.1f} total_secs={time.monotonic() - started:.1f} "
+        f"recall_secs={recall_secs:.1f} confirmed={len(confirmed)} confirm_secs={confirm_secs:.1f} total_secs={time.monotonic() - started:.1f} "
         f"served={served.provider}/{served.model}",
         file=sys.stderr,
     )

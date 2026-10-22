@@ -204,3 +204,60 @@ def test_evidence_is_read_from_bytes_not_from_the_model_claim(raw_words, memory,
     memories = (recall_correct.Memory("합성 노트", memory),)
     # When the table reason is chosen, then it follows the bytes, not the claim.
     assert recall_correct.evidence_label(edit, memories, raw_words) == expected
+
+
+
+CONFIRM_RAW: Final = (
+    "# synthetic\n\n---\n\n"
+    "[00:00:01] 화자1: 미레솔 과제를 시작합니다\n"
+    "[00:00:05] 화자2: 미레솔 박사님 오셨어요\n"
+)
+
+
+def _confirm_run(tmp_path, monkeypatch, capsys, rows):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(CONFIRM_RAW))
+    monkeypatch.setattr(codex_llm, "complete_served", lambda prompt, **_: codex_llm.Served(
+        text=_edits((5, "미레솔", "바라솔", "문맥"), (6, "미레솔", "바라솔", "문맥")),
+        provider="synthetic", model="synthetic",
+    ))
+    report = tmp_path / "r.json"
+    env = {**unit_node.env(), "HOME": str(tmp_path), REPORT_ENV: str(report)}
+    code = recall_correct.main(["--recall-cli", str(_recall(tmp_path, rows))], env)
+    return code, capsys.readouterr().out, json.loads(report.read_text(encoding="utf-8"))
+
+
+def test_memory_confirmed_term_passes_a_wider_guard_but_a_name_does_not(tmp_path, monkeypatch, capsys):
+    # Given a fix three jamo away (strict guard: two) whose new word memory spells.
+    rows = [{"title": "합성 노트", "excerpt": "바라솔 과제 노트"}]
+    # When the command checks the new word in memory and applies the fixes.
+    code, out, report = _confirm_run(tmp_path, monkeypatch, capsys, rows)
+    # Then the term line is fixed with memory as its reason; the titled name keeps the strict guard.
+    assert code == 0
+    assert "화자1: 바라솔 과제를" in out and "화자2: 미레솔 박사님" in out
+    assert report == {
+        "evidence": [{"before": "미레솔", "after": "바라솔", "evidence": "기억: 합성 노트"}],
+        "rejected": 1,
+    }
+
+
+def test_unconfirmed_far_fix_keeps_the_strict_guard(tmp_path, monkeypatch, capsys):
+    # Given the same far fixes and a memory that never spells the new word.
+    code, out, report = _confirm_run(tmp_path, monkeypatch, capsys, [])
+    # When the command runs, then nothing changes.
+    assert code == 0 and out == CONFIRM_RAW
+    assert report["rejected"] == 2
+
+
+def test_memory_check_is_capped_and_blocked_fixes_go_first(monkeypatch):
+    # Given twelve new words, the last one far enough that the strict guard blocks it.
+    editable = {line: ("", f"낱말{line:02d}가") for line in range(1, 13)}
+    edits = [recall_correct.Edit(line, f"낱말{line:02d}", f"낱말{line:02d}다", "문맥") for line in range(1, 12)]
+    edits.append(recall_correct.Edit(12, "낱말12", "바사아다", "문맥"))
+    asked: list[str] = []
+    monkeypatch.setattr(recall_correct, "search", lambda _cli, word, **_: asked.append(word) or ())
+    # When the new words are checked against memory.
+    words = recall_correct.candidates(edits, editable, "")
+    recall_correct.confirm(Path("unused"), words, (), timeout=1, env={})
+    # Then the blocked word is first in line and at most ten searches run.
+    assert words[0] == "바사아다"
+    assert len(asked) == recall_correct.CONFIRM_LIMIT and "바사아다" in asked
