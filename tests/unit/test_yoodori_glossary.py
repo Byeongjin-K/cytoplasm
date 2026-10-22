@@ -58,7 +58,8 @@ def test_glossary_list_is_a_read():
     name, argv, _ = gate.build(["glossary-list"])
     # When built, then it only lists.
     assert name == "glossary-list"
-    assert argv == ["/usr/bin/python3", "-m", "automation.term_glossary", "list", "--kind", "lifelog"]
+    assert argv == ["/usr/bin/python3", "-m", "automation.term_glossary", "list"]
+    assert gate.build(["glossary-list", "--kind", "meeting"])[1][-2:] == ["--kind", "meeting"]
     with pytest.raises(gate.Refused):
         gate.build(["glossary-list", "extra"])
 
@@ -77,5 +78,19 @@ def test_add_job_argv_writes_the_row_through_the_real_cli(tmp_path):
     _, argv, _ = gate.build(["glossary-list"])
     listed = subprocess.run([sys.executable, *argv[1:]], capture_output=True, text=True,
                             env=env, cwd=REPO, check=False)
-    assert "- 주간기관 → 주관기관" in listed.stdout
+    assert listed.stdout == "주간기관,주관기관\n"
     assert os.path.exists(tmp_path / "cache" / "lifelog.csv")
+
+
+def test_list_without_kind_merges_lifelog_and_meeting(tmp_path):
+    # Given one row in each kind's node copy, the same wrong form spelled differently in meeting.
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "lifelog.csv").write_text("주간기관,주관기관\n한건전,한건영\n", encoding="utf-8")
+    (cache / "meeting.csv").write_text("한건전,한건연\n", encoding="utf-8")
+    env = {**unit_node.env(), "HOME": str(tmp_path), "TERM_GLOSSARY_CACHE": str(cache), "PYTHONPATH": str(REPO)}
+    env.pop("DRIVE_PUBLISH_ENABLED", None)
+    # When the ledger is listed with no kind, then both kinds come out as wrong,right rows, meeting winning.
+    listed = subprocess.run([sys.executable, "-m", "automation.term_glossary", "list"],
+                            capture_output=True, text=True, env=env, cwd=REPO, check=False)
+    assert listed.stdout == "주간기관,주관기관\n한건전,한건연\n"

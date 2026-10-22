@@ -141,7 +141,7 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Daily memory copy: memory-copy (note body on SSH stdin; fixed note, no origin).\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>. Plaud notes written: plaud-written <n 1-50>.\n"
-         "Correction ledger read: glossary-list [--kind lifelog|meeting].\n"
+         "Correction ledger read: glossary-list [--kind lifelog|meeting] (wrong,right rows; no kind = all).\n"
          "Dashboard order: order-status <n> <" + "|".join(ORDER_STATUSES) + ">"
          " [--dori <name>] [--post-url <https link>] [--note <text>].\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
@@ -571,10 +571,10 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
     if name == "recall":
         return name, [py, str(LIVE / "recall/scripts/recall_cli.py"), "search", _text(args, 300)], HOME
     if name == "glossary-list":
-        kind, rest = _glossary_kind(args)
-        if rest:
+        kinds = ["--kind", _glossary_kind(args)[0]] if "--kind" in args else []
+        if args not in ([], kinds):
             raise Refused("glossary-list takes only [--kind lifelog|meeting]")
-        return name, [py, "-m", "automation.term_glossary", "list", "--kind", kind], RELEASE
+        return name, [py, "-m", "automation.term_glossary", "list", *kinds], RELEASE
     if name == "status":
         if args:
             raise Refused("status takes no arguments")

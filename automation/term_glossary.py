@@ -238,7 +238,7 @@ def add_pair(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """`add <kind> <wrong> <right>` for YooDori's glossary-add; `list` for glossary-list."""
+    """`add` for YooDori's glossary-add; `list` prints `wrong,right` rows (every writable kind, later kinds win)."""
     parser = argparse.ArgumentParser(prog="term_glossary")
     sub = parser.add_subparsers(dest="command", required=True)
     add = sub.add_parser("add")
@@ -246,7 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     add.add_argument("wrong")
     add.add_argument("right")
     show = sub.add_parser("list")
-    show.add_argument("--kind", choices=WRITABLE_KINDS, default="lifelog")
+    show.add_argument("--kind", choices=WRITABLE_KINDS, default=None)
     args = parser.parse_args(argv)
     try:
         if args.command == "add":
@@ -254,10 +254,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"용어집({folder_for(args.kind)})에 {args.wrong} → {args.right} "
                   f"{ {'added': '추가함', 'updated': '고침', 'unchanged': '이미 있음'}[action] }")
             return 0
-        pairs = [(w, r) for w, r in glossary_for(args.kind) if w != r]
-        print(f"용어집({folder_for(args.kind)}) 교정 {len(pairs)}줄")
-        for wrong, right in pairs:
-            print(f"- {wrong} → {right}")
+        merged: dict[str, str] = {}
+        for kind in (args.kind,) if args.kind else WRITABLE_KINDS:
+            merged.update((w, r) for w, r in glossary_for(kind) if w != r)
+        sys.stdout.write(term_correction.format_glossary(tuple(merged.items())))
         return 0
     except TermGlossaryError as error:
         print(f"용어집 쓰기 거절: {error}", file=sys.stderr)
