@@ -52,9 +52,9 @@ ORDERS_CSS: Final = (
     ".order-last-label{margin:var(--s3) 0 0;padding-top:var(--s3);border-top:1px solid var(--line)}"
     ".order-more{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:var(--t-sm)}"
     ".order-trial-why{margin:0 0 var(--s2)}"
-    ".order-card{margin-top:var(--s4)}"
-    ".order-sent{margin-top:var(--s4);background:var(--accent-wash);border-color:transparent;color:var(--accent-ink)}"
-    "main>section[data-tab=order]>.card+.card{margin-top:var(--s4)}"
+    ".order-card{margin-top:var(--gap-card)}"
+    ".order-sent{margin-top:var(--gap-card);background:var(--accent-wash);border-color:transparent;color:var(--accent-ink)}"
+    "main>section[data-tab=order]>.card+.card{margin-top:var(--gap-card)}"
     ".order-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3)}"
     ".order-actions .btn{min-height:44px}"
     ".order-actions .row-error{flex-basis:100%;margin-top:0}"
@@ -68,7 +68,7 @@ ORDERS_CSS: Final = (
     ".order-box-head .btn{min-height:44px}"
     "a.order-new{display:inline-flex;align-items:center;gap:6px;min-height:44px}"
     "main>section[data-tab=orders],main>section[data-tab=order]{max-width:820px}"
-    "#orders>.card,#orders>details.card{margin-top:var(--s4)}"
+    "#orders>.card,#orders>details.card{margin-top:var(--gap-card)}#order-box{margin-top:var(--gap-card)}"
     "@media (max-width:640px){.order-links{grid-template-columns:1fr}}"
 )
 
