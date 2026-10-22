@@ -227,10 +227,11 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
     if done:
         body += (f'<p class="small muted order-last-label">최근 결과</p>'
                  f'<ul>{_row(done[0], titles, related=False)}</ul>')
-    rest = len(orders) - min(len(open_), _SHOWN) - (1 if done else 0)
-    if rest > 0:
-        body += (f'<a class="order-more" href="#orders">지시 탭에서 전부 보기<span class="muted">({len(orders)}건)</span>'
-                 f'{icon("chevron-right")}</a>')
+    shown = min(len(open_), _SHOWN) + (1 if done else 0)
+    if len(orders) > shown:  # the rest, trials included, are in the tab; the count names only real orders not shown
+        more = len(real) - shown
+        count = f'<span class="muted">({more}건 더)</span>' if more else ""
+        body += f'<a class="order-more" href="#orders">지시 탭에서 전부 보기{count}{icon("chevron-right")}</a>'
     return (
         '<section id="order-box" data-tab="summary"><div class="card agenda">'
         f'<div class="order-box-head">{icon("inbox")}<div><b>도리에게 지시</b><p class="small muted">{line}</p></div>'
