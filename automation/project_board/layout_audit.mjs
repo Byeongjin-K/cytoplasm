@@ -12,6 +12,8 @@
 //   lead-sep   a 「·」 separator begins a line (it belongs at the end of the item before it)
 //   unopened   a screen did not load (it is reported, and the audit goes on)
 //   under-nav  at the end of the page, content sits under the fixed bottom tab bar
+//   gap        two neighbouring cards (one below or beside the other, nothing between) sit closer or further apart than
+//              the --gap-card token; a gap of 2.5 tokens or more holds a heading and is not counted
 //
 // Usage (node 18+ with the playwright package; nothing is installed into the repository):
 //   PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node automation/project_board/layout_audit.mjs \
@@ -135,6 +137,24 @@ function probe() {
         const authored = /\n[ \t\u00a0]*$/.test(n.textContent.slice(0, k)); // a bullet the writer put at a line start
         if (!before && !sameNodeBefore && !authored) found.push({ type: 'lead-sep', a: name(i.el) });
       }
+    }
+  }
+  // neighbouring cards keep one gap: the --gap-card token, the same on every screen (owner 2026-10-22 "균일한 간격")
+  const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap-card')) || 16;
+  const cards = [...document.querySelectorAll('main .card, main .tile, main .callout')]
+    .filter((c) => visible(c) && !pinned(c) && !c.parentElement.closest('.card, .tile, .callout'))
+    .map((c) => ({ c, r: c.getBoundingClientRect() }));
+  for (const A of cards) {
+    let below = null, right = null;
+    for (const B of cards) {
+      if (B === A) continue;
+      const across = Math.min(A.r.right, B.r.right) - Math.max(A.r.left, B.r.left);
+      const along = Math.min(A.r.bottom, B.r.bottom) - Math.max(A.r.top, B.r.top);
+      if (across > 1 && B.r.top >= A.r.bottom - 1 && (!below || B.r.top < below.r.top)) below = B;
+      if (along > 1 && B.r.left >= A.r.right - 1 && (!right || B.r.left < right.r.left)) right = B;
+    }
+    for (const [B, px] of [[below, below && below.r.top - A.r.bottom], [right, right && right.r.left - A.r.right]]) {
+      if (B && px < gap * 2.5 && Math.abs(px - gap) > 1) found.push({ type: 'gap', a: name(A.c), b: `${name(B.c)} ${Math.round(px)}px, not ${gap}px` });
     }
   }
   if (document.scrollingElement.scrollWidth > vw + 1) found.push({ type: 'hscroll', a: `${document.scrollingElement.scrollWidth}px` });

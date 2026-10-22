@@ -84,8 +84,11 @@ def seed(store: BoardStore, today: date) -> None:
 
 
 DEMO_RECEIVER: Final = "관리 도리"
+_TRIAL_TARGET: Final = "시험(보내지 않음)"  # how the relay marks a path check it did not hand on
 _ORDERS: Final = (  # invented: (words, linked todo, project, then status, taking Dori, note)
-    ("시편 측정 결과를 표로 정리해서 내일 오전까지 올려 줘", "demo-1-2", "", "끝", "연구 도리", "표 올림"),
+    ("[시험] 지시 경로 확인, 할 일 없음", "", "", "끝", "", "시험 지시, 할 일 없어 바로 닫음"),
+    ("시편 측정 결과를 표로 정리해서 내일 오전까지 올려 줘", "demo-1-2", "", "끝", "연구 도리",
+     "표로 정리해 올림(200), 대시보드 지시 근거로 게이트 통과"),
     ("협력사 납품 검수 일정 잡아 줘. 다음 주 화요일 오후가 좋아", "demo-2-3", "", "처리 중", "일정 도리", ""),
     ("스마트공장 표준화 관련 최근 해외 동향 조사해 줘", "", "스마트공장 데이터 표준화", "넘김", "연구 도리", ""),
     ("이번 주 지연된 할 일 정리해서 알려 줘", "", "", "받음", "", ""),
@@ -93,7 +96,7 @@ _ORDERS: Final = (  # invented: (words, linked todo, project, then status, takin
 
 
 def seed_orders(directory: Path, store: BoardStore, today: date) -> OrderStore:
-    """Invented orders beside the demo board, one in each step from 받음 to 끝."""
+    """Invented orders beside the demo board, one in each step from 받음 to 끝, plus a trial the relay did not send."""
     orders = OrderStore(directory / ORDERS_FILE)
     base = datetime.combine(today - timedelta(days=1), datetime.min.time(), UTC) + timedelta(hours=1)
     for index, (words, todo_id, project, status, dori, note) in enumerate(_ORDERS):
@@ -102,9 +105,10 @@ def seed_orders(directory: Path, store: BoardStore, today: date) -> OrderStore:
         order = orders.add(words, receiver=DEMO_RECEIVER, by="데모 사용자", via="tailnet", todo_id=todo_id,
                            project=todo.project if todo else project, now=at)
         if status != "받음":
-            orders.mark_delivered(order.number, DEMO_RECEIVER, now=at + timedelta(minutes=1))
+            trial = words.startswith("[시험]")
+            orders.mark_delivered(order.number, _TRIAL_TARGET if trial else DEMO_RECEIVER, now=at + timedelta(minutes=1))
             orders.update(order.number, status=status, dori=dori, note=note or None,
-                          post_url=f"https://example.com/demo-room/{order.number}", by=DEMO_RECEIVER,
+                          post_url=None if trial else f"https://example.com/demo-room/{order.number}", by=DEMO_RECEIVER,
                           now=at + timedelta(minutes=4))
     return orders
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json
+import re
 import threading
 from collections.abc import Iterator
 from datetime import date
@@ -192,6 +193,40 @@ def test_an_order_reads_once_and_its_result_stays_in_sight(tmp_path: Path) -> No
     box = box[:box.index("</section>")]
     assert 'href="#order/1"' in box and "보고서 올림" in box
     assert 'data-order-project="프로젝트A"' in page
+
+
+def test_the_summary_box_is_short_trials_stay_apart_and_memos_read_as_plain_words(tmp_path: Path) -> None:
+    """orders-ui-fix2 (owner 2026-10-22 "안 고쳐졌는데? 도리에게 지시 탭이 부자연스러워"): the summary box holds the open
+    orders and one latest result, never a trial; trials keep their own fold and screen; a memo drops status codes and
+    gate talk; a linked todo sits on its own line, not inside the dot-joined meta line."""
+    store, orders = _store(tmp_path), OrderStore(tmp_path / "orders.db")
+    for words in ("[시험] 경로 확인", "표 정리해 줘", "일정 잡아 줘"):
+        orders.add(words, receiver="유돌", by=OWNER, via="tailnet", todo_id="pb-1-1")
+    orders.mark_delivered(1, "시험(보내지 않음)")
+    orders.update(1, status="끝", note="시험 지시, 바로 닫음", by="유돌")
+    orders.mark_delivered(2, "유돌")
+    orders.update(2, status="끝", note="표 올림(200) 바로 지움(204), 대시보드 지시 근거로 게이트 통과", by="유돌")
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN, orders=orders.all(),
+                            order_receiver="유돌")
+
+    def section(marker: str) -> str:
+        part = page[page.index(marker):]
+        return part[:part.index("</section>")]
+
+    box = section('id="order-box"')
+    assert 'href="#order/3"' in box and 'href="#order/2"' in box and "#order/1" not in box
+    assert "표 올림 바로 지움" in box and "(200)" not in box and "게이트" not in box
+    assert "지시 탭에서 전부 보기" in box and 'href="#todo' not in box
+    tab = section('id="orders"')
+    trial = tab[tab.index('data-fold="orders-trial"'):]
+    assert 'href="#order/1"' in trial and 'href="#order/1"' not in tab[:tab.index('data-fold="orders-trial"')]
+    assert "시험이라 보내지 않음" in trial and "시험(보내지 않음)" not in page
+    metas = re.findall(r'<span class="where">(.*?)</span><', tab)
+    assert len(metas) == 3 and not any("#todo" in meta for meta in metas)
+    assert 'class="order-rel"' in tab and "유돌이 끝냄" in tab
+    detail = section('data-tab="order" data-key="2"')
+    assert "표 올림 바로 지움" in detail and "(204)" not in detail and "게이트 통과" not in detail
+    assert orders.get(2).note.endswith("게이트 통과")  # type: ignore[union-attr]  # the store keeps the words
 
 
 def test_the_order_todo_list_puts_work_in_progress_first_and_every_dropdown_gets_the_find_field(tmp_path: Path) -> None:
