@@ -203,6 +203,8 @@ _TABS_JS: Final = """
     document.title=page?(page.dataset.title||r.proj)+' · '+title:title;
     if(keep===true){return;}
     var here=page?(page.dataset.title||r.proj):'';
+    // a screen off the tab bar (the orders list) names itself, so a screen opened from it does not name the summary tab on its back link
+    if(!here){var cur=document.querySelector('main>section[data-title][data-tab='+tab+']');if(cur){here=cur.dataset.title;}}
     if(!here){links.forEach(function(a){if(a.dataset.tab===navTab){here=[].filter.call(a.childNodes,function(n){return n.nodeType===3;})
       .map(function(n){return n.textContent;}).join('').trim();}});}
     var st=history.state||{};
@@ -1040,7 +1042,8 @@ def _archive(shelf: tuple[ProjectView, ...], mode: Mode, today: date, fresh: dic
 
 
 def _project_page(
-    index: int, view: ProjectView, snapshot: BoardSnapshot, mode: Mode, today: date, *, archived: bool = False
+    index: int, view: ProjectView, snapshot: BoardSnapshot, mode: Mode, today: date, *, archived: bool = False,
+    orders: str = "",
 ) -> str:
     """One project's own screen: its 할 일, 일정 and 근거 only, grade badges kept on every row."""
     todos = [t for t in snapshot.todos if t.project == view.name]
@@ -1097,7 +1100,7 @@ def _project_page(
         f'<section id="pv-{index}" data-tab="project" data-project="{name_attr}"{flag}>{back}'
         f'<div class="pv-head"><h2>{escape(view.name)}</h2>{badges}{owner}{button}</div>{shelf}'
         f'<div class="tiles">{tiles}</div>'
-        f"{todo_fold}{agenda_fold}{evidence_fold}</section>"
+        f"{todo_fold}{agenda_fold}{evidence_fold}{orders}</section>"
     )
 
 
@@ -1205,7 +1208,7 @@ def render_dashboard(
     ledger: LedgerView | None = None, extras: Mapping[str, TodoExtra] | None = None,
     orders: Sequence[Order] | None = None, order_receiver: str = "",
 ) -> str:
-    from .orders_view import ORDERS_CSS, ORDERS_JS, order_pages, orders_section, summary_box, todo_orders
+    from .orders_view import ORDERS_CSS, ORDERS_JS, order_pages, orders_section, project_orders, summary_box, todo_orders
 
     today = date.fromisoformat(snapshot.today)
     shelf = tuple(sorted(snapshot.archived, key=project_sort_key))
@@ -1230,7 +1233,8 @@ def render_dashboard(
     scripts += ORDERS_JS if orders is not None else ""
     fresh = '<span id="pb-fresh" class="fresh" title="2분마다 바뀐 내용만 새로 받습니다">방금 갱신</span>' if served else ""
     pages = "".join(
-        _project_page(i, view, full, mode, today, archived=view in shelf)
+        _project_page(i, view, full, mode, today, archived=view in shelf,
+                      orders=project_orders(orders, view.name) if orders is not None and view not in shelf else "")
         for i, view in enumerate(snapshot.projects + shelf, 1)
     ) + "".join(
         _todo_page(t, full, mode, today, (extras or {}).get(t.todo_id),

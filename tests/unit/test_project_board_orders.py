@@ -168,6 +168,32 @@ def test_order_words_are_escaped_everywhere_and_never_exported(tmp_path: Path) -
     assert "도리에게 지시" not in exported and "alert(1)" not in exported
 
 
+def test_an_order_reads_once_and_its_result_stays_in_sight(tmp_path: Path) -> None:
+    """orders-ui-qa (owner 2026-10-22 "지시하는 UI가 좀 이상해"): the receiver is named once, the sender's login is not
+    shown as a person, the gate's uses are one line, a finished order's memo is on the summary when nothing is
+    open, and the project screen offers an order about that project."""
+    import re
+
+    store, orders = _store(tmp_path), OrderStore(tmp_path / "orders.db")
+    orders.add("조사해 줘", receiver="유돌", by=OWNER, via="tailnet", todo_id="pb-1-1", project="프로젝트A")
+    orders.mark_delivered(1, "유돌")
+    orders.record_use(1, by="gate")
+    orders.record_use(1, by="gate")
+    orders.update(1, status="끝", note="보고서 올림", by="유돌")
+    page = render_dashboard(store.snapshot(today=TODAY), mode="served", token=TOKEN, orders=orders.all(),
+                            order_receiver="유돌")
+    detail = page[page.index('data-tab="order" data-key="1"'):]
+    detail = detail[:detail.index("</section>")]
+    receiver = re.search(r"<dt>받는 도리</dt><dd>(.*?)</dd>", detail)
+    assert receiver is not None and receiver.group(1).count("유돌") == 1
+    assert OWNER not in detail
+    assert detail.count("쓰기 근거로 확인됨") == 1 and "(2번)" in detail
+    box = page[page.index('id="order-box"'):]
+    box = box[:box.index("</section>")]
+    assert 'href="#order/1"' in box and "보고서 올림" in box
+    assert 'data-order-project="프로젝트A"' in page
+
+
 def test_the_yoodori_gate_writes_order_status_through_fixed_argv() -> None:
     name, argv, cwd = gate.build(["order-status", "12", "처리 중", "--dori", "공돌",
                                   "--post-url", "https://chat.example/room/9", "--note", "조사 시작"])
