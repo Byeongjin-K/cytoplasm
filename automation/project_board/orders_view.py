@@ -7,6 +7,7 @@ Every value is escaped; the room post link is an https address checked when it w
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from html import escape
 from typing import Final
@@ -18,7 +19,16 @@ from .orders import DEFAULT_RECEIVER, LOCAL, MAX_BODY, ORDER_STATUSES, OWNER_DEV
 _STATUS_CLASS: Final = {"받음": "st-open", "넘김": "st-held", "처리 중": "st-doing", "끝": "st-done"}
 _EVENT_WORDS: Final = {"created": "대시보드에 지시를 남김", "delivered": "에게 전달됨", "used": "쓰기 근거로 확인됨"}
 _FIELD_WORDS: Final = {"dori": "맡은 도리 ", "post_url": "도리 방 글 연결", "note": "메모: "}
-_SHOWN: Final = 3  # orders on the summary box: open ones first, then the latest finished (their result)
+_SHOWN: Final = 3  # open orders on the summary box; below them only the latest finished one (its result)
+# A trial order checks the path and carries no work (lead 2026-10-22: "[시험]" in the words, or the relay marked it
+# as not sent). It stays in the store and on its own screen, but the owner's lists keep it apart.
+_TRIAL_WORD: Final = "[시험]"
+_TRIAL_TARGET: Final = "시험"
+# A memo is the receiving Dori's words. Status codes in brackets and clauses about the gate are machine talk the owner
+# does not read (owner 2026-10-22 "부자연스러워"), so the screens drop them; the store keeps the memo as written.
+_CODE: Final = re.compile(r"\s*\((?:HTTP\s*)?\d{3}\)")
+_MACHINE: Final = re.compile(r"게이트|\b(?:gate|exit|http|api|sha\d*|token|json)\b", re.IGNORECASE)
+_CLAUSE: Final = re.compile(r"\s*[,;]\s*")
 
 ORDERS_CSS: Final = (
     ".order-form textarea{font:inherit;font-size:var(--t-md);color:var(--text);background:var(--surface);"
@@ -33,6 +43,15 @@ ORDERS_CSS: Final = (
     ".order-steps .past::before{content:'\u2713\u00a0'}"
     ".agenda li>.order-note{flex-basis:100%;margin:0;color:var(--text-2);font-size:var(--t-sm);"
     "white-space:pre-wrap;overflow-wrap:anywhere}"
+    ".agenda li>.order-rel{flex-basis:100%;display:flex;flex-direction:column;gap:0;font-size:var(--t-sm);color:var(--text-3)}"
+    ".order-rel a{display:inline-block;padding:3px 0;color:var(--text-2);text-decoration:underline;"
+    "text-decoration-color:var(--line-strong);text-underline-offset:3px;overflow-wrap:anywhere}"
+    ".order-rel a:hover{color:var(--accent-ink)}"
+    ".order-rel>div{display:flex;gap:8px;align-items:flex-start}"
+    ".order-rel .lbl{flex:none;padding:3px 0}"
+    ".order-last-label{margin:var(--s3) 0 0;padding-top:var(--s3);border-top:1px solid var(--line)}"
+    ".order-more{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:var(--t-sm)}"
+    ".order-trial-why{margin:0 0 var(--s2)}"
     ".order-card{margin-top:var(--s4)}"
     ".order-sent{margin-top:var(--s4);background:var(--accent-wash);border-color:transparent;color:var(--accent-ink)}"
     "main>section[data-tab=order]>.card+.card{margin-top:var(--s4)}"
@@ -126,24 +145,47 @@ def _badge(status: str) -> str:
     return f'<span class="badge {_STATUS_CLASS.get(status, "st-open")}">{escape(status)}</span>'
 
 
-def _links(order: Order, titles: dict[str, str]) -> list[str]:
+def is_trial(order: Order) -> bool:
+    """A path check with no work in it: its words start with [시험] or the relay marked it as not sent."""
+    return order.body.lstrip().startswith(_TRIAL_WORD) or order.delivered_to.startswith(_TRIAL_TARGET)
+
+
+def plain_note(note: str) -> str:
+    """The memo in the owner's words: bracketed status codes go, and so does any clause about the gate."""
+    kept = [c for c in _CLAUSE.split(_CODE.sub("", note)) if c.strip() and not _MACHINE.search(c)]
+    return ", ".join(c.strip() for c in kept)
+
+
+def _related(order: Order, titles: dict[str, str]) -> str:
+    """The todo, project and room post of an order, one per line under the row: a long todo title wraps on its own
+    line instead of dragging a 「·」 to the far edge of the meta line (owner phone 2026-10-22)."""
     from .dashboard import project_href, todo_href
 
-    out = []
+    lines = []
     if order.todo_id:
         title = titles.get(order.todo_id)
-        out.append(f'<a href="{escape(todo_href(order.todo_id), quote=True)}">{escape(title)}</a>' if title
-                   else '<span class="muted">지난 할\u00a0일</span>')
+        target = (f'<a href="{escape(todo_href(order.todo_id), quote=True)}">{escape(title)}</a>' if title
+                  else '<span class="muted">지난 할\u00a0일</span>')
+        lines.append(f'<div><span class="lbl">할\u00a0일</span>{target}</div>')
     if order.project:
-        out.append(f'<a href="{escape(project_href(order.project), quote=True)}">{escape(order.project)}</a>')
-    return out
+        lines.append(f'<div><span class="lbl">프로젝트</span><a href="{escape(project_href(order.project), quote=True)}">'
+                     f"{escape(order.project)}</a></div>")
+    if order.post_url:
+        lines.append(f'<div><a href="{escape(order.post_url, quote=True)}" target="_blank" rel="noopener noreferrer">'
+                     "도리 방 글 보기</a></div>")
+    return f'<div class="order-rel">{"".join(lines)}</div>' if lines else ""
 
 
 def _who(order: Order) -> str:
-    """Who has it now, said once: the Dori that took it, else the receiver once it got there, else not yet."""
+    """Who has it now, said once: the Dori that finished or took it, else the receiver once it got there, else not
+    yet. A trial the relay did not send says so in plain words."""
     def name(text: str) -> str:  # a Dori name never splits across two lines
         return escape(text).replace(" ", "\u00a0")
 
+    if order.delivered_to.startswith(_TRIAL_TARGET):
+        return "시험이라 보내지 않음"
+    if not order.is_open:
+        return f"{name(_subject(order.dori or order.delivered_to or order.receiver))} 끝냄"
     if order.dori:
         return f"맡은\u00a0도리\u00a0{name(order.dori)}"
     if order.delivered_at:
@@ -151,18 +193,17 @@ def _who(order: Order) -> str:
     return "아직 전달 전"
 
 
-def _row(order: Order, titles: dict[str, str]) -> str:
+def _row(order: Order, titles: dict[str, str], *, related: bool = True) -> str:
     from .dashboard import _glued
 
-    where = [_badge(order.status), escape(_kst(order.created_at)), _who(order)]
-    where += _links(order, titles)
-    if order.post_url:
-        where.append(f'<a href="{escape(order.post_url, quote=True)}" target="_blank" rel="noopener noreferrer">도리 방 글</a>')
-    note = f'<p class="order-note">메모: {escape(order.note)}</p>' if order.note else ""
+    stamp = order.created_at if order.is_open else order.updated_at
+    where = [_badge(order.status), escape(_kst(stamp)), _who(order)]
+    memo = plain_note(order.note)
+    note = f'<p class="order-note">{escape(memo)}</p>' if memo else ""
     return (
         f'<li><a class="ag-title" href="{escape(order_href(order.number), quote=True)}">#{order.number} '
         f'{escape(_first_line(order.body))}</a>'
-        f'<span class="where">{_glued(where)}</span>{note}</li>'
+        f'<span class="where">{_glued(where)}</span>{note}{_related(order, titles) if related else ""}</li>'
     )
 
 
@@ -175,14 +216,21 @@ def _titles(snapshot: BoardSnapshot) -> dict[str, str]:
 
 
 def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
-    open_ = [o for o in orders if o.is_open]
-    done = len(orders) - len(open_)
-    line = f"진행 중 {len(open_)}건{' · 끝 ' + str(done) + '건' if done else ''}" if orders else "아직 보낸 지시가 없습니다"
+    """Short on a phone (owner 2026-10-22 "부자연스러워"): the open orders, then one line for the latest result, and a
+    way to the full list. Finished ones stay folded in the orders tab and trials stay out of the box."""
+    real = [o for o in orders if not is_trial(o)]
+    open_ = [o for o in real if o.is_open]
+    done = _latest_first(o for o in real if not o.is_open)
+    line = (f"진행 중 {len(open_)}건" if open_ else "진행 중 없음") if real else "아직 보낸 지시가 없습니다"
     titles = _titles(snapshot)
-    shown = (open_ + _latest_first(o for o in orders if not o.is_open))[:_SHOWN]
-    items = "".join(_row(o, titles) for o in shown)
-    more = f'<div class="small"><a href="#orders">지시 {len(orders)}건 모두 보기</a></div>' if len(orders) > _SHOWN else ""
-    body = f'<ul>{items}</ul>{more}' if items else more
+    body = f'<ul>{"".join(_row(o, titles, related=False) for o in open_[:_SHOWN])}</ul>' if open_ else ""
+    if done:
+        body += (f'<p class="small muted order-last-label">최근 결과</p>'
+                 f'<ul>{_row(done[0], titles, related=False)}</ul>')
+    rest = len(orders) - min(len(open_), _SHOWN) - (1 if done else 0)
+    if rest > 0:
+        body += (f'<a class="order-more" href="#orders">지시 탭에서 전부 보기<span class="muted">({len(orders)}건)</span>'
+                 f'{icon("chevron-right")}</a>')
     return (
         '<section id="order-box" data-tab="summary"><div class="card agenda">'
         f'<div class="order-box-head">{icon("inbox")}<div><b>도리에게 지시</b><p class="small muted">{line}</p></div>'
@@ -227,8 +275,9 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
         '<span class="order-count small muted" aria-live="polite"></span></div></form>'
     )
     titles = _titles(snapshot)
-    open_ = [o for o in orders if o.is_open]
-    done = _latest_first(o for o in orders if not o.is_open)
+    open_ = [o for o in orders if o.is_open and not is_trial(o)]
+    done = _latest_first(o for o in orders if not o.is_open and not is_trial(o))
+    trials = _latest_first(o for o in orders if is_trial(o))
     lists = ""
     if open_:
         lists += (f'<div class="card agenda"><h3>진행 중인 지시 <span class="cnt">{len(open_)}</span></h3>'
@@ -236,6 +285,11 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
     if done:
         lists += (f'<details class="card agenda fold" data-fold="orders-done"{"" if open_ else " open"}><summary><h3>끝난 지시 '
                   f'<span class="cnt">{len(done)}</span></h3></summary><ul>{"".join(_row(o, titles) for o in done)}</ul></details>')
+    if trials:
+        lists += ('<details class="card agenda fold" data-fold="orders-trial"><summary><h3>시험 지시 '
+                  f'<span class="cnt">{len(trials)}</span></h3></summary>'
+                  '<p class="small muted order-trial-why">도리 경로를 확인하려고 보낸 것이라 맡길 일은 없습니다.</p>'
+                  f'<ul>{"".join(_row(o, titles) for o in trials)}</ul></details>')
     if not orders:
         lists = ('<div class="card empty">' + icon("inbox") + "<b>아직 보낸 지시가 없습니다</b>"
                  "<p>위 칸에 도리에게 맡길 일을 쓰면 여기에 쌓이고, 누가 맡아 어디까지 했는지 함께 보입니다.</p></div>")
@@ -263,7 +317,8 @@ def _event(at: str, kind: str, detail: str, actor: str, times: int = 1) -> str:
     if kind == "created":
         what = _EVENT_WORDS["created"]
     elif kind == "delivered":
-        what = escape(detail) + _EVENT_WORDS["delivered"]
+        what = ("시험이라 도리에게 보내지 않음" if detail.startswith(_TRIAL_TARGET)
+                else escape(detail) + _EVENT_WORDS["delivered"])
     elif kind == "used":
         what = _EVENT_WORDS["used"] + (f" ({times}번)" if times > 1 else "")
     else:
@@ -271,7 +326,8 @@ def _event(at: str, kind: str, detail: str, actor: str, times: int = 1) -> str:
         for piece in detail.split(" · "):
             key, sep, value = piece.partition("=")
             if sep and key in _FIELD_WORDS:
-                parts.append(_FIELD_WORDS[key] + ("" if key == "post_url" else escape(value)))
+                shown = plain_note(value) if key == "note" else value
+                parts.append(_FIELD_WORDS[key] + ("" if key == "post_url" else escape(shown)))
             else:
                 parts.append(f"상태 {escape(piece)}")
         what = ", ".join(parts)
@@ -311,13 +367,17 @@ def _device(order: Order) -> str:
 def _order_page(order: Order, titles: dict[str, str]) -> str:
     from .dashboard import project_href, todo_href
 
-    delivered = f"{escape(_kst(order.delivered_at))} 전달됨" if order.delivered_at else "아직 전달 전"
+    delivered = ("시험이라 보내지 않음" if order.delivered_to.startswith(_TRIAL_TARGET)
+                 else f"{escape(_kst(order.delivered_at))} 전달됨" if order.delivered_at else "아직 전달 전")
     rows = [
         ("상태", _steps(order.status)),
         ("보낸 때", escape(_kst(order.created_at))),
         ("보낸 기기", _device(order)),
         ("받는 도리", f"{escape(order.receiver)}<div class=\"small muted\">{delivered}</div>"),
-        ("맡은 도리", escape(order.dori) if order.dori else '<span class="muted">아직 정해지지 않음</span>'),
+        ("맡은 도리", escape(order.dori) if order.dori
+         else '<span class="muted">없음</span>' if is_trial(order)
+         else f'{escape(order.delivered_to or order.receiver)} <span class="muted">(직접 처리)</span>' if not order.is_open
+         else '<span class="muted">아직 정해지지 않음</span>'),
     ]
     if order.post_url:
         rows.append(("도리 방 글", f'<a href="{escape(order.post_url, quote=True)}" target="_blank" rel="noopener noreferrer">'
@@ -328,8 +388,10 @@ def _order_page(order: Order, titles: dict[str, str]) -> str:
                      else '<span class="muted">지난 할\u00a0일(보관 또는 정리됨)</span>'))
     if order.project:
         rows.append(("프로젝트", f'<a href="{escape(project_href(order.project), quote=True)}">{escape(order.project)}</a>'))
-    if order.note:
-        rows.append(("메모", f'<span class="order-body">{escape(order.note)}</span>'))
+    if plain_note(order.note):
+        rows.append(("메모", f'<span class="order-body">{escape(plain_note(order.note))}</span>'))
+    if is_trial(order):
+        rows.append(("시험", '<span class="muted">도리 경로를 확인하려고 보낸 지시라 맡길 일은 없습니다</span>'))
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     return (
         f'<section data-tab="order" data-key="{order.number}" data-title="지시 #{order.number}" '
