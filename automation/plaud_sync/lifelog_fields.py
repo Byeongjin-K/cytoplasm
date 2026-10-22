@@ -30,8 +30,12 @@ GLANCE_HEADING: Final = "## 한눈에"
 SUMMARY_HEADING: Final = "## 요약"
 DECISIONS_HEADING: Final = "## 결정 · 할 일"
 TRANSCRIPT_HEADING: Final = "## 전문"
+#: 동결 전 교정이 전문을 바꿨을 때만 나온다 — 무엇을 무엇으로, 왜 바꿨는지.
+CORRECTION_HEADING: Final = "## 교정 기록"
 SOURCE_RULE: Final = "---"
-OWN_HEADINGS: Final = (GLANCE_HEADING, SUMMARY_HEADING, DECISIONS_HEADING, TRANSCRIPT_HEADING)
+OWN_HEADINGS: Final = (
+    GLANCE_HEADING, SUMMARY_HEADING, DECISIONS_HEADING, CORRECTION_HEADING, TRANSCRIPT_HEADING,
+)
 NO_SUMMARY: Final = "- (요약 없음)"
 #: 요약이 왜 없는지까지 말한다 — 게이트 생략과 모델 실패는 소유자에게 다른 사실이다.
 NO_SUMMARY_REASON: Final = "없음 (모델이 전사본에서 요약을 만들지 못함)"
