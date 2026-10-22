@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from html import escape
 from typing import Final
 
-from .dashboard_theme import icon
+from .dashboard_theme import fold, icon
 from .sessions import Agent, Lane, Service, Sessions, SessionsState
 
 _KST: Final = timezone(timedelta(hours=9))
@@ -243,17 +243,14 @@ def _member(m: _Member) -> str:
     )
 
 
-def _group(key: str, name: str, glyph: str, count: str, summary: str, members: list[_Member], empty: str = "") -> str:
+def _group(key: str, name: str, glyph: str, summary: str, members: list[_Member], empty: str = "") -> str:
     states = [m.st for m in members]
     body = (f'<ul class="ss-members">{"".join(_member(m) for m in members)}</ul>' if members
             else f'<p class="note">{escape(empty)}</p>')
     badge = _badge(_worst(states)) if members else ""
-    return (
-        f'<details class="card fold ss-group" id="ss-g-{escape(key, quote=True)}" data-fold="ss-{key}" data-count="{len(members)}"><summary>'
-        f'<span class="ss-icon">{icon(glyph)}</span><span class="ss-gname"><b>{escape(name)}</b>'
-        f'<span class="ss-gsum">{escape(count)}{" · " + escape(summary) if summary else ""}</span></span>{badge}</summary>'
-        f"{body}</details>"
-    )
+    block = fold(f"ss-{key}", escape(name), len(members), body, glyph=glyph, sub=escape(summary), trail=badge,
+                 attrs=f' data-count="{len(members)}"', cls="ss-group")
+    return block.replace("<details ", f'<details id="ss-g-{escape(key, quote=True)}" ', 1)
 
 
 def _branch(kind: str, glyph: str, title: str, sub: str, total: int, groups: list[str]) -> str:
@@ -305,14 +302,14 @@ def _attention(lanes: list[Lane], services: list[Service]) -> str:
     if not rows:
         return ""
     items = "".join(f'<li><a href="{escape(href, quote=True)}"><b>{escape(name)}</b> · {escape(what)}</a></li>' for href, name, what in rows)
-    return (f'<div class="callout ss-attention">{icon("alert")}<div><b>먼저 볼 것 {len(rows)}곳</b>'
-            f'<ul class="small">{items}</ul></div></div>')
+    return fold("ss-attention", "먼저 볼 것", len(rows), f'<ul class="small">{items}</ul>', kind="callout",
+                cls="ss-attention", glyph="alert")
 
 
 def _board(data: Sessions, now_ms: int) -> str:
     lanes, agents, services = list(data.lanes), list(data.agents), list(data.services)
     lane_groups = [
-        _group(f"lane-{key}", name, glyph, f"{_n(len(g))}건", _lane_counts(x.st for x in g), _lane_members(g, now_ms))
+        _group(f"lane-{key}", name, glyph, _lane_counts(x.st for x in g), _lane_members(g, now_ms))
         for key, name, glyph in _DEPTS if (g := [x for x in lanes if x.dept == key])
     ]
     platforms = [p for p in _PLATFORMS if any(a.platform == p for a in agents)]
@@ -321,17 +318,17 @@ def _board(data: Sessions, now_ms: int) -> str:
     for p in platforms:
         g = [a for a in agents if a.platform == p]
         live = sum(a.live for a in g)
-        agent_groups.append(_group(f"agent-{p}", _PLATFORMS.get(p, p), "sessions", f"{_n(len(g))}개",
+        agent_groups.append(_group(f"agent-{p}", _PLATFORMS.get(p, p), "sessions",
                                    f"진행 {_n(live)}" if live else "모두 종료", _agent_members(g)))
     windows = [
         _Member(label, f"{_n(len(g))}개", "live", "", f"{_day(first)} {_clock(first)}부터 지금까지",
                 f"가장 오래 켜진 창 {_dur(data.now - first)}", "")
         for kind, label, _ in _WINDOWS if (g := [w for w in data.windows if w.kind == kind]) and (first := min(w.start for w in g))
     ]
-    agent_groups.append(_group("agent-windows", "상주 작업 창", "window", f"{_n(len(data.windows))}개", "지금 가동 중", windows,
+    agent_groups.append(_group("agent-windows", "상주 작업 창", "window", "지금 가동 중" if windows else "", windows,
                                "지금 켜져 있는 작업 창이 없습니다."))
     service_groups = [
-        _group(f"svc-{key}", name, glyph, f"{_n(len(g))}종", "", [_service_member(s, data.w0) for s in g])
+        _group(f"svc-{key}", name, glyph, "", [_service_member(s, data.w0) for s in g])
         for key, name, glyph in _SERVICE_GROUPS if (g := [s for s in services if s.group == key])
     ]
     days = list(range(data.w0, data.now, _DAY_MS))

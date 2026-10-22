@@ -60,9 +60,12 @@ def test_summary_and_project_cards_link_to_the_project_page(tmp_path: Path) -> N
 
 def test_every_list_folds_under_a_heading_that_keeps_its_count(tmp_path: Path) -> None:
     page = render_dashboard(_store(tmp_path).snapshot(today=TODAY), mode="served", token="t" * 40)
-    folds = re.findall(r'<details [^>]*data-fold="([^"]+)"[^>]*><summary><h3>(.*?) <span class="badge d-none cnt">(\d+)</span>', page)
+    folds = re.findall(r'<details [^>]*data-fold="([^"]+)"[^>]*><summary class="fold-head">(?:<span class="fold-icon">.*?</span>)?'
+                       r'<span class="fold-text"><h3><span class="fold-title">(.*?)</span> <span class="badge d-none cnt">(\d+)</span>', page)
     keys = {key: (title, int(count)) for key, title, count in folds}
     assert len(keys) == len(folds)  # one browser-kept state per list
+    # one fold for every list (owner 2026-10-22 "접는 기능이 있으면 모든 리스팅에 적용해야지"): no other details header
+    assert page.count("<details ") - page.count('<details class="more">') == len(folds)
     assert sum(count for key, (_, count) in keys.items() if key.startswith("s:")) == 3
     assert keys["t:프로젝트A"][1] == 2 and keys["e:프로젝트B"] == ("프로젝트B", 1)
     assert keys["p:프로젝트A:t"] == ("할 일", 2) and keys["p:프로젝트A:e"][1] == 1

@@ -112,8 +112,8 @@ def test_a_lane_that_waits_reads_as_waiting_with_what_and_when_and_a_stuck_one_a
     assert starts and all("대기" not in s and "진행 중" not in s for s in starts)
     assert any(s.endswith(" 시작") for s in starts) and any(s.endswith("까지") for s in starts)
     assert "막힘 작업 창이 오류로 멈췄습니다" in shown
-    assert re.search(r"에이전트 운영 \d+건 · 완료 \d+, 진행 \d+, 대기 1", shown)
-    assert re.search(r"웹·대시보드 \d+건 · 완료 \d+, 진행 \d+, 막힘 1", shown)
+    assert re.search(r"에이전트 운영 \d+ ?완료 \d+, 진행 \d+, 대기 1", shown)
+    assert re.search(r"웹·대시보드 \d+ ?완료 \d+, 진행 \d+, 막힘 1", shown)
 
 
 def test_an_older_feed_that_still_says_hold_reads_as_waiting(tmp_path: Path) -> None:

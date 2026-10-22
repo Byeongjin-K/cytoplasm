@@ -217,6 +217,11 @@ def test_the_summary_box_is_short_trials_stay_apart_and_memos_read_as_plain_word
     assert 'href="#order/3"' in box and 'href="#order/2"' in box and "#order/1" not in box
     assert "표 올림 바로 지움" in box and "(200)" not in box and "게이트" not in box
     assert "지시 탭에서 전부 보기" in box and 'href="#todo' not in box
+    # orders-ui-fold (owner 2026-10-22 "도리에게 지시도 접을수있게"): the box folds by its header, which keeps the open
+    # count, the one line and the write button in sight while it is folded
+    head = re.search(r'<details [^>]*data-fold="orders-box"[^>]*><summary class="fold-head">(.*?)</summary>', box)
+    assert head is not None and '<span class="badge d-none cnt">1</span>' in head.group(1)
+    assert "진행 중 1건" in head.group(1) and 'href="#orders">지시 쓰기</a>' in head.group(1)
     tab = section('id="orders"')
     trial = tab[tab.index('data-fold="orders-trial"'):]
     assert 'href="#order/1"' in trial and 'href="#order/1"' not in tab[:tab.index('data-fold="orders-trial"')]

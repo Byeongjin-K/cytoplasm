@@ -227,6 +227,18 @@ details.fold>summary::before{content:"";width:8px;height:8px;margin:0 6px 0 4px;
 border-bottom:2px solid var(--text-3);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s var(--ease);flex:none}
 details.fold:not([open])>summary::before{transform:rotate(-45deg)}
 details.fold>summary h3{margin:0;display:flex;gap:var(--s2);align-items:center;font-size:var(--t-lg)}
+@media (hover:hover){details.fold>summary:hover{background:var(--surface-2)}}
+details.fold>summary:active{background:var(--neutral-wash)}
+details.card.fold>summary,details.callout.fold>summary{margin:0 calc(-1 * var(--s2));padding:0 var(--s2)}
+.fold-head{gap:var(--s3);flex-wrap:wrap}
+.fold-text{display:flex;flex-direction:column;gap:2px;flex:1 1 0;min-width:0;padding:var(--s1) 0}
+.fold-sub{font-size:var(--t-sm);color:var(--text-2);font-weight:400}
+.fold-icon{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:50%;background:var(--accent-wash);color:var(--accent-ink)}
+.fold-icon .ico{width:20px;height:20px}
+.fold-head:has(.fold-icon){min-height:56px}
+.fold-head>.btn{flex:none;min-height:var(--hit)}
+details.callout.fold{display:block}
+#events>details.fold{margin-top:var(--gap-card)}
 details.fold>summary h3 a{color:inherit}
 details.fold[open]>summary{margin-bottom:var(--s2)}
 details.sect{margin-top:var(--s6)}
@@ -347,12 +359,6 @@ background:var(--surface);border:1px solid var(--line-strong);border-radius:999p
 .ss-days meter::-webkit-meter-bar{background:var(--neutral-wash);border:0;border-radius:var(--r-sm);height:12px}
 .ss-days meter::-webkit-meter-optimum-value{background:var(--accent);border-radius:var(--r-sm)}
 .ss-days meter::-moz-meter-bar{background:var(--accent);border-radius:var(--r-sm)}
-details.ss-group>summary{gap:var(--s3);min-height:52px;flex-wrap:wrap;margin:0 calc(-1 * var(--s2));padding:0 var(--s2)}
-details.ss-group>summary:hover{background:var(--surface-2)}
-details.ss-group>summary:active{background:var(--neutral-wash)}
-.ss-gname{display:flex;flex-direction:column;flex:1;min-width:0}
-.ss-gname b{font-size:var(--t-lg);line-height:1.3}
-.ss-gsum{font-size:var(--t-sm);color:var(--text-2)}
 .ss-members{list-style:none;margin:var(--s2) 0 var(--s2);padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--s3)}
 .ss-member{padding:var(--s3) var(--s4);border-radius:var(--r-md);background:var(--surface-2)}
 .ss-mhead{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s2)}
@@ -425,6 +431,27 @@ _PATHS: Final = {
 
 def icon(name: str) -> str:
     return f'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-{name}"/></svg>'
+
+
+def fold(
+    key: str, title: str, count: int, body: str, *, kind: str = "card", glyph: str = "", sub: str = "", trail: str = "",
+    attrs: str = "", cls: str = "", open_: bool = True,
+) -> str:
+    """The one fold every list group on the board uses (owner 2026-10-22 "접는 기능이 있으면 모든 리스팅에 적용해야지").
+
+    The header is always arrow · (icon) · title · count, with an optional line under the title and a chip or button at
+    the end; a tap, a click, Enter or Space on it folds the list, and the browser keeps that choice per ``key``, open
+    or closed (``_FOLD_JS``). ``kind`` is the box: ``card``, ``sect`` (a heading over cards) or ``callout`` (a notice).
+    ``title``, ``sub``, ``trail`` and ``attrs`` are markup the caller already escaped.
+    """
+    mark = f'<span class="fold-icon">{icon(glyph)}</span>' if glyph else ""
+    line = f'<span class="fold-sub">{sub}</span>' if sub else ""
+    classes = " ".join(part for part in (kind, "fold", cls) if part)
+    return (
+        f'<details class="{classes}" data-fold="{escape(key, quote=True)}"{attrs}{" open" if open_ else ""}>'
+        f'<summary class="fold-head">{mark}<span class="fold-text"><h3><span class="fold-title">{title}</span> '
+        f'<span class="badge d-none cnt">{count}</span></h3>{line}</span>{trail}</summary>{body}</details>'
+    )
 
 
 def sprite() -> str:
