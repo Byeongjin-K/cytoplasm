@@ -154,7 +154,7 @@ def mail_markdown(runtime: MailRuntime, uid: str) -> str | None:
     return None if path is None else path.read_text(encoding="utf-8", errors="replace")
 
 
-def _front_matter(document: str) -> tuple[dict[str, str], list[str], str]:
+def front_matter(document: str) -> tuple[dict[str, str], list[str], str]:
     if not document.startswith("---\n"):
         return {}, [], document
     head, _, body = document[4:].partition("\n---\n")
@@ -176,7 +176,7 @@ def read_mail(runtime: MailRuntime, uid: str) -> SourceDocument | None:
     document = mail_markdown(runtime, uid)
     if document is None:
         return None
-    fields, attachments, body = _front_matter(document)
+    fields, attachments, body = front_matter(document)
     ref = SourceRef(
         kind="mail", source_id=uid, subject=fields.get("subject", "")[:300],
         sender=fields.get("from", "")[:200], date=fields.get("date", "")[:40],

@@ -172,7 +172,7 @@ a.todo-title:hover{color:var(--accent-ink);text-decoration:underline}
 .shelf-link{margin-top:var(--gap-card)}
 a.ss-pillar{color:inherit;text-decoration:none}
 a.ss-pillar:hover{border-color:var(--line-strong)}
-.ss-attention{margin:0 0 var(--s5)}
+.ss-attention{margin:0 0 var(--s5)}.callout+.ss-attention{margin-top:var(--gap-card)}
 .ss-attention li a{display:inline-block;padding:3px 0}
 .events .what a,.td-log .what a,.callout li a,.agenda .ag-title,.who-link,a.due{display:inline-block;padding:3px 0}
 a.todo-title{padding:3px 0}
@@ -275,7 +275,7 @@ dialog p{margin:0 0 var(--s3);color:var(--text-2)}
 .reader h1{font-size:var(--t-xl);margin:0 0 var(--s4)}
 .cmd{margin:var(--s3) 0 0;padding:var(--s3) var(--s4);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);overflow-x:auto}
 .cmd code{background:none;border:0;padding:0;white-space:pre-wrap}
-.q{white-space:nowrap}
+.q{display:inline-block;max-width:100%}
 dialog h2:focus{outline:none}
 .reader{max-width:860px;margin:0 auto;padding:var(--s6) var(--s4) var(--s10)}
 .reader pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:var(--t-md);line-height:1.7;margin:0}

@@ -1,11 +1,12 @@
 # Project board: existing component contract
 
 This is the existing server-rendered dashboard, not a new visual direction.
-The ledger reuses `dashboard_theme.py` without adding styles or dependencies.
+The seventh bottom tab (도리 지시) and the schedule rows' status field reuse `dashboard_theme.py`
+and the board's one dropdown (`select_find.py`) without adding styles beyond layout or any dependency.
 
 ## 1. Surface and readers
-The owner's authenticated, loopback dashboard. Private ledger titles never enter
-the exported dashboard attachment.
+The owner's authenticated, loopback dashboard. The owner's orders never enter
+the exported dashboard attachment, so the 도리 지시 tab exists only on the live page.
 
 ## 2. Tokens
 `dashboard_theme._TOKENS` owns light/dark colors, `--s1` through `--s10` spacing,
@@ -13,28 +14,30 @@ the exported dashboard attachment.
 
 ## 3. Layout
 Reuse the existing main scroll owner, responsive navigation and `stack`.
-Boards are native `details` groups; cards form readable single-column lists.
-With the live ledger tab, the existing mobile navigation uses seven equal columns
-instead of six (보관함 moved under 프로젝트, owner Q347), so the extra tab does not create a second fixed row.
+On the live page the mobile navigation uses seven equal columns (요약 · 프로젝트 · 할 일 · 일정 · 근거 · 세션 ·
+도리 지시) instead of six, so the extra tab does not create a second fixed row. The ledger tab that held this slot
+was removed (owner Q360, 2026-10-23); the exported file keeps six.
 
 ## 4. Hierarchy
-A section title, board title and count, then card title, status and reference.
+A section title, group title and count, then row title, status and reference.
 Status is Korean text as well as an existing neutral/status badge.
 
 ## 5. Primitives and states
 Reuse `head`, `fold`, `card`, `todos`, `todo-main`, `badge` and inline Lucide icons.
-Ledger entries are selectable text without checkboxes or mutation buttons.
-Missing/off: absent. Empty: an explanatory card. Unreadable: an inline error.
+A fold header folds wherever it is tapped; a link out of a group (a todo group's project) is a button at the
+end of the header, never the title. A schedule row's status is the board's one dropdown: a short list that opens
+without the keyboard and saves through the same `POST /todo/<id>` as the todo screen.
+Missing/off: absent. Empty: an explanatory card. Failure: the row goes back and says why.
 
 ## 6. Interaction and motion
-Existing tab navigation, fold persistence and refresh remain unchanged.
-No new animation, network request or interaction mechanism.
+Each screen keeps where it was left: a bottom tab returns to its place, the tab already open goes to its top,
+a reload or a return from a source page lays the same place again (`sessionStorage` `pb-seen`).
+No new animation or network request.
 
 ## 7. Accessibility
 Native headings, lists and details/summary; escaped text; no status by color alone.
-Existing focus rings and responsive wrapping apply to the new section.
+Existing focus rings and responsive wrapping apply to the new tab and field.
 
 ## 8. Verification and accepted debt
-Check the live section at desktop and phone widths, light and dark, with long
-titles, empty boards and an error. Existing theme design is preserved, not audited
-or redesigned outside the new section.
+Check the live page at desktop and phone widths, light and dark, with long titles,
+an empty orders list and a failed save. Existing theme design is preserved, not redesigned.

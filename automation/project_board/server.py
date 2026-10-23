@@ -30,6 +30,7 @@ import logging
 import subprocess
 import threading
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import date
 from html import escape
 from http.cookies import SimpleCookie
@@ -42,10 +43,10 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from .board_store import BoardStore
 from .dashboard import DEFAULT_BRAND, LOCAL_ACTOR, project_href, render_dashboard, stamp_etag, title_text, todo_href
 from .dashboard_theme import icon, notice_page, page_shell
-from .models import STATUSES, PendingView, ProjectBoardError, TodoExtra
+from .models import STATUSES, BoardSnapshot, PendingView, ProjectBoardError, TodoExtra
 from .orders import LOCAL, OWNER_DEVICE, TAILNET, OrderStore
 from .sessions import SessionsState
-from .ledger_view import load_ledger
+from .sources import front_matter
 
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
 MIN_TOKEN: Final = 32
@@ -217,10 +218,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._page(404, "찾는 화면이 없습니다", "주소가 바뀌었거나 없는 화면입니다.")
 
     def _dashboard(self) -> None:
-        snapshot = self.store.snapshot(today=self.today(), pending=self.pending())
+        snapshot = self._servable(self.store.snapshot(today=self.today(), pending=self.pending()))
         etag, page = stamp_etag(render_dashboard(
             snapshot, mode="served", token="" if self._tokenless() else self.token, brand=self.brand,
-            sessions=self.sessions(), ledger=load_ledger(), extras=self.extras(),
+            sessions=self.sessions(), extras=self.extras(),
             orders=self.orders.all() if self.orders is not None else None, order_receiver=self.order_receiver))
         offered = {tag.strip().removeprefix("W/") for tag in (self.headers.get("If-None-Match") or "").split(",")}
         if etag in offered:  # the open page's 2-minute check: nothing it shows has changed
@@ -231,11 +232,29 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send(200, page.encode("utf-8"), "text/html; charset=utf-8", {"ETag": etag})
 
+    def _servable(self, snapshot: BoardSnapshot) -> BoardSnapshot:
+        """Only the attachments this page can hand over: a name the mail's stored files do not have (a webmail
+        "Download all" or "Save" read as a file) would be a link to a 404."""
+        sources = tuple(
+            replace(row, attachments=tuple(name for name in row.attachments if self._stored(row.source_kind, row.source_id, name)))
+            if row.attachments else row
+            for row in snapshot.sources
+        )
+        return replace(snapshot, sources=sources)
+
+    def _stored(self, kind: str, source_id: str, name: str) -> bool:
+        path = self.attachment_path(kind, source_id, name)
+        return path is not None and path.is_file()
+
     def _source(self, kind: str, source_id: str) -> None:
         text = self.read_source(kind, source_id) if self.store.approved_attachments(kind, source_id) is not None else None
         if text is None:
             self._page(404, "원문을 찾을 수 없습니다", "승인된 근거가 아니거나 원문이 더는 보관되어 있지 않습니다.")
             return
+        if text.startswith("---\n"):  # a stored mail note opens with its record (uid, folder ...), not words to read
+            fields, _, body = front_matter(text)
+            body = body.lstrip()
+            text = f"# {fields['subject']}\n{body}" if fields.get("subject") and not body.startswith("# ") else body
         first, _, rest = text.partition("\n")
         heading = first[2:].strip() if first.startswith("# ") else ""
         title = f"<h1>{title_text(heading)}</h1>" if heading else ""
