@@ -231,7 +231,8 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
     if not real:
         body = '<p class="small muted order-none">「지시 쓰기」로 맡긴 일이 여기에 쌓이고, 누가 맡아 어디까지 했는지 보입니다.</p>'
     write = '<a class="btn primary" href="#orders">지시 쓰기</a>'
-    box = fold("orders-box", "도리에게 지시", len(open_), body, cls="agenda", glyph="inbox", sub=line, trail=write)
+    # the bottom tab's own name, so the summary box and the tab it opens read the same and fit one line on a phone
+    box = fold("orders-box", "도리 지시", len(open_), body, cls="agenda", glyph="inbox", sub=line, trail=write)
     return f'<section id="order-box" data-tab="summary">{box}</section>'
 
 

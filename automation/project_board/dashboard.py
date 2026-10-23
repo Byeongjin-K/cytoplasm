@@ -478,6 +478,7 @@ _SEVEN_CSS: Final = (
     ".st-pick{display:flex;align-items:center;gap:var(--s2);margin-top:var(--s1);font-size:var(--t-sm);color:var(--text-3)}"
     ".st-pick .find{width:7.5em;flex:none}.agenda li.done .ag-title{text-decoration:line-through;color:var(--text-3)}"
     ".fold-head>.fold-go{gap:2px;font-size:var(--t-sm)}"
+    "@media(max-width:640px){.fold-head>.fold-go{width:var(--hit);padding:0;justify-content:center}.fold-go .go-word{display:none}}"
 )
 LOCAL_ACTOR: Final = "노드 로컬 접속"
 
@@ -885,7 +886,7 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
         items = sorted(groups[project], key=_todo_order)
         # the whole header folds the group; the project screen is its own button at the end of the header
         go = (f'<a class="btn fold-go" href="{escape(project_href(project), quote=True)}" '
-              f'aria-label="{escape(project, quote=True)} 프로젝트 화면">프로젝트{icon("chevron-right")}</a>')
+              f'aria-label="{escape(project, quote=True)} 프로젝트 화면"><span class="go-word">프로젝트</span>{icon("chevron-right")}</a>')
         body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
         block = fold(f"t:{project}", escape(project), len(items), body, cls="todo-group", trail=go)
         blocks.append(block.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))

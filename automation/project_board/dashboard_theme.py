@@ -226,7 +226,8 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::before{content:"";width:8px;height:8px;margin:0 6px 0 4px;border-right:2px solid var(--text-3);
 border-bottom:2px solid var(--text-3);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s var(--ease);flex:none}
 details.fold:not([open])>summary::before{transform:rotate(-45deg)}
-details.fold>summary h3{margin:0;display:flex;gap:var(--s2);align-items:center;font-size:var(--t-lg)}
+details.fold>summary h3{margin:0;display:block;font-size:var(--t-lg);line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
+details.fold>summary h3 .cnt{vertical-align:2px;margin-left:var(--s1)}
 @media (hover:hover){details.fold>summary:hover{background:var(--surface-2)}}
 details.fold>summary:active{background:var(--neutral-wash)}
 details.card.fold>summary,details.callout.fold>summary{margin:0 calc(-1 * var(--s2));padding:0 var(--s2)}
