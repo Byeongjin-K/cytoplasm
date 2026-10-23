@@ -231,7 +231,8 @@ def summary_box(orders: Sequence[Order], snapshot: BoardSnapshot) -> str:
     if not real:
         body = '<p class="small muted order-none">「지시 쓰기」로 맡긴 일이 여기에 쌓이고, 누가 맡아 어디까지 했는지 보입니다.</p>'
     write = '<a class="btn primary" href="#orders">지시 쓰기</a>'
-    box = fold("orders-box", "도리에게 지시", len(open_), body, cls="agenda", glyph="inbox", sub=line, trail=write)
+    # the bottom tab's own name, so the summary box and the tab it opens read the same and fit one line on a phone
+    box = fold("orders-box", "도리 지시", len(open_), body, cls="agenda", glyph="inbox", sub=line, trail=write)
     return f'<section id="order-box" data-tab="summary">{box}</section>'
 
 
@@ -289,7 +290,8 @@ def orders_section(orders: Sequence[Order], snapshot: BoardSnapshot, receiver: s
         lists = ('<div class="card empty">' + icon("inbox") + "<b>아직 보낸 지시가 없습니다</b>"
                  "<p>위 칸에 도리에게 맡길 일을 쓰면 여기에 쌓이고, 누가 맡아 어디까지 했는지 함께 보입니다.</p></div>")
     return (
-        '<section id="orders" data-tab="orders" data-title="도리에게 지시"><a class="back" href="#summary" data-back>'
+        # a bottom tab of its own (owner Q360); the back link shows only when a todo or project screen opened it
+        '<section id="orders" data-tab="orders" data-title="도리에게 지시"><a class="back" href="#summary" data-back hidden>'
         f'{icon("chevron-left")}<span>요약</span></a>'
         f'<div class="pv-head"><h2>도리에게 지시</h2></div>{form}{lists}</section>'
     )

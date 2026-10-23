@@ -26,7 +26,6 @@ from .models import (
 from .orders import Order
 from .sessions import SessionsState
 from .sessions_view import render_sessions, summary_line
-from .ledger_view import NAV_CSS, LedgerView, render_ledger
 
 Mode = Literal["served", "file"]
 
@@ -88,6 +87,18 @@ _SERVED_JS: Final = """
           note(main.lastElementChild,why(error));say(why(error));});
     });
   });
+  // the status field on a schedule row: the same save as the buttons on a todo screen; the row says it at once, a failure puts it back
+  root.querySelectorAll('select[data-status-todo]').forEach(function(sel){
+    sel.addEventListener('change',function(){
+      var li=sel.closest('li'),was=sel.dataset.was||'',now=sel.value,old=li.querySelector('.row-error');if(old){old.remove();}
+      sel.disabled=true;li.classList.add('saving');li.dataset.status=now;say('저장하는 중');if(PB.findSync){PB.findSync();}
+      post('/todo/'+encodeURIComponent(sel.dataset.statusTodo),'status='+encodeURIComponent(now))
+        .then(function(){sel.dataset.was=now;sel.disabled=false;li.classList.remove('saving');li.classList.toggle('done',now==='완료');
+          say((now==='완료'?'완료로':now+'으로')+' 바꿨습니다');if(PB.findSync){PB.findSync();}if(PB.refresh){PB.refresh();}})
+        .catch(function(error){sel.value=was;li.dataset.status=was;sel.disabled=false;li.classList.remove('saving');
+          if(PB.findSync){PB.findSync();}note(sel.closest('.st-pick'),why(error));say(why(error));});
+    });
+  });
   root.querySelectorAll('button[data-set-status]').forEach(function(b){
     b.addEventListener('click',function(){
       if(b.getAttribute('aria-pressed')==='true'){return;}
@@ -142,7 +153,9 @@ _FOLD_JS: Final = """
 
 _TABS_JS: Final = """
 (function(){
-  var PB=window.PB=window.PB||{},title=document.title,sticky='';
+  var PB=window.PB=window.PB||{},title=document.title,sticky='',ordersTab=!!document.querySelector('nav a[data-tab=orders]');
+  // where each screen was left is ours to keep (a source page, a reload or a back step returns there on every browser)
+  try{history.scrollRestoration='manual';}catch(e){}
   function dec(s){try{return decodeURIComponent(s);}catch(e){return '';}}
   function parse(hash){
     var q=hash.indexOf('?p=');
@@ -192,8 +205,9 @@ _TABS_JS: Final = """
       panels.forEach(function(s){if(s.dataset.tab===tab&&(tab==='project'?s.dataset.project:s.dataset.key)===r.proj){page=s;}});
       if(!page){tab=tab==='project'?'projects':tab==='todo'?'todos':tab==='order'&&names.indexOf('orders')>=0&&document.getElementById('orders')?'orders':'summary';}
     }else if(names.indexOf(tab)<0||(tab==='orders'&&!document.getElementById('orders'))){tab='summary';}
-    var navTab=page?(page.dataset.tab==='project'?'projects':page.dataset.tab==='order'?'summary':'todos'):tab==='archive'?'projects':tab==='orders'?'summary':tab;
+    var home=ordersTab?'orders':'summary',navTab=page?(page.dataset.tab==='project'?'projects':page.dataset.tab==='order'?home:'todos'):tab==='archive'?'projects':tab==='orders'?home:tab;
     panels.forEach(function(s){s.hidden=page?s!==page:s.dataset.tab!==tab;});
+    onScreen=hash;hold=false;
     links.forEach(function(a){var on=a.dataset.tab===navTab;a.classList.toggle('on',on);
       if(on){a.setAttribute('aria-current','page');}else{a.removeAttribute('aria-current');}});
     var ss=document.getElementById('todo-s');
@@ -212,11 +226,14 @@ _TABS_JS: Final = """
     if(!here){links.forEach(function(a){if(a.dataset.tab===navTab){here=[].filter.call(a.childNodes,function(n){return n.nodeType===3;})
       .map(function(n){return n.textContent;}).join('').trim();}});}
     var st=history.state||{};
-    if(!('pbFrom' in st)){st={pbFrom:moves>0&&last!==here?last:''};try{history.replaceState(st,'');}catch(e){}}
+    if(!('pbFrom' in st)){st={pbFrom:moves>=0&&last!==here?last:'',pbPage:moves>=0&&lastPage};try{history.replaceState(st,'');}catch(e){}}
     if(page){var b=page.querySelector('[data-back] span');if(b&&st.pbFrom){b.textContent=st.pbFrom;}}
-    last=here;moves++;
+    // the orders tab offers a way back only when a todo or project screen opened it
+    var ob=tab==='orders'&&!page?document.querySelector('#orders>[data-back]'):null;
+    if(ob){ob.hidden=!(st.pbFrom&&st.pbPage);if(!ob.hidden){ob.querySelector('span').textContent=st.pbFrom;}}
+    last=here;lastPage=!!page;moves++;
     var target=(hash.indexOf('todo-')===0||hash.indexOf('sched-')===0||hash.indexOf('ss-')===0||hash==='pending'||hash==='events')&&document.getElementById(hash),fresh=jump;jump=false;
-    if(!fresh&&hash in seen){window.scrollTo(0,seen[hash]);return;}
+    if(!fresh&&hash in seen){var y=seen[hash];window.scrollTo(0,y);if(moves===0){settle(y,hash);}return;}
     if(target&&hash.indexOf('todo-')===0){reveal(target);}
     if(target&&target.tagName==='DETAILS'){target.open=true;}
     if(target){target.scrollIntoView({block:'center'});}else{window.scrollTo(0,0);}
@@ -228,16 +245,49 @@ _TABS_JS: Final = """
     for(var d=li.closest('details');d;d=d.parentElement&&d.parentElement.closest('details')){d.open=true;}
   }
   // back and forward return to where that screen was left; a link or a picker opens its screen fresh
-  var seen={},jump=false,moves=-1,last='',linkedStatus=false;
+  var seen=kept(),jump=false,moves=-1,last='',lastPage=false,linkedStatus=false,onScreen=null,saving=0,hold=false;
+  // a reload or a return from a source page: the jump the browser makes to the #section and the dropdowns that build after
+  // the first paint both move the page, so the kept place is laid again until the page has settled or the owner scrolls
+  function settle(y,hash){
+    var stop=false,steps=[0,60,200,450,800];hold=true;
+    function off(){stop=true;hold=false;}
+    ['touchstart','wheel','keydown','mousedown'].forEach(function(n){window.addEventListener(n,off,{once:true,passive:true});});
+    function run(){steps.forEach(function(ms,i){setTimeout(function(){
+      if(!stop&&onScreen===hash&&Math.abs(window.scrollY-y)>2){window.scrollTo(0,y);}
+      if(i===steps.length-1&&!stop){hold=false;}
+    },ms);});}
+    if(document.readyState==='complete'){run();}else{window.addEventListener('load',run,{once:true});}
+  }
+  function kept(){try{var v=JSON.parse(sessionStorage.getItem('pb-seen')||'{}');return v&&typeof v==='object'?v:{};}catch(e){return {};}}
+  function keep(){saving=0;try{sessionStorage.setItem('pb-seen',JSON.stringify(seen));}catch(e){}}
   // a detail screen back link returns to the screen it was opened from (its name on the link), else to its list
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[data-back]');if(a&&(history.state||{}).pbFrom){e.preventDefault();history.back();}
   });
   document.addEventListener('click',function(e){
     var a=e.target.closest&&e.target.closest('a[href]');if(!a){return;}var h=a.getAttribute('href');
-    if(h.charAt(0)==='#'&&!(a.hasAttribute('data-back')&&(history.state||{}).pbFrom)){jump=true;}
+    if(h.charAt(0)!=='#'){return;}
+    // the place on this screen is taken now: the jump the browser makes to a #section named like the tab comes
+    // before the screen switches and must not be written down as where this screen was left
+    if(onScreen!==null){seen[onScreen]=window.scrollY;}hold=true;
+    if(a.hasAttribute('data-back')&&(history.state||{}).pbFrom){return;}
+    // a bottom tab returns to where that tab was left (the tab already open goes back to its top), and so does a
+    // back link on a screen opened directly (a reload or a shared address, so there is no step to go back)
+    jump=!(a.hasAttribute('data-back')||a.closest('nav')&&parse(h.slice(1)).tab!==parse(location.hash.slice(1)).tab);
   },true);
-  window.addEventListener('scroll',function(){seen[location.hash.slice(1)]=window.scrollY;},{passive:true});
+  // a scroll belongs to the screen on show (not to an address the screen has not switched to yet)
+  window.addEventListener('scroll',function(){if(hold){return;}seen[onScreen===null?location.hash.slice(1):onScreen]=window.scrollY;if(!saving){saving=setTimeout(keep,200);}},{passive:true});
+  window.addEventListener('pagehide',keep);
+  // a screen link moves the address itself: the browser would also jump to the section named like the tab (#todos,
+  // #schedule ...) on its own schedule, after this script has laid the kept place, so the address is pushed without
+  // that jump and the same hashchange every listener knows is sent once the other click handlers have run
+  document.addEventListener('click',function(e){
+    if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey){return;}
+    var a=e.target.closest&&e.target.closest('a[href^="#"]');if(!a||a.classList.contains('skip')||a.target){return;}
+    var h=a.getAttribute('href'),from=location.href;e.preventDefault();
+    try{if(h===location.hash){history.replaceState(history.state,'',h);}else{history.pushState(null,'',h);}}catch(x){location.hash=h;return;}
+    setTimeout(function(){window.dispatchEvent(new HashChangeEvent('hashchange',{oldURL:from,newURL:location.href}));},0);
+  });
   PB.show=show;
   window.addEventListener('hashchange',show);show();
 })();
@@ -423,6 +473,13 @@ TABS: Final = (
     ("sessions", "세션"),
 )
 _NAV: Final = "".join(f'<a href="#{tab}" data-tab="{tab}">{icon(tab)}{label}</a>' for tab, label in TABS)
+_SEVEN_CSS: Final = (
+    "@media(max-width:640px){nav.seven{grid-template-columns:repeat(7,minmax(0,1fr))}}"
+    ".st-pick{display:flex;align-items:center;gap:var(--s2);margin-top:var(--s1);font-size:var(--t-sm);color:var(--text-3)}"
+    ".st-pick .find{width:7.5em;flex:none}.agenda li.done .ag-title{text-decoration:line-through;color:var(--text-3)}"
+    ".fold-head>.fold-go{gap:2px;font-size:var(--t-sm)}"
+    "@media(max-width:640px){.fold-head>.fold-go{width:var(--hit);padding:0;justify-content:center}.fold-go .go-word{display:none}}"
+)
 LOCAL_ACTOR: Final = "노드 로컬 접속"
 
 EMPTY_SECTION: Final = (
@@ -439,7 +496,7 @@ _FILTER_JS: Final = """
     var rows=document.querySelectorAll('#todos ul.todos li'),text=q.value.trim().toLowerCase(),want=s.value,proj=document.body.dataset.project||'',shown=0,total=0;
     rows.forEach(function(li){
       var mine=!proj||li.dataset.project===proj;if(mine){total++;}
-      var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.replace(/\\u2060/g,'').toLowerCase().indexOf(text)>=0);
+      var ok=mine&&(!want||li.dataset.status===want)&&(!text||li.textContent.replace(/\\u2060/g,'').replace(/\\u00a0/g,' ').toLowerCase().indexOf(text)>=0);
       li.hidden=!ok;if(ok){shown++;}
     });
     document.querySelectorAll('#todos .todo-group').forEach(function(g){
@@ -536,7 +593,9 @@ _HELD_DOT: Final = "\u2060·"  # a word joiner keeps the dot off the start of a 
 def title_text(text: str) -> str:
     """A title or mail subject as written: a word joiner before each 「·」 so no line begins with it (Chrome broke
     「조직문화확산·법정의무교육·연구윤리교육」 before the dot under keep-all). Search ignores the joiner."""
-    return escape(text).replace("·", "\u2060·")
+    # " · " written with spaces: the space before the dot is a break too, so it is held as a no-break space;
+    # a dot the writer put at the start of a line (a bullet in a mail body) is left as written
+    return re.sub(r"(?<!\n)·", "\u2060·", escape(text).replace(" ·", "\u00a0·"))
 
 
 def _keep(text: str) -> str:
@@ -825,9 +884,11 @@ def _todos(snapshot: BoardSnapshot, mode: Mode, today: date) -> str:
     blocks = []
     for project in _in_project_order(groups, snapshot):
         items = sorted(groups[project], key=_todo_order)
-        heading = f'<a href="{escape(project_href(project), quote=True)}">{escape(project)}</a>'
+        # the whole header folds the group; the project screen is its own button at the end of the header
+        go = (f'<a class="btn fold-go" href="{escape(project_href(project), quote=True)}" '
+              f'aria-label="{escape(project, quote=True)} 프로젝트 화면"><span class="go-word">프로젝트</span>{icon("chevron-right")}</a>')
         body = f'<ul class="todos">{"".join(_todo_item(t, mode, today) for t in items)}</ul>'
-        block = fold(f"t:{project}", heading, len(items), body, cls="todo-group")
+        block = fold(f"t:{project}", escape(project), len(items), body, cls="todo-group", trail=go)
         blocks.append(block.replace("<details ", f'<details data-project="{escape(project, quote=True)}" ', 1))
     have = Counter(t.status for t in snapshot.todos)
     options = "".join(f'<option value="{s}">{s} {have[s]}건</option>' for s in ("열림", "진행", "완료", "보류") if have[s] or s != "보류")
@@ -870,19 +931,31 @@ def _agenda_cards(
             where += [_person_link(todo.owner)] if todo.owner else []
             where += [_md(todo.due)] if todo.due else []
             title = f'<a class="ag-title" href="{escape(todo_href(todo.todo_id), quote=True)}">{title_text(todo.title)}</a>'
+            pick = _status_pick(todo) if mode == "served" else ""
             href = _source_href(mode, todo.source_kind, todo.source_id)
             kind = "mail" if todo.source_kind == "mail" else "sources"
             subject = title_text(todo.source_subject or todo.source_id)
             source = (f'<a class="src-link" href="{escape(href, quote=True)}" title="근거 원문 열기">{icon(kind)}<span>{subject}</span></a>'
                       if href else f'<span class="src-link">{icon(kind)}<span>{subject}</span></span>')
             items.append(
-                f'<li data-project="{escape(todo.project, quote=True)}"><span class="badge {css}">{label}</span>'
-                f'{title}{_grade_badge(todo.grade)}'
-                f'<span class="where">{_glued(where)}</span>{source}</li>'
+                f'<li data-project="{escape(todo.project, quote=True)}" data-status="{escape(todo.status, quote=True)}">'
+                f'<span class="badge {css}">{label}</span>{title}{_grade_badge(todo.grade)}'
+                f'<span class="where">{_glued(where)}</span>{source}{pick}</li>'
             )
         block = fold(f"{key}:{name}", name, len(rows), f'<ul>{"".join(items)}</ul>', cls="bucket")
         parts.append(block.replace("<details ", f'<details id="sched-{_BUCKET_IDS[name]}" ', 1) if key == "s" else block)
     return "".join(parts)
+
+
+def _status_pick(todo: TodoRow) -> str:
+    """열림·진행·완료 on the row itself: the board's one dropdown (a short list opens without the keyboard), saved by the
+    same ``POST /todo/<id>`` as the todo screen's buttons (owner 2026-10-23 "일정 탭에서도 좀 편하게 바꿀 수 있는 게")."""
+    ident = escape(todo.todo_id, quote=True)
+    choices = _SETTABLE if todo.status in _SETTABLE else (*_SETTABLE, todo.status)
+    options = "".join(f'<option value="{escape(s, quote=True)}"{" selected" if s == todo.status else ""}>{escape(s)}</option>'
+                      for s in choices)
+    return (f'<label class="st-pick">상태<select data-status-todo="{ident}" data-was="{escape(todo.status, quote=True)}" '
+            f'aria-label="상태 바꾸기: {escape(todo.title, quote=True)}">{options}</select></label>')
 
 
 def _agenda(snapshot: BoardSnapshot, today: date, mode: Mode = "served") -> str:
@@ -1083,8 +1156,9 @@ def _project_page(
         if mode == "served"
         else ""
     )
-    back = (f'<a class="back" href="#archive">{icon("chevron-left")}보관함</a>' if archived
-            else f'<a class="back" href="#projects">{icon("chevron-left")}전체 프로젝트</a>')
+    # like a todo screen: the back link returns to the screen that opened this one and says its name
+    back = (f'<a class="back" href="#archive" data-back>{icon("chevron-left")}<span>보관함</span></a>' if archived
+            else f'<a class="back" href="#projects" data-back>{icon("chevron-left")}<span>전체 프로젝트</span></a>')
     shelf = (
         f'<div class="card note shelf-note">보관한 프로젝트입니다. 요약, 할 일, 일정, 근거에 나오지 않습니다. '
         f"{_archived_line(view, mode)}</div>"
@@ -1155,7 +1229,7 @@ def _todo_page(
             ("프로젝트", f'<a href="{escape(project_href(todo.project), quote=True)}">{escape(todo.project)}</a>'),
             ("보안 등급", _grade_badge(todo.grade)), ("근거", where)]
     rows += [("메모", escape(todo.note))] if todo.note else []
-    rows += [("근거 요약", _keep(source.summary))] if source is not None and source.summary else []
+    rows += [("근거 요약", _keep(source.summary).replace(_DOT, _HELD_DOT))] if source is not None and source.summary else []
     facts = "".join(f"<dt>{k}</dt><dd>{v}</dd>" for k, v in rows)
     siblings = [t for t in full.todos if t.proposal_id == todo.proposal_id and t.todo_id != todo.todo_id]
     same = ""
@@ -1201,7 +1275,7 @@ def _person_page(name: str, todos: list[TodoRow], today: date) -> str:
 def render_dashboard(
     snapshot: BoardSnapshot, *, mode: Mode, token: str = "", brand: str = DEFAULT_BRAND,
     sessions: SessionsState = "missing", now: datetime | None = None,
-    ledger: LedgerView | None = None, extras: Mapping[str, TodoExtra] | None = None,
+    extras: Mapping[str, TodoExtra] | None = None,
     orders: Sequence[Order] | None = None, order_receiver: str = "",
 ) -> str:
     from .orders_view import ORDERS_CSS, ORDERS_JS, order_pages, orders_section, project_orders, summary_box, todo_orders
@@ -1248,22 +1322,22 @@ def render_dashboard(
             people[todo.owner].append(todo)
     pages += "".join(_person_page(person, rows, today) for person, rows in sorted(people.items()))
     name = escape(brand or DEFAULT_BRAND)
-    ledger = ledger if served else None
-    ledger_nav = f'<a href="#ledger" data-tab="ledger">{icon("todos")}장부</a>' if ledger is not None else ""
-    nav_class = ' class="ledger-nav"' if ledger is not None else ""
-    ledger_css = NAV_CSS if ledger is not None else ""
+    # 도리에게 지시 is the seventh bottom tab on the live page (owner Q360: it took the old ledger tab's place)
+    orders_nav = f'<a href="#orders" data-tab="orders">{icon("inbox")}도리 지시</a>' if orders is not None else ""
+    nav_class = ' class="seven"' if orders is not None else ""
+    nav_css = _SEVEN_CSS if orders is not None else ""
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f'{meta}<title>{name}</title><link rel="icon" href="{favicon(brand or DEFAULT_BRAND)}">'
-        f"<style>{CSS}{ledger_css}{ORDERS_CSS if orders is not None else ''}{FIND_CSS}</style></head><body>"
+        f"<style>{CSS}{nav_css}{ORDERS_CSS if orders is not None else ''}{FIND_CSS}</style></head><body>"
         f'{sprite()}<a class="skip" href="#main">본문으로 건너뛰기</a>'
         f'<header><div class="bar"><a class="brand" href="#summary">{brand_mark(brand or DEFAULT_BRAND)}{name}</a>'
-        f'<nav aria-label="화면"{nav_class}>{_NAV}{ledger_nav}</nav>{fresh}</div></header><main id="main">'
+        f'<nav aria-label="화면"{nav_class}>{_NAV}{orders_nav}</nav>{fresh}</div></header><main id="main">'
         f"{empty}{_summary(snapshot, today, '' if mode == 'file' else summary_line(sessions))}"
         f"{summary_box(orders, snapshot) if orders is not None else ''}{_projects(snapshot, today, _shelf_link(shelf, new_in_shelf))}"
         f"{_todos(snapshot, mode, today)}{_agenda(snapshot, today, mode)}{_sources(snapshot, mode)}{_archive(shelf, mode, today, new_in_shelf)}"
-        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{render_ledger(ledger)}{order_html}{_events(snapshot, mode)}{pages}</main>"
+        f"{render_sessions(sessions, now_ms=now_ms, exported=mode == 'file')}{order_html}{_events(snapshot, mode)}{pages}</main>"
         f'<footer><span>{name}</span><span aria-hidden="true">·</span><span>기준일 {_md(snapshot.today)}</span>'
         f'<span aria-hidden="true">·</span><span data-live>{escape(_kst(snapshot.generated_at))} 생성</span></footer>'
         f"{_ARCHIVE_DIALOG if mode == 'served' else ''}"
