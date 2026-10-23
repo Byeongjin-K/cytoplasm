@@ -84,10 +84,10 @@ def test_on_asks_for_date_only_lines_and_changes_nothing_else(hermes, monkeypatc
     _marker(hermes, b"on")
     received = _classify_prompt(monkeypatch)
     today = _today_prompt()
-    assert received != today
-    assert "날짜만 명시되고 시각이 없으면 시각을 지어내지 말고" in received
-    assert "제출 마감처럼 날짜가 정해진 일정도 true" in received
-    assert "날짜와 시각이 본문에 명시된 경우에만" not in received
+    # Only the two rule lines the classifier's JSON keys name differ; every other line is today's.
+    changed = [(old, new) for old, new in zip(today.splitlines(), received.splitlines(), strict=True)
+               if old != new]
+    assert [new.split(":", 1)[0] for _old, new in changed] == ["- schedule_needed", "- schedule_text"]
     for current, replacement in mail_schedule_all_day.PROMPT_RULES:
         today = today.replace(current, replacement)
     assert received == today
@@ -145,6 +145,49 @@ def test_opt_in_still_refuses_undated_or_backwards_lines(text, error):
         calendar_core.parse_request(text, NOW, all_day_undated=True)
 
 
+@pytest.mark.parametrize("text", ["10월 20일 제출 마감", "1월 5일 결과 통보"])
+def test_opt_in_does_not_move_a_passed_yearless_day_to_next_year(text):
+    # NOW is 2031-10-23: a past 'M월 D일' is a passed deadline, not next year's event.
+    with pytest.raises(calendar_core.AmbiguousTime):
+        calendar_core.parse_request(text, NOW, all_day_undated=True)
+
+
+def test_opt_in_refuses_an_explicit_past_year_and_keeps_the_timed_rollover():
+    with pytest.raises(calendar_core.ParseRejected):
+        calendar_core.parse_request("2031-10-20 제출 마감", NOW, all_day_undated=True)
+    timed = calendar_core.parse_request("10월 20일 오후 3시 회의", NOW, all_day_undated=True)
+    assert timed.start.year == 2032 and not timed.all_day
+
+
+@pytest.mark.parametrize("text", [
+    "11월 18일부터 25일간 워크숍", "11월 18일부터 3일간 워크숍", "11월 18일부터 3일 동안 워크숍",
+    "11월 18일~3일간 워크숍", "11월 18일 2박 3일 워크숍", "11월 18일부터 2주간 워크숍",
+])
+def test_opt_in_reasks_a_length_instead_of_reading_it_as_an_end_day(text):
+    with pytest.raises(calendar_core.AmbiguousTime):
+        calendar_core.parse_request(text, NOW, all_day_undated=True)
+
+
+@pytest.mark.parametrize("text", ["11월 18일 오후 연차평가", "11월 18일 오전 연차평가"])
+def test_opt_in_reasks_a_half_day_without_a_clock_time(text):
+    with pytest.raises(calendar_core.AmbiguousTime):
+        calendar_core.parse_request(text, NOW, all_day_undated=True)
+
+
+@pytest.mark.parametrize("opt_in", [False, True])
+def test_a_timed_midnight_to_midnight_event_keeps_its_times(opt_in):
+    parsed = calendar_core.parse_request("내일 자정부터 24시간 서버 점검", NOW, all_day_undated=opt_in)
+    assert not parsed.all_day
+    body = json.loads(calendar_core.build_create_argv("primary", parsed)[-1])
+    assert body["start"]["dateTime"] == "2031-10-24T00:00:00+09:00"
+    summary = calendar_core.render_change_summary(
+        action="create", summary=parsed.summary, start=parsed.start.isoformat(),
+        end=parsed.end.isoformat(), calendar_id="primary", event_id="",
+    )
+    assert "일시: 2031-10-24 (금) 00:00 ~ 00:00 KST" in summary
+    assert triage_digest._event_when(parsed.start.isoformat(), parsed.end.isoformat()) == "10/24(금) 00:00–00:00"
+
+
 def test_all_day_insert_uses_calendar_dates_with_exclusive_end():
     parsed = calendar_core.parse_request("12월 22일~23일 겨울학교", NOW, all_day_undated=True)
     body = json.loads(calendar_core.build_create_argv("primary", parsed, color_id="2")[-1])
@@ -178,7 +221,7 @@ def test_draft_create_refuses_all_day_on_a_broken_marker(hermes, monkeypatch):
     assert caught.value.exit_code == 3
 
 
-def test_all_day_draft_card_names_the_last_day(hermes, monkeypatch):
+def test_all_day_draft_card_names_the_last_day(hermes, monkeypatch, capsys):
     monkeypatch.setenv(mail_schedule_all_day.CALENDAR_ENV, "1")
     _marker(hermes, b"on")
     draft = _draft()
@@ -187,15 +230,68 @@ def test_all_day_draft_card_names_the_last_day(hermes, monkeypatch):
     assert draft["start"].endswith("-11-18T00:00:00+09:00")
     prepared = calendar_card.prepare_draft(draft)
     year = draft["start"][:4]
-    assert prepared["render_version"] == "4"
+    # A new card version shows the day; stored v4/v5 cards keep their bytes.
+    assert prepared["render_version"] == "6"
     assert f"시작: {year}-11-18 (종일)\n" in prepared["approval_content"]
     assert f"종료: {year}-11-18 (종일)\n" in prepared["approval_content"]
+    assert prepared["sha256"] == draft["sha256"]
     assert calendar_digest.event_key(draft)
-    summary = calendar_core.render_change_summary(
-        action="create", summary=draft["summary"], start=draft["start"], end=draft["end"],
-        calendar_id="primary", event_id="",
+    import calendar_output
+
+    calendar_output.print_draft(draft)
+    out = capsys.readouterr().out
+    assert f"일시: {year}-11-18 (" in out and ") 종일\n" in out
+    assert calendar_digest.card_line(draft, None).split(" summary=")[0].endswith(
+        f"start={year}-11-18 end={year}-11-19")
+
+
+def test_all_day_draft_with_a_color_uses_the_new_card_version(hermes, monkeypatch):
+    monkeypatch.setenv(mail_schedule_all_day.CALENDAR_ENV, "1")
+    _marker(hermes, b"on")
+    (hermes / "calendar-default-color.mode").write_bytes(b"2")
+    draft = _draft()
+    assert json.loads(draft["argv"][-1])["colorId"] == "2"
+    prepared = calendar_card.prepare_draft(draft)
+    assert prepared["render_version"] == "6"
+    assert "색: " in prepared["approval_content"] and "(종일)" in prepared["approval_content"]
+
+
+def test_v6_pending_round_trip(tmp_path):
+    from datetime import UTC
+
+    from calendar_pending import PendingConfirm, PendingConfirmStore
+
+    entry = PendingConfirm(
+        draft_id="abc123", sha256="digest", dm_channel_id="222", dm_message_id="333",
+        created=datetime(2030, 1, 1, tzinfo=UTC), render_version="6",
     )
-    assert f"일시: {year}-11-18 (" in summary and ") 종일" in summary
+    store = PendingConfirmStore(tmp_path / "pending.jsonl")
+    store.append(entry)
+    assert store.load() == (entry,)
+
+
+def test_timed_draft_digest_line_keeps_datetimes(hermes):
+    draft = calendar_cli._build_create_draft(argparse.Namespace(
+        text="내일 자정부터 24시간 서버 점검", summary="", calendar="primary", channel_id="dm",
+    ))
+    line = calendar_digest.card_line(draft, None)
+    assert f" start={draft['start']} end={draft['end']} " in line
+
+
+def test_calendar_without_the_env_never_imports_the_switch_module(monkeypatch):
+    monkeypatch.delenv(mail_schedule_all_day.CALENDAR_ENV, raising=False)
+    monkeypatch.setitem(sys.modules, "automation.mail_schedule_all_day", None)
+    assert calendar_cli._mail_all_day_undated() is False
+
+
+def test_mail_without_the_switch_module_keeps_todays_prompt(hermes, monkeypatch):
+    import mail_schedule_mode
+
+    _marker(hermes, b"on")
+    monkeypatch.setitem(sys.modules, "automation.mail_schedule_all_day", None)
+    template = triage_core.load_prompt_template(PROMPT)
+    assert mail_schedule_mode.mode() == "off"
+    assert mail_schedule_mode.classify_template(template) == template
 
 
 # --- mail: the calendar child and the digest line --------------------------------
@@ -224,8 +320,9 @@ def test_transport_asks_the_calendar_for_all_day_only_when_on(hermes, tmp_path, 
 
 
 @pytest.mark.parametrize("start,end,shown", [
-    ("2031-11-18T00:00:00+09:00", "2031-11-19T00:00:00+09:00", "11/18(화) 종일"),
-    ("2031-12-22T00:00:00+09:00", "2031-12-24T00:00:00+09:00", "12/22(월)–12/23(화) 종일"),
+    ("2031-11-18", "2031-11-19", "11/18(화) 종일"),
+    ("2031-12-22", "2031-12-24", "12/22(월)–12/23(화) 종일"),
+    ("2031-11-18T00:00:00+09:00", "2031-11-19T00:00:00+09:00", "11/18(화) 00:00–00:00"),
     ("2031-11-18T15:00:00+09:00", "2031-11-18T16:00:00+09:00", "11/18(화) 15:00–16:00"),
 ])
 def test_digest_line_shows_all_day_events_as_a_day(start, end, shown):
@@ -235,4 +332,4 @@ def test_digest_line_shows_all_day_events_as_a_day(start, end, shown):
 def test_mail_and_calendar_share_one_env_name():
     import mail_schedule_mode
 
-    assert mail_schedule_mode.CALENDAR_ENV == mail_schedule_all_day.CALENDAR_ENV
+    assert mail_schedule_mode.CALENDAR_ENV == mail_schedule_all_day.CALENDAR_ENV == calendar_cli.ALL_DAY_ENV

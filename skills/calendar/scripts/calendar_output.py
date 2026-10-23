@@ -17,6 +17,7 @@ def print_draft(record: dict[str, str | list[str]]) -> None:
             end=str(record["end"]),
             calendar_id=str(record["calendar_id"]),
             event_id=str(record["event_id"]),
+            all_day=calendar_core.argv_all_day(record["argv"]),
         )
     )
     print(f"DRAFT-CREATED id={record['id']} action={record['action']} sha256={record['sha256']}")

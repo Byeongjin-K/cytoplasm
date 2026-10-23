@@ -129,12 +129,20 @@ def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
     )
 
 
-def _mail_all_day_undated() -> bool:
-    """Only the mail digest asks (env pair), and only the released marker says yes."""
-    from automation.mail_schedule_all_day import CALENDAR_ENV, node_mode
+#: Same name as ``automation.mail_schedule_all_day.CALENDAR_ENV`` (pinned by a unit test).
+ALL_DAY_ENV = "CALENDAR_ALL_DAY_UNDATED"
 
-    if os.environ.get(CALENDAR_ENV) != "1":
+
+def _mail_all_day_undated() -> bool:
+    """Only the mail digest asks (env pair), and only the released marker says yes.
+
+    The env is read before the switch module is imported, so an owner command (no env)
+    never depends on that module being present in the code tree.
+    """
+    if os.environ.get(ALL_DAY_ENV) != "1":
         return False
+    from automation.mail_schedule_all_day import node_mode
+
     try:
         return node_mode(Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser()) == "on"
     except (OSError, ValueError) as error:

@@ -79,9 +79,7 @@ def _update_draft() -> dict[str, str | list[str]]:
             "2031-10-01T01:00:00Z",
             ("2031-10-01 09:00 (+09:00)", "2031-10-01 10:00 (+09:00)"),
         ),
-        # An all-day create shows the last day a person reads, not Calendar's exclusive end (Q336).
-        ("2031-10-01", "2031-10-02", ("2031-10-01 (종일)", "2031-10-01 (종일)")),
-        ("2031-10-01", "2031-10-03", ("2031-10-01 (종일)", "2031-10-02 (종일)")),
+        ("2031-10-01", "2031-10-02", ("2031-10-01", "2031-10-02")),
     ],
 )
 def test_v4_fact_when_time_kind_changes_keeps_four_structured_lines(

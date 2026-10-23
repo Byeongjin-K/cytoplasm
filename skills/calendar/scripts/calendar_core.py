@@ -34,7 +34,10 @@ _DATE_MD = re.compile(r"(\d{1,2})월\s*(\d{1,2})일")
 _DATE_WORD = re.compile("|".join(_DAY_WORDS))
 _DATE_WEEK = re.compile(r"(이번|다음|다다음)\s*주(?:\s*([월화수목금토일])요일)?")
 _DATE_OFFSET = re.compile(r"(\d{1,2})일\s*(?:뒤|후)")
-_DATE_RANGE_END = re.compile(r"\s*(?:~|-|부터)\s*(?:(\d{1,2})월\s*)?(\d{1,2})일(?:\s*까지)?")
+_DATE_RANGE_END = re.compile(r"\s*(?:~|-|부터)\s*(?:(\d{1,2})월\s*)?(\d{1,2})일(?!\s*(?:간|동안))(?:\s*까지)?")
+# A length ("3일간", "2박", "2주 동안") is not an end day; an all-day draft re-asks for the last day.
+_SPAN_LENGTH = re.compile(r"\d{1,3}\s*(?:박|(?:일|주|개월|달)\s*(?:간|동안))")
+_HALF_DAY = re.compile(r"오전|오후")
 _TIME = re.compile(
     r"(?:(오전|오후)\s*)?(\d{1,2})\s*시(?!간)(?:\s*(\d{1,2})\s*분|\s*(반))?"
     r"|(\d{1,2}):(\d{2})|(정오)|(자정)"
@@ -101,7 +104,21 @@ def parse_request(text: str, now: datetime, *, all_day_undated: bool = False) ->
 
 
 def _all_day(body: str, day: date, now: datetime, spans: list[Span]) -> ParsedRequest:
-    """KST-midnight bounds with an exclusive end, like Calendar's all-day ``date`` pair."""
+    """KST-midnight bounds with an exclusive end, like Calendar's all-day ``date`` pair.
+
+    Never guesses: a length instead of an end day, a half day without a clock time, or a
+    year-less day that already passed this year is re-asked (exit 5), not drafted.
+    """
+    if _SPAN_LENGTH.search(body):
+        raise AmbiguousTime("며칠까지인가요? 끝 날짜(예: 11월 20일까지)를 알려주세요.")
+    if _HALF_DAY.search(body):
+        raise AmbiguousTime("오전/오후만으로는 시각을 정할 수 없어요. 시각(예: 오후 3시)을 알려주세요.")
+    today = now.astimezone(KST).date()
+    yearless = _DATE_MD.search(body)
+    if spans and yearless is not None and yearless.span() == spans[0] and day.year > today.year:
+        raise AmbiguousTime(
+            f"{yearless[0]}은 올해 이미 지났어요. 몇 년 일정인지 날짜(예: {day.isoformat()})로 알려주세요."
+        )
     last = day
     if spans and (tail := _DATE_RANGE_END.match(body, spans[0][1])):
         spans.append(tail.span())
@@ -114,7 +131,7 @@ def _all_day(body: str, day: date, now: datetime, spans: list[Span]) -> ParsedRe
             last = last.replace(year=day.year + 1)
         if last < day:
             raise ParseRejected("끝 날짜가 시작 날짜보다 빠릅니다")
-    if day < now.astimezone(KST).date():
+    if day < today:
         raise ParseRejected(f"이미 지난 날짜입니다: {day.isoformat()}")
     return ParsedRequest(
         summary=_strip_spans(body, spans),
@@ -124,10 +141,20 @@ def _all_day(body: str, day: date, now: datetime, spans: list[Span]) -> ParsedRe
     )
 
 
-def is_all_day(start: datetime, end: datetime) -> bool:
-    """Whole KST days from midnight to midnight — how an all-day draft is stored."""
-    begin, finish = start.astimezone(KST), end.astimezone(KST)
-    return begin.time() == time.min and finish.time() == time.min and finish > begin
+def argv_all_day(argv: list[str] | tuple[str, ...]) -> bool:
+    """True only when the frozen insert body carries Calendar ``date`` bounds.
+
+    A timed event that runs midnight to midnight is still timed: the Calendar command,
+    not the stored KST bounds, says what the owner approves.
+    """
+    try:
+        body = json.loads(argv[list(argv).index("--json") + 1])
+    except (ValueError, IndexError):
+        return False
+    if not isinstance(body, dict):
+        return False
+    start = body.get("start")
+    return isinstance(start, dict) and "date" in start and "dateTime" not in start
 
 
 def resolve_relative_day(text: str, now: datetime) -> date:
@@ -234,16 +261,21 @@ def _strip_spans(text: str, spans: list[Span]) -> str:
 
 
 def render_change_summary(
-    *, action: str, summary: str, start: str, end: str, calendar_id: str, event_id: str
+    *, action: str, summary: str, start: str, end: str, calendar_id: str, event_id: str,
+    all_day: bool = False,
 ) -> str:
-    """Render the Korean pre-confirmation change summary block."""
+    """Render the Korean pre-confirmation change summary block.
+
+    ``all_day`` comes from the frozen command (:func:`argv_all_day`); without it the
+    block is today's bytes, so the frozen v1 card never changes.
+    """
     labels = {"create": "생성", "update": "수정", "delete": "삭제"}
     when = "(변경 없음)"
     if start:
         begin = datetime.fromisoformat(start)
         finish = datetime.fromisoformat(end)
         day_ko = _WEEKDAY_KO[begin.weekday()]
-        if action == "create" and is_all_day(begin, finish):
+        if action == "create" and all_day:
             last = finish.astimezone(KST).date() - timedelta(days=1)
             when = f"{begin.strftime('%Y-%m-%d')} ({day_ko})"
             if last != begin.astimezone(KST).date():

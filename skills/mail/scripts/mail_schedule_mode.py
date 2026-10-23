@@ -15,8 +15,12 @@ def mode() -> str:
     root = str(mail_runtime.repo_root())
     if root not in sys.path:
         sys.path.insert(0, root)
-    from automation.mail_schedule_all_day import node_mode
-
+    try:
+        from automation.mail_schedule_all_day import node_mode
+    except ImportError:
+        # A code tree older than this mail skill has no switch: today's behaviour.
+        print("MAIL-SCHEDULE-ALL-DAY-UNAVAILABLE: 종일 일정 초안 모듈이 없어 끕니다", file=sys.stderr)
+        return "off"
     try:
         return node_mode(Path.home() / ".hermes")
     except (OSError, ValueError):
@@ -25,6 +29,9 @@ def mode() -> str:
 
 
 def classify_template(template: str) -> str:
+    selected = mode()
+    if selected == "off":
+        return template
     from automation.mail_schedule_all_day import apply_to_template
 
-    return apply_to_template(template, mode())
+    return apply_to_template(template, selected)
