@@ -21,6 +21,11 @@ Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`ob
 삭제+다음 릴리스는 평문 복귀이며, 꺼짐 중 시험은 형 기관주소 전용 초안만 허용한다.
 [소개](../docs/기능소개/기관메일-회신-서식-유지.md).
 
+회신 초안 맺음말 빼기는 `mail_reply_closing`의 기본 `keep` 릴리스 스위치다. 호스트
+`release-flags/mail-reply-closing`의 정확한 `omit`을 같은 HEAD 승인 표면에 묶고, 선언된 `push_file`로
+agent 표식을 배포·재조회한다. `draft_reply`만 그 값을 읽어 알려진 맺음 규칙 줄을 바꾸고 끝 서명 줄을 지운다.
+카드 staging에는 이 모듈을 포함한다([소개](../docs/기능소개/메일-회신-맺음말-빼기.md)).
+
 캘린더 기본색은 `calendar_default_color`의 기본 꺼짐 릴리스 스위치다.
 `release-flags/calendar-default-color`의 정확한 Google id `1`~`11`과 HEAD를
 기존 승인에 묶고, 선언된 `push_file`로 agent 표식을 배포·재조회한다.

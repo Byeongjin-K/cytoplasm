@@ -1,0 +1,2 @@
+# Dynamic release-host mode, verified against the node marker by the release probe.
+agent|automation/mail_reply_closing|.hermes/mail-reply-closing.mode|v2:derived;algorithm=mail-reply-closing-v1

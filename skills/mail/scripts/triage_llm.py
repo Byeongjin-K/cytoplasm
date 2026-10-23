@@ -165,8 +165,11 @@ def draft_reply(
     prompt_path: Path, instruction: str = "", evidence: str = "",
 ) -> tuple[str, str, str]:
     """Korean final-text reply through the shared account route."""
+    import mail_reply_format
+
+    closing, template = mail_reply_format.closing_template(triage_core.load_prompt_template(prompt_path))
     prompt = triage_core.build_prompt(
-        triage_core.load_prompt_template(prompt_path),
+        template,
         subject=subject, sender=sender, body=body, instruction=instruction,
         evidence=evidence,
     )
@@ -175,6 +178,7 @@ def draft_reply(
               uid_opaque=uid_opaque, served=served)
     raw = served.text
     llm_subject, reply_body = triage_core.parse_reply(raw)
+    reply_body = mail_reply_format.closing_body(reply_body, closing)
     return triage_core.reply_subject(llm_subject, subject), reply_body, CODEX_PROVIDER
 
 

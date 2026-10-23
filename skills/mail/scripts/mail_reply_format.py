@@ -46,3 +46,25 @@ def select(format_test: str, to: str, cc: str, bcc: tuple[str, ...]) -> str:
         return "html" if enabled(Path.home()) else ""
     except (OSError, ValueError):
         raise GateError("기관메일 회신 서식 표식을 읽을 수 없습니다 — 초안 생성 거부", 3) from None
+
+
+def closing_template(template: str) -> tuple[str, str]:
+    """Apply the released closing marker to a reply prompt; return (mode, template)."""
+    from triage_gate import GateError
+
+    root = str(mail_runtime.repo_root())
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from automation.mail_reply_closing import apply_to_template, node_mode
+
+    try:
+        mode = node_mode(Path.home())
+        return mode, apply_to_template(template, mode)
+    except (OSError, ValueError):
+        raise GateError("회신 맺음말 표식 또는 프롬프트를 확인할 수 없습니다 — 초안 생성 거부", 3) from None
+
+
+def closing_body(body: str, mode: str) -> str:
+    from automation.mail_reply_closing import strip_sign_off
+
+    return strip_sign_off(body, mode)
