@@ -104,6 +104,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         from automation.mail_reply_closing import surface as mail_closing_surface
 
         surfaces.append(mail_closing_surface())
+    if getattr(args, "mail_schedule_all_day", None) == "on":
+        from automation.mail_schedule_all_day import surface as mail_all_day_surface
+
+        surfaces.append(mail_all_day_surface())
     color = getattr(args, "calendar_default_color", None)
     if color is not None:
         from automation.calendar_default_color import surface as color_surface
@@ -444,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--ledger", choices=("on",), help="Hermes 카드를 검증 후 작은 장부로 이관")
     plan.add_argument("--mail-html-reply", choices=("on",), help="기관메일 회신 새 서식 켜기")
     plan.add_argument("--mail-reply-closing", choices=("omit",), help="회신 초안 맺음말 빼기(계정 서명이 붙임)")
+    plan.add_argument("--mail-schedule-all-day", choices=("on",), help="날짜만 있는 메일 일정도 종일 초안으로")
     plan.add_argument("--calendar-default-color", choices=tuple(str(i) for i in range(1, 12)),
                       help="새 캘린더 일정의 기본 Google colorId")
     plan.add_argument("--document-ocr", choices=("on",), help="스캔본·구형 hwp·사진 글자 읽기 켜기")
@@ -602,6 +607,16 @@ def main(argv: list[str] | None = None) -> int:
             skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
         ))
     reply_closing.set_defaults(run=authorize_reply_closing)
+    schedule_all_day = commands.add_parser("authorize-mail-schedule-all-day")
+    schedule_all_day.add_argument("--head", required=True)
+    def authorize_schedule_all_day(args: argparse.Namespace) -> int:
+        from automation.mail_schedule_all_day import surface
+
+        name, digest = surface()
+        return skill_gate.cmd_release_authorize(argparse.Namespace(
+            skill=None, surface=name, hash=digest, head=args.head, peer_attest_mode="",
+        ))
+    schedule_all_day.set_defaults(run=authorize_schedule_all_day)
     calendar_color = commands.add_parser("authorize-calendar-default-color")
     calendar_color.add_argument("--head", required=True)
     calendar_color.add_argument("--color", required=True, choices=tuple(str(i) for i in range(1, 12)))

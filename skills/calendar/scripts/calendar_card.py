@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, assert_never
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -203,10 +203,16 @@ def change_details(draft: DraftRecord) -> str:
         case unreachable:
             assert_never(unreachable)
     lines = [action]
+    all_day = (changed.action is CalendarAction.CREATE and changed.start is not None and changed.end is not None
+               and "T" not in changed.start and "T" not in changed.end)
     for label, value, replacement in values:
         suffix = markers[replacement is not None]
         shown = value or "(저장된 값 없음)"
-        if multiline and label in {"시작", "종료"} and value:
+        if multiline and all_day and label in {"시작", "종료"} and value:
+            # Calendar's all-day end date is exclusive; the owner reads the last day (Q336).
+            day = date.fromisoformat(value) - timedelta(days=label == "종료")
+            shown = f"{day.isoformat()} (종일)"
+        elif multiline and label in {"시작", "종료"} and value:
             shown = _display_time(value)
         lines.append(f"{label}: {shown}{suffix}")
     if changed.color is not None:

@@ -8,7 +8,7 @@ import sys
 from contextvars import ContextVar
 from dataclasses import replace
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
 
@@ -330,11 +330,17 @@ def _event_when(start: str, end: str) -> str:
         begin = datetime.fromisoformat(start).astimezone(ZoneInfo("Asia/Seoul"))
     except ValueError:
         return ""
-    when = f"{begin.month}/{begin.day}({_WEEKDAY_KO[begin.weekday()]}) {begin:%H:%M}"
+    day = f"{begin.month}/{begin.day}({_WEEKDAY_KO[begin.weekday()]})"
+    when = f"{day} {begin:%H:%M}"
     try:
         finish = datetime.fromisoformat(end).astimezone(ZoneInfo("Asia/Seoul"))
     except ValueError:
         return when
+    if begin.time() == finish.time() == time.min and finish > begin:  # an all-day draft
+        last = finish - timedelta(days=1)
+        if last.date() == begin.date():
+            return f"{day} 종일"
+        return f"{day}–{last.month}/{last.day}({_WEEKDAY_KO[last.weekday()]}) 종일"
     return f"{when}–{finish:%H:%M}"
 
 

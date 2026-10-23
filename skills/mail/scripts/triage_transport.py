@@ -141,6 +141,9 @@ def _run_calendar(
     )
     if not calendar_cli.exists():
         return "calendar-unavailable"
+    import mail_schedule_mode
+
+    all_day = {mail_schedule_mode.CALENDAR_ENV: "1"} if mail_schedule_mode.mode() == "on" else {}
     try:
         proc = subprocess.run(  # noqa: S603 — calendar owns draft + digest approval publication
             [sys.executable, str(calendar_cli), "draft-create", "--text", schedule_text,
@@ -149,7 +152,7 @@ def _run_calendar(
             # The card replies under its mail card in the digest thread (owner Q187). An env
             # pair, not a flag: a calendar CLI older than this ignores it instead of exit 2.
             env={**os.environ, "CALENDAR_DIGEST_REPLY_TO": reply_to,
-                 "CALENDAR_DIGEST_REPLY_CHANNEL": reply_channel},
+                 "CALENDAR_DIGEST_REPLY_CHANNEL": reply_channel, **all_day},
         )
     except subprocess.TimeoutExpired:  # 느린 캘린더 CLI 가 다이제스트 전체를 죽이지 못한다
         print(f"CAL-TIMEOUT uid={uid_opaque} timeout={CALENDAR_TIMEOUT_SECONDS}s", file=sys.stderr)

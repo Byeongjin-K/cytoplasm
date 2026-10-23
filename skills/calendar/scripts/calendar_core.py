@@ -34,6 +34,7 @@ _DATE_MD = re.compile(r"(\d{1,2})월\s*(\d{1,2})일")
 _DATE_WORD = re.compile("|".join(_DAY_WORDS))
 _DATE_WEEK = re.compile(r"(이번|다음|다다음)\s*주(?:\s*([월화수목금토일])요일)?")
 _DATE_OFFSET = re.compile(r"(\d{1,2})일\s*(?:뒤|후)")
+_DATE_RANGE_END = re.compile(r"\s*(?:~|-|부터)\s*(?:(\d{1,2})월\s*)?(\d{1,2})일(?:\s*까지)?")
 _TIME = re.compile(
     r"(?:(오전|오후)\s*)?(\d{1,2})\s*시(?!간)(?:\s*(\d{1,2})\s*분|\s*(반))?"
     r"|(\d{1,2}):(\d{2})|(정오)|(자정)"
@@ -60,13 +61,18 @@ class ParsedRequest:
     summary: str
     start: datetime
     end: datetime
+    all_day: bool = False
 
 
 Span = tuple[int, int]
 
 
-def parse_request(text: str, now: datetime) -> ParsedRequest:
-    """Parse Korean natural language into a concrete event; never guess."""
+def parse_request(text: str, now: datetime, *, all_day_undated: bool = False) -> ParsedRequest:
+    """Parse Korean natural language into a concrete event; never guess.
+
+    ``all_day_undated`` (mail digest under the released switch only) turns a line that
+    names a day but no time into an all-day event instead of the exit-5 re-ask.
+    """
     body = text.strip()
     for marker in _AMBIGUOUS_MARKERS:
         if marker in body:
@@ -77,6 +83,8 @@ def parse_request(text: str, now: datetime) -> ParsedRequest:
     spans: list[Span] = []
     day = _extract_date(body, now.astimezone(KST).date(), spans)
     times = _extract_times(body, spans)
+    if not times and all_day_undated:
+        return _all_day(body, day, now, spans)
     if not times:
         raise AmbiguousTime("몇 시로 잡을까요? 시각(예: 오후 3시, 15:00)을 알려주세요.")
     duration = _extract_duration(body, spans)
@@ -90,6 +98,36 @@ def parse_request(text: str, now: datetime) -> ParsedRequest:
     if start <= now.astimezone(KST):
         raise ParseRejected(f"과거 시각입니다: {start.isoformat()}")
     return ParsedRequest(summary=_strip_spans(body, spans), start=start, end=end)
+
+
+def _all_day(body: str, day: date, now: datetime, spans: list[Span]) -> ParsedRequest:
+    """KST-midnight bounds with an exclusive end, like Calendar's all-day ``date`` pair."""
+    last = day
+    if spans and (tail := _DATE_RANGE_END.match(body, spans[0][1])):
+        spans.append(tail.span())
+        month = int(tail[1]) if tail[1] else day.month
+        try:
+            last = date(day.year, month, int(tail[2]))
+        except ValueError as error:
+            raise ParseRejected(f"날짜 범위를 읽을 수 없습니다: {tail[0].strip()}") from error
+        if last < day and tail[1]:
+            last = last.replace(year=day.year + 1)
+        if last < day:
+            raise ParseRejected("끝 날짜가 시작 날짜보다 빠릅니다")
+    if day < now.astimezone(KST).date():
+        raise ParseRejected(f"이미 지난 날짜입니다: {day.isoformat()}")
+    return ParsedRequest(
+        summary=_strip_spans(body, spans),
+        start=datetime.combine(day, time.min, KST),
+        end=datetime.combine(last + timedelta(days=1), time.min, KST),
+        all_day=True,
+    )
+
+
+def is_all_day(start: datetime, end: datetime) -> bool:
+    """Whole KST days from midnight to midnight — how an all-day draft is stored."""
+    begin, finish = start.astimezone(KST), end.astimezone(KST)
+    return begin.time() == time.min and finish.time() == time.min and finish > begin
 
 
 def resolve_relative_day(text: str, now: datetime) -> date:
@@ -205,10 +243,17 @@ def render_change_summary(
         begin = datetime.fromisoformat(start)
         finish = datetime.fromisoformat(end)
         day_ko = _WEEKDAY_KO[begin.weekday()]
-        when = (
-            f"{begin.strftime('%Y-%m-%d')} ({day_ko}) "
-            f"{begin.strftime('%H:%M')} ~ {finish.strftime('%H:%M')} KST"
-        )
+        if action == "create" and is_all_day(begin, finish):
+            last = finish.astimezone(KST).date() - timedelta(days=1)
+            when = f"{begin.strftime('%Y-%m-%d')} ({day_ko})"
+            if last != begin.astimezone(KST).date():
+                when += f" ~ {last.isoformat()} ({_WEEKDAY_KO[last.weekday()]})"
+            when += " 종일"
+        else:
+            when = (
+                f"{begin.strftime('%Y-%m-%d')} ({day_ko}) "
+                f"{begin.strftime('%H:%M')} ~ {finish.strftime('%H:%M')} KST"
+            )
     return (
         "CHANGE-SUMMARY\n"
         f"동작: {labels[action]}\n"
@@ -230,11 +275,12 @@ def _event_time(value: datetime) -> dict[str, str]:
 def build_create_argv(
     calendar_id: str, request: ParsedRequest, *, color_id: str | None = None,
 ) -> tuple[str, ...]:
-    body: dict[str, str | Mapping[str, str]] = {
-        "summary": request.summary,
-        "start": _event_time(request.start),
-        "end": _event_time(request.end),
-    }
+    if request.all_day:
+        start: Mapping[str, str] = {"date": request.start.date().isoformat()}
+        end: Mapping[str, str] = {"date": request.end.date().isoformat()}
+    else:
+        start, end = _event_time(request.start), _event_time(request.end)
+    body: dict[str, str | Mapping[str, str]] = {"summary": request.summary, "start": start, "end": end}
     if color_id is not None:
         body["colorId"] = color_id
     return (

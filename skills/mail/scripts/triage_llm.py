@@ -149,8 +149,10 @@ def classify(
     *, subject: str, sender: str, body: str, uid_opaque: str, prompt_path: Path,
 ) -> tuple[triage_core.Classification, str]:
     """Classify mail actions on the account-configured shared route."""
+    import mail_schedule_mode
+
     prompt = triage_core.build_prompt(
-        triage_core.load_prompt_template(prompt_path),
+        mail_schedule_mode.classify_template(triage_core.load_prompt_template(prompt_path)),
         subject=subject, sender=sender, body=body,
     )
     served = call_codex(prompt)
