@@ -35,6 +35,12 @@ NOW = datetime(2031, 10, 23, 8, 0, tzinfo=calendar_core.KST)  # Thursday
 MAIL = {"subject": "가상 과제 연차평가 안내", "sender": "예시 <a@example.invalid>", "body": "11월 18일 연차평가"}
 
 
+class _FrozenClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz)
+
+
 @pytest.fixture
 def hermes(tmp_path, monkeypatch):
     home = tmp_path / "home"
@@ -44,6 +50,7 @@ def hermes(tmp_path, monkeypatch):
     monkeypatch.setenv("CALENDAR_GATE_DIR", str(tmp_path / "gate"))
     monkeypatch.setenv("CALENDAR_PEERS_CONFIG", str(tmp_path / "absent-peers.yaml"))
     monkeypatch.delenv(mail_schedule_all_day.CALENDAR_ENV, raising=False)
+    monkeypatch.setattr(calendar_cli, "datetime", _FrozenClock)  # draft-create reads the wall clock
     return home / ".hermes"
 
 
@@ -152,9 +159,20 @@ def test_opt_in_does_not_move_a_passed_yearless_day_to_next_year(text):
         calendar_core.parse_request(text, NOW, all_day_undated=True)
 
 
-def test_opt_in_refuses_an_explicit_past_year_and_keeps_the_timed_rollover():
+@pytest.mark.parametrize("text", ["2031-10-20 제출 마감", "2030년 11월 18일 평가", "2031년 10월 20일 제출 마감"])
+def test_opt_in_refuses_an_explicit_past_year(text):
     with pytest.raises(calendar_core.ParseRejected):
-        calendar_core.parse_request("2031-10-20 제출 마감", NOW, all_day_undated=True)
+        calendar_core.parse_request(text, NOW, all_day_undated=True)
+
+
+def test_opt_in_keeps_an_explicit_korean_year():
+    parsed = calendar_core.parse_request("2032년 1월 5일 결과 발표", NOW, all_day_undated=True)
+    assert (parsed.start.date().isoformat(), parsed.summary) == ("2032-01-05", "결과 발표")
+    with pytest.raises(calendar_core.AmbiguousTime):
+        calendar_core.parse_request("11월 18일 평가 (2030년 공고)", NOW, all_day_undated=True)
+
+
+def test_opt_in_keeps_the_timed_rollover():
     timed = calendar_core.parse_request("10월 20일 오후 3시 회의", NOW, all_day_undated=True)
     assert timed.start.year == 2032 and not timed.all_day
 
@@ -267,7 +285,8 @@ def test_v6_pending_round_trip(tmp_path):
     )
     store = PendingConfirmStore(tmp_path / "pending.jsonl")
     store.append(entry)
-    assert store.load() == (entry,)
+    (loaded,) = store.load()
+    assert loaded == entry and loaded.render_version == "6"
 
 
 def test_timed_draft_digest_line_keeps_datetimes(hermes):

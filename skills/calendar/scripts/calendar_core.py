@@ -38,6 +38,8 @@ _DATE_RANGE_END = re.compile(r"\s*(?:~|-|부터)\s*(?:(\d{1,2})월\s*)?(\d{1,2})
 # A length ("3일간", "2박", "2주 동안") is not an end day; an all-day draft re-asks for the last day.
 _SPAN_LENGTH = re.compile(r"\d{1,3}\s*(?:박|(?:일|주|개월|달)\s*(?:간|동안))")
 _HALF_DAY = re.compile(r"오전|오후")
+_DATE_KO_YMD = re.compile(r"(\d{4})\s*년\s*(\d{1,2})월\s*(\d{1,2})일")
+_YEAR_WORD = re.compile(r"\d{4}\s*년")
 _TIME = re.compile(
     r"(?:(오전|오후)\s*)?(\d{1,2})\s*시(?!간)(?:\s*(\d{1,2})\s*분|\s*(반))?"
     r"|(\d{1,2}):(\d{2})|(정오)|(자정)"
@@ -107,13 +109,23 @@ def _all_day(body: str, day: date, now: datetime, spans: list[Span]) -> ParsedRe
     """KST-midnight bounds with an exclusive end, like Calendar's all-day ``date`` pair.
 
     Never guesses: a length instead of an end day, a half day without a clock time, or a
-    year-less day that already passed this year is re-asked (exit 5), not drafted.
+    year-less day that already passed this year is re-asked (exit 5), not drafted. A
+    ``YYYY년 M월 D일`` keeps its year (a past one is rejected); a year elsewhere is re-asked.
     """
     if _SPAN_LENGTH.search(body):
         raise AmbiguousTime("며칠까지인가요? 끝 날짜(예: 11월 20일까지)를 알려주세요.")
     if _HALF_DAY.search(body):
         raise AmbiguousTime("오전/오후만으로는 시각을 정할 수 없어요. 시각(예: 오후 3시)을 알려주세요.")
     today = now.astimezone(KST).date()
+    explicit = _DATE_KO_YMD.search(body)
+    if spans and explicit is not None and explicit.end() == spans[0][1]:
+        try:
+            day = date(int(explicit[1]), int(explicit[2]), int(explicit[3]))
+        except ValueError as error:
+            raise ParseRejected(f"날짜를 읽을 수 없습니다: {explicit[0]}") from error
+        spans[0] = explicit.span()
+    elif _YEAR_WORD.search(body):
+        raise AmbiguousTime("연도가 어느 날짜의 것인지 알 수 없어요. 날짜(예: 2026-11-18)로 알려주세요.")
     yearless = _DATE_MD.search(body)
     if spans and yearless is not None and yearless.span() == spans[0] and day.year > today.year:
         raise AmbiguousTime(
