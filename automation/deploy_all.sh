@@ -78,6 +78,7 @@ auto_kinds="$(PYTHONPATH="$repo_root" python3 -B -m automation.auto_write_releas
 ledger_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.ledger.release switch)" || exit 4
 mail_html_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.mail_html_reply switch)" || exit 4
 mail_closing_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.mail_reply_closing switch)" || exit 4
+mail_all_day_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.mail_schedule_all_day switch)" || exit 4
 calendar_color="$(PYTHONPATH="$repo_root" python3 -B -m automation.calendar_default_color switch)" || exit 4
 document_ocr_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.document_ocr switch)" || exit 4
 relay_mode="$(PYTHONPATH="$repo_root" python3 -B -m automation.omo_relay_release switch)" || exit 4
@@ -106,7 +107,7 @@ probe() { # probe <format> [extra args...] — 노드 릴리스 트리의 판정
   local format="$1" extra=""
   shift
   (( $# )) && printf -v extra ' %q' "$@"
-  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --calendar-default-color $calendar_color --document-ocr $document_ocr_mode --mail-html-reply $mail_html_mode --mail-reply-closing $mail_closing_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
+  ssh "$host" "python3 $exec_root/automation/deploy_all_probe.py --calendar-default-color $calendar_color --document-ocr $document_ocr_mode --mail-html-reply $mail_html_mode --mail-reply-closing $mail_closing_mode --mail-schedule-all-day $mail_all_day_mode --owner-timers-off $owner_timers --ledger $ledger_mode --omo-relay $relay_mode --report-hub $report_mode --hermes-dashboard $dashboard_mode --peer-retired $peer_mode --auto-write $auto_kinds --notice-bot $notice_digest --fault-channel $fault_channel --dori-agent-chat $dori_mode --hermes-gateways $gateway_mode --yoodori-channel $chat_channel --format $format$extra" < /dev/null
 }
 
 converge_owner_timers() {
@@ -430,6 +431,10 @@ case "$mode" in
     if [[ "$mail_closing_mode" == omit ]]; then
       "$repo_root/automation/release_approval_remote.sh" authorize-mail-reply-closing --head "$node_sha" \
         || { log "MAIL-REPLY-CLOSING-UNAUTHORIZED: 같은 HEAD의 릴리스 승인이 필요합니다"; exit 4; }
+    fi
+    if [[ "$mail_all_day_mode" == on ]]; then
+      "$repo_root/automation/release_approval_remote.sh" authorize-mail-schedule-all-day --head "$node_sha" \
+        || { log "MAIL-SCHEDULE-ALL-DAY-UNAUTHORIZED: 같은 HEAD의 릴리스 승인이 필요합니다"; exit 4; }
     fi
     if [[ "$calendar_color" != off ]]; then
       "$repo_root/automation/release_approval_remote.sh" authorize-calendar-default-color \

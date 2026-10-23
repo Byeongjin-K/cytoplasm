@@ -207,6 +207,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
     from automation.ledger_policy import CARD_LINE as LEDGER_LINE, SURFACE as LEDGER_SURFACE
     from automation.mail_html_reply import CARD_LINE as HTML_REPLY_LINE, SURFACE as HTML_REPLY_SURFACE
     from automation.mail_reply_closing import CARD_LINE as CLOSING_LINE, SURFACE as CLOSING_SURFACE
+    from automation.mail_schedule_all_day import CARD_LINE as ALL_DAY_LINE, SURFACE as ALL_DAY_SURFACE
     from automation.calendar_default_color import PREFIX as COLOR_PREFIX, color_label
     from automation.document_ocr import CARD_LINE as OCR_LINE, SURFACE as OCR_SURFACE
     from automation.omo_relay_policy import CARD_LINE as RELAY_LINE, SURFACE as RELAY_SURFACE
@@ -236,6 +237,7 @@ def approval_surface_lines(spec: ReleaseView) -> list[str]:
         *([LEDGER_LINE] if any(name == LEDGER_SURFACE for name, _digest in spec.surface_digests) else []),
         *([HTML_REPLY_LINE] if any(name == HTML_REPLY_SURFACE for name, _digest in spec.surface_digests) else []),
         *([CLOSING_LINE] if any(name == CLOSING_SURFACE for name, _digest in spec.surface_digests) else []),
+        *([ALL_DAY_LINE] if any(name == ALL_DAY_SURFACE for name, _digest in spec.surface_digests) else []),
         *(
             [f"새 일정 기본색: {color_label(name.removeprefix(COLOR_PREFIX))}"
              for name, _digest in spec.surface_digests if name.startswith(COLOR_PREFIX)]

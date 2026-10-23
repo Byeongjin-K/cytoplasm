@@ -104,11 +104,13 @@ def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
                     "(예: '오후 3시 미팅' vs 'peer-test와 오전에 가능한 시간 조율')."
                 )
             raise calendar_gate.GateError(detail, ROUTING_REJECT_EXIT_CODE)
-    request = calendar_core.parse_request(args.text, now)
+    request = calendar_core.parse_request(args.text, now, all_day_undated=_mail_all_day_undated())
     summary = args.summary or request.summary
     if not summary:
         raise calendar_core.ParseRejected("일정 제목을 알 수 없습니다 (--summary로 지정 가능)")
-    request = calendar_core.ParsedRequest(summary=summary, start=request.start, end=request.end)
+    request = calendar_core.ParsedRequest(
+        summary=summary, start=request.start, end=request.end, all_day=request.all_day,
+    )
     from automation.calendar_default_color import node_color
 
     try:
@@ -125,6 +127,26 @@ def _build_create_draft(args: argparse.Namespace) -> DraftRecord:
         start=request.start.isoformat(), end=request.end.isoformat(),
         channel_id=args.channel_id, **_origin_of(args),
     )
+
+
+#: Same name as ``automation.mail_schedule_all_day.CALENDAR_ENV`` (pinned by a unit test).
+ALL_DAY_ENV = "CALENDAR_ALL_DAY_UNDATED"
+
+
+def _mail_all_day_undated() -> bool:
+    """Only the mail digest asks (env pair), and only the released marker says yes.
+
+    The env is read before the switch module is imported, so an owner command (no env)
+    never depends on that module being present in the code tree.
+    """
+    if os.environ.get(ALL_DAY_ENV) != "1":
+        return False
+    from automation.mail_schedule_all_day import node_mode
+
+    try:
+        return node_mode(Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser()) == "on"
+    except (OSError, ValueError) as error:
+        raise calendar_gate.GateError("종일 일정 초안 설정이 잘못되었습니다", 3) from error
 
 
 def cmd_draft_create(args: argparse.Namespace) -> int:

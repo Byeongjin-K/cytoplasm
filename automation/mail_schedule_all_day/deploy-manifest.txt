@@ -1,0 +1,2 @@
+# Dynamic release-host mode, verified against the node marker by the release probe.
+agent|automation/mail_schedule_all_day|.hermes/mail-schedule-all-day.mode|v2:derived;algorithm=mail-schedule-all-day-v1

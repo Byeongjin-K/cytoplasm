@@ -8,7 +8,7 @@ import sys
 from contextvars import ContextVar
 from dataclasses import replace
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
 
@@ -325,17 +325,36 @@ _WEEKDAY_KO = "월화수목금토일"
 
 
 def _event_when(start: str, end: str) -> str:
-    """``10/19(월) 13:30–14:30`` in KST, or '' when the calendar did not say."""
+    """``10/19(월) 13:30–14:30`` in KST, or '' when the calendar did not say.
+
+    Only Calendar's date form (no ``T``, exclusive end) is an all-day event; a timed
+    event that runs midnight to midnight keeps its times.
+    """
+    if "T" not in start:
+        return _all_day_when(start, end)
     try:
         begin = datetime.fromisoformat(start).astimezone(ZoneInfo("Asia/Seoul"))
     except ValueError:
         return ""
-    when = f"{begin.month}/{begin.day}({_WEEKDAY_KO[begin.weekday()]}) {begin:%H:%M}"
+    day = f"{begin.month}/{begin.day}({_WEEKDAY_KO[begin.weekday()]})"
+    when = f"{day} {begin:%H:%M}"
     try:
         finish = datetime.fromisoformat(end).astimezone(ZoneInfo("Asia/Seoul"))
     except ValueError:
         return when
     return f"{when}–{finish:%H:%M}"
+
+
+def _all_day_when(start: str, end: str) -> str:
+    try:
+        first = date.fromisoformat(start)
+        last = date.fromisoformat(end) - timedelta(days=1)
+    except ValueError:
+        return ""
+    day = f"{first.month}/{first.day}({_WEEKDAY_KO[first.weekday()]})"
+    if last <= first:
+        return f"{day} 종일"
+    return f"{day}–{last.month}/{last.day}({_WEEKDAY_KO[last.weekday()]}) 종일"
 
 
 # What the owner reads for each calendar delegation cause. The cause codes themselves

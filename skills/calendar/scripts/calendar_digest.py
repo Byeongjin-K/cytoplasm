@@ -206,8 +206,15 @@ def card_line(record: Mapping[str, object], message_id: str | None) -> str:
         if link.status is LinkStatus.AVAILABLE:
             url = str(link.url)
     title = " ".join(str(record.get("summary") or "").split())
-    return (f"DIGEST-CARD draft={record.get('id')} url={url} start={record.get('start') or '-'} "
-            f"end={record.get('end') or '-'} summary={title}")
+    start, end = record.get("start") or "-", record.get("end") or "-"
+    argv = record.get("argv")
+    if isinstance(argv, list) and calendar_core.argv_all_day(argv):
+        # An all-day draft says so with Calendar's date form (exclusive end); the digest
+        # reads the day only from that form, never from a timed midnight-to-midnight event.
+        start, end = (datetime.fromisoformat(str(value)).astimezone(calendar_core.KST).date().isoformat()
+                      for value in (start, end))
+    return (f"DIGEST-CARD draft={record.get('id')} url={url} start={start} "
+            f"end={end} summary={title}")
 
 
 def _failures() -> tuple[type[BaseException], ...]:

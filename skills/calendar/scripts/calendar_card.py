@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, assert_never
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,7 +23,11 @@ def prepare_draft(draft: DraftRecord) -> DraftRecord:
     version = draft.get("render_version", "1" if draft.get("approval_thread_id") else "4")
     try:
         if "render_version" not in draft and not draft.get("approval_thread_id"):
-            if _changes(draft).color is not None:
+            changed = _changes(draft)
+            if _all_day_create(changed):
+                # v6 shows an all-day create as the days a person reads; v4/v5 bytes stay.
+                version = "6"
+            elif changed.color is not None:
                 version = "5"
         card = prepare(lambda selected: calendar_confirm.render_confirmation(
             {**draft, "render_version": selected},
@@ -40,7 +44,7 @@ def render_envelope(draft: DraftRecord) -> str:
     from calendar_binding import reaction_instruction
 
     version = draft.get("render_version")
-    if version not in {"2", "3", "4", "5"}:
+    if version not in {"2", "3", "4", "5", "6"}:
         raise CardRenderError("unknown calendar card render version")
     if not callable(getattr(owner_message, "render", None)):
         raise CardRenderError("owner envelope unavailable")
@@ -50,13 +54,13 @@ def render_envelope(draft: DraftRecord) -> str:
         location=here, owner=owner_message.Action("react", here, reaction_instruction()),
         agent_next="승인된 캘린더 변경만 실행", recovery="not_applicable",
         detail=owner_message.Approval(None, "캘린더를 변경하지 않음"),
-        render_version="owner-ko-v2" if version in {"4", "5"} else "owner-ko-v1",
+        render_version="owner-ko-v2" if version in {"4", "5", "6"} else "owner-ko-v1",
     )
     try:
         body = owner_message.render(envelope, destination=here)
     except owner_message.OwnerMessageError as error:
         raise CardRenderError("calendar envelope cannot render") from error
-    if version in {"4", "5"}:
+    if version in {"4", "5", "6"}:
         return f"{body}\n해시: `sha256:{draft['sha256']}`"
     return f"{body}\nsha256:{draft['sha256']}"
 
@@ -172,6 +176,12 @@ def capture_context(draft: DraftRecord) -> DraftRecord:
     return captured
 
 
+def _all_day_create(changed: ChangeFields) -> bool:
+    """A create whose frozen insert carries Calendar ``date`` bounds (no time)."""
+    return (changed.action is CalendarAction.CREATE and changed.start is not None and changed.end is not None
+            and "T" not in changed.start and "T" not in changed.end)
+
+
 def change_details(draft: DraftRecord) -> str:
     """Render append-only calendar facts while preserving v2/v3 bytes."""
     match draft.get("render_version"):
@@ -180,7 +190,7 @@ def change_details(draft: DraftRecord) -> str:
         case "3":
             changed = _changes(draft)
             multiline = False
-        case "4" | "5":
+        case "4" | "5" | "6":
             changed = _changes(draft)
             multiline = True
         case _:
@@ -203,17 +213,22 @@ def change_details(draft: DraftRecord) -> str:
         case unreachable:
             assert_never(unreachable)
     lines = [action]
+    all_day = draft.get("render_version") == "6" and _all_day_create(changed)
     for label, value, replacement in values:
         suffix = markers[replacement is not None]
         shown = value or "(저장된 값 없음)"
-        if multiline and label in {"시작", "종료"} and value:
+        if multiline and all_day and label in {"시작", "종료"} and value:
+            # Calendar's all-day end date is exclusive; the card shows the last day a person reads.
+            day = date.fromisoformat(value) - timedelta(days=label == "종료")
+            shown = f"{day.isoformat()} (종일)"
+        elif multiline and label in {"시작", "종료"} and value:
             shown = _display_time(value)
         lines.append(f"{label}: {shown}{suffix}")
     if changed.color is not None:
         from automation.calendar_default_color import color_label
         from automation.interop.approval_card import CardRenderError
 
-        if draft.get("render_version") != "5":
+        if draft.get("render_version") not in {"5", "6"}:
             raise CardRenderError("calendar color requires card version 5")
         lines.append(f"색: {color_label(changed.color)}")
     if not multiline:
