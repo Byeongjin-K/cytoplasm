@@ -214,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--auto-write", default="off", help="릴리스 호스트의 자동 쓰기 종류")
     parser.add_argument("--ledger", choices=("on", "off"), default="off")
     parser.add_argument("--mail-html-reply", choices=("on", "off"), default="off")
+    parser.add_argument("--mail-reply-closing", choices=("keep", "omit"), default="keep")
     parser.add_argument("--calendar-default-color", choices=("off", *(str(i) for i in range(1, 12))), default="off")
     parser.add_argument("--document-ocr", choices=("on", "off"), default="off")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
@@ -239,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
                                  peer_retired=args.peer_retired == "retired",
                                  omo_relay_mode=args.omo_relay,
                                  **({"mail_html_reply": args.mail_html_reply} if args.mail_html_reply == "on" else {}),
+                                 **({"mail_reply_closing": args.mail_reply_closing}
+                                    if args.mail_reply_closing == "omit" else {}),
                                  **({"calendar_default_color": args.calendar_default_color}
                                     if args.calendar_default_color != "off" else {}),
                                  **({"document_ocr": args.document_ocr} if args.document_ocr == "on" else {}),

@@ -201,6 +201,16 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
         # Before the first release there is no marker; that is the plain-text default.
         state = "ok" if mode == "off" and have == "-" else _state(want, have)
         return _Seen(want, want if state == "ok" else have, state)
+    if decl.attr("algorithm") == "mail-reply-closing-v1":
+        mode = _cache.get("mail_reply_closing", "keep")
+        if mode not in ("keep", "omit"):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("sha", decl.destination))
+        have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
+        # Before the first release there is no marker; that is today's closing.
+        state = "ok" if mode == "keep" and have == "-" else _state(want, have)
+        return _Seen(want, want if state == "ok" else have, state)
     if decl.attr("algorithm") == "calendar-default-color-v1":
         from automation.calendar_default_color import COLORS
 
@@ -354,6 +364,7 @@ def collect(
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
+    mail_reply_closing: str = "keep",
     calendar_default_color: str = "off",
     document_ocr: str = "off",
     report_hub: str = "on",
@@ -384,6 +395,7 @@ def collect(
     cache.update({"report-hub": report_hub, "hermes-dashboard": hermes_dashboard})
     cache["omo_relay_mode"] = omo_relay_mode
     cache["mail_html_reply"] = mail_html_reply
+    cache["mail_reply_closing"] = mail_reply_closing
     cache["calendar_default_color"] = calendar_default_color
     cache["document_ocr"] = document_ocr
     cache["owner_timers_off"] = owner_timers_off
@@ -429,6 +441,7 @@ def observe_node(
     agent_chat_channel: str = "off",
     omo_relay_mode: str = "off",
     mail_html_reply: str = "off",
+    mail_reply_closing: str = "keep",
     calendar_default_color: str = "off",
     document_ocr: str = "off",
     report_hub: str = "on",
@@ -447,4 +460,5 @@ def observe_node(
                    owner_timers_off=owner_timers_off,
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
                    omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply,
+                   mail_reply_closing=mail_reply_closing,
                    calendar_default_color=calendar_default_color, document_ocr=document_ocr)
