@@ -1,6 +1,6 @@
 """Release-bound opt-in: a mail that names a day but no time becomes an all-day draft.
 
-Owner decision 2026-10-23 (Q334): "응, 종일 일정 초안으로 (카드가 조금 늘어남)".
+Proposed in PR #185; turning it on is the release approval of the switch below.
 Absent or ``off`` keeps today's behaviour byte for byte: the classify prompt asks for a
 schedule line only when the mail names both a date and a time, and the calendar re-asks
 (exit 5) for a line without a time. Under ``on`` the classify prompt also asks for a
