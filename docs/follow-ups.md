@@ -431,3 +431,9 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 - **시각 있는 경로는 `2025년 11월 18일 오후 3시` 의 연도를 버리고 올해(또는 내년)로 잡는다** — 종일 경로는 이제 `YYYY년 M월 D일` 을 읽고 지난 연도를 거부하지만, 시각 경로(소유자 지시 포함)는 PR 전부터 `M월 D일` 만 본다 → `calendar_core.resolve_relative_day` 가 `YYYY년 M월 D일` 을 함께 읽게 한다(꺼짐 동작이 바뀌므로 따로). 영향: 연도를 적은 시각 일정이 다른 해로 잡힐 수 있음 · 심각도 중.
 - **종일 경로가 `아침`·`점심`·`저녁` 같은 때 낱말은 되묻지 않는다** — 이번 범위는 `오전`/`오후` 만이다 → 때 낱말 목록을 정해 같은 되묻기로 보낸다. 영향: 스위치 켠 뒤 `11월 18일 저녁 회식` 이 종일 초안이 됨 · 심각도 낮음.
 - **`test_document_ocr_relay.py::test_relay_hands_the_file_over_and_prints_the_answer` 가 가끔 실패한다** — main 2c7f20d 단독 실행에서 9번 중 1번, 전체 로컬 CI 에서 1번 빈 출력으로 실패했다 → 비결정 원인을 찾아 고친다. 영향: 로컬 CI 재실행 · 심각도 낮음.
+
+## 기관메일 수집 반복 실패 원인 조사에서 남긴 것 (2026-10-24)
+
+- **시간 초과 stderr 가 「분류 안 됨」으로 남는다** — 수집 실패의 `failure_signature` 표지는 대소문자를 가린 `Timeout` 만 찾아 `CDP command timed out`·`Operation timed out` 이 `unclassified`, 오류 코드는 인증·브라우저 미정(`auth_or_browser_error`)이 된다 → `mailon_interface.failure_signatures` 와 `mailon_failure.BROWSER_SIGNATURES` 에 시간 초과 표지를 더한다(인터페이스 문서와 함께). 영향: 진단 문구만, 수집 동작 무관. 심각도 낮음.
+- **보낸메일함을 매 수집마다 찾지 못하고 건너뛴다** — 10-24 수집 로그의 모든 실행이 「folder 보낸메일함 unresolvable … skipping (fail-open)」 경고를 남긴다 → 폴더 해석 경로를 실측으로 다시 본다. 영향: 보낸 메일 새 줄이 저장되지 않을 수 있음, 받은메일함 수집은 정상. 심각도 중간.
+- **coordination-confirm-watch 가 1분마다 「pending draft is unavailable」을 남긴다** — 2026-08-16 대기 확인 한 건의 초안 파일이 없어 10-21부터 4,539번 같은 줄이 journal 에 쌓였다(종료코드 0, 디스코드 글 없음) → 초안 없는 대기 레코드를 만료로 닫거나 정리 명령을 둔다. 영향: 로그 잡음, 다른 조율 확인은 그 뒤에 막히는지 확인 필요. 심각도 중간.
