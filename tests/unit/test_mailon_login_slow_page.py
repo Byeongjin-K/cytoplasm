@@ -130,6 +130,23 @@ def test_a_page_that_never_becomes_usable_fails_without_submitting(clock: _Clock
     assert page.submits == 0
 
 
+def test_a_form_that_never_came_gets_one_more_open_before_submitting(clock: _Clock) -> None:
+    # 2026-10-21 15:41 KST: the page opened but the fields never came, and that sync failed.
+    page = _Page(clock, 10_000.0)
+    opens: list[str] = []
+
+    def reopen(url: str) -> None:
+        opens.append(url)
+        if len(opens) == 2:
+            page.ready_at = clock.now
+
+    page.open = reopen  # type: ignore[method-assign]
+    login_mod.login(page, _Config())  # type: ignore[arg-type]
+
+    assert len(opens) == 2
+    assert page.submits == 1
+
+
 def test_a_non_timeout_fill_error_is_not_retried(clock: _Clock) -> None:
     page = _Page(clock, 0.0)
 

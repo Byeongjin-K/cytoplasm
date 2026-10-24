@@ -131,7 +131,12 @@ def _on_login_page(url: str) -> bool:
     return _LOGIN_PATH in url
 
 
-_OPEN_TIMED_OUT = "Operation timed out"
+# A slow mailon.kr also times the open out *before* the browser shows the login page, as
+# `Operation timed out` or `CDP command timed out: Page.enable` (node 2026-10-24 19:30 KST: one
+# failed sync after 475 opens that week with p90 27 s, max 87 s). Nothing has been typed yet, so
+# opening again is safe; the next 10-minute tick used to be the only retry.
+_OPEN_ATTEMPTS = 3
+_OPEN_RETRY_DELAY_SECONDS = 5.0
 
 # Slow-login budget (node sync logs, 178 logins in 2026-10): opening the page took p50 5.3 s,
 # p90 27 s, max 57.6 s, and `wait --load domcontentloaded` never resolved (it timed out at 25 s
@@ -207,24 +212,36 @@ def _fill_credentials(browser: AgentBrowser, cfg: Config) -> None:
 
 
 def _open_login_page(browser: AgentBrowser, cfg: Config) -> None:
-    """Open the login page, tolerating only a load timeout that already reached it.
+    """Open the login page; a timed-out open continues if it got there, else opens again.
 
     agent-browser's `open` waits for the full page load under a 25 s action
     limit, and mailon.kr regularly takes longer while the login form itself is
     already rendered (2026-10-02: 3 of 6 opens timed out, the form was there
-    6 of 6). Any other failure, or a timeout that never reached the login
-    path, still raises.
+    6 of 6). A timeout that has not reached the login path yet opens the page
+    again, at most `_OPEN_ATTEMPTS` times. Any other failure still raises at once.
     """
-    log.info("opening login page: %s", cfg.login_url)
-    try:
-        browser.open(cfg.login_url)
-    except BrowserError as error:
-        if _OPEN_TIMED_OUT not in str(error):
-            raise
-        url = browser.current_url()
-        if not _on_login_page(url):
-            raise
-        log.warning("login page open timed out after reaching %s; continuing", url)
+    for attempt in range(1, _OPEN_ATTEMPTS + 1):
+        log.info("opening login page: %s", cfg.login_url)
+        try:
+            browser.open(cfg.login_url)
+            return
+        except BrowserError as error:
+            if not _timed_out(error):
+                raise
+            try:
+                url = browser.current_url()
+            except BrowserError as probe:
+                if not _timed_out(probe):
+                    raise
+                url = ""
+            if _on_login_page(url):
+                log.warning("login page open timed out after reaching %s; continuing", url)
+                return
+            if attempt == _OPEN_ATTEMPTS:
+                raise
+            log.warning("login page open timed out before reaching it (attempt %d/%d); retrying in %.0fs",
+                        attempt, _OPEN_ATTEMPTS, _OPEN_RETRY_DELAY_SECONDS)
+            time.sleep(_OPEN_RETRY_DELAY_SECONDS)
 
 
 def login(browser: AgentBrowser, cfg: Config) -> None:
@@ -241,7 +258,13 @@ def login(browser: AgentBrowser, cfg: Config) -> None:
     """
     _open_login_page(browser, cfg)
     log.info("opened; waiting for the login fields")
-    _wait_for_form(browser)
+    try:
+        _wait_for_form(browser)
+    except LoginError:
+        # 2026-10-21 15:41 KST: the page opened but the fields never came; nothing typed yet.
+        log.warning("login form did not appear; opening the login page once more")
+        _open_login_page(browser, cfg)
+        _wait_for_form(browser)
 
     log.info("dismissing popups")
     _dismiss_popups(browser)

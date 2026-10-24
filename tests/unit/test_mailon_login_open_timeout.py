@@ -44,15 +44,23 @@ _TIMEOUT = (
 )
 
 
+_CDP_ENABLE = (
+    "agent-browser failed (1): cmd=open https://mailon.kr/ stderr=✗ CDP command timed out: Page.enable"
+)
+
+
 class _Browser:
-    def __init__(self, *, open_error: str | None, url: str) -> None:
+    def __init__(self, *, open_error: str | None, url: str, failing_opens: int = 99) -> None:
         self._open_error = open_error
         self._url = url
+        self._failing_opens = failing_opens
         self.url_reads = 0
+        self.opens = 0
 
     def open(self, url: str) -> None:
         self.opened = url
-        if self._open_error is not None:
+        self.opens += 1
+        if self._open_error is not None and self.opens <= self._failing_opens:
             raise BrowserError(self._open_error)
 
     def current_url(self) -> str:
@@ -73,11 +81,31 @@ def test_a_timed_out_open_that_reached_the_login_form_continues() -> None:
     assert browser.url_reads == 1
 
 
-def test_a_timed_out_open_that_never_reached_the_login_page_still_fails() -> None:
-    browser = _Browser(open_error=_TIMEOUT, url="about:blank")
+@pytest.fixture(autouse=True)
+def _no_wait(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    waits: list[float] = []
+    monkeypatch.setattr(login_mod.time, "sleep", waits.append)
+    return waits
+
+
+@pytest.mark.parametrize("error", [_TIMEOUT, _CDP_ENABLE])
+def test_a_timed_out_open_that_never_reached_the_login_page_still_fails(error: str) -> None:
+    browser = _Browser(open_error=error, url="about:blank")
 
     with pytest.raises(BrowserError):
         login_mod._open_login_page(browser, _Config())  # type: ignore[arg-type]
+    assert browser.opens == login_mod._OPEN_ATTEMPTS
+
+
+@pytest.mark.parametrize("error", [_TIMEOUT, _CDP_ENABLE])
+def test_a_timed_out_open_before_the_login_page_opens_again(error: str, _no_wait: list[float]) -> None:
+    # 2026-10-24 19:30 KST: the first open timed out on Page.enable and the sync failed.
+    browser = _Browser(open_error=error, url="about:blank", failing_opens=1)
+
+    login_mod._open_login_page(browser, _Config())  # type: ignore[arg-type]
+
+    assert browser.opens == 2
+    assert _no_wait == [login_mod._OPEN_RETRY_DELAY_SECONDS]
 
 
 def test_any_other_open_failure_still_fails_even_on_the_login_page() -> None:
@@ -89,6 +117,7 @@ def test_any_other_open_failure_still_fails_even_on_the_login_page() -> None:
     with pytest.raises(BrowserError):
         login_mod._open_login_page(browser, _Config())  # type: ignore[arg-type]
     assert browser.url_reads == 0
+    assert browser.opens == 1
 
 
 def test_a_clean_open_does_not_second_guess_the_url() -> None:
