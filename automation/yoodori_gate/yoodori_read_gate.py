@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import calendar
 import http.client
 import json
 import os
@@ -28,6 +29,7 @@ HOME = Path.home()
 LIVE = Path("/srv/autophagy-skills/live")
 RELEASE = Path("/srv/autophagy-agent-current")
 LOG = HOME / ".local/state/yoodori-gate.log"
+MAIL_DRAFTS = HOME / ".hermes/mail-triage/drafts"
 TIMEOUT = 150
 ENV = {
     "HOME": str(HOME),
@@ -39,6 +41,9 @@ ENV = {
 _INT = re.compile(r"[0-9]{1,3}")
 _UID = re.compile(r"[0-9]{1,20}")
 _REPLY_KEY = re.compile(r"[0-9]{4}-[0-9]{4}-[0-9]{1,3}")
+_DRAFT_ID = re.compile(r"[0-9a-f]{6}")
+_CARD_CALL = re.compile(r"(\S+) (?:mail-compose|mail-draft) rc=0 s=([0-9.]+)")
+_STAMP = "%Y-%m-%dT%H:%M:%SZ"
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 _SHELL = re.compile(r"[;&|`$<>\\]")
 STAGING = HOME / ".local/share/yoodori-staging"
@@ -144,6 +149,8 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "Daily conversation summary: day-summary <YYYY-MM-DD> (body on stdin; overwrites that day's note).\n"
          "Release reads: release-notes <vX.Y.Z>. Plaud notes written: plaud-written <n 1-50>.\n"
          "Correction ledger read: glossary-list [--kind lifelog|meeting] (wrong,right rows; no kind = all).\n"
+         "Withdraw your own pending mail card: card-withdraw <draft id> <reason...> (only a card this gate\n"
+         "  posted with mail-compose or mail-draft and the owner has not decided; never sends or approves).\n"
          "Dashboard order: order-status <n> <" + "|".join(ORDER_STATUSES) + ">"
          " [--dori <name>] [--post-url <https link>] [--note <text>].\n"
          "Private upload: stage <name> (file bytes on SSH stdin, at most 64 MiB).\n"
@@ -486,6 +493,41 @@ def _glossary_kind(args: list[str]) -> tuple[str, list[str]]:
     return args[at + 1], [*args[:at], *args[at + 2:]]
 
 
+def posted_by_gate(draft_id: str) -> bool:
+    """True iff the draft was created during a mail-compose/mail-draft call this gate logged rc=0.
+
+    Owner Q367: YooDori withdraws only its own cards. The gate log is written by this forced
+    command alone, so a card raised another way (another Dori, a digest reaction, a release) has
+    no matching call. A missing or unreadable draft or log refuses.
+    """
+    try:
+        created = json.loads((MAIL_DRAFTS / f"{draft_id}.json").read_text(encoding="utf-8"))["created"]
+        at = calendar.timegm(time.strptime(created, _STAMP))
+        lines = LOG.read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    for line in lines:
+        call = _CARD_CALL.fullmatch(line)
+        if call:
+            try:
+                end = calendar.timegm(time.strptime(call[1], _STAMP))
+            except ValueError:
+                continue
+            if end - float(call[2]) - 1 <= at <= end:
+                return True
+    return False
+
+
+def card_withdraw(args: list[str]) -> list[str]:
+    if len(args) < 2 or not _DRAFT_ID.fullmatch(args[0]) or any(w.startswith("-") for w in args[1:]):
+        raise Refused("card-withdraw needs <draft id> <reason...>")
+    reason = _text(args[1:], 200)
+    if not posted_by_gate(args[0]):
+        raise Refused("not a mail card YooDori posted through this gate (or no such card)")
+    return ["/usr/bin/python3", str(LIVE / "mail/scripts/triage_cli.py"), "withdraw",
+            "--draft", args[0], "--reason", reason, "--by", "유돌"]
+
+
 def order_status(args: list[str]) -> list[str]:
     """``order-update`` argv for one dashboard order; the writer is always 유돌."""
     if len(args) < 2 or not _ORDER_NUMBER.fullmatch(args[0]) or args[1] not in ORDER_STATUSES:
@@ -512,6 +554,8 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
     name, args = words[0], words[1:]
     if name == "order-status":
         return name, order_status(args), RELEASE
+    if name == "card-withdraw":
+        return name, card_withdraw(args), RELEASE
     if name == "release-notes":
         if len(args) != 1 or _RELEASE_TAG.fullmatch(args[0]) is None:
             raise Refused("release-notes needs <vX.Y.Z>")
@@ -781,7 +825,7 @@ def main() -> int:
             print(f"STAGED {path.name} sha256={digest} bytes={size} path={path} original={argv[1]}")
             rc = 0
         else:
-            env = card_env(HOME, RELEASE, ENV) if name in CARD_COMMANDS else ENV
+            env = card_env(HOME, RELEASE, ENV) if name in (*CARD_COMMANDS, "card-withdraw") else ENV
             if name == "obsidian-request":
                 argv = stage_body(argv, STAGING)
             if name == "calendar-request":

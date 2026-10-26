@@ -52,6 +52,7 @@ peer는 기존 `hermes-memory-profile-with-recall-v1`을 유지한다.
 유돌은 SSH 강제명령으로 기존 읽기(`calendar`, `mail-list`, `mail-get`, `recall`, `status`),
 기관메일 이름→주소 조회(`mail-resolve <이름>`, [소개](유돌-이름으로-기관메일-주소.md)),
 기관메일 검색(`mail-search <낱말...> [--limit n]`, [소개](유돌-기관메일-검색.md)),
+자기가 올린 대기 중 메일 카드 거두기(`card-withdraw <draft id> <사유>`, [소개](유돌-카드-거두기.md)),
 Gmail 읽기(`gmail-list`, `gmail-get`)와
 아래 **승인 요청 7종**, 노드 비공개 폴더로의 `stage` 파일 전달만 할 수 있다.
 실행·승인·발송·워처 호출 권한은 없다.

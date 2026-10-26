@@ -273,7 +273,7 @@ def discard_draft(draft_id: str) -> None:
     path.unlink()
 
 
-def expire_draft(draft_id: str, message_id: str, reason: str) -> None:
+def expire_draft(draft_id: str, message_id: str, reason: str, extra: dict | None = None) -> None:
     """Make one still-bound pending draft terminal without recording owner approval."""
     path = _draft_path(draft_id)
     if path is None:
@@ -281,7 +281,7 @@ def expire_draft(draft_id: str, message_id: str, reason: str) -> None:
     current = json.loads(path.read_text(encoding="utf-8"))
     if current.get("status") != "pending" or current.get("message_id", "") != message_id:
         raise GateError("드래프트 만료 중 승인 바인딩 변경 감지 — 거부", 3)
-    write_json(path, {**current, "status": "expired", "expired_reason": reason})
+    write_json(path, {**current, **(extra or {}), "status": "expired", "expired_reason": reason})
 
 
 def list_drafts() -> list[dict]:
