@@ -468,6 +468,72 @@ def fill_body_via_editor_api(browser: TriggerBrowser, body: str, html: str | Non
         log.warning("editor-API body refill failed: %s", str(error)[:150])
 
 
+# 2026-10-26 (owner: "한6줄은되보여", "큰 글씨 폰트로 3줄들어가있어"): with the
+# signature placed outside the editor (#signPlaceType 1) the compose form posts
+# signUid + signContent beside the body, and the webmail server joins them as
+# body + three default-size <p><br/></p> + signature — about six body lines in
+# Gmail. The owner's signature setting holds no blank line, so the only lever is
+# what we post: append the webmail's own signContent (read here, never stored in
+# code) after the body with one body-sized blank line, and set the compose to the
+# webmail's own "사용안함" state (signUid -1, signContent empty) so the server
+# adds nothing.  One eval does it all and puts everything back if any step does
+# not read back, so a failure sends the mail exactly as before.
+SIGNATURE_SPACER = '<div style="font-family:\uad74\ub9bc; font-size:10pt; line-height:150%"><br></div>'
+
+_SIGNATURE_INTO_BODY_JS = r"""
+JSON.stringify((() => { /* signature into body */
+  const spacer = __SPACER__;
+  const c = window._compose, ed = window.mail_editor;
+  if (!c || typeof c.getForm !== 'function' || !ed || typeof ed.getContent !== 'function') {
+    return {moved: false, reason: 'compose-unavailable'};
+  }
+  const place = document.querySelector('#signPlaceType');
+  if (!place || String(place.value) !== '1') return {moved: false, reason: 'signature-not-outside-editor'};
+  try { if (typeof ed.getMode === 'function' && ed.getMode() === 'text') return {moved: false, reason: 'text-mode'}; }
+  catch (e) { return {moved: false, reason: 'mode-unreadable'}; }
+  const sel = document.querySelector('#mcp_wrap select[name="signUid"]');
+  const ipt = document.querySelector('#mcp_wrap [name="signContent"]');
+  if (!sel || !ipt) return {moved: false, reason: 'signature-fields-missing'};
+  const sign = String(ipt.value || '');
+  if (String(sel.value) === '-1' || !sign.trim()) return {moved: false, reason: 'no-signature'};
+  let base = '';
+  try { base = String(ed.getContent()); } catch (e) { return {moved: false, reason: 'content-unreadable'}; }
+  if (!base || base.indexOf('undefined') !== -1) return {moved: false, reason: 'content-unreadable'};
+  const combined = base + spacer + sign;
+  const origGet = ed.getContent, origUid = sel.value;
+  const restore = (why) => {
+    ed.getContent = origGet; sel.value = origUid; ipt.value = sign;
+    return {moved: false, reason: why};
+  };
+  try {
+    ed.getContent = function() { return combined; };
+    sel.value = '-1';
+    if (typeof c.signSelected === 'function') c.signSelected(sel);
+    ipt.value = '';
+    const p = c.getForm();
+    if (String(p.content) !== combined) return restore('content-not-posted');
+    if (String(p.signUid) !== '-1' || String(p.signContent || '') !== '') return restore('signature-still-posted');
+  } catch (e) { return restore('error:' + String(e).slice(0, 80)); }
+  return {moved: true, signature_chars: sign.length};
+})())
+"""
+
+
+def move_signature_into_body(browser: TriggerBrowser) -> dict:
+    """Post the webmail signature right under the body instead of letting the
+    server put three large blank paragraphs before it; never raises."""
+    script = _SIGNATURE_INTO_BODY_JS.replace("__SPACER__", json.dumps(SIGNATURE_SPACER))
+    try:
+        raw = _unwrap(browser.eval_js(script))
+        result = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception as error:
+        result = {"moved": False, "reason": f"eval-failed:{type(error).__name__}"}
+    if not isinstance(result, dict):
+        result = {"moved": False, "reason": "unparseable"}
+    log.info("signature placement: %s", json.dumps(result, ensure_ascii=False)[:200])
+    return result
+
+
 _RECIPIENT_TOKENIZE_TEMPLATE = r"""
 (() => {
   const groups = __GROUPS__;
