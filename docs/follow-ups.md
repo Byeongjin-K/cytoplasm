@@ -437,3 +437,7 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 - **시간 초과 stderr 가 「분류 안 됨」으로 남는다** — 수집 실패의 `failure_signature` 표지는 대소문자를 가린 `Timeout` 만 찾아 `CDP command timed out`·`Operation timed out` 이 `unclassified`, 오류 코드는 인증·브라우저 미정(`auth_or_browser_error`)이 된다 → `mailon_interface.failure_signatures` 와 `mailon_failure.BROWSER_SIGNATURES` 에 시간 초과 표지를 더한다(인터페이스 문서와 함께). 영향: 진단 문구만, 수집 동작 무관. 심각도 낮음.
 - **보낸메일함을 매 수집마다 찾지 못하고 건너뛴다** — 10-24 수집 로그의 모든 실행이 「folder 보낸메일함 unresolvable … skipping (fail-open)」 경고를 남긴다 → 폴더 해석 경로를 실측으로 다시 본다. 영향: 보낸 메일 새 줄이 저장되지 않을 수 있음, 받은메일함 수집은 정상. 심각도 중간.
 - **coordination-confirm-watch 가 1분마다 「pending draft is unavailable」을 남긴다** — 2026-08-16 대기 확인 한 건의 초안 파일이 없어 10-21부터 4,539번 같은 줄이 journal 에 쌓였다(종료코드 0, 디스코드 글 없음) → 초안 없는 대기 레코드를 만료로 닫거나 정리 명령을 둔다. 영향: 로그 잡음, 다른 조율 확인은 그 뒤에 막히는지 확인 필요. 심각도 중간.
+
+## 기관메일 빈 줄 고침 릴리스에서 남긴 것 (2026-10-26, v2.7.0)
+
+- **대기 중인 릴리스 카드를 자동 회수하고 새 카드를 같은 스레드에 올리면 스레드 이름이 「⌛ 만료」로 남는다** — `release.sh` 의 낡은 대기 요청 복구(binding-mismatch → `release_abandon.abandon` 이 `ThreadOutcome.EXPIRED` 로 스레드를 닫음 → 요청을 한 번 다시 게시)가 새 카드를 같은 요청 스레드에 올리는데, 제목은 만료 접두어를 단 채 그대로다. v2.7.0 에서 살아 있는 카드가 「⌛ 만료 · 🏷️ 릴리스 v2.7.0」 스레드 아래 올라갔다 → 회수 뒤 다시 게시할 때 스레드 제목을 살아 있는 판으로 되돌리거나 새 요청 스레드를 연다(`approval_surface.request_thread_title` 한 곳에서). 영향: 형이 살아 있는 카드를 만료로 보고 지나칠 수 있음 · 심각도 중.
