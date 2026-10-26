@@ -583,6 +583,15 @@ def cmd_discard(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_withdraw(args: argparse.Namespace) -> int:
+    """The requester takes back its own pending card; never a send or an approval (owner Q367)."""
+    import triage_supersede
+
+    triage_supersede.withdraw(args.draft, args.reason, args.by)
+    print(f"WITHDRAWN draft={args.draft} by={args.by}")
+    return 0
+
+
 def cmd_list_drafts(_args: argparse.Namespace) -> int:
     for record in triage_gate.list_drafts():
         print(f"DRAFT id={record['id']} status={record['status']} "
@@ -791,6 +800,12 @@ def build_parser() -> argparse.ArgumentParser:
     discard = sub.add_parser("discard", help="초안 폐기 (승인 거부, 발송 0건)")
     discard.add_argument("--draft", required=True)
     discard.set_defaults(func=cmd_discard)
+
+    withdraw = sub.add_parser("withdraw", help="요청자가 자기 대기 카드를 거둠 (발송 0건, 형이 결정한 카드는 거부)")
+    withdraw.add_argument("--draft", required=True)
+    withdraw.add_argument("--reason", required=True)
+    withdraw.add_argument("--by", required=True)
+    withdraw.set_defaults(func=cmd_withdraw)
 
     sub.add_parser("list-drafts", help="초안 목록 (마스킹)").set_defaults(func=cmd_list_drafts)
     sub.add_parser("mode", help="유효 mail-mode + 실패 카운터").set_defaults(func=cmd_mode)
