@@ -2,7 +2,7 @@
 """W4-1 institutional-mail READ-ONLY wrapper public command surface.
 
 Thin subprocess wrapper over mailon (`python -m mailon.main …`). Stage 1 is
-strictly READ-ONLY: `list` / `get` / `classify` / `status` / `resolve`.
+strictly READ-ONLY: `list` / `get` / `search` / `classify` / `status` / `resolve`.
 
 The cached mailon interface and read/classification helpers live in cohesive
 sibling modules and are re-exported here for stable W4-2 public imports. W4-2
@@ -156,6 +156,62 @@ def cmd_get(args) -> int:
     return _emit(payload, 0)
 
 
+SNIPPET_CONTEXT = 60
+
+
+def _snippet(body: str, word: str) -> str:
+    flat = " ".join(body.split())
+    at = flat.casefold().find(word)
+    start = max(at - SNIPPET_CONTEXT, 0)
+    return flat[start:at + len(word) + SNIPPET_CONTEXT]
+
+
+def cmd_search(args) -> int:
+    """Every query word must appear in the subject, sender or saved Markdown body (case-insensitive).
+
+    All folders; mails matched by subject or sender alone come first, then body matches, each newest
+    first, so a remembered subject is not pushed past the limit by mails that merely mention the words.
+    Read-only (state.db opened mode=ro, Markdown only read). A mail whose Markdown file is missing is
+    still matched by subject and sender and counted in `without_body`.
+    """
+    cfg = _cfg()
+    words = [word.casefold() for word in args.query.split()]
+    if not words:
+        return _error("search", "usage_error", "--query에 찾을 낱말이 필요.")
+    rows = _db_rows(cfg, "1 = 1", (), None)
+    if not rows:
+        return _error("search", "not_found",
+                      "state.db가 없거나 비어 있음. 먼저 `list --sync`로 수집할 것.")
+    by_head: list[dict] = []
+    by_body: list[dict] = []
+    without_body = 0
+    for row in rows:
+        md_path = cfg["repo"] / row["markdown_path"] if row["markdown_path"] else None
+        has_body = md_path is not None and md_path.is_file()
+        without_body += not has_body
+        if len(by_head) >= args.limit:
+            continue
+        fields = {"subject": (row["subject"] or "").casefold(),
+                  "sender": (row["sender"] or "").casefold()}
+        rest = [word for word in words if not any(word in text for text in fields.values())]
+        body = md_path.read_text(encoding="utf-8", errors="replace") if rest and has_body else ""
+        if any(word not in body.casefold() for word in rest) or (rest and len(by_body) >= args.limit):
+            continue
+        mail = _render_mail(row, args.masked, cfg["mask_salt"])
+        mail["matched_in"] = [name for name, text in fields.items()
+                              if any(word in text for word in words)] + (["body"] if rest else [])
+        if rest and not args.masked:
+            mail["snippet"] = _snippet(body, rest[0])
+        (by_body if rest else by_head).append(mail)
+    mails = (by_head + by_body)[:args.limit]
+    payload = {
+        "wrapper": WRAPPER_VERSION, "command": "search", "status": "ok",
+        "masked": args.masked, "limit": args.limit, "searched": len(rows),
+        "without_body": without_body, "count": len(mails), "mails": mails,
+    }
+    return _emit(payload, 0)
+
+
 def cmd_classify(args) -> int:
     cfg = _cfg()
     if args.uid:
@@ -248,7 +304,7 @@ def cmd_resolve(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="mail_wrapper.py",
-        description="W4-1 institutional-mail READ-ONLY wrapper (list/get/classify/resolve/status).",
+        description="W4-1 institutional-mail READ-ONLY wrapper (list/get/search/classify/resolve/status).",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -265,6 +321,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="with --body: also the stored original HTML (reply quotes)")
     s.add_argument("--masked", action="store_true", default=False)
     s.set_defaults(fn=cmd_get)
+
+    s = sub.add_parser("search", help="find mail in every folder by subject, sender or saved body")
+    s.add_argument("--query", required=True)
+    s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--masked", action="store_true", default=False)
+    s.set_defaults(fn=cmd_search)
 
     s = sub.add_parser("classify", help="metadata-only triage (subject/sender)")
     s.add_argument("--uid")
