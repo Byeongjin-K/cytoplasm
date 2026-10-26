@@ -351,6 +351,13 @@ class ComposeSender:
             raise SendSafetyError(
                 "compose form missing body/recipients (would send garbage) — "
                 "form dump logged", cause="compose_form_incomplete")
+        if send_trigger.move_signature_into_body(self._browser).get("moved"):
+            form_ok, form_dump = send_trigger.verify_compose_form(
+                self._browser, request.recipients, request.body, cc=request.cc, **bcc_options)
+            if not form_ok:
+                raise SendSafetyError(
+                    "compose form changed after the signature move — form dump logged",
+                    cause="compose_form_incomplete")
         self._step = "send_trigger"
         baseline_ids = send_verify.request_ids(self._browser.network_requests())
         send_started_ms = self._now_ms()
