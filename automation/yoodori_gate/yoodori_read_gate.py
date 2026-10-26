@@ -135,6 +135,8 @@ _ORDER_FLAGS = {"--dori": 20, "--post-url": 300, "--note": 300}
 
 USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "mail-get <uid> [--body], recall <question...>, status.\n"
+         "Institutional mail search: mail-search <words...> [--limit n 1-50, default 20] (every folder,\n"
+         "  subject/sender/saved body, all words must match, newest first; read-only).\n"
          "Institutional mail address by name: mail-resolve <name> (webmail autocomplete, read-only).\n"
          "Gmail reads: gmail-list <n 1-50> [query...], gmail-get <hex id> [--body].\n"
          "Obsidian read: note-get <PARA path>.\n"
@@ -560,6 +562,14 @@ def build(words: list[str]) -> tuple[str, list[str], Path]:
         if not args or len(args) > 2 or not _UID.fullmatch(args[0]) or (len(args) == 2 and args[1] != "--body"):
             raise Refused("mail-get needs <uid> [--body]")
         return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "get", *args], HOME
+    if name == "mail-search":
+        limit = "20"
+        if len(args) >= 2 and args[-2] == "--limit":
+            limit, args = _int(args[-1], 1, 50), args[:-2]
+        if not args or any(word.startswith("-") for word in args):
+            raise Refused("mail-search needs <query...> [--limit n]")
+        return name, [py, str(LIVE / "mail/scripts/mail_wrapper.py"), "search", "--limit", limit,
+                      "--query", _text(args, 200)], HOME
     if name == "mail-resolve":
         if len(args) != 1 or args[0].startswith("-"):
             raise Refused("mail-resolve needs exactly one <name>")

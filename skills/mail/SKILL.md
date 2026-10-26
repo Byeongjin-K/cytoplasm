@@ -53,6 +53,9 @@ python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py classify --uid <
 # 수신자 이름→이메일 해석 (기관 웹메일 자동완성 기반, READ-ONLY; 필드를 명시적으로 가릴 때는 --masked)
 python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py resolve --name "<이름>"
 
+# 저장된 기관메일 검색 (모든 폴더, 제목·보낸 사람·저장된 본문; 낱말은 모두 맞아야 함, 대소문자 무시, READ-ONLY)
+python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py search --query "<낱말 ...>" --limit 20
+
 # mailon 상태를 JSON으로
 python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py status
 ```
@@ -61,6 +64,9 @@ stdout은 항상 **정확히 하나의 JSON 객체**다 (`"wrapper": "mail-wrapp
 기본 `list`는 받은편지함만 조회한다. `--all-folders`를 명시한 경우에만 vendor
 sync에 `--folders all`을 전달하고 DB의 모든 폴더를 조회하며, JSON에
 `"scope":"all-folders"`가 추가된다.
+`search`는 수집 없이 `state.db`와 저장된 Markdown만 읽는다. 제목·보낸 사람만으로 맞은 메일이 먼저, 본문에서만
+맞은 메일이 뒤에 오고(각각 최신순), 본문 일치에는 앞뒤 60자 `snippet`이 붙는다(`--masked`면 빠짐).
+`searched`는 찾아본 메일 수, `without_body`는 본문 파일이 없어 제목·보낸 사람으로만 찾은 메일 수다.
 
 ### 수신자 이름→이메일 해석 (resolve)
 
