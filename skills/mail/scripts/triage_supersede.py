@@ -14,12 +14,15 @@ import json
 import sys
 from datetime import UTC, datetime
 from importlib import import_module
+from urllib.error import HTTPError
 
 import triage_gate
 
 REASON = "superseded-by-newer-draft"
 NOTICE = "🔁 새 판으로 대체됨 — 이 카드는 실행되지 않습니다. 아래 새 카드에서 승인해 주세요."
 WITHDRAWN = "withdrawn-by-requester"
+#: Discord refuses to edit a message inside an archived thread with HTTP 400 and this code.
+ARCHIVED_THREAD = 50083
 
 
 def _same_request(old: dict, new: dict) -> bool:
@@ -120,8 +123,35 @@ def _notify_withdrawn(record: dict, by: str, reason: str) -> None:
 
 
 def _mark(channel_id: str, message_id: str, notice: str = NOTICE) -> None:
+    """Edit the card; a card in a closed (archived) thread is edited after reopening the thread.
+
+    2026-10-26: 28fe93 sat in a thread its release result had already archived, and the edit was
+    refused (400, code 50083), so the withdrawn card kept its live look.
+    """
     confirm = import_module("triage_confirm")
+    path = f"/channels/{channel_id}/messages/{message_id}"
     try:
-        confirm._api("PATCH", f"/channels/{channel_id}/messages/{message_id}", {"content": notice})
+        try:
+            confirm._api("PATCH", path, {"content": notice})
+        except HTTPError as error:
+            code = _discord_code(error)
+            if error.code != 400 or code != ARCHIVED_THREAD:
+                _mark_failed(message_id, f"HTTPError status={error.code} code={code}")
+                return
+            confirm._api("PATCH", f"/channels/{channel_id}", {"archived": False})
+            confirm._api("PATCH", path, {"content": notice})
     except Exception as error:  # noqa: BLE001 — the record is already terminal; the mark is cosmetic
-        print(f"MAIL-SUPERSEDE-MARK-FAIL message={message_id} err={type(error).__name__}", file=sys.stderr)
+        detail = f" status={error.code} code={_discord_code(error)}" if isinstance(error, HTTPError) else ""
+        _mark_failed(message_id, f"{type(error).__name__}{detail}")
+
+
+def _mark_failed(message_id: str, err: str) -> None:
+    print(f"MAIL-SUPERSEDE-MARK-FAIL message={message_id} err={err}", file=sys.stderr)
+
+
+def _discord_code(error: HTTPError) -> int | None:
+    try:
+        code = json.loads(error.read() or b"{}").get("code")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return code if isinstance(code, int) else None
