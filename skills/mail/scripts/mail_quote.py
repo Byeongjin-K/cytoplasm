@@ -38,7 +38,7 @@ _YAML_ESCAPE: Final = re.compile(r"\\(.)")
 
 REPLY_STYLE: Final = (
     "font-family:'맑은 고딕','Malgun Gothic',sans-serif;"
-    "font-size:10.5pt;line-height:160%;white-space:pre-wrap"
+    "font-size:10.5pt;line-height:160%"
 )
 # One argv string may not exceed 128 KiB on Linux (MAX_ARG_STRLEN); the reply and
 # the header block share the --body-html argument with the quoted original.
@@ -122,7 +122,7 @@ def render_quote_html(original: Original) -> QuoteHtml:
 
 def text_quote_html(quote: str) -> str:
     """A text quote as HTML that keeps its line breaks and spacing."""
-    return f'<div style="white-space:pre-wrap">{_text_html(quote)}</div>'
+    return f'<div>{_text_html(quote)}</div>'
 
 
 def html_body(body: str, quote_html: str) -> str:
@@ -148,7 +148,13 @@ def sanitize_html(fragment: str) -> str:
 
 
 def _text_html(text: str) -> str:
-    return html.escape(text, quote=False).replace("\n", "<br>")
+    # No white-space:pre-wrap: the webmail stores and delivers the HTML re-indented, a
+    # newline and spaces around every <br>, and pre-wrap showed them as extra blank lines
+    # and indents (2026-10-26, a one-blank-line mail arrived with each break doubled).
+    # <br> breaks the line; a run of spaces or a line-leading space keeps its width as
+    # &nbsp;, which a re-indent cannot change.
+    escaped = html.escape(text.expandtabs(4), quote=False)
+    return re.sub(r"(?m)^ | (?= )", "&nbsp;", escaped).replace("\n", "<br>")
 
 
 _DROP_WITH_CONTENT: Final = frozenset({
