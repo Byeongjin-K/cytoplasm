@@ -19,6 +19,8 @@ The contract pinned here:
 """
 from __future__ import annotations
 
+import html
+import re
 import sys
 from pathlib import Path
 
@@ -44,7 +46,7 @@ from test_mail_reply_quote import (  # noqa: E402
 
 REPLY_DIV = (
     "<div style=\"font-family:'맑은 고딕','Malgun Gothic',sans-serif;"
-    "font-size:10.5pt;line-height:160%;white-space:pre-wrap\">"
+    "font-size:10.5pt;line-height:160%\">"
 )
 
 
@@ -149,6 +151,43 @@ def test_sanitizer_keeps_formatting_links_and_inline_images() -> None:
     assert '<a href="https://example.invalid/doc">문서</a>' in cleaned
     assert f'<img alt="로고" src="{inline}">' in cleaned
     assert '<font face="굴림" size="2">작게</font><br>' in cleaned
+
+
+def _seen_lines(fragment: str) -> list[str]:
+    """The lines a recipient sees for one ``<div>`` of text the editor received.
+
+    The webmail stores and delivers the HTML re-indented: a newline and spaces around
+    every ``<br>`` (the owner's copy of the 2026-10-26 13:45 KST mail). Under
+    ``white-space:pre-wrap`` those characters are shown as more line breaks and indents;
+    under the normal rule they collapse and only ``<br>`` breaks a line.
+    """
+    match = re.fullmatch(r'<div(?: style="([^"]*)")?>(.*)</div>', fragment, re.S)
+    assert match, fragment
+    delivered = match.group(2).replace("<br>", "\n    <br/>\n")
+    if "pre-wrap" in (match.group(1) or ""):
+        lines = delivered.replace("<br/>", "\n").split("\n")
+    else:
+        lines = [line.strip(" ") for line in re.sub(r"[ \t\n]+", " ", delivered).split("<br/>")]
+    return [html.unescape(line).replace("\xa0", " ") for line in lines]
+
+
+def test_one_blank_line_between_paragraphs_reaches_the_recipient_as_one_blank_line() -> None:
+    # Given: plain text with one blank line between paragraphs (the 13:45 mail's shape)
+    body = "안녕하세요.\n\n둘째 문단입니다.\n이어지는 줄\n\n감사합니다."
+    # When: it becomes the editor HTML and the webmail re-indents it on delivery
+    seen = _seen_lines(mail_quote.html_body(body, ""))
+    # Then: the recipient sees exactly the lines that were written, no extra blank lines
+    assert seen == ["안녕하세요.", "", "둘째 문단입니다.", "이어지는 줄", "", "감사합니다."]
+
+
+def test_spaces_the_writer_typed_survive_the_re_indent() -> None:
+    seen = _seen_lines(mail_quote.html_body("가  나\n   들여쓴 줄\n\t탭", ""))
+    assert seen == ["가  나", "   들여쓴 줄", "    탭"]
+
+
+def test_text_quote_keeps_its_lines_without_doubling_them() -> None:
+    seen = _seen_lines(mail_quote.text_quote_html("-----원본 메시지-----\n제목: 안내\n\n본문 첫 줄"))
+    assert seen == ["-----원본 메시지-----", "제목: 안내", "", "본문 첫 줄"]
 
 
 def test_reply_text_is_escaped_and_keeps_its_line_breaks() -> None:
