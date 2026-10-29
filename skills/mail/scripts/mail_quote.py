@@ -99,8 +99,48 @@ def render_quote(original: Original) -> str:
         lines.append(f"참조: {original.cc}")
     lines.append(f"제목: {original.subject}")
     header = "\n".join(lines) + "\n"
-    body = _capped(original.body)
+    body = _capped(original.body if original.body_html.strip() else rejoin_runs(original.body))
     return header if not body else f"{header}\n{body}"
+
+
+# A mail collected before 2026-10-19 keeps no HTML, and MailOn stored its text with
+# get_text("\n", strip=True): a line break between every inline run, so an Outlook mail reads
+# '안녕하세요\n,\n박사님\n!'. That text never has a blank line and has lines of punctuation only.
+_PUNCTUATION_LINE: Final = re.compile(r"[,.!?;:)\]}」』…%’”]+")
+_CLOSING_START: Final = re.compile(r"[,.!?;:)\]}」』…%’”]")
+_OPENING_END: Final = tuple("([{「『<")
+_SENTENCE_END: Final = re.compile(r"[.!?。]$")
+_HEADER_LABEL: Final = re.compile(r"(?:From|Sent|To|Cc|Subject|Date|보낸 사람|받는 사람|보낸 날짜|참조|제목)\s*:", re.I)
+_LIST_START: Final = re.compile(r"[-•·*※▶►■□○●◦>]|\d{1,2}[.)]\s|\[|[①-⑳]|-----")
+# Two runs both this short are one line split by markup; a longer run is a line of its own. Chosen
+# on 31 stored mails that have both shapes: wrong breaks 1,589 -> 514, wrong joins 0 -> 203.
+_RUN_CHARS: Final = 12
+
+
+def rejoin_runs(body: str) -> str:
+    """Join the inline runs of a text stored one run per line; any other text is returned as is."""
+    lines = body.split("\n")
+    if any(not line.strip() for line in lines) or sum(
+        1 for line in lines if _PUNCTUATION_LINE.fullmatch(line.strip())
+    ) < 2:
+        return body
+    joined = [lines[0].strip()]
+    previous_run = joined[0]
+    for raw in lines[1:]:
+        run, line = raw.strip(), joined[-1]
+        if _CLOSING_START.match(run) or line.endswith(_OPENING_END):
+            joined[-1] = line + run
+        elif _HEADER_LABEL.fullmatch(previous_run):
+            joined[-1] = f"{line} {run}"
+        elif (
+            _HEADER_LABEL.match(run) or _LIST_START.match(run) or _SENTENCE_END.search(line)
+            or line.endswith("]") or len(previous_run) > _RUN_CHARS or len(run) > _RUN_CHARS
+        ):
+            joined.append(run)
+        else:
+            joined[-1] = f"{line} {run}"
+        previous_run = run
+    return "\n".join(joined)
 
 
 def with_quote(body: str, quote: str) -> str:
