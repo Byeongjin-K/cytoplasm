@@ -22,7 +22,7 @@ import html
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 from typing import Final
@@ -356,13 +356,18 @@ def _body_text(remainder: str) -> str:
 
 
 def _display_date(value: str) -> str:
-    """Show the original's date in Korea time; MailOn stores it as naive UTC (2026-10-19)."""
+    """Show the original's date in Korea time, converted once.
+
+    MailOn stores the received time naive in the mail host's local zone (``parse_millis`` uses
+    ``datetime.fromtimestamp``; the wrapper passes ``TZ`` through): UTC on a UTC host (2026-10-19),
+    KST on a host in Asia/Seoul, where reading it as UTC added 9 hours (2026-10-29).
+    """
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
         return value
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
+        parsed = parsed.astimezone()  # the host's local zone, as MailOn wrote it
     return parsed.astimezone(_SEOUL).strftime("%Y-%m-%d %H:%M")
 
 

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import sys
+import time
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -42,6 +44,17 @@ EXPECTED_HEADER = (
     f"참조: {ORIGINAL_CC}\n"
     f"제목: {ORIGINAL_SUBJECT}\n"
 )
+
+
+@pytest.fixture(autouse=True)
+def _utc_mail_host(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    # The fixtures store naive UTC, which is what MailOn writes on a UTC host; the quote reads a
+    # naive date in the host's zone, so the expected 15:12 holds on any developer machine.
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
 
 
 def _markdown(tmp_path: Path, *, body: str = ORIGINAL_BODY, cc: str = ORIGINAL_CC) -> str:
