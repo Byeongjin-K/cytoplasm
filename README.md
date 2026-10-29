@@ -129,7 +129,7 @@ action_hash : sha256:7f3c…a19b
 
 ### 도리 기본 설치
 
-신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌은 선택이며
+신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌·공돌은 선택이며
 Hermes는 설치하지 않습니다. Python 3.11 이상, 실제 설치에는 git·Bun이 필요합니다.
 봇 토큰·채널·모델 로그인은 설치별로 준비합니다.
 
@@ -138,7 +138,7 @@ python3 -m automation.install --dry-run
 python3 -m automation.install.wizard
 ```
 
-마법사 첫 항목과 빈 입력은 도리입니다. `--dori-role okdori`·`--dori-role moodori`로
+마법사 첫 항목과 빈 입력은 도리입니다. `--dori-role okdori`·`--dori-role moodori`·`--dori-role gongdori`로
 선택 역할을 더합니다. 도리 CLI·역할 설치와 기존 업무 노드의 업그레이드는 구분합니다.
 [설치 가이드](docs/guide/install.md)와 [도리 기반 메이저 소개](docs/기능소개/도리-기반-메이저.md)를
 먼저 읽으세요. 이미 전환된 노드는 설치기를 재실행하지 않고 기존 서명 릴리스로 업데이트하며,

@@ -20,7 +20,7 @@
 python3 -m automation.install --dry-run
 python3 -m automation.install.wizard
 # 선택 역할을 더하려면:
-python3 -m automation.install --role okdori --role moodori --owner-call 소유자
+python3 -m automation.install --role okdori --role moodori --role gongdori --owner-call 소유자
 ```
 
 Python 3.11 이상으로 계획을 볼 수 있고, 실제 설치에는 git·Bun이 필요하다.
@@ -314,7 +314,7 @@ python3 -m automation.install.dori --role okdori --role moodori --owner-call 형
 | `dori-skill-link` | `~/.agents/skills/dori-mode` → 포크 스킬 링크(링크가 아닌 폴더가 있으면 그대로 둔다) |
 | `dori-cli` | 포크 `scripts` 에서 `bun install`·`bun link` — `dori` 명령이 생긴다 |
 | `dori-config` | `~/.dori/config.json` 이 없을 때만 포크 예시(`--backend aoe` 기본)를 복사한다 |
-| `dori-role-<역할>` | `~/Documents/<도리>/AGENTS.md`·`avatar.md` 를 `dori/roles/` 템플릿에서 쓴다. 기본은 리드(`zzangdori`)·비서(`yoodori`), `--role okdori`·`--role moodori` 는 선택. 이미 있으면 덮지 않고 다르면 차이만 보인다(`DORI-ROLE-KEEP`) |
+| `dori-role-<역할>` | `~/Documents/<도리>/AGENTS.md`·`avatar.md` 를 `dori/roles/` 템플릿에서 쓴다. 기본은 리드(`zzangdori`)·비서(`yoodori`), `--role okdori`(카톡)·`--role moodori`(회사 업무)·`--role gongdori`(연구) 는 선택. 이미 있으면 덮지 않고 다르면 차이만 보인다(`DORI-ROLE-KEEP`) |
 
 `--dry-run` 은 쓰기도 네트워크도 없다(git·bun 이 없어도 계획은 나온다). 실제 설치에는 git 과
 bun 이 PATH 에 있어야 한다(`DORI-INSTALL-BLOCK`). 설치 뒤 `~/.dori/dori.env`(0600)에 봇 토큰·

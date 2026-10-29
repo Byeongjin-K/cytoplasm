@@ -105,7 +105,7 @@ def _parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--expect-update-trust-fingerprint", default=None)
     _ = parser.add_argument("--with-component", action="append", default=[], metavar="NAME")
     _ = parser.add_argument("--dori-role", action="append", default=[], metavar="KEY",
-                            help="dori 프로필의 선택 역할(okdori, moodori)")
+                            help="dori 프로필의 선택 역할(okdori, moodori, gongdori)")
     _ = parser.add_argument("--owner-call", default=None, help="dori 프로필: 도리가 소유자를 부르는 말")
     _ = parser.add_argument("--dry-run-only", action="store_true")
     _ = parser.add_argument("--yes", action="store_true", help="비대화 실행 전용: 확인을 건너뛴다")

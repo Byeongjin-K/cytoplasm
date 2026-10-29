@@ -82,8 +82,8 @@ def test_the_dry_run_plans_lead_and_secretary_and_writes_nothing(
 
 
 def test_optional_roles_are_added_only_when_named(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert _run(home, "--dry-run", "--role", "okdori", "--role", "moodori") == 0
-    assert "lead(짱돌), yoodori(유돌), okdori(옥돌), moodori(무돌)" in capsys.readouterr().out
+    assert _run(home, "--dry-run", "--role", "okdori", "--role", "moodori", "--role", "gongdori") == 0
+    assert "lead(짱돌), yoodori(유돌), okdori(옥돌), moodori(무돌), gongdori(공돌)" in capsys.readouterr().out
 
     assert _run(home, "--dry-run", "--role", "nope") == 2
     assert "DORI-UNKNOWN-ROLE: nope" in capsys.readouterr().out
@@ -96,7 +96,7 @@ def test_every_role_renders_completely_and_carries_no_personal_value(home: Path)
     repo = Path(dori.REPO_ROOT)
     denylist = public_gate.resolve_denylist(repo, None)
 
-    assert {r.key for r in roles} == {"lead", "yoodori", "okdori", "moodori"}
+    assert {r.key for r in roles} == {"lead", "yoodori", "okdori", "moodori", "gongdori"}
     assert {p.name for p in (repo / "dori" / "roles").iterdir() if p.is_dir()} == {r.key for r in roles}
     for entry in files:
         assert "{{" not in entry.content, entry.path
@@ -105,9 +105,9 @@ def test_every_role_renders_completely_and_carries_no_personal_value(home: Path)
             assert "형" in entry.content and entry.role.name in entry.content
 
 
-def test_the_four_avatars_share_one_family_header() -> None:
+def test_the_five_avatars_share_one_family_header() -> None:
     heads = set()
-    for key in ("lead", "yoodori", "okdori", "moodori"):
+    for key in ("lead", "yoodori", "okdori", "moodori", "gongdori"):
         text = (Path(dori.REPO_ROOT) / "dori" / "roles" / key / "avatar.md").read_text(encoding="utf-8")
         prompt = text.split("```text\n", 1)[1].split("\n```", 1)[0]
         assert prompt.startswith(_COMMON_HEAD)

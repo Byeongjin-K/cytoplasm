@@ -18,7 +18,7 @@ python3 -m automation.install.wizard
 옵션 없이 포크·CLI·역할을 준비한다. 실제 설치에는 git·Bun이 필요하고,
 역할별 봇·채널·모델 로그인은 자기 것으로 구성한다.
 `quickstart.sh --dry-run-only`도 같은 기본 경로를 쓴다.
-선택 역할은 마법사 `--dori-role okdori|moodori`, 직접 설치기 `--role okdori|moodori`다.
+선택 역할은 마법사 `--dori-role okdori|moodori|gongdori`, 직접 설치기 `--role okdori|moodori|gongdori`다.
 단계와 제한은 [설치 가이드](install.md#도리-기본-설치-p6)가 소유한다.
 
 **이하 §1–§8은 명시적 레거시 Hermes 프로필용 안내**다.
