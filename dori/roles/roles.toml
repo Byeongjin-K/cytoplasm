@@ -38,3 +38,12 @@ nick = "무돌"
 dir = "moodori"
 default = false
 summary = "회사 업무(선택) — 기관 시스템 2단계 로그인을 소유자와 함께 하고, 임시저장까지만 처리한다"
+
+[[role]]
+key = "gongdori"
+name = "GongDori"
+ko = "공도리"
+nick = "공돌"
+dir = "gongdori"
+default = false
+summary = "연구(선택) — 강화학습 실험을 돌리고, 가설을 찾아 작게 확인하고, 주간 연구동향을 쓴다"

@@ -8,7 +8,7 @@ autophagy/
 ├── skills/       # 19개 스킬 디렉터리 (18 기능 + hello-autophagy 데모). 각 <name>/{SKILL.md, scripts/*_cli.py, scripts/*watch.py, deploy.sh}. 에이전트가 스스로 만든 자가 스킬은 이 트리에 없다(각 계정의 `~/.hermes/skills`)
 ├── automation/   # 오케스트레이션·게이트·워처·배치 코어 (interop, repair, rag_ingest, report_hub, skill_generation, selfskill_audit, twin_distill, twin_observe, managed_skills, managed_sync ...)
 ├── configs/      # routing-policy.md, peers.example.yaml, rag/
-├── dori/         # 도리 기반 사이토플라즘 저장소 층(2026-10-18 소유자 결정 Q219) — pin.toml(도리 포크 고정 커밋)·roles/(리드·비서 기본, 옥돌·무돌 선택 역할 템플릿+아바타). 개인값 없음, 설치는 automation/install/dori.py
+├── dori/         # 도리 기반 사이토플라즘 저장소 층(2026-10-18 소유자 결정 Q219) — pin.toml(도리 포크 고정 커밋)·roles/(리드·비서 기본, 옥돌·무돌·공돌 선택 역할 템플릿+아바타). 개인값 없음, 설치는 automation/install/dori.py
 ├── prompts/      # 버전형 LLM 프롬프트 자산
 ├── docs/         # guide/(설계규약) patch/(인프라 변경) troubleshooting/ · qa/(W#-# 웨이브 증적)는 추적하지 않는 비공개 운영 저장소 링크다(아래 .omo/ 와 같음)
 ├── tests/        # unit/ + e2e/(drivers, scenarios, fixtures)

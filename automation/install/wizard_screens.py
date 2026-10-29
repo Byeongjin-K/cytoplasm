@@ -22,7 +22,7 @@ DEFAULT_ORIGIN_URL: Final = "https://github.com/orientpine/cytoplasm.git"
 DOCTOR_ARGV: Final = ("python3", "-m", "automation.doctor")
 
 PROFILE_MENU: Final = (
-    ("dori", "도리 — 리드(짱돌)·비서(유돌) 기본 구성, 옥돌·무돌은 선택(root·신뢰키 불필요)"),
+    ("dori", "도리 — 리드(짱돌)·비서(유돌) 기본 구성, 옥돌·무돌·공돌은 선택(root·신뢰키 불필요)"),
     ("core", "레거시 Hermes — 게이트웨이·승인 게이트·자동 업데이트"),
     ("rag", "레거시 Hermes + 개인 RAG(검색·임베딩·Qdrant)"),
     ("report-hub", "레거시 Hermes + Lab report-hub(콜렉터·대시보드)"),

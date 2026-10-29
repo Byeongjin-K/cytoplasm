@@ -163,7 +163,7 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
     )
     _ = parser.add_argument("--dry-run", action="store_true", help="계획과 렌더 결과만 보인다(쓰기·네트워크 없음)")
     _ = parser.add_argument("--role", action="append", default=[], metavar="KEY",
-                            help="선택 역할을 더한다(okdori, moodori). lead·yoodori 는 기본")
+                            help="선택 역할을 더한다(okdori, moodori, gongdori). lead·yoodori 는 기본")
     _ = parser.add_argument("--owner-call", default="소유자", help="도리가 소유자를 부르는 말(예: 형)")
     _ = parser.add_argument("--backend", choices=sorted(_CONFIG_EXAMPLES), default="aoe")
     _ = parser.add_argument("--src", type=Path, default=home / ".dori" / "src")
