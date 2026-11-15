@@ -35,6 +35,12 @@ AVATAR_NAME: Final = "avatar.md"
 _PLACEHOLDER: Final = re.compile(r"\{\{[A-Z_]+\}\}")
 DIFF_LINE_LIMIT: Final = 40
 _CONFIG_EXAMPLES: Final = {"aoe": "config.aoe.example.json", "herdr": "config.example.json"}
+_ENV_EXAMPLE: Final = Path("skills") / "dori-mode" / "setups" / "discord-aoe" / "dori.env.example"
+_ENV_KEYS: Final = "DORI_DISCORD_TOKEN·GUILD·CHANNEL·OWNER"
+_TOOL_HINTS: Final = {
+    "git": "sudo apt install -y git (윈도우: winget install Git.Git)",
+    "bun": "curl -fsSL https://bun.sh/install | bash (윈도우: irm https://bun.sh/install.ps1 | iex), 그다음 새 터미널",
+}
 
 Runner = Callable[[tuple[str, ...], Path], int]
 
@@ -162,6 +168,22 @@ def _link_skill(link: Path, target: Path) -> None:
         link.symlink_to(target)
 
 
+def env_template(example: str, backend: str) -> str:
+    """The fork's dori.env example; a herdr Dori has no aoe session, so its DORI_LEAD_* lines stay commented out."""
+    if backend != "herdr":
+        return example
+    return "".join(f"# (herdr: not used) {line}" if line.startswith("DORI_LEAD_") else line
+                   for line in example.splitlines(keepends=True))
+
+
+def _find_bun(home: Path, which: Callable[[str], str | None]) -> None:
+    # bun's installer puts bun in ~/.bun/bin and adds it to PATH only for new terminals; the same terminal still finds it
+    folder = home / ".bun" / "bin"
+    if which("bun") is None and (folder / ("bun.exe" if sys.platform == "win32" else "bun")).is_file():
+        os.environ["PATH"] = f"{folder}{os.pathsep}{os.environ.get('PATH', '')}"
+        print(f"DORI-BUN-FOUND {folder} (PATH 에 없어 이 실행에만 더했다)")
+
+
 def _default_runner(argv: tuple[str, ...], cwd: Path) -> int:
     return subprocess.run(argv, cwd=cwd, check=False).returncode
 
@@ -218,17 +240,20 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
 
     print(f"DORI-PIN repo={pin.repo} commit={pin.commit}")
     print(f"역할: {', '.join(f'{r.key}({r.nick})' for r in roles)}")
+    _find_bun(home, which)
     missing = [tool for tool in ("git", "bun") if which(tool) is None]
     for tool in ("git", "bun"):
         print(f"  [{'필요' if tool in missing else '통과'}] {tool}")
     fork_action, fork_detail = _fork_state(pin, options.src, args.update)
     config = options.home / ".dori" / "config.json"
+    env_file = options.home / ".dori" / "dori.env"
     link = options.skills / "dori-mode"
     steps = [
         ("dori-fork", fork_detail),
         ("dori-skill-link", f"{link} -> {options.src / 'skills' / 'dori-mode'}"),
         ("dori-cli", f"bun install && bun link ({options.src / 'skills' / 'dori-mode' / 'scripts'})"),
         ("dori-config", f"{config} {'유지(이미 있음)' if config.exists() else '포크 예시 복사 ' + _CONFIG_EXAMPLES[options.backend]}"),
+        ("dori-env", f"{env_file} {'유지(이미 있음)' if env_file.exists() else '포크 예시 복사(0600) — ' + _ENV_KEYS + ' 네 줄만 채우면 된다'}"),
         *((f"dori-role-{e.role.key}", f"{e.path} {({'new': '새로 씀', 'same': '같음 — 넘어감', 'differs': '다름 — 그대로 두고 차이만 보임'})[e.state]}") for e in files),
     ]
     web_port = args.web_port or tools.web_port
@@ -251,6 +276,9 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
         return 0
     if missing:
         print(f"DORI-INSTALL-BLOCK: {', '.join(missing)} 이 PATH 에 없다")
+        for tool in missing:
+            print(f"  {tool} 설치: {_TOOL_HINTS[tool]}")
+        print("  (한 줄 설치 install.sh·install.ps1 은 이것까지 깐다 — README 「빠른 시작」)")
         return 2
 
     if fork_action == "fetch":
@@ -279,6 +307,14 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
         _ = shutil.copyfile(
             options.src / "skills" / "dori-mode" / "references" / _CONFIG_EXAMPLES[options.backend], config
         )
+    if env_file.exists():
+        print(f"DORI-ENV {env_file} kept")
+    elif not (options.src / _ENV_EXAMPLE).is_file():
+        print(f"DORI-ENV-NO-EXAMPLE {options.src / _ENV_EXAMPLE} 이 없어 {env_file} 을 만들지 않았다")
+    else:
+        example = (options.src / _ENV_EXAMPLE).read_text(encoding="utf-8")
+        dori_herdr.write_private(env_file, env_template(example, options.backend))
+        print(f"DORI-ENV {env_file} new (0600) — {_ENV_KEYS} 네 줄을 자기 봇 값으로 바꾼다")
     for entry in files:
         if entry.state == "new":
             entry.path.parent.mkdir(parents=True, exist_ok=True)
@@ -295,11 +331,12 @@ def main(argv: Sequence[str] | None = None, *, runner: Runner = _default_runner,
             return code
     print(f"DORI-INSTALLED pin={pin.commit[:12]} roles={','.join(r.key for r in roles)} kept={kept} backend={options.backend}")
     if options.backend == "herdr" and layout.windows:
-        print("다음: %USERPROFILE%\\.dori\\dori.env 에 봇 토큰·채널·소유자 id 를 넣고, `herdr` 를 열어 리드 탭에서 \"Dori mode\" 라고 한다."
+        print(f"다음: {env_file} 의 {_ENV_KEYS} 네 줄을 자기 봇 값으로 바꾸고, `herdr` 를 열어 리드 탭에서 /login 으로 모델에 로그인한 뒤 \"Dori mode\" 라고 한다."
               f" 도리 상시 루프는 작업 스케줄러 '{dori_herdr.SERVE_TASK}' 가 로그온마다 켭니다(토큰을 넣으면 다음 재시도 때 연결).")
     elif options.backend == "herdr":
-        print("다음: ~/.dori/dori.env 에 봇 토큰·채널·소유자 id 를 넣고(0600), 웹(또는 `herdr`)에서 리드 탭을 열어 \"Dori mode\" 라고 한다."
-              f" 웹 비밀번호는 {layout.web_env} 의 HERDR_WEB_PASSPHRASE(옛 aoe 웹을 쓰던 계정은 그 비밀번호).")
+        print(f"다음: {env_file} 의 {_ENV_KEYS} 네 줄을 자기 봇 값으로 바꾸고, 웹(또는 `herdr`)에서 리드 탭을 열어 /login 으로 모델에 로그인한 뒤 \"Dori mode\" 라고 한다."
+              f" 웹 비밀번호는 {layout.web_env} 의 HERDR_WEB_PASSPHRASE(옛 aoe 웹을 쓰던 계정은 그 비밀번호)."
+              f" 도리 상시 루프는 사용자 유닛 {dori_herdr.SERVE_UNIT} 가 켭니다(토큰을 넣으면 다음 재시도 때 연결).")
     else:
         print("다음: ~/.dori/dori.env 에 봇 토큰·채널·소유자 id 를 넣고(0600), 리드 작업 폴더에서 에이전트를 열어 \"Dori mode\" 라고 한다.")
     return 0

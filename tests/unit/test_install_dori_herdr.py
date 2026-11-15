@@ -42,6 +42,7 @@ def _fork(tmp_path: Path) -> DoriPin:
             "defaultCwd": "~/code/my-project", "agentCommand": ["omo", "--model", "{model}", "{prompt}"]}, indent=2) + "\n",
         "setups/discord-aoe/herdr-guard": "#!/bin/sh\n",
         "setups/discord-aoe/systemd/dori-herdr.service": "[Service]\nExecStart=herdr server\n",
+        "setups/discord-aoe/dori.env.example": "# copy me\nDORI_DISCORD_TOKEN=replace-with-token\nDORI_LEAD_AOE_ID=0a1b\nDORI_LEAD_TMUX=aoe_Dori\n",
         "setups/herdr-web/herdr-web@.service": "[Service]\nExecStart=proxy\n",
         "setups/herdr-web/herdr-web-terminal@.service": "[Service]\nExecStart=ttyd\n",
     }
@@ -125,13 +126,20 @@ def test_a_fresh_install_gets_herdr_ttyd_the_server_the_web_and_the_lead_in_a_he
     assert (home / ".local" / "bin" / "ttyd").read_bytes() == _TTYD
     assert (home / ".config" / "herdr" / "config.toml").read_text(encoding="utf-8") == "onboarding = false\n"
     units = home / ".config" / "systemd" / "user"
-    assert sorted(p.name for p in units.iterdir()) == ["dori-herdr.service", "herdr-web-terminal@.service", "herdr-web@.service"]
+    assert sorted(p.name for p in units.iterdir()) == [
+        "dori-herdr.service", "dori-serve.service", "herdr-web-terminal@.service", "herdr-web@.service"]
+    assert (units / "dori-serve.service").read_text(encoding="utf-8") == dori_herdr.SERVE_UNIT_TEXT
+    dori_env = home / ".dori" / "dori.env"
+    assert stat.S_IMODE(dori_env.stat().st_mode) == 0o600
+    assert dori_env.read_text(encoding="utf-8") == (
+        "# copy me\nDORI_DISCORD_TOKEN=replace-with-token\n"
+        "# (herdr: not used) DORI_LEAD_AOE_ID=0a1b\n# (herdr: not used) DORI_LEAD_TMUX=aoe_Dori\n")
     env = home / ".config" / "herdr" / "web-8181.env"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     keys = dict(line.split("=", 1) for line in env.read_text(encoding="utf-8").splitlines())
     assert keys["HERDR_WEB_ORIGIN"] == "http://127.0.0.1:8181" and keys["HERDR_TTYD_PORT"] == "9281"
     assert len(keys["HERDR_WEB_PASSPHRASE"]) == 32 and len(keys["HERDR_STATE_SECRET"]) == 64
-    assert world.active == {"dori-herdr.service", "herdr-web@8181.service"}
+    assert world.active == {"dori-herdr.service", "herdr-web@8181.service", "dori-serve.service"}
     config = json.loads((home / ".dori" / "config.json").read_text(encoding="utf-8"))
     lead_dir = home / "Documents" / "zzangdori"
     assert config["backend"] == "herdr" and config["leadPane"] == "w1:p1" and config["defaultCwd"] == str(lead_dir)
@@ -171,7 +179,7 @@ def test_an_aoe_install_rerun_gets_herdr_ready_but_keeps_its_config_web_port_and
     env = (home / ".config" / "herdr" / "web-8181.env").read_text(encoding="utf-8")
     assert "HERDR_WEB_PASSPHRASE" not in env and "HERDR_WEB_ORIGIN=https://node.example:443\n" in env
     assert "DORI-HERDR-WEB-PORT-BUSY 8181" in out
-    assert world.active == {"dori-herdr.service"}
+    assert world.active == {"dori-herdr.service", "dori-serve.service"}
     assert world.ran("workspace", "create") == [] and world.ran("pane", "run") == []
     assert "DORI-LEAD-KEEP" in out
 
@@ -207,7 +215,43 @@ def test_a_ttyd_port_held_by_another_account_keeps_the_web_off(
     assert _install(home, world) == 0
 
     assert "DORI-HERDR-WEB-PORT-BUSY 9281" in capsys.readouterr().out
-    assert world.active == {"dori-herdr.service"}
+    assert world.active == {"dori-herdr.service", "dori-serve.service"}
+
+
+def test_an_account_running_the_loops_as_one_unit_each_gets_no_second_listener(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    units = home / ".config" / "systemd" / "user"
+    units.mkdir(parents=True)
+    _ = (units / "dori-inbound.service").write_text("[Service]\nExecStart=dori inbound discord\n", encoding="utf-8")
+    world = _World()
+
+    assert _install(home, world) == 0
+
+    assert not (units / "dori-serve.service").exists()
+    assert "dori-serve.service" not in world.active
+    assert "DORI-SERVE-UNIT-SKIP dori-inbound.service" in capsys.readouterr().out
+
+
+def test_an_update_restarts_a_running_serve_unit_on_the_new_code(home: Path) -> None:
+    world = _World()
+    assert _install(home, world) == 0
+    again = _World(active=set(world.active))
+
+    assert _install(home, again, "--update") == 0
+
+    assert again.ran("systemctl", "--user", "restart") == [("systemctl", "--user", "restart", "dori-serve.service")]
+
+
+def test_a_lead_left_without_omo_names_the_omo_installer_and_a_ready_session_id(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world = _World()
+
+    assert _install(home, world, which={"git": "/usr/bin/git", "bun": "/usr/bin/bun"}) == 0
+
+    [line] = [out for out in capsys.readouterr().out.splitlines() if out.startswith("DORI-LEAD-PANE")]
+    assert dori_herdr.OMO_INSTALL in line and "<" not in line.split("herdr pane run", 1)[1]
 
 
 def test_a_second_run_writes_nothing_new_and_starts_no_second_lead(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
