@@ -77,6 +77,21 @@ def _cli() -> Path:
     return Path(override).expanduser() if override else CLI
 
 
+def _folders_mode():
+    """The switch module, found beside the wrapper in the live mail skill.
+
+    The node runs this file as a lone copy in ~/.hermes/scripts (automation.cron_timer_run), so a mail
+    module it imports is not beside it; v2.7.41 failed every tick with No module named
+    'mail_user_folders_mode' (owner card Q60, 2026-11-16).
+    """
+    live = str(_cli().parent)
+    if live not in sys.path:
+        sys.path.append(live)
+    import mail_user_folders_mode
+
+    return mail_user_folders_mode
+
+
 def _payload(stdout: str) -> dict:
     for line in reversed(stdout.strip().splitlines()):
         try:
@@ -90,14 +105,14 @@ def _payload(stdout: str) -> dict:
 
 def _scope() -> list[str]:
     """The periodic scope: the user folders only under the released switch."""
-    import mail_user_folders_mode
+    mail_user_folders_mode = _folders_mode()
 
     return ["--user-folders"] if mail_user_folders_mode.mode() == "on" else []
 
 
 def _now_scope(words: list[str]) -> list[str] | None:
     """``--now`` takes none, ``--user-folders`` or ``--user-folders --since-days N``; None refuses."""
-    import mail_user_folders_mode
+    mail_user_folders_mode = _folders_mode()
 
     if not words:
         return _scope()
