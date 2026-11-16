@@ -9,6 +9,14 @@
 
 ## 도리로 시작하기 (기본)
 
+리눅스는 터미널에 한 줄이면 된다. 같은 줄이 업데이트도 한다.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
+```
+
+체크아웃에서 직접 돌리려면:
+
 ```bash
 python3 -m automation.install --dry-run
 python3 -m automation.install.wizard

@@ -106,6 +106,9 @@ Copy-Item $serveLog (Join-Path $Evidence "serve-after-install.log")
 Check ((Get-ScheduledTask -TaskName "Dori serve").State -eq "Running") "'Dori serve' is running now"
 Check (Select-String -LiteralPath $serveLog -Pattern "watch SERVE_STARTED" -Quiet) "serve.log: the watch loop started"
 Check (-not (Select-String -LiteralPath $serveLog -Pattern 'Executable not found in \$PATH: "herdr"' -Quiet)) "serve.log: the loops find herdr on PATH"
+$doriEnv = Join-Path $env:USERPROFILE ".dori\dori.env"
+Check ((Test-Path $doriEnv) -and -not ([IO.File]::ReadAllText($doriEnv).Contains("`r"))) "dori.env written with LF line ends (the fork reads a CRLF line as unset)"
+Check (-not (Select-String -LiteralPath $serveLog -Pattern 'inbound DORI_DISCORD_TOKEN is not set' -Quiet)) "serve.log: the Discord listener reads the token line of dori.env"
 $before = ServeSupervisors
 Check ($before.Count -eq 1) "exactly one dori serve supervisor after install ($($before.Count))"
 

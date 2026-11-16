@@ -1,8 +1,9 @@
 """도리 herdr 백엔드 설치 — `dori.py` 가 `--backend herdr`(기본)일 때 부른다.
 
 `dori/herdr.toml` 에 고정한 herdr·ttyd 를 받아 sha256 을 확인하고 계정의 `~/.local` 에 둔다. 포크의 유닛으로
-herdr 서버(`dori-herdr.service`)와 웹(`herdr-web@<포트>`)을 켜고, 새로 복사한 config 이면 리드를 herdr pane 에
-띄워 `leadPane` 에 적는다. root 는 쓰지 않는다.
+herdr 서버(`dori-herdr.service`)와 웹(`herdr-web@<포트>`)을 켜고, 도리 상시 루프(디스코드 수신 등)는 윈도우의
+「Dori serve」 작업과 같은 `dori serve` 를 사용자 유닛 `dori-serve.service` 로 켠다(루프를 유닛 하나씩 따로 돌리는 계정은
+그대로 둔다). 새로 복사한 config 이면 리드를 herdr pane 에 띄워 `leadPane` 에 적는다. root 는 쓰지 않는다.
 
 네이티브 윈도우(WSL 없음)에서는 systemd 대신 작업 스케줄러다: herdr zip 을 풀어 계정 PATH 에 넣고, 로그온 때 herdr
 서버를 띄우는 작업과 포크의 `dori serve --install-task`(도리 상시 루프) 작업을 등록해 바로 켠다. 웹(ttyd·systemd
@@ -37,6 +38,26 @@ _FORK_SETUPS: Final = Path("skills") / "dori-mode" / "setups"
 _SERVER_UNIT: Final = "dori-herdr.service"
 SERVER_TASK: Final = "Dori herdr server"
 SERVE_TASK: Final = "Dori serve"
+SERVE_UNIT: Final = "dori-serve.service"
+# an account that runs the loops as one unit each (setups/discord-aoe) already has the Discord listener: a second one
+# from dori serve would answer every owner message twice
+LOOP_UNITS: Final = ("dori-inbound.service", "dori-lanes.service", "dori-session-watch.service")
+SERVE_UNIT_TEXT: Final = """\
+[Unit]
+Description=This Dori's always-on loops (dori serve: watch, freshness, dead-panes, guard, state-git, Discord inbound, session watch), from the cytoplasm installer
+After=network-online.target dori-herdr.service
+
+[Service]
+# no EnvironmentFile: every dori command reads ~/.dori/dori.env itself
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.bun/bin/dori serve
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+"""
+OMO_INSTALL: Final = "curl -fsSL https://get.omo.dev/install.sh | bash (윈도우: irm https://get.omo.dev/install.ps1 | iex)"
 _ZIP_MARK: Final = ".zip-sha256"
 _EXAMPLE_CWD: Final = "~/code/my-project"
 _READY_TRIES: Final = 50
@@ -130,6 +151,7 @@ def plan(layout: Layout, tools: Tools, key: str) -> list[tuple[str, str]]:
         ("herdr-ttyd", f"{layout.ttyd} ttyd {tools.ttyd_version} ({key}{', sha256 ' + ttyd.sha256[:12] if ttyd else ' — 받을 바이너리 없음, 웹 건너뜀'})"),
         ("herdr-server", f"{layout.units / _SERVER_UNIT} 를 켠다(systemctl --user, 이미 있으면 그대로)"),
         ("herdr-web", f"herdr-web@{layout.web_port} (ttyd {layout.web_port + tools.ttyd_offset}, 상태 {layout.web_port + tools.state_offset}) — {layout.web_env}(0600, 없을 때만) · 포트를 다른 프로그램이 쓰면 켜지 않음"),
+        ("serve-unit", f"{layout.units / SERVE_UNIT} = dori serve(도리 상시 루프, 디스코드 수신) — 새로 만들면 켠다, 켜져 있으면 --update 때 새 코드로 다시 켜고 꺼 둔 것은 그대로 둔다 · 루프별 유닛({LOOP_UNITS[0]} 등)이 있으면 그대로 둔다"),
         ("herdr-lead", "새로 복사한 config 이면 리드를 herdr pane 에 띄우고 leadPane 에 적는다"),
     ]
 
@@ -239,10 +261,11 @@ def _env_ports(layout: Layout) -> list[int]:
     return [layout.web_port, *(int(values[k]) for k in ("HERDR_TTYD_PORT", "HERDR_STATE_PORT") if values.get(k, "").isdigit())]
 
 
-def _write_private(path: Path, text: str) -> None:
+def write_private(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    # LF on every OS: the fork reads dori.env line by line and a Windows CRLF line never matches (DORI_DISCORD_TOKEN is not set)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
         _ = handle.write(text)
 
 
@@ -274,7 +297,8 @@ def open_lead(layout: Layout, config: Path, lead_dir: Path, label: str, capture:
     _ = config.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     agent = str((data.get("agentCommand") or ["omo"])[0])
     if which(agent) is None:
-        print(f"DORI-LEAD-PANE {pane} — {agent} 가 PATH 에 없어 리드 에이전트는 켜지 않았다. 깐 뒤: herdr pane run {pane} '{agent} --session-id <새 uuid>'")
+        install = f" ({OMO_INSTALL})" if agent == "omo" else ""
+        print(f"DORI-LEAD-PANE {pane} — {agent} 가 PATH 에 없어 리드 에이전트는 켜지 않았다. 깐 뒤{install}: herdr pane run {pane} '{agent} --session-id {uuid.uuid4()}'")
         return
     session = str(uuid.uuid4())
     code, out = capture((herdr, "pane", "run", pane, f"{agent} --session-id {session}"))
@@ -391,6 +415,39 @@ def windows_supervise(layout: Layout, capture: Capture, which: Which, sleep: Cal
     return 0
 
 
+def serve_unit(layout: Layout, capture: Capture, *, restart: bool) -> int:
+    """The Linux twin of the Windows 'Dori serve' task: dori serve in one user unit - a unit it creates is enabled and
+    started, a running one is restarted on --update, and one this account already stopped is left stopped."""
+    if loops := [name for name in LOOP_UNITS if (layout.units / name).exists()]:
+        print(f"DORI-SERVE-UNIT-SKIP {' '.join(loops)} 가 루프를 이미 돌린다 — {SERVE_UNIT} 는 만들지 않는다")
+        return 0
+    dest = layout.units / SERVE_UNIT
+    if dest.exists():
+        state = "same" if dest.read_text(encoding="utf-8") == SERVE_UNIT_TEXT else "kept"
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _ = dest.write_text(SERVE_UNIT_TEXT, encoding="utf-8")
+        state = "new"
+    _ = _systemctl(capture, "daemon-reload")
+    if state == "new":
+        action, verb = ("enable", "--now", SERVE_UNIT), "active"
+    elif _systemctl(capture, "is-active", SERVE_UNIT)[0] != 0:
+        # a unit this account already had and stopped stays stopped: the owner paused the loops, an update must not resume them
+        print(f"DORI-SERVE-UNIT {dest} {state} stopped — 꺼져 있어 그대로 둔다(켜려면 systemctl --user enable --now {SERVE_UNIT})")
+        return 0
+    elif restart:
+        action, verb = ("restart", SERVE_UNIT), "restarted"
+    else:
+        print(f"DORI-SERVE-UNIT {dest} {state} active")
+        return 0
+    code, out = _systemctl(capture, *action)
+    if code != 0:
+        print(f"DORI-SERVE-UNIT-FAIL {SERVE_UNIT}: {out.strip()[:200]}")
+        return 6
+    print(f"DORI-SERVE-UNIT {dest} {state} {verb} — 디스코드 수신은 ~/.dori/dori.env 토큰을 읽는다")
+    return 0
+
+
 def install(layout: Layout, tools: Tools, key: str, *, origin: str, config: Path, lead_dir: Path, lead_label: str,
             capture: Capture, fetch: Fetch, which: Which, sleep: Callable[[float], None] = time.sleep,
             restart: bool = False, path_adder: Callable[[Path], str] = add_user_path) -> int:
@@ -440,7 +497,7 @@ def install(layout: Layout, tools: Tools, key: str, *, origin: str, config: Path
         print(f"DORI-HERDR-UNIT {layout.units / source.name} {state}")
     web_env = "kept" if layout.web_env.exists() else "new"
     if web_env == "new":
-        _write_private(layout.web_env, _web_env(layout, tools, origin))
+        write_private(layout.web_env, _web_env(layout, tools, origin))
     print(f"DORI-HERDR-WEB-ENV {layout.web_env} {web_env}")
     _ = _systemctl(capture, "daemon-reload")
     code, out = _systemctl(capture, "enable", "--now", _SERVER_UNIT)
@@ -467,5 +524,8 @@ def install(layout: Layout, tools: Tools, key: str, *, origin: str, config: Path
     else:
         code, out = _systemctl(capture, "enable", "--now", web)
         print(f"DORI-HERDR-WEB {web} {'active' if code == 0 else 'FAIL ' + out.strip()[:200]} — {origin}")
+    code = serve_unit(layout, capture, restart=restart)
+    if code != 0:
+        return code
     open_lead(layout, config, lead_dir, lead_label, capture, which, sleep)
     return 0

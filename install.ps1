@@ -3,7 +3,8 @@
 # Run the same line again to update. Options: environment variables (irm | iex) or parameters (-File):
 #   CYTO_ROLES / -Role (okdori,moodori,gongdori)   CYTO_OWNER_CALL / -OwnerCall   CYTO_HOME / -InstallRoot
 #
-# What it does: finds or installs git, Python 3.11+, bun and PowerShell 7 (winget, per user where it can); clones
+# What it does: finds or installs git, Python 3.11+, bun, PowerShell 7 (winget, per user where it can) and omo, the agent
+# each Dori runs (its own installer, get.omo.dev); clones
 # cytoplasm into <InstallRoot>\src; on the first run checks the newest release tag's signature against the update trust
 # key whose fingerprint is published in README (nothing from the clone runs before that); then hands over to
 # `python -m automation.install.update`, which keeps that check for every later update and runs the Dori installer
@@ -49,16 +50,18 @@ function FindPwsh {
 }
 function FindPython {
   # a probe that writes to stderr ("no such runtime") must not end the script under Windows PowerShell 5.1
+  # Each hit returns with the unary comma: PowerShell unrolls a one-element array, so a bare python.exe path came back as a
+  # string and $py[0] was its first letter ("The term 'C' is not recognized" right after winget installed Python).
   $ErrorActionPreference = "Continue"
   foreach ($v in @("3.14", "3.13", "3.12", "3.11")) {
-    if (Have py) { & py "-$v" -c "import sys" 2>$null; if ($LASTEXITCODE -eq 0) { return @("py", "-$v") } }
+    if (Have py) { & py "-$v" -c "import sys" 2>$null; if ($LASTEXITCODE -eq 0) { return ,@("py", "-$v") } }
   }
   foreach ($c in @("python", "python3")) {
     $cmd = Get-Command $c -ErrorAction SilentlyContinue
     # the WindowsApps python.exe is a Store stub that opens the Store instead of running
     if ($cmd -and $cmd.Source -notlike "*\WindowsApps\*") {
       & $cmd.Source -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-      if ($LASTEXITCODE -eq 0) { return @($cmd.Source) }
+      if ($LASTEXITCODE -eq 0) { return ,@($cmd.Source) }
     }
   }
   return $null
@@ -82,6 +85,20 @@ Native "bun" @("--version")
 Step "PowerShell 7.3+ (herdr panes need it)"
 if (-not (FindPwsh)) { InstallWithWinget "Microsoft.PowerShell" "Dori runs its herdr panes in PowerShell 7" }
 if (-not (FindPwsh)) { throw "CYTO-WINDOWS-NEEDS: PowerShell 7.3 or newer (winget install Microsoft.PowerShell), then run this again" }
+
+Step "omo (the agent the Dori lead runs in its herdr tab)"
+# cytoplasm and Dori install without omo (the lead tab then waits for it); omo's installer refuses an Administrator shell
+if (-not (Have omo)) {
+  try {
+    Invoke-RestMethod https://get.omo.dev/install.ps1 | Invoke-Expression
+    AddUserPath (Join-Path $env:USERPROFILE ".local\bin")
+  } catch {
+    Write-Host "CYTO-WINDOWS-OMO-SKIP: $($_.Exception.Message)"
+  }
+}
+if (-not (Have omo)) {
+  Write-Host "CYTO-WINDOWS-OMO-SKIP: omo is not installed - the Dori lead tab waits for it. From a normal (not Administrator) PowerShell: irm https://get.omo.dev/install.ps1 | iex, then the command on the DORI-LEAD-PANE line below"
+}
 
 $src = Join-Path $InstallRoot "src"
 $signers = Join-Path $InstallRoot "update-allowed-signers"

@@ -507,3 +507,9 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 ## Drive 저장 여러 파일 한 카드에서 남긴 것 (2026-11-13, #241)
 
 - **공유 드라이브(shared drive) 폴더 id 는 거절된다** — `drive_client.folder_info`·`verify_owner_only` 가 `supportsAllDrives` 없이 조회해, 공유 드라이브 폴더를 `drive-save --folder` 로 주면 권한 확인을 못 해 요청이 거절된다(fail-closed, 잘못 저장되지는 않음) → 공유 드라이브를 쓸 일이 생기면 조회에 그 인자를 넣고, 공유 드라이브는 구성원이 함께 보므로 형 결정으로 허용 범위를 정한다. 영향: 내 드라이브 밖 폴더 저장 불가 · 심각도 낮음.
+
+## 리눅스 한 줄 설치·처음 설치 막힘 고침에서 남긴 것 (2026-11-16)
+
+- 도리 기본 설치에서 `python3 -m automation.doctor` 는 레거시 agent 계정 진단으로 가 `doctor-run` 경고만 낸다 → 도리 설치용 점검(포크·herdr·dori-serve·dori.env 네 줄·omo 로그인)으로 나누기. 영향: 처음 설치자가 README 의 doctor 안내를 따르면 헛경고, 중간.
+- `dori-serve.service` 본문은 사이토플라즘 설치기 안의 상수다 → 포크 `setups/discord-aoe/systemd/` 에 같은 유닛을 두고 고정 커밋을 올릴 때 설치기가 포크 파일을 복사하게 옮기기(포크가 원형). 영향: 유닛을 고칠 곳이 둘, 낮음.
+- 처음 설치 측정은 우분투 24.04(aarch64 컨테이너)와 windows-latest 러너에서만 했다 → x86_64 실기 노트북·macOS(systemd 없음, 상시 루프 없음)에서 한 번 더 재기. 영향: 그 환경의 막힘을 모름, 낮음.

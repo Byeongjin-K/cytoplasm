@@ -37,9 +37,9 @@ def test_default_entrypoints_plan_only_dori_without_writing(
         if line.split() and line.split()[0].rstrip(".").isdigit()
     }
     assert kinds == {
-        "dori-fork", "dori-skill-link", "dori-cli", "dori-config",
+        "dori-fork", "dori-skill-link", "dori-cli", "dori-config", "dori-env",
         "dori-role-lead", "dori-role-yoodori",
-        "dori-herdr-bin", "dori-herdr-ttyd", "dori-herdr-server", "dori-herdr-web", "dori-herdr-lead",
+        "dori-herdr-bin", "dori-herdr-ttyd", "dori-herdr-server", "dori-herdr-web", "dori-serve-unit", "dori-herdr-lead",
     }
     assert list(home.iterdir()) == []
 
