@@ -50,8 +50,36 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class _CutHandler(http.server.BaseHTTPRequestHandler):
+    """Promises 100 bytes, sends 4, closes (a webmail connection dropped mid-file)."""
+
+    def do_GET(self):  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Length", "100")
+        self.end_headers()
+        self.wfile.write(b"abcd")
+        self.wfile.flush()
+        self.close_connection = True
+
+    def log_message(self, *args):
+        pass
+
+
 @pytest.fixture
-def server():
+def webmail_host(monkeypatch):
+    monkeypatch.setattr(scraper_mod, "WEBMAIL_HOSTS", frozenset({"127.0.0.1"}))
+
+
+@pytest.fixture
+def cut_server(webmail_host):
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _CutHandler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}/mail/manage/attach/download?position=7"
+    httpd.shutdown()
+
+
+@pytest.fixture
+def server(webmail_host):
     httpd = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     _Handler.seen = []
@@ -104,3 +132,24 @@ def test_a_browser_error_that_is_not_a_timeout_still_fails_the_attachment(tmp_pa
     with pytest.raises(BrowserError, match="HTTP 404"):
         s._download_attachment("10192857", "2. a.xlsx", server, declared_size=None)
     assert _Handler.seen == []
+
+
+def test_a_timed_out_link_to_another_host_never_gets_the_webmail_cookies(
+        tmp_path, server, monkeypatch):
+    # Given: the same timeout, but the link points outside the webmail's own hosts.
+    monkeypatch.setattr(scraper_mod, "WEBMAIL_HOSTS", frozenset({"mailon.kr"}))
+    s = _scraper(tmp_path, _SlowEvalBrowser("✗ CDP command timed out: Runtime.evaluate"))
+    # When / Then: the timeout is the recorded failure and no request leaves with the cookies.
+    with pytest.raises(BrowserError, match="timed out"):
+        s._download_attachment("10192857", "2. a.xlsx", server, declared_size=None)
+    assert _Handler.seen == []
+
+
+def test_a_streamed_file_cut_before_its_length_is_a_failure_not_a_saved_file(
+        tmp_path, cut_server):
+    # Given: the streamed fallback, and a server that drops the connection after 4 of 100 bytes.
+    s = _scraper(tmp_path, _SlowEvalBrowser("✗ CDP command timed out: Runtime.evaluate"))
+    # When / Then: the attachment fails (so it stays 'fail' for a retry) and nothing is left on disk.
+    with pytest.raises(RuntimeError, match="4 of 100 bytes|IncompleteRead"):
+        s._download_attachment("10192857", "2. a.xlsx", cut_server, declared_size=None)
+    assert not list((tmp_path / "att" / "10192857").glob("*"))
