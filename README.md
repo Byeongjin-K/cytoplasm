@@ -77,9 +77,10 @@ Update later: run the same line again. Open a new terminal so PATH picks up dori
 윈도우는 로그온 때 도는 작업 스케줄러 항목 두 개(「Dori herdr server」, 「Dori serve」)입니다. 사람이 따로 켤 것은 없습니다.
 
 > [!NOTE]
-> **macOS** 는 같은 한 줄로 설치되지만 상시 실행 장치가 없어 리드 탭과 디스코드 수신을 저절로 켜지 않습니다.
-> 4단계에서 `herdr` 를 연 뒤 탭 하나에서 `omo` 를, 또 다른 탭에서 `dori serve` 를 실행해 두세요(재부팅하면 다시).
-> macOS 설치는 아직 실제 기기에서 끝까지 검증하지 않았습니다. 막히면 아래 [막힐 때](#막힐-때)의 이슈로 알려 주세요.
+> **macOS 는 아직 처음 설치하는 분께 권하지 않습니다.** 한 줄 설치가 macOS 에 없는 `systemctl` 을 부르다 도중에 멈출 수 있는
+> 알려진 문제가 있고(고칠 예정), 실제 기기에서 끝까지 검증하지 않았습니다. 고쳐진 뒤에도 상시 실행 장치가 없어 리드 탭과
+> 디스코드 수신을 저절로 켜지 않으므로, `herdr` 를 연 뒤 탭 하나에서 `omo` 를, 또 다른 탭에서 `dori serve` 를 실행해 두어야
+> 합니다(재부팅하면 다시). 가능하면 리눅스나 윈도우 컴퓨터를 쓰세요.
 
 ### 2단계 — 디스코드 봇 만들고 값 네 개 구하기
 
@@ -178,7 +179,7 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 | herdr 에 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 「짱돌」 자체가 없으면 같은 한 줄을 다시 실행하세요. 「짱돌」 은 있는데 빈 명령줄만 보이면(`DORI-LEAD-FAIL` 포함) 바로 위 줄처럼 그 화면에 `omo` 를 입력합니다 |
 | 디스코드에서 답이 없음 | 아래 기록에서 `DISCORD_LISTENER_FATAL` 줄을 찾아보세요. `close=4004` 면 토큰이 틀렸습니다(2단계 3을 다시 하고 3단계에 새 토큰). `close=4014` 면 Message Content Intent 가 꺼져 있습니다(2단계 4). 그런 줄이 없으면 채널 ID·내 ID 가 맞는지, 봇이 그 채널을 볼 수 있는지(2단계 5) 확인하세요 |
 
-디스코드 수신 기록을 보는 곳: 리눅스는 터미널에서 `journalctl --user -u dori-serve -n 50`, 윈도우는 PowerShell 에서
+디스코드 수신 기록을 보는 곳: 리눅스는 터미널에서 `grep DISCORD_LISTENER_FATAL ~/.dori/state/serve.log | tail -5`(아무것도 안 나오면 그 오류가 없는 것), 윈도우는 PowerShell 에서
 `notepad "$env:USERPROFILE\.dori\state\serve.log"` 를 실행하고 메모장에서 `Ctrl`+`F` 로 `DISCORD_LISTENER_FATAL` 을 찾습니다.
 
 그래도 안 되면 [GitHub 이슈](https://github.com/orientpine/cytoplasm/issues)(GitHub 계정이 필요합니다)에 운영체제와 마지막에 나온 화면 몇 줄을
@@ -684,7 +685,7 @@ logs/           # 로그 (git 미추적, 디렉토리만 유지)
 herdr 웹, 레인 체크포인트, 분리 인수인계, `dori heavy`, 송신 게이트, 음성 설정은 Linux 전용으로 남아요.
 
 macOS 에서는 도리 설치기가 포크·역할·herdr 까지 깔지만 systemd 가 없어 herdr 서버·웹 유닛은
-건너뜁니다. 그래서 재부팅 뒤 루프를 살려 두는 장치가 없어요. 직접 띄워야 합니다.
+건너뜁니다. 다만 지금은 그 건너뛰기 전에 `systemctl` 이 없다며 멈출 수 있는 알려진 문제가 있어(고칠 예정) 처음 설치에는 권하지 않아요. 그래서 재부팅 뒤 루프를 살려 두는 장치가 없어요. 직접 띄워야 합니다.
 Linux·macOS 업데이트는 `python3 -m automation.install.update` 입니다.
 
 </details>
