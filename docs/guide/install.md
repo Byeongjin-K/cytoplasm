@@ -28,7 +28,8 @@ curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.s
 설치가 끝나면 사람이 할 일은 셋뿐이다.
 
 1. `~/.dori/dori.env`(설치기가 포크 예시로 0600 으로 만든다)의 `DORI_DISCORD_TOKEN`·`DORI_DISCORD_GUILD`·
-   `DORI_DISCORD_CHANNEL`·`DORI_DISCORD_OWNER` 네 줄을 자기 봇 값으로 바꾼다(만드는 법은 그 파일 주석).
+   `DORI_DISCORD_CHANNEL`·`DORI_DISCORD_OWNER` 네 줄을 자기 봇 값으로 바꾼다(봇 만들기·토큰·개발자 모드로 ID 복사는
+   [README 「빠른 시작」 2·3단계](../../README.md#2단계--디스코드-봇-만들고-값-네-개-구하기), 그 파일 주석에도 있다).
    상시 루프는 다음 재시도(최대 5분) 때 붙는다. 바로 붙이려면 `systemctl --user restart dori-serve`(윈도우는 재로그온).
 2. 리드 탭(`herdr`, 리눅스는 웹 `http://127.0.0.1:8181` 도)의 omo 에서 `/login` 으로 모델에 로그인한다.
 3. 같은 탭에서 "Dori mode" 라고 한다.

@@ -1,29 +1,202 @@
 <div align="center">
 
-# autophagy-agents
+# cytoplasm (사이토플라즘)
 
 **연구자 한 사람이 자기 노드에서 돌리는 개인 에이전트 시스템.**<br>
 메일·일정·회의록·노트를 대신 처리하지만, **내가 ✅ 를 누르지 않은 일은 절대 하지 않습니다.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](#필요한-것)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-FCC624?logo=linux&logoColor=black)](#필요한-것)
+[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](#빠른-시작)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-FCC624?logo=linux&logoColor=black)](#빠른-시작)
 [![Latest tag](https://img.shields.io/github/v/tag/orientpine/cytoplasm?label=latest&color=success)](https://github.com/orientpine/cytoplasm/tags)
 [![Releases](https://img.shields.io/badge/releases-SSH%20signed-success)](#업데이트는-서명된-것만-설치됩니다)
 [![External effects](https://img.shields.io/badge/external%20effects-owner%20approved-critical)](#승인-게이트가-실제로-막는-것)
 
-[빠른 시작](#빠른-시작) · [무엇을 할 수 있나요](#무엇을-할-수-있나요) · [동작 방식](#동작-방식) · [FAQ](#자주-묻는-질문) · [보안](SECURITY.md)
+[빠른 시작](#빠른-시작) · [막힐 때](#막힐-때) · [무엇을 할 수 있나요](#무엇을-할-수-있나요) · [동작 방식](#동작-방식) · [FAQ](#자주-묻는-질문) · [보안](SECURITY.md)
 
 </div>
 
-> [!IMPORTANT]
-> **릴리스 서명키 교체 공지 (2026-10-19)** — 릴리스를 만드는 기계를 옮기면서 업데이트를 검증하는 서명키를 새로 만들었습니다.
->
-> - v2.6.5 까지는 이전 키(`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`), **v2.6.6 부터는 새 키**로 서명합니다. 새 키 지문: `SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU`
-> - 이미 설치한 서버가 이전 키만 믿고 있으면 **v2.6.5 에서 멈춰** 더 업데이트되지 않습니다. 리컨실러 로그·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 경고와 새 지문이 남습니다.
-> - 운영자가 할 일: v2.6.6 릴리스에 붙은 `update-trust.pub` 를 받아 신뢰 파일에 덧붙입니다 — `trust_key_bootstrap.py install --add` 명령 전체는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있습니다.
-> - 확인: `python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'` 의 마지막 줄이 `TRUSTED` 이면 됩니다(2분 안에 최신 릴리스로 따라옵니다).
-> - 이전 교체(2026-10-13): v1.22.2 까지는 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3~v2.6.5 는 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 였습니다.
+
+---
+
+## 빠른 시작
+
+개발자가 아니어도 이 절만 위에서부터 따라 하면 됩니다. 컴퓨터에 **도리**(디스코드로 말을 걸면 일을 해 주는
+비서 프로그램)를 깔고, 디스코드에서 첫 답장을 받는 데까지 갑니다. 처음 보는 말은 아래
+[처음 보는 말 풀이](#처음-보는-말-풀이)에 한 줄씩 있습니다.
+
+### 시작 전에 준비할 것
+
+| 준비물 | 설명 |
+|---|---|
+| 컴퓨터 한 대 | 리눅스(우분투 등)·윈도우 10/11·macOS. 도리는 이 컴퓨터가 켜져 있을 때 답합니다 |
+| 디스코드 계정 | 봇을 만들고 그 봇과 이야기할 개인 서버를 만듭니다(무료) |
+| AI 구독 하나 | **Claude Pro/Max** 또는 **ChatGPT Plus/Pro**. 4단계에서 이 계정으로 로그인합니다 |
+| 30분쯤 | 설치를 기다리는 몇 분 + 디스코드 봇 만들기 |
+
+설치 한 줄을 실행한 뒤 사람이 할 일은 **셋**뿐입니다. ① 디스코드 봇 값 네 개를 파일에 넣기(2~3단계),
+② 리드 탭에서 `/login` 으로 AI 구독에 로그인(4단계), ③ "Dori mode" 라고 말하기(5단계). 마지막 6단계에서
+디스코드에 말을 걸어 답이 오는지 확인합니다.
+
+### 1단계 — 설치 한 줄 실행
+
+**리눅스·macOS** — 터미널을 엽니다(우분투는 `Ctrl`+`Alt`+`T`, macOS 는 `Cmd`+`Space` 를 누르고 「터미널」 입력).
+아래 한 줄을 복사해 터미널에 붙여 넣고(리눅스 터미널은 `Ctrl`+`Shift`+`V`, macOS 는 `Cmd`+`V`) `Enter` 를 누릅니다.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
+```
+
+git 같은 기본 도구가 없으면 리눅스는 `sudo` 비밀번호(컴퓨터 로그인 비밀번호)를 한 번 묻습니다.
+
+**윈도우** — `시작` 버튼을 누르고 `powershell` 을 입력한 뒤 「Windows PowerShell」 을 그냥 클릭해 엽니다.
+「관리자 권한으로 실행」 은 고르지 마세요(필요 없고, 그러면 AI 에이전트 설치가 건너뛰어집니다). 아래 한 줄을
+복사해 파란 창에 붙여 넣고(`Ctrl`+`V` 또는 마우스 오른쪽 클릭) `Enter` 를 누릅니다. WSL 은 필요 없습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.ps1 | iex"
+```
+
+몇 분 동안 글자가 흘러갑니다. 필요한 도구(git·Python·Bun·omo, 윈도우는 PowerShell 7 도)를 찾아 없으면 깔고,
+내려받은 것이 진짜 배포본인지 서명으로 확인한 뒤 도리를 설치합니다. 마지막 즈음에 이 줄이 보이면 성공입니다.
+
+```text
+CYTO-LINUX-INSTALLED ...      (윈도우는 CYTO-WINDOWS-INSTALLED ...)
+Update later: run the same line again. Open a new terminal so PATH picks up dori, herdr and omo.
+```
+
+**터미널(PowerShell) 창을 닫고 새로 엽니다.** 그래야 방금 깐 `herdr`·`dori`·`omo` 명령을 찾습니다.
+중간에 멈추거나 빨간 글이 나오면 [막힐 때](#막힐-때)를 보세요.
+
+설치기는 도리가 늘 깨어 있도록 상시 실행 장치도 켭니다. 리눅스는 사용자 서비스 `dori-serve.service`,
+윈도우는 로그온 때 도는 작업 스케줄러 항목 두 개(「Dori herdr server」, 「Dori serve」)입니다. 사람이 따로 켤 것은 없습니다.
+
+> [!NOTE]
+> **macOS** 는 같은 한 줄로 설치되지만 상시 실행 장치가 없어 리드 탭과 디스코드 수신을 저절로 켜지 않습니다.
+> 4단계에서 `herdr` 를 연 뒤 탭 하나에서 `omo` 를, 또 다른 탭에서 `dori serve` 를 실행해 두세요(재부팅하면 다시).
+
+### 2단계 — 디스코드 봇 만들고 값 네 개 구하기
+
+도리는 **내가 만든 봇**으로 디스코드에서 말합니다. 아래 네 값을 메모장에 모아 두세요.
+
+| 값 | 무엇인가 | 넣을 줄 |
+|---|---|---|
+| 봇 토큰 | 봇의 비밀번호. **남에게 보이거나 어디에 올리면 안 됩니다** | `DORI_DISCORD_TOKEN` |
+| 서버 ID | 봇과 이야기할 내 디스코드 서버의 번호 | `DORI_DISCORD_GUILD` |
+| 채널 ID | 그 서버에서 도리와 이야기할 채널의 번호 | `DORI_DISCORD_CHANNEL` |
+| 내 ID | 내 디스코드 계정의 번호. 도리는 이 사람의 말만 지시로 받습니다 | `DORI_DISCORD_OWNER` |
+
+1. **내 서버와 채널 만들기.** 디스코드 앱 왼쪽 줄 맨 아래 「+」(서버 추가) → 「직접 만들기」 → 「나와 친구들을 위한 서버」 →
+   이름을 정하고 만듭니다. 그 서버에 글 채널을 하나 만듭니다(예: `#dori`). 이미 있는 내 서버를 써도 됩니다.
+2. **봇 만들기.** 브라우저로 <https://discord.com/developers/applications> 에 디스코드 계정으로 들어가
+   「New Application」 → 이름(예: Dori) → 「Create」.
+3. **토큰 받기.** 왼쪽 메뉴 「Bot」 → 「Reset Token」 → 확인 → 나온 긴 글자를 「Copy」 해 메모합니다.
+   토큰은 이때 한 번만 보입니다. 잃어버리면 다시 「Reset Token」 하면 됩니다(예전 토큰은 그때 못 쓰게 됩니다).
+4. **글 읽기 권한 켜기.** 같은 「Bot」 화면 아래쪽 「Privileged Gateway Intents」 에서 **Message Content Intent** 를 켜고
+   「Save Changes」. 이걸 빼먹으면 봇이 내 말을 읽지 못합니다.
+5. **봇을 내 서버에 초대.** 왼쪽 메뉴 「OAuth2」 → 「URL Generator」 → Scopes 에서 `bot` 체크 →
+   아래 Bot Permissions 에서 `View Channels`, `Send Messages`, `Send Messages in Threads`, `Create Public Threads`,
+   `Manage Threads`, `Add Reactions`, `Read Message History`, `Attach Files` 를 체크 → 맨 아래 생성된 주소를 복사해
+   브라우저 새 탭에 붙여 넣고 1에서 만든 서버를 골라 「승인」.
+6. **개발자 모드 켜기(ID 복사용).** 디스코드 앱 왼쪽 아래 톱니바퀴(사용자 설정) → 「고급」 → 「개발자 모드」 켜기.
+7. **ID 세 개 복사.** 왼쪽 줄의 내 서버 아이콘을 마우스 오른쪽 클릭 → 「서버 ID 복사」, 채널 이름을 오른쪽 클릭 →
+   「채널 ID 복사」, 채팅에 보이는 내 이름(또는 왼쪽 아래 내 프로필)을 오른쪽 클릭 → 「사용자 ID 복사」. 셋 다 18~19자리 숫자입니다.
+
+### 3단계 — 값 네 개를 `dori.env` 에 넣기
+
+설치기가 만들어 둔 설정 파일 `dori.env` 를 엽니다.
+
+```bash
+nano ~/.dori/dori.env                               # 리눅스 (저장 Ctrl+O → Enter, 나가기 Ctrl+X)
+open -e ~/.dori/dori.env                            # macOS (텍스트 편집기)
+```
+
+```powershell
+notepad "$env:USERPROFILE\.dori\dori.env"           # 윈도우 (메모장, 저장 Ctrl+S)
+```
+
+파일 위쪽의 네 줄에서 `=` 뒤의 예시 값만 2단계에서 모은 값으로 바꿉니다. 띄어쓰기나 따옴표는 넣지 않습니다.
+`#` 으로 시작하는 줄과 나머지 줄은 그대로 둡니다.
+
+```text
+DORI_DISCORD_TOKEN=replace-with-your-bot-token     ← 봇 토큰
+DORI_DISCORD_GUILD=111111111111111111              ← 서버 ID
+DORI_DISCORD_CHANNEL=222222222222222222            ← 채널 ID
+DORI_DISCORD_OWNER=333333333333333333              ← 내 ID
+```
+
+저장하면 도리의 디스코드 수신이 다음 재시도(최대 5분) 때 저절로 붙습니다. 바로 붙이려면 리눅스는
+`systemctl --user restart dori-serve`, 윈도우는 로그아웃했다가 다시 로그인합니다. 이 파일에는 비밀이 들어 있으니
+남에게 보내거나 어디에 올리지 마세요.
+
+### 4단계 — 리드 탭을 열고 `/login`
+
+새 터미널(윈도우는 새 PowerShell)에서 `herdr` 를 입력하고 `Enter` 를 누릅니다. herdr 는 AI 에이전트 화면 여러 개를
+한 창에 띄워 두는 프로그램이고, 마우스로 클릭해서 씁니다. 왼쪽 목록에서 **「짱돌」** 작업 공간(도리의 리드)을 클릭하면
+AI 에이전트 omo 의 입력 화면이 보입니다. 리눅스는 브라우저 주소창에 `http://127.0.0.1:8181` 을 넣어도 같은 화면이 열립니다.
+
+1. 그 화면에 `/login` 을 입력하고 `Enter`.
+2. 목록에서 내 구독을 고릅니다. Claude 를 쓰면 **Anthropic Subscription (Claude Pro/Max)**,
+   ChatGPT 를 쓰면 **ChatGPT Subscription (Plus/Pro)**. 화살표 키로 옮기고 `Enter`.
+3. 브라우저가 열리면 그 구독 계정으로 로그인하고 「허용」(Authorize)을 누릅니다. 브라우저가 열리지 않으면
+   화면에 나온 주소를 복사해 브라우저에 붙여 넣습니다. 터미널로 돌아와 로그인됐다는 말이 나오면 끝입니다.
+
+herdr 창을 닫아도 도리는 뒤에서 계속 돕니다. 다시 보려면 `herdr` 를 또 입력하면 됩니다.
+
+### 5단계 — "Dori mode" 라고 말하기
+
+같은 짱돌 화면에 `Dori mode` 라고 입력하고 `Enter`. 도리가 먼저 자기를 뭐라고 부를지 묻습니다. "Dori" 라고 해도 되고,
+ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리가 디스코드 채널과 연결하고 지시를 기다립니다.
+다음에 다시 켤 때도 같은 화면에서 그 이름으로 "○○ mode" 라고 하면 됩니다.
+
+### 6단계 — 잘 됐는지 확인: 디스코드에 말 걸기
+
+2단계에서 ID 를 복사한 채널에 `안녕, 들려?` 라고 써 봅니다. 1~2분 안에 내가 만든 봇이 답하면 설치가 끝난 것입니다.
+그다음부터는 그 채널에 하고 싶은 일을 보통 말로 쓰면 됩니다. 답이 없으면 바로 아래 [막힐 때](#막힐-때)를 보세요.
+
+### 막힐 때
+
+| 보이는 것 | 뜻과 할 일 |
+|---|---|
+| `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 그 줄이 무엇이 없는지 이름을 댑니다. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
+| `…-FINGERPRINT-MISMATCH` | 내려받은 것이 공식 배포본과 다르다는 뜻이라 설치기가 일부러 멈췄습니다. 다시 시도하지 말고 이슈로 알려 주세요 |
+| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP` | AI 에이전트 omo 를 못 깔았습니다(윈도우는 대개 관리자 창이라서). 그 줄에 적힌 명령을 **일반** 터미널(PowerShell)에서 실행한 뒤, 출력의 `DORI-LEAD-PANE` 줄 끝 명령(`herdr pane run …`)을 실행하면 짱돌 탭이 켜집니다 |
+| PowerShell 이 빨간 글로 실행 정책(ExecutionPolicy)을 말함 | 한 줄을 고치지 말고 위에 적힌 그대로 붙여 넣으세요. 이미 그 설정이 들어 있습니다 |
+| 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | git, Python 3.11 이상, PowerShell 7 을 직접 깐 뒤 같은 한 줄을 다시 실행하세요 |
+| `herdr`·`dori` 명령을 찾을 수 없음 | 터미널을 닫고 새로 여세요. 설치 직후의 창은 새 명령을 모릅니다 |
+| herdr 에 「짱돌」 이 없음 | macOS 이거나 위의 OMO-SKIP 경우입니다. 탭 하나에서 `omo` 를 직접 실행하고 4단계를 이어 가세요 |
+| 디스코드에서 답이 없음 | 아래 기록에서 `DISCORD_LISTENER_FATAL` 줄을 찾아보세요. `close=4004` 면 토큰이 틀렸습니다(2단계 3을 다시 하고 3단계에 새 토큰). `close=4014` 면 Message Content Intent 가 꺼져 있습니다(2단계 4). 그런 줄이 없으면 채널 ID·내 ID 가 맞는지, 봇이 그 채널을 볼 수 있는지(2단계 5) 확인하세요 |
+
+디스코드 수신 기록을 보는 곳: 리눅스는 `journalctl --user -u dori-serve -n 50`, 윈도우는
+`%USERPROFILE%\.dori\state\serve.log` 를 메모장으로 엽니다.
+
+그래도 안 되면 [GitHub 이슈](https://github.com/orientpine/cytoplasm/issues)에 운영체제와 마지막에 나온 화면 몇 줄을
+붙여 알려 주세요. **봇 토큰과 `dori.env` 내용은 절대 붙이지 마세요.** 설치 단계별 자세한 내용은
+[설치 가이드](docs/guide/install.md#도리-기본-설치-p6)에 있습니다.
+
+### 업데이트
+
+새 릴리스가 나오면 **1단계의 같은 한 줄을 다시 실행**하면 됩니다. 넣어 둔 `dori.env` 와 설정은 그대로 남습니다.
+옥돌·무돌·공돌 같은 선택 역할은 줄 앞에 환경변수 `CYTO_ROLES=okdori,moodori,gongdori` 를 붙여 더합니다
+([설치 가이드](docs/guide/install.md#도리-기본-설치-p6)). 예전 방식으로 서버에 깔아 운영하던 분은
+[릴리스 서명키 교체 공지](#릴리스-서명키-교체-공지-2026-10-19)와 [직접 설치와 레거시 노드](#직접-설치와-레거시-노드)를 보세요.
+
+### 처음 보는 말 풀이
+
+| 말 | 뜻 |
+|---|---|
+| 도리(Dori) | 디스코드로 지시를 받아 일을 하고 결과를 알려 주는 상시 비서. 이 설치가 까는 것 |
+| 짱돌(리드)·유돌(YooDori) | 기본으로 깔리는 두 역할. 짱돌은 지시를 받아 일을 나눠 맡기는 리드, 유돌은 메일·일정·할 일·문서를 맡는 비서 |
+| 옥돌·무돌·공돌 | 원하면 더하는 선택 역할 |
+| 터미널·PowerShell | 글자로 명령을 입력하는 창. 리눅스·macOS 는 「터미널」, 윈도우는 「PowerShell」 |
+| omo | 도리 안에서 실제로 생각하고 일하는 AI 에이전트 프로그램. `/login` 으로 내 AI 구독에 연결 |
+| herdr | 여러 AI 에이전트 화면(탭)을 한 창에 띄워 두는 프로그램. 창을 닫아도 뒤에서 계속 돎 |
+| 리드 탭·작업 공간 | herdr 안에서 짱돌이 도는 화면. 도리가 일을 맡길 때는 일마다 새 탭(레인, lane)을 엽니다 |
+| `dori.env` | 봇 토큰·ID 를 넣는 내 설정 파일. 비밀이 들어 있음 |
+| 서명된 릴리스·지문 | 설치기가 내려받은 것이 진짜 배포본인지 자동으로 확인하는 장치. 사람이 할 일은 없음 |
+| 승인 카드(✅/⛔) | 메일 발송처럼 바깥으로 나가는 일 전에 디스코드에 올라오는 확인 카드. ✅ 를 눌러야 실행 |
+| Hermes·리컨실러·레거시 노드·프로필 | 예전 방식(서버 계정에 깔던 설치)의 이름. 새로 설치하는 분은 몰라도 됩니다 |
+
 
 ---
 
@@ -59,15 +232,16 @@ action_hash : sha256:7f3c…a19b
 
 ## 목차
 
+- [빠른 시작](#빠른-시작) — [막힐 때](#막힐-때) · [처음 보는 말 풀이](#처음-보는-말-풀이)
 - [한눈에](#한눈에)
 - [왜 이렇게 만들었나요](#왜-이렇게-만들었나요)
 - [무엇을 할 수 있나요](#무엇을-할-수-있나요)
-- [빠른 시작](#빠른-시작)
 - [동작 방식](#동작-방식)
 - [승인 게이트가 실제로 막는 것](#승인-게이트가-실제로-막는-것)
 - [업데이트는 서명된 것만 설치됩니다](#업데이트는-서명된-것만-설치됩니다)
 - [연합 모델 — 각자 자기 설치를 소유합니다](#연합-모델--각자-자기-설치를-소유합니다)
 - [함께 쓰면 좋은 것 — Dori](#함께-쓰면-좋은-것--dori)
+- [직접 설치와 레거시 노드](#직접-설치와-레거시-노드)
 - [저장소 구조](#저장소-구조)
 - [자주 묻는 질문](#자주-묻는-질문)
 - [기여하기](#기여하기)
@@ -124,133 +298,6 @@ action_hash : sha256:7f3c…a19b
 [`skills/AGENTS.md`](skills/AGENTS.md) 를 보세요.
 
 ---
-
-## 빠른 시작
-
-### 리눅스 (한 줄)
-
-터미널에 한 줄을 붙여 넣습니다. git 이 없으면 `sudo` 비밀번호를 한 번 묻습니다.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
-```
-
-git·Python 3.11+·Bun·omo(도리 리드가 쓰는 에이전트)가 없으면 깔고, 서명된 최신 릴리스를 확인한 뒤
-도리를 설치합니다. 리드 탭이 herdr 에 뜨고, 디스코드 수신 같은 상시 루프는 사용자 유닛 `dori-serve.service` 가
-살려 둡니다. 끝나면 할 일은 셋입니다. `~/.dori/dori.env` 의 `DORI_DISCORD_TOKEN`·`GUILD`·`CHANNEL`·`OWNER` 네 줄을
-자기 봇 값으로 바꾸고, 리드 탭(`herdr` 또는 웹 `http://127.0.0.1:8181`)에서 `/login` 으로 모델에 로그인한 뒤
-"Dori mode" 라고 합니다. 새 릴리스가 나오면 **같은 줄을 다시 실행**하면 업데이트됩니다.
-
-### 도리 기본 설치 (체크아웃에서 직접)
-
-신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌·공돌은 선택이며
-Hermes는 설치하지 않습니다. Python 3.11 이상, 실제 설치에는 git·Bun이 필요합니다.
-봇 토큰·채널·모델 로그인은 설치별로 준비합니다.
-
-```bash
-python3 -m automation.install --dry-run
-python3 -m automation.install.wizard
-```
-
-마법사 첫 항목과 빈 입력은 도리입니다. `--dori-role okdori`·`--dori-role moodori`·`--dori-role gongdori`로
-선택 역할을 더합니다. 도리 CLI·역할 설치와 기존 업무 노드의 업그레이드는 구분합니다.
-[설치 가이드](docs/guide/install.md)와 [도리 기반 메이저 소개](docs/기능소개/도리-기반-메이저.md)를
-먼저 읽으세요. 이미 전환된 노드는 설치기를 재실행하지 않고 기존 서명 릴리스로 업데이트하며,
-멈춘 Hermes 잡·계정·유닛을 지우지 않습니다.
-
-### 윈도우 (WSL 없이)
-
-PowerShell 에 한 줄을 붙여 넣습니다. 관리자 권한은 필요 없습니다.
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.ps1 | iex"
-```
-
-git·Python·Bun·PowerShell 7·omo 가 없으면 winget 과 각자의 설치기로 깔고, 서명된 최신 릴리스를 확인한 뒤
-도리를 설치합니다. 로그온 때 도는 작업 스케줄러 항목 두 개(「Dori herdr server」, 「Dori serve」)가
-systemd 대신 루프를 살려 둡니다. 끝난 뒤 할 일은 리눅스와 같습니다(`%USERPROFILE%\.dori\dori.env` 네 줄, 리드 탭 `/login`).
-새 릴리스가 나오면 **같은 줄을 다시 실행**하면 업데이트됩니다.
-자세한 내용은 [설치 가이드 「윈도우」](docs/guide/install.md#윈도우네이티브-wsl-없음)에 있습니다.
-
-### 필요한 것
-
-도리 기본 설치는 Linux·macOS·윈도우(네이티브)에서 돕니다. 아래 표는 레거시 노드용입니다.
-
-아래 절차는 기존 노드 유지보수를 위해 `--profile core|rag|report-hub|full`을
-명시한 경우에만 적용됩니다. 기본 도리 경로의 전제가 아닙니다.
-
-| 항목 | 값 |
-|---|---|
-| 운영체제 | **Linux + systemd** (리컨실러·워처가 systemd 타이머) |
-| 권한 | 설치에 `root`. 계획 확인(dry-run)은 root 없이 가능 |
-| 파이썬 | 3.12 이상 |
-| 그 밖에 | Discord 앱·봇, 모델 provider, Hermes 게이트웨이, 업데이트 신뢰키 |
-
-전제 준비의 정본은 [`docs/guide/third-party-runtime-prereqs.md`](docs/guide/third-party-runtime-prereqs.md)
-입니다. 처음 받은 분은 표지 문서 [`docs/guide/quickstart-install.md`](docs/guide/quickstart-install.md)
-부터 펼치세요. 설치 절차 전체의 단일 진실은 [`docs/guide/install.md`](docs/guide/install.md) 이고요.
-
-### 1단계 — 지문부터 대조합니다
-
-`<bundle>/update-trust.pub` 은 각 릴리스에 asset 으로 동봉되는 업데이트 신뢰키의 공개키예요.
-그 지문은 이 README 와 릴리스 노트에 공지되는데, **키와 다른 경로로 받은 지문**을 설치기에
-넘겨 대조하는 것이 이 부트스트랩의 핵심입니다. 마법사도 설치기도 지문을 지어내지 않아요.
-
-```
-SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU
-```
-
-사람이 직접 판단해야 하는 지점은 사실상 여기 하나뿐입니다.
-
-### 2단계 — 설치 마법사 (권장)
-
-```bash
-python3 -m automation.install.wizard \
-    --profile core \
-    --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
-```
-
-마법사는 프로필(`core`·`rag`·`report-hub`·`full`), 업데이트 origin URL, 호스트 이름, 운영자
-계정을 묻고 `~/.config/autophagy/node.toml` 을 대신 써 줍니다. 그다음 root 없이 설치 계획을
-받아 한국어 요약을 보여주고, `yes` 를 입력해야만 `sudo` 로 실제 설치에 들어가요. 설치 로직은
-여전히 아래 설치기 하나가 소유합니다 — 마법사는 그 인자를 조립할 뿐이죠.
-
-- `--profile core` 처럼 값을 미리 주면 그 질문은 건너뜁니다. `--config PATH` 로 위치를 바꾸거나
-  이미 있는 config 를 그대로 재사용해도 되고요.
-- `--dry-run-only` 는 계획 확인에서 끝납니다(`sudo` 0회). `--yes` 는 비대화 실행 전용이에요.
-- 확인 질문에 `n` 을 답하면 rc 3 으로 멈추고 아무것도 설치하지 않습니다.
-- 설치 전에 사람이 준비할 승인(Codex 구독 로그인·Discord 봇·Google 동의 등)을 먼저 보여 주고, 설치가 끝나면
-  `python3 -m automation.doctor` 로 하나씩 확인·안내합니다. 승인한 뒤 Enter 를 누르면 다시 점검해요.
-  설치 뒤에는 매시간 점검해 끊긴 연결이 **생기거나 풀릴 때만** 알려 줍니다
-  ([연결·승인 점검](docs/guide/연결-승인-점검.md)).
-
-### 3단계 — 설치기 직접 실행 (스크립트·수동)
-
-config 를 [install.md §3](docs/guide/install.md) 대로 손으로 쓰거나, 마법사가 만든 파일을 그대로
-주고 같은 설치기를 부르세요.
-
-```bash
-# 무엇이 설치될지 먼저 봅니다 — root 불필요, 아무것도 쓰지 않습니다
-python3 -m automation.install \
-    --config ~/.config/autophagy/node.toml \
-    --profile core \
-    --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU' \
-    --dry-run
-
-# 실제 설치 — 멱등입니다. 막히면 고치고 같은 명령을 다시 실행하세요
-sudo python3 -m automation.install \
-    --config ~/.config/autophagy/node.toml \
-    --profile core \
-    --update-trust-key <bundle>/update-trust.pub \
-    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
-```
-
-명시적 레거시 `--profile`은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로
-고정합니다. 프로필을 생략하면 위 도리 기본 설치로 갑니다.
-
-설치가 끝난 뒤의 사용법은 [`docs/guide/manual-member.md`](docs/guide/manual-member.md) 가 이어받습니다.
 
 ---
 
@@ -339,6 +386,17 @@ flowchart TD
 리컨실러 저널·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 한 줄과 새 서명 키
 지문이 남고, 덧붙이는 절차는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있어요.
 
+### 릴리스 서명키 교체 공지 (2026-10-19)
+
+> [!IMPORTANT]
+> 릴리스를 만드는 기계를 옮기면서 업데이트를 검증하는 서명키를 새로 만들었습니다.
+>
+> - v2.6.5 까지는 이전 키(`SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang`), **v2.6.6 부터는 새 키**로 서명합니다. 새 키 지문: `SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU`
+> - 이미 설치한 서버가 이전 키만 믿고 있으면 **v2.6.5 에서 멈춰** 더 업데이트되지 않습니다. 리컨실러 로그·헬스체크에 `UPDATE-TRUST-STALE-KEY 신뢰 키 갱신 필요` 경고와 새 지문이 남습니다.
+> - 운영자가 할 일: v2.6.6 릴리스에 붙은 `update-trust.pub` 를 받아 신뢰 파일에 덧붙입니다 — `trust_key_bootstrap.py install --add` 명령 전체는 [install.md 「업데이트 신뢰키가 바뀌었을 때」](docs/guide/install.md#업데이트-신뢰키가-바뀌었을-때-이미-설치한-서버)에 있습니다.
+> - 확인: `python3 /srv/autophagy-agent-current/automation/install/trust_key_bootstrap.py verify --expect-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'` 의 마지막 줄이 `TRUSTED` 이면 됩니다(2분 안에 최신 릴리스로 따라옵니다).
+> - 이전 교체(2026-10-13): v1.22.2 까지는 `SHA256:0imCAjLaEFCB8oNX05/7mHFQAZsL722KIEZsVD5yvrA`, v1.22.3~v2.6.5 는 `SHA256:NT5Ra3dsXhGg/+k6dvZaaE9epZcSuq4KuFGCMYQiang` 였습니다.
+
 ---
 
 ## 연합 모델 — 각자 자기 설치를 소유합니다
@@ -426,6 +484,110 @@ flowchart LR
 
 ---
 
+## 직접 설치와 레거시 노드
+
+빠른 시작의 한 줄 대신 저장소 체크아웃에서 설치기를 직접 부르거나, 예전 방식(Hermes 게이트웨이·서비스 계정·리컨실러
+타이머를 쓰는 서버 노드)을 운영하는 분을 위한 절입니다. 처음 설치하는 분은 읽지 않아도 됩니다.
+
+### 도리 기본 설치 — 체크아웃에서 직접
+
+신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌·공돌은 선택이며
+Hermes는 설치하지 않습니다. Python 3.11 이상, 실제 설치에는 git·Bun이 필요합니다.
+봇 토큰·채널·모델 로그인은 설치별로 준비합니다.
+
+```bash
+python3 -m automation.install --dry-run
+python3 -m automation.install.wizard
+```
+
+마법사 첫 항목과 빈 입력은 도리입니다. `--dori-role okdori`·`--dori-role moodori`·`--dori-role gongdori`로
+선택 역할을 더합니다. 도리 CLI·역할 설치와 기존 업무 노드의 업그레이드는 구분합니다.
+[설치 가이드](docs/guide/install.md)와 [도리 기반 메이저 소개](docs/기능소개/도리-기반-메이저.md)를
+먼저 읽으세요. 이미 전환된 노드는 설치기를 재실행하지 않고 기존 서명 릴리스로 업데이트하며,
+멈춘 Hermes 잡·계정·유닛을 지우지 않습니다.
+
+### 필요한 것
+
+도리 기본 설치는 Linux·macOS·윈도우(네이티브)에서 돕니다. 아래 표는 레거시 노드용입니다.
+
+아래 절차는 기존 노드 유지보수를 위해 `--profile core|rag|report-hub|full`을
+명시한 경우에만 적용됩니다. 기본 도리 경로의 전제가 아닙니다.
+
+| 항목 | 값 |
+|---|---|
+| 운영체제 | **Linux + systemd** (리컨실러·워처가 systemd 타이머) |
+| 권한 | 설치에 `root`. 계획 확인(dry-run)은 root 없이 가능 |
+| 파이썬 | 3.12 이상 |
+| 그 밖에 | Discord 앱·봇, 모델 provider, Hermes 게이트웨이, 업데이트 신뢰키 |
+
+전제 준비의 정본은 [`docs/guide/third-party-runtime-prereqs.md`](docs/guide/third-party-runtime-prereqs.md)
+입니다. 처음 받은 분은 표지 문서 [`docs/guide/quickstart-install.md`](docs/guide/quickstart-install.md)
+부터 펼치세요. 설치 절차 전체의 단일 진실은 [`docs/guide/install.md`](docs/guide/install.md) 이고요.
+
+### 레거시 1단계 — 지문부터 대조합니다
+
+`<bundle>/update-trust.pub` 은 각 릴리스에 asset 으로 동봉되는 업데이트 신뢰키의 공개키예요.
+그 지문은 이 README 와 릴리스 노트에 공지되는데, **키와 다른 경로로 받은 지문**을 설치기에
+넘겨 대조하는 것이 이 부트스트랩의 핵심입니다. 마법사도 설치기도 지문을 지어내지 않아요.
+
+```
+SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU
+```
+
+사람이 직접 판단해야 하는 지점은 사실상 여기 하나뿐입니다.
+
+### 레거시 2단계 — 설치 마법사 (권장)
+
+```bash
+python3 -m automation.install.wizard \
+    --profile core \
+    --update-trust-key <bundle>/update-trust.pub \
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
+```
+
+마법사는 프로필(`core`·`rag`·`report-hub`·`full`), 업데이트 origin URL, 호스트 이름, 운영자
+계정을 묻고 `~/.config/autophagy/node.toml` 을 대신 써 줍니다. 그다음 root 없이 설치 계획을
+받아 한국어 요약을 보여주고, `yes` 를 입력해야만 `sudo` 로 실제 설치에 들어가요. 설치 로직은
+여전히 아래 설치기 하나가 소유합니다 — 마법사는 그 인자를 조립할 뿐이죠.
+
+- `--profile core` 처럼 값을 미리 주면 그 질문은 건너뜁니다. `--config PATH` 로 위치를 바꾸거나
+  이미 있는 config 를 그대로 재사용해도 되고요.
+- `--dry-run-only` 는 계획 확인에서 끝납니다(`sudo` 0회). `--yes` 는 비대화 실행 전용이에요.
+- 확인 질문에 `n` 을 답하면 rc 3 으로 멈추고 아무것도 설치하지 않습니다.
+- 설치 전에 사람이 준비할 승인(Codex 구독 로그인·Discord 봇·Google 동의 등)을 먼저 보여 주고, 설치가 끝나면
+  `python3 -m automation.doctor` 로 하나씩 확인·안내합니다. 승인한 뒤 Enter 를 누르면 다시 점검해요.
+  설치 뒤에는 매시간 점검해 끊긴 연결이 **생기거나 풀릴 때만** 알려 줍니다
+  ([연결·승인 점검](docs/guide/연결-승인-점검.md)).
+
+### 레거시 3단계 — 설치기 직접 실행 (스크립트·수동)
+
+config 를 [install.md §3](docs/guide/install.md) 대로 손으로 쓰거나, 마법사가 만든 파일을 그대로
+주고 같은 설치기를 부르세요.
+
+```bash
+# 무엇이 설치될지 먼저 봅니다 — root 불필요, 아무것도 쓰지 않습니다
+python3 -m automation.install \
+    --config ~/.config/autophagy/node.toml \
+    --profile core \
+    --update-trust-key <bundle>/update-trust.pub \
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU' \
+    --dry-run
+
+# 실제 설치 — 멱등입니다. 막히면 고치고 같은 명령을 다시 실행하세요
+sudo python3 -m automation.install \
+    --config ~/.config/autophagy/node.toml \
+    --profile core \
+    --update-trust-key <bundle>/update-trust.pub \
+    --expect-update-trust-fingerprint 'SHA256:4yOZrMFmCSiSryt6+sal+E2hROpMlalgWNUqSf9lqsU'
+```
+
+명시적 레거시 `--profile`은 이 노드가 운영하는 묶음의 헬스체크 선언을 root 소유 파일로
+고정합니다. 프로필을 생략하면 위 도리 기본 설치로 갑니다.
+
+설치가 끝난 뒤의 사용법은 [`docs/guide/manual-member.md`](docs/guide/manual-member.md) 가 이어받습니다.
+
+---
+
 ## 저장소 구조
 
 ```text
@@ -445,6 +607,8 @@ docs/
   troubleshooting/  # 트러블슈팅
 logs/           # 로그 (git 미추적, 디렉토리만 유지)
 ```
+
+예전 이름은 `autophagy-agents` 였고, 일부 경로·문서에 그 이름이 남아 있습니다.
 
 `.omo/`(계획·오케스트레이션 상태)와 `docs/qa/`(QA 증적)는 비공개 개발 저장소 전용이라 공개
 배포본에는 들어 있지 않아요.
