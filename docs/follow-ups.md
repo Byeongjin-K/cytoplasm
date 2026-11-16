@@ -513,3 +513,9 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 - 도리 기본 설치에서 `python3 -m automation.doctor` 는 레거시 agent 계정 진단으로 가 `doctor-run` 경고만 낸다 → 도리 설치용 점검(포크·herdr·dori-serve·dori.env 네 줄·omo 로그인)으로 나누기. 영향: 처음 설치자가 README 의 doctor 안내를 따르면 헛경고, 중간.
 - `dori-serve.service` 본문은 사이토플라즘 설치기 안의 상수다 → 포크 `setups/discord-aoe/systemd/` 에 같은 유닛을 두고 고정 커밋을 올릴 때 설치기가 포크 파일을 복사하게 옮기기(포크가 원형). 영향: 유닛을 고칠 곳이 둘, 낮음.
 - 처음 설치 측정은 우분투 24.04(aarch64 컨테이너)와 windows-latest 러너에서만 했다 → x86_64 실기 노트북·macOS(systemd 없음, 상시 루프 없음)에서 한 번 더 재기. 영향: 그 환경의 막힘을 모름, 낮음.
+
+## README 빠른 시작 다시 쓰기에서 남긴 것 (2026-11-16)
+
+- **macOS 에서 `systemctl` 자체가 없으면 도리 설치가 건너뛰기 분기로 가지 못할 수 있다** — `automation/install/dori_herdr.py` 는 `systemctl --user show-environment` 의 실패 종료값을 보고 서버·웹 유닛·리드를 건너뛰는데, `default_capture` 의 `subprocess.run` 은 명령이 없을 때 `FileNotFoundError` 를 그대로 던진다(코드 읽기로만 확인, macOS 실기 미측정) → `default_capture` 가 실행 파일 없음을 non-zero 로 돌려주게 하고 macOS 에서 한 줄 설치를 한 번 끝까지 재기. 영향: macOS 처음 설치가 리드 단계에서 멈출 수 있음 · 심각도 중.
+- **README 빠른 시작은 비개발자 역할 읽기 검토로만 검증했다** — 디스코드 개발자 포털 메뉴 이름, omo `/login` 화면, 첫 답장까지를 새 디스코드 봇·새 계정으로 실제로 따라가 보지 않았다 → 새 PC 한 대와 새 봇으로 README 만 보고 첫 답장까지 재고 다른 문구를 고치기. 영향: 화면 이름이 바뀌었으면 처음 설치자가 헤맴 · 심각도 낮음.
+- **우분투 22.04 는 기본 Python 이 3.10 이라 설치기가 `CYTO-LINUX-NEEDS` 로 멈춘다** — README 는 deadsnakes 로 `python3.12` 를 깔고 다시 실행하라고 안내만 한다 → 설치기가 그 경우 깔 명령을 직접 출력하거나 지원 우분투 버전을 설치기에서 먼저 알리기. 영향: 22.04 사용자가 한 단계 더 함 · 심각도 낮음.

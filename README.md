@@ -29,7 +29,7 @@
 
 | 준비물 | 설명 |
 |---|---|
-| 컴퓨터 한 대 | 리눅스(우분투 등)·윈도우 10/11·macOS. 도리는 이 컴퓨터가 켜져 있을 때 답합니다 |
+| 컴퓨터 한 대 | 리눅스(우분투 24.04 이상 권장)·윈도우 10/11·macOS. 도리는 이 컴퓨터가 켜져 있을 때 답합니다 |
 | 디스코드 계정 | 봇을 만들고 그 봇과 이야기할 개인 서버를 만듭니다(무료) |
 | AI 구독 하나 | **Claude Pro/Max** 또는 **ChatGPT Plus/Pro**. 4단계에서 이 계정으로 로그인합니다 |
 | 30분쯤 | 설치를 기다리는 몇 분 + 디스코드 봇 만들기 |
@@ -67,6 +67,9 @@ CYTO-LINUX-INSTALLED ...      (윈도우는 CYTO-WINDOWS-INSTALLED ...)
 Update later: run the same line again. Open a new terminal so PATH picks up dori, herdr and omo.
 ```
 
+창을 닫기 전에 출력에 `OMO-SKIP` 이나 `DORI-LEAD-FAIL` 이 들어간 줄이 있었는지 한 번 훑어보세요. 있으면 설치는 됐지만
+짱돌 화면에 AI 에이전트가 켜지지 않은 것이라 [막힐 때](#막힐-때) 표의 그 줄을 따라 하면 됩니다(창을 닫아도 고칠 수 있습니다).
+
 **터미널(PowerShell) 창을 닫고 새로 엽니다.** 그래야 방금 깐 `herdr`·`dori`·`omo` 명령을 찾습니다.
 중간에 멈추거나 빨간 글이 나오면 [막힐 때](#막힐-때)를 보세요.
 
@@ -76,6 +79,7 @@ Update later: run the same line again. Open a new terminal so PATH picks up dori
 > [!NOTE]
 > **macOS** 는 같은 한 줄로 설치되지만 상시 실행 장치가 없어 리드 탭과 디스코드 수신을 저절로 켜지 않습니다.
 > 4단계에서 `herdr` 를 연 뒤 탭 하나에서 `omo` 를, 또 다른 탭에서 `dori serve` 를 실행해 두세요(재부팅하면 다시).
+> macOS 설치는 아직 실제 기기에서 끝까지 검증하지 않았습니다. 막히면 아래 [막힐 때](#막힐-때)의 이슈로 알려 주세요.
 
 ### 2단계 — 디스코드 봇 만들고 값 네 개 구하기
 
@@ -163,9 +167,10 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 
 | 보이는 것 | 뜻과 할 일 |
 |---|---|
-| `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 그 줄이 무엇이 없는지 이름을 댑니다. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
+| `CYTO-LINUX-NEEDS: Python 3.11 or newer …` | 우분투 22.04 처럼 기본 Python 이 오래된 경우입니다. `sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt install -y python3.12` 를 실행한 뒤 같은 한 줄을 다시 실행하세요. 설치기가 `python3.12` 를 찾아 씁니다 |
+| 그 밖의 `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 그 줄이 무엇이 없는지 이름을 댑니다. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
 | `…-FINGERPRINT-MISMATCH` | 내려받은 것이 공식 배포본과 다르다는 뜻이라 설치기가 일부러 멈췄습니다. 다시 시도하지 말고 이슈로 알려 주세요 |
-| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP` | AI 에이전트 omo 를 못 깔았습니다(윈도우는 대개 관리자 창이라서). 짱돌 작업 공간은 만들어졌지만 그 안에 omo 가 켜지지 않은 상태입니다. 그 줄에 적힌 omo 설치 명령을 **일반** 터미널(PowerShell)에서 실행하고, 새 창에서 설치 출력의 `DORI-LEAD-PANE` 줄 끝에 있는 `herdr pane run …` 명령을 통째로 복사해 실행하면 짱돌 화면에 omo 가 켜집니다 |
+| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP`, 또는 짱돌 화면에 AI 입력창 대신 빈 명령줄만 보임 | AI 에이전트 omo 가 깔리지 않았거나 켜지지 않았습니다(윈도우는 대개 관리자 창에서 실행해서). 짱돌 작업 공간 자체는 있습니다. ① **일반** 창에서 omo 를 깝니다. 리눅스·macOS `curl -fsSL https://get.omo.dev/install.sh \| bash`, 윈도우 `irm https://get.omo.dev/install.ps1 \| iex`. ② 창을 새로 열고 `herdr` → 왼쪽의 「짱돌」 클릭 → 그 화면에 `omo` 를 입력하고 `Enter`. 그다음 4단계를 이어 갑니다 |
 | PowerShell 이 빨간 글로 실행 정책(ExecutionPolicy)을 말함 | 한 줄을 고치지 말고 위에 적힌 그대로 붙여 넣으세요. 이미 그 설정이 들어 있습니다 |
 | 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | 세 가지를 직접 깝니다. 각 페이지에서 Windows 용 설치 파일을 받아 실행하고 기본값 그대로 「Next」 로 진행합니다. [git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/)(첫 화면 아래 「Add python.exe to PATH」 를 꼭 체크), PowerShell 7(Microsoft Store 에서 「PowerShell」 검색 후 설치). 그다음 PowerShell 창을 새로 열고 같은 한 줄을 다시 실행하세요 |
 | `herdr`·`dori` 명령을 찾을 수 없음 | 터미널을 닫고 새로 여세요. 설치 직후의 창은 새 명령을 모릅니다 |
