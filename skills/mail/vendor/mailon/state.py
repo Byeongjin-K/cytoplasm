@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_status
     ON attachments (status);
 
+-- Names of the user folders a user-folder sync collected (messages.folder = 'folder:' || folder_uid).
+-- Added for issue #251; CREATE IF NOT EXISTS leaves an existing state.db's rows as they are.
+CREATE TABLE IF NOT EXISTS folders (
+    folder_uid TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    kind       TEXT NOT NULL,      -- 'user' (the only kind recorded today)
+    seen_at    INTEGER NOT NULL
+);
+
 -- Mails already looked at by the large-link backfill (heal.py), so each is re-read at most once.
 CREATE TABLE IF NOT EXISTS large_link_checked (
     uid        TEXT PRIMARY KEY,
@@ -135,6 +144,18 @@ class StateDB:
                 "SELECT uid FROM messages WHERE folder = ?", (folder,)
             ).fetchall()
             return {r["uid"] for r in rows}
+
+    def all_uids(self) -> set[str]:
+        with self._conn() as c:
+            return {r["uid"] for r in c.execute("SELECT uid FROM messages").fetchall()}
+
+    def record_folder(self, folder_uid: str, *, name: str, kind: str = "user") -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO folders (folder_uid, name, kind, seen_at) VALUES (?, ?, ?, ?)",
+                (folder_uid, name, kind, int(time.time())),
+            )
+            c.commit()
 
     def message_count(self, folder: str = "inbox") -> int:
         with self._conn() as c:

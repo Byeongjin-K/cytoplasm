@@ -127,9 +127,38 @@ def _db_rows(cfg: dict, where: str, params: tuple, limit: int | None) -> list[di
         )
         if limit is not None:
             sql += f" LIMIT {int(limit)}"
-        return [dict(row) for row in conn.execute(sql, params).fetchall()]
+        rows = [dict(row) for row in conn.execute(sql, params).fetchall()]
+        names = _folder_names(conn) if any(r["folder"].startswith("folder:") for r in rows) else {}
+        for row in rows:
+            if row["folder"] in names:
+                row["folder_name"] = names[row["folder"]]
+        return rows
     finally:
         conn.close()
+
+
+def _has_folders_table(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'folders'").fetchone() is not None
+
+
+def _folder_names(conn: sqlite3.Connection) -> dict[str, str]:
+    """``folder:<uid>`` -> user folder name, as mailon stored it (no table before the first user sync)."""
+    if not _has_folders_table(conn):
+        return {}
+    return {f"folder:{uid}": name for uid, name in conn.execute("SELECT folder_uid, name FROM folders")}
+
+
+def _user_folder_where(cfg: dict) -> tuple[str, tuple]:
+    """Inbox plus the folders mailon recorded as user folders; inbox alone until it has any."""
+    if cfg["db"].is_file():
+        conn = sqlite3.connect(f"file:{cfg['db']}?mode=ro", uri=True)
+        try:
+            if _has_folders_table(conn):
+                return ("folder = ? OR folder IN (SELECT 'folder:' || folder_uid FROM folders "
+                        "WHERE kind = 'user')", ("inbox",))
+        finally:
+            conn.close()
+    return "folder = ?", ("inbox",)
 
 
 def _render_mail(row: dict, masked: bool, salt: str) -> dict:
@@ -138,6 +167,8 @@ def _render_mail(row: dict, masked: bool, salt: str) -> dict:
         "subject": row["subject"] or "", "sender": row["sender"] or "",
         "markdown_path": row["markdown_path"],
     }
+    if row.get("folder_name"):
+        out["folder_name"] = mask_value(row["folder_name"], salt) if masked else row["folder_name"]
     if masked:
         out["subject"] = mask_value(out["subject"], salt)
         out["sender"] = mask_value(out["sender"], salt)

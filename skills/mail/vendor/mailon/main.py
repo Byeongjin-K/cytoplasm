@@ -8,7 +8,7 @@ import signal
 import sys
 import traceback
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -30,7 +30,7 @@ from . import send_lock
 from .browser import AgentBrowser, BrowserError, unique_session_name
 from .config import PROJECT_ROOT, load_config, load_totp_secret
 from .login import LoginError, login
-from .folders import resolve_folder_uid
+from .folders import resolve_folder_uid, select_user_folders
 from .heal import backfill_bcc, backfill_large_links, prune_buttons
 from .resolve import parse_candidates, resolve_name
 from .scraper import SYNC_LARGE_DOWNLOAD_BUDGET_S, InboxScraper
@@ -166,7 +166,7 @@ def cmd_probe(args) -> int:
 
 
 
-_VALID_FOLDERS = ("inbox", "sent", "all")
+_VALID_FOLDERS = ("inbox", "sent", "user", "all")
 
 
 def _parse_folders(csv: str) -> list[str]:
@@ -207,16 +207,53 @@ def _sync_folder(db: StateDB, scraper: InboxScraper, cfg, limit: int,
             skip.add(mail.uid)  # within-run dedupe
             write_mail(mail, cfg.mails_dir, project_root)
             continue
-        md_path = write_mail(mail, cfg.mails_dir, project_root)
-        db.record_message(
-            mail.uid,
-            folder=mail.folder,
-            subject=mail.subject,
-            sender=mail.sender,
-            recv_date=(mail.date.isoformat() if mail.date else ""),
-            markdown_path=str(md_path.relative_to(project_root)),
-        )
+        _save_mail(db, mail, cfg, project_root)
         skip.add(mail.uid)
+        new_count += 1
+    return new_count
+
+
+def _save_mail(db: StateDB, mail, cfg, project_root: Path) -> None:
+    md_path = write_mail(mail, cfg.mails_dir, project_root)
+    db.record_message(
+        mail.uid,
+        folder=mail.folder,
+        subject=mail.subject,
+        sender=mail.sender,
+        recv_date=(mail.date.isoformat() if mail.date else ""),
+        markdown_path=str(md_path.relative_to(project_root)),
+    )
+
+
+def _sync_user_folders(db: StateDB, scraper: InboxScraper, cfg, limit: int,
+                       project_root: Path, since_days: int) -> int:
+    """Save new mails of the user folders received in the last ``since_days`` days.
+
+    Issue #251: webmail rules file mail straight into user folders, past the inbox.
+    Trash, spam and drafts are never collected, nor a folder whose name is unknown;
+    nothing older than the cutoff is fetched, so a first run does not backfill."""
+    since = datetime.now() - timedelta(days=since_days)
+    refs, capped = scraper.list_recent_all_folders(int(since.timestamp() * 1000))
+    if capped:
+        log.warning("[user] page cap reached before the %d-day cutoff; newest rows only", since_days)
+    known = {scraper.folder_uid or "", scraper.sent_uid or ""} - {""}
+    folders = select_user_folders(
+        scraper.browser, {ref.folder_uid for ref in refs}, exclude_uids=known,
+        folder_info=scraper.folder_info)
+    for uid, name in folders.items():
+        db.record_folder(uid, name=name)
+    skip = db.all_uids()
+    new_refs = [ref for ref in refs if ref.folder_uid in folders and ref.uid not in skip]
+    log.info("[user] %d folder(s), %d new mail(s) since %s", len(folders), len(new_refs),
+             since.date().isoformat())
+    new_count = 0
+    for ref in new_refs[:limit] if limit else new_refs:
+        try:
+            mail = scraper.read_mail(ref, state_db=db)
+        except Exception as e:
+            log.error("failed uid=%s subject=%r: %s", ref.uid, ref.subject, e)
+            continue
+        _save_mail(db, mail, cfg, project_root)
         new_count += 1
     return new_count
 
@@ -239,8 +276,11 @@ def cmd_sync(args) -> int:
     # `finally` closes the browser (2026-10-13: killed syncs left both behind).
     signal.signal(signal.SIGTERM, _raise_terminated)
 
+    since_days = getattr(args, "since_days", None)
     try:
         folders = _parse_folders(args.folders)
+        if ("user" in folders) != (since_days is not None) or (since_days is not None and since_days < 1):
+            raise ValueError("--folders user needs --since-days N (N >= 1), and only it takes one")
     except ValueError as e:
         db.finish_run(run_id, status="fail", error=str(e))
         print(f"FAIL: {e}", file=sys.stderr)
@@ -265,18 +305,22 @@ def cmd_sync(args) -> int:
         limit = args.limit if args.limit is not None else cfg.max_mails_per_run
         full_scan = args.full_scan
 
-        if all_folders:
-            new_count += _sync_folder(db, scraper, cfg, limit, PROJECT_ROOT, full_scan)
-        elif "inbox" in folders:
-            new_count += _sync_folder(db, scraper, cfg, limit, PROJECT_ROOT, full_scan)
-
         folder_uids: dict[str, str] = {}
-        if not all_folders and "sent" in folders:
+        sent_uid = None
+        if all_folders or "sent" in folders or "user" in folders:
+            # The all-folder and user-folder walks need it too: a sent mail stays folder 'sent'.
             sent_uid = resolve_folder_uid(
                 browser, "보낸메일함",
                 inbox_uid=scraper.folder_uid or "",
                 account_email=cfg.mailon_id,
             )
+            scraper.sent_uid = sent_uid
+        if all_folders:
+            new_count += _sync_folder(db, scraper, cfg, limit, PROJECT_ROOT, full_scan)
+        elif "inbox" in folders:
+            new_count += _sync_folder(db, scraper, cfg, limit, PROJECT_ROOT, full_scan)
+
+        if not all_folders and "sent" in folders:
             if sent_uid:
                 folder_uids["sent"] = sent_uid
                 sent_scraper = InboxScraper(
@@ -285,6 +329,12 @@ def cmd_sync(args) -> int:
                 sent_scraper.folder_uid = sent_uid
                 new_count += _sync_folder(db, sent_scraper, cfg, limit, PROJECT_ROOT, full_scan)
             # unresolvable -> warning already logged; sync stays fail-open
+        if "user" in folders:
+            user_scraper = InboxScraper(
+                browser, cfg.attachments_dir, folder_label="user", all_folders=True,
+                large_download_budget_s=SYNC_LARGE_DOWNLOAD_BUDGET_S)
+            user_scraper.folder_uid, user_scraper.sent_uid = scraper.folder_uid, sent_uid
+            new_count += _sync_user_folders(db, user_scraper, cfg, limit, PROJECT_ROOT, since_days)
 
         # Retry previously-failed attachments (global, once per run).
         retry_ok, retry_fail = scraper.retry_failed_attachments(db)
@@ -529,7 +579,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s_sync.add_argument(
         "--folders", default="inbox,sent",
-        help="comma-separated folders to sync: inbox,sent; or all (default: inbox,sent)",
+        help="comma-separated folders to sync: inbox,sent,user; or all (default: inbox,sent). "
+             "user = the user folders (never trash, spam, drafts) within --since-days",
+    )
+    s_sync.add_argument(
+        "--since-days", type=int, default=None,
+        help="with --folders ...,user: collect user-folder mail received in the last N days only",
     )
     s_sync.add_argument(
         "--full-scan", action="store_true",

@@ -130,6 +130,8 @@ JOB_COMMANDS = ("doc", "patent", "stt", "meeting", "mail-sync", "mail-attachment
 GLOSSARY_KINDS = ("lifelog", "meeting")
 # Read jobs still start only from the owner's own recent message, but never touch the write ledger.
 ORIGIN_READ_JOBS = frozenset({"mail-sync", "mail-attachment-text"})
+#: Most days back a gate-run user-folder collection may reach (the mail skill's own cap).
+MAIL_SYNC_MAX_DAYS = 31
 LONG = frozenset({"proposal", "stt", "meeting"})
 JOB_WAIT = 100
 # Test replays, injected approvals and output-root overrides are never caller-controlled.
@@ -189,7 +191,9 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "  doc <" + "|".join(k for k in TOOLS if k not in {"patent", "stt", "meeting"}) + "> <sub> [args],\n"
          "  patent <create|checklist|draft|status|export> [args], stt <transcribe|ingest|polish> [args],\n"
          "  meeting <ingest|evidence> [args],\n"
-         "  mail-sync (collect institutional mail now; waits for a running collection);\n"
+         "  mail-sync [--all-folders [--since-days 1-31]] (collect institutional mail now; waits for a\n"
+         "  running collection; --all-folders adds the user folders, never trash, spam or drafts, of the\n"
+         "  last 7 days or of --since-days);\n"
          "  glossary-add <wrong> <right> [--kind lifelog|meeting] (the owner's transcript correction,\n"
          "  one row of the term glossary; later transcripts use it before the model);\n"
          "  mail-attachment-text <uid> <file name as mail-get shows it> (that attachment as text; scans,\n"
@@ -206,6 +210,16 @@ def _int(value: str, low: int, high: int) -> str:
     if not _INT.fullmatch(value) or not low <= int(value) <= high:
         raise Refused(f"number out of range {low}-{high}")
     return str(int(value))
+
+
+def _mail_sync_scope(rest: list[str]) -> list[str]:
+    """The only scopes mail-sync takes: none, --all-folders, or --all-folders --since-days N."""
+    if not rest:
+        return []
+    if rest[0] != "--all-folders" or len(rest) not in (1, 3) or (len(rest) == 3 and rest[1] != "--since-days"):
+        raise Refused("mail-sync takes only --all-folders [--since-days N] besides the origin")
+    days = ["--since-days", _int(rest[2], 1, MAIL_SYNC_MAX_DAYS)] if len(rest) == 3 else []
+    return ["--user-folders", *days]
 
 
 def _text(words: list[str], limit: int) -> str:
@@ -588,9 +602,9 @@ def build_job(words: list[str]) -> Job:
     if name == "mail-sync":
         # Owner 2026-10-19: collect institutional mail now when he asks (a fresh MailOn login,
         # so only from his own message); waits for a running scheduled collection.
-        if rest:
-            raise Refused("mail-sync takes no arguments besides the origin")
-        argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now"]
+        # Issue #251 (owner Q58, 2026-11-16): --all-folders also collects the user folders, with
+        # the same exclusions (trash, spam, drafts) and date limit as the periodic collection.
+        argv = [py, str(LIVE / "mail/scripts/mail_sync_watch.py"), "--now", *_mail_sync_scope(rest)]
         return Job(name, argv, False, "기관메일 지금 수집", 1800, channel, message)
     if name == "mail-attachment-text":
         if len(rest) != 2 or not _UID.fullmatch(rest[0]):

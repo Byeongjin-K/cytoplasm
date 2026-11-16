@@ -37,6 +37,54 @@ def test_mail_sync_is_a_read_job_running_the_watch_once() -> None:
         gate.build_job(["mail-sync"])
 
 
+WATCH = ["/usr/bin/python3", "/srv/autophagy-skills/live/mail/scripts/mail_sync_watch.py", "--now"]
+
+
+@pytest.mark.parametrize("scope,tail", [
+    (["--all-folders"], ["--user-folders"]),
+    (["--all-folders", "--since-days", "1"], ["--user-folders", "--since-days", "1"]),
+    (["--all-folders", "--since-days", "31"], ["--user-folders", "--since-days", "31"]),
+    (["--all-folders", "--since-days", "007"], ["--user-folders", "--since-days", "7"]),
+])
+def test_mail_sync_takes_the_user_folder_scope(scope: list[str], tail: list[str]) -> None:
+    # Given / When: YooDori asks for the user folders too (issue #251, owner Q58).
+    job = gate.build_job(["mail-sync", *scope, *ORIGIN])
+    # Then: the same watcher, with the scope that keeps the exclusions and the day limit.
+    assert job.argv == [*WATCH, *tail] and job.write is False
+
+
+@pytest.mark.parametrize("scope", [
+    ["--all-folders", "--since-days", "0"],
+    ["--all-folders", "--since-days", "32"],
+    ["--all-folders", "--since-days", "-1"],
+    ["--all-folders", "--since-days", "01x"],
+    ["--all-folders", "--since-days", "1000"],
+    ["--all-folders", "--since-days"],
+    ["--since-days", "3"],
+    ["--all-folders", "--all-folders"],
+    ["--all-folders", "--since-days", "3", "--since-days", "4"],
+    ["--user-folders"],
+    ["--all-folders", "--full-scan"],
+    ["--all-folders", "--limit", "5"],
+])
+def test_mail_sync_refuses_every_other_argument(scope: list[str]) -> None:
+    with pytest.raises(gate.Refused):
+        gate.build_job(["mail-sync", *scope, *ORIGIN])
+
+
+def test_mail_sync_day_cap_matches_the_mail_skill() -> None:
+    import importlib.util
+    import sys
+
+    scripts = Path(__file__).resolve().parents[2] / "skills/mail/scripts"
+    sys.path.insert(0, str(scripts))
+    spec = importlib.util.spec_from_file_location("mail_user_folders_mode", scripts / "mail_user_folders_mode.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert gate.MAIL_SYNC_MAX_DAYS == module.MAX_SINCE_DAYS
+
+
 def test_mail_sync_starts_only_for_a_verified_owner_message(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: the origin is not the owner's recent message.
     def refuse(*_args, **_kwargs):
