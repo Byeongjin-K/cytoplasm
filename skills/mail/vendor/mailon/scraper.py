@@ -101,10 +101,22 @@ BUTTON_NAMES = frozenset({
 # The webmail's own hosts: only these get its session cookies when a slow in-page fetch is
 # streamed instead (2026-11-16), never a foreign host an attachment link happens to point at.
 WEBMAIL_HOSTS = frozenset({"mailon.kr"})
+WEBMAIL_SCHEME = "https"
 
 
 def is_webmail_link(href: str) -> bool:
-    return urlsplit(href or "").hostname in WEBMAIL_HOSTS
+    parts = urlsplit(href or "")
+    return parts.scheme == WEBMAIL_SCHEME and parts.hostname in WEBMAIL_HOSTS
+
+
+class _WebmailOnlyCookieRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect, but the session cookie never leaves the webmail's own https hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not is_webmail_link(newurl):
+            new.remove_header("Cookie")
+        return new
 
 
 def is_large_file_link(href: str) -> bool:
@@ -775,7 +787,8 @@ class InboxScraper:
         deadline = None if budget is None else time.monotonic() + budget
         read_timeout = 300 if budget is None else min(300, BUDGETED_READ_TIMEOUT_S, budget)
         try:
-            with urllib.request.urlopen(req, timeout=read_timeout) as resp:
+            opener = urllib.request.build_opener(_WebmailOnlyCookieRedirect)
+            with opener.open(req, timeout=read_timeout) as resp:
                 # An expired large-file link answers 200 with MailOn's HTML notice page, not the file.
                 if not cookies and resp.headers.get_content_type() == "text/html":
                     raise RuntimeError("large-file link returned an HTML page (expired link)")

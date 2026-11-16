@@ -68,6 +68,32 @@ class _CutHandler(http.server.BaseHTTPRequestHandler):
 @pytest.fixture
 def webmail_host(monkeypatch):
     monkeypatch.setattr(scraper_mod, "WEBMAIL_HOSTS", frozenset({"127.0.0.1"}))
+    monkeypatch.setattr(scraper_mod, "WEBMAIL_SCHEME", "http")
+
+
+class _RedirectHandler(http.server.BaseHTTPRequestHandler):
+    """The webmail answering the download with a redirect to another host."""
+
+    target = ""
+
+    def do_GET(self):  # noqa: N802
+        self.send_response(302)
+        self.send_header("Location", _RedirectHandler.target)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def redirect_to_other_host(server):
+    # Same machine, different hostname: "localhost" is not in the patched WEBMAIL_HOSTS.
+    _RedirectHandler.target = server.replace("127.0.0.1", "localhost")
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _RedirectHandler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}/mail/manage/attach/download?position=7"
+    httpd.shutdown()
 
 
 @pytest.fixture
@@ -143,6 +169,25 @@ def test_a_timed_out_link_to_another_host_never_gets_the_webmail_cookies(
     with pytest.raises(BrowserError, match="timed out"):
         s._download_attachment("10192857", "2. a.xlsx", server, declared_size=None)
     assert _Handler.seen == []
+
+
+def test_a_redirect_off_the_webmail_host_is_followed_without_the_webmail_cookies(
+        tmp_path, redirect_to_other_host):
+    # Given: the streamed fallback, and the webmail redirecting the download to another host.
+    s = _scraper(tmp_path, _SlowEvalBrowser("✗ CDP command timed out: Runtime.evaluate"))
+    # When
+    saved = s._download_attachment("10192857", "2. a.xlsx", redirect_to_other_host,
+                                   declared_size=None)
+    # Then: the file arrives, and the other host never saw the session cookie.
+    assert saved.local_path.read_bytes() == BODY
+    assert [h.get("Cookie") for h in _Handler.seen] == [None]
+
+
+def test_only_https_links_on_the_webmail_hosts_count_as_webmail():
+    assert scraper_mod.is_webmail_link("https://mailon.kr/mail/manage/attach/download?position=7")
+    assert not scraper_mod.is_webmail_link("http://mailon.kr/mail/manage/attach/download")
+    assert not scraper_mod.is_webmail_link("https://mailon.kr.example.org/download")
+    assert not scraper_mod.is_webmail_link("https://other.example/download")
 
 
 def test_a_streamed_file_cut_before_its_length_is_a_failure_not_a_saved_file(
