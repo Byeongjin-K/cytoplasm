@@ -9,7 +9,17 @@
 
 ## 도리로 시작하기 (기본)
 
-리눅스는 터미널에 한 줄이면 된다. 같은 줄이 업데이트도 한다.
+처음 설치하는 사람(개발자가 아니어도)은 **[README 「빠른 시작」](../../README.md#빠른-시작)** 한 절만
+위에서부터 따라가면 된다. 거기에 이 순서가 단계별로 있다.
+
+1. 설치 한 줄 실행(터미널·PowerShell 여는 법, 성공 표시 `CYTO-LINUX-INSTALLED`/`CYTO-WINDOWS-INSTALLED`).
+2. 디스코드 봇 만들기와 값 네 개(봇 토큰·서버 ID·채널 ID·내 ID, 개발자 모드로 ID 복사).
+3. 그 값을 `~/.dori/dori.env`(윈도우 `%USERPROFILE%\.dori\dori.env`)에 넣기.
+4. `herdr` 를 열어 「짱돌」 리드 탭에서 `/login` — Claude Pro/Max 또는 ChatGPT Plus/Pro 구독 고르기.
+5. 같은 탭에서 "Dori mode".
+6. 디스코드 채널에 말을 걸어 봇이 답하는지 확인. 답이 없으면 README 「막힐 때」 표.
+
+리눅스·macOS 한 줄(같은 줄이 업데이트도 한다):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
@@ -37,7 +47,11 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/ori
 
 깔리는 것·제한은 [설치 가이드 「윈도우」](install.md#윈도우네이티브-wsl-없음).
 
-**이하 §1–§8은 명시적 레거시 Hermes 프로필용 안내**다.
+---
+
+## 레거시 Hermes 노드 (기존 운영자만)
+
+**이하 §1–§8은 명시적 레거시 Hermes 프로필용 안내**다. 새로 설치하는 사람은 읽지 않아도 된다.
 기존 노드를 P6로 업데이트할 때는 설치기를 재실행하지 않고
 [업그레이드·복구 절차](install.md#p6-기존-노드-업그레이드와-복구)를 따른다.
 
