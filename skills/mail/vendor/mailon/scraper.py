@@ -75,7 +75,7 @@ MAILON_ORIGIN = "https://mailon.kr"
 LIST_ENDPOINT = "/mail/list_async.json"
 VIEW_ENDPOINT = "/mail/view_async"
 PAGE_SIZE = 20
-#: Most all-folder pages one user-folder sync reads (500 rows); the date cutoff usually ends it first.
+#: Most pages one user folder's walk reads (500 rows); the date cutoff usually ends it first.
 USER_FOLDER_MAX_PAGES = 25
 
 # Attachment download strategy thresholds.
@@ -574,29 +574,35 @@ class InboxScraper:
             attach_count=int(item.get("attachCount") or 0),
         )
 
-    def list_recent_all_folders(
-        self, since_millis: int, *, max_pages: int = USER_FOLDER_MAX_PAGES,
+    def list_recent_folder(
+        self, folder_uid: str, since_millis: int, *, max_pages: int = USER_FOLDER_MAX_PAGES,
     ) -> tuple[list[MailRef], bool]:
-        """Rows of every folder received at or after ``since_millis``, newest first.
+        """Rows of one folder received at or after ``since_millis``, newest first.
 
-        The all-folder list is sorted by time, so the walk ends at the first older
-        row and never reads the whole mailbox (issue #251: a 10k-row walk took 116 s).
-        Returns the refs and whether ``max_pages`` cut the walk before the cutoff."""
-        assert self.folder_uid, "call resolve_inbox_folder_uid() first"
+        The folder's own list is sorted by time, so the walk ends at the first older row.
+        It reads that folder only: the all-folder list is mostly inbox rows, so 25 pages of it
+        never reached older user-folder mail (2026-11-16 live run). Returns the refs and
+        whether ``max_pages`` cut the walk before the cutoff."""
+        saved = (self.folder_uid, self.all_folders)
+        self.folder_uid, self.all_folders = folder_uid, False
         refs: list[MailRef] = []
         seen: set[str] = set()
-        for page in range(1, max_pages + 1):
-            contents = _fetch_all_folder_page(self.browser, self.folder_uid, page)
-            for item in contents:
-                uid = str(item.get("mailUid") or "")
-                if int(item.get("timeMillis") or 0) < since_millis:
+        try:
+            for page in range(1, max_pages + 1):
+                data = self.fetch_list_page(page)
+                contents = (data.get("contents") or []) if data.get("result") else []
+                for item in contents:
+                    uid = str(item.get("mailUid") or "")
+                    if int(item.get("timeMillis") or 0) < since_millis:
+                        return refs, False
+                    if uid and uid not in seen:
+                        seen.add(uid)
+                        refs.append(self._ref(uid, item))
+                if len(contents) < PAGE_SIZE:
                     return refs, False
-                if uid and uid not in seen:
-                    seen.add(uid)
-                    refs.append(self._ref(uid, item))
-            if len(contents) < PAGE_SIZE:
-                return refs, False
-        return refs, True
+            return refs, True
+        finally:
+            self.folder_uid, self.all_folders = saved
 
     def folder_info(self, uid: str) -> dict:
         """The list API's ``folder`` object for one folder (its name, when the server gives one)."""
