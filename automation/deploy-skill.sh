@@ -762,7 +762,7 @@ push_skill "$SANDBOX_ACCOUNT" "$SRC_DIR" "$SKILL"
 GATE_HELPERS=(skill_gate.py skill_gate_refresh.py skill_gate_review.py node_config.py notice_bot.py auto_write_policy.py ledger_policy.py omo_relay_policy.py peer_retired.py hermes_product_policy.py gateway_retirement_policy.py owner_timers_policy.py mail_html_reply.py mail_reply_closing.py mail_schedule_all_day.py calendar_default_color.py document_ocr.py
               typing_compat.py git_tag_signature.py peer_attestation.py peer_signed_attestation.py peer_attest_runtime.py skill_gate_e2e.py
               skill_gate_specs.py stored_content.py release_spec.py release_spec_message.py skill_gate_approval.py skill_gate_request.py
-              skill_gate_retire.py skill_gate_surface.py release_command.py owner_origin.py)
+              skill_gate_retire.py skill_gate_surface.py release_command.py owner_origin.py owner_kakao.py)
 GATE_INTEROP_HELPERS=(interop/approval_lease.py interop/approval_lifecycle.py interop/approval_card.py
                       interop/approval_reminder.py interop/approval_reminder_config.py
                       interop/approval_types.py interop/approval_surface.py
