@@ -30,24 +30,23 @@
     "bot_id": "<옥도리 디스코드 봇 id>",
     "owner_ids": ["<소유자 카카오톡 id>"],
     "watcher_user": "<워처 실행 계정>",
+    "relay_user": "<옥도리 계정>",
     "socket": "dori-kakao-proof"
   }
 }
 ```
 
-`bot_id`·`owner_ids`는 숫자 문자열이다. `watcher_user`는 워처를 실제 실행하는 OS 계정이다.
+`bot_id`·`owner_ids`는 숫자 문자열이다. `watcher_user`는 워처를 실제 실행하는 OS 계정이고
+`relay_user`는 옥도리 에이전트의 계정이다. 둘이 같거나 하나라도 없으면 꺼짐이다.
 추상 유닉스 소켓 `socket`의 `SO_PEERCRED` uid를 그 계정 uid와 대조한 뒤에만
 전달 글을 보내며 한 조회의 제한 시간은 총 3초다. 워처는 본문을 응답하지 않는다.
 작업 `spec.json`의 `origin.kakao`에는 `chat`·`log`·`sent_at`만,
 `origin.sent_at`에는 전달 글과 카톡 글 중 가장 오래된 시각을 남긴다.
 카톡 본문은 작업 기록에 넣지 않는다.
 
-## 남은 한계
+## 워처 계정 분리
 
-uid 대조는 상대가 `watcher_user` 계정이라는 것만 보장한다. 워처를 옥도리 에이전트와 같은
-계정에서 돌리면 에이전트가 워처를 멈추고 가짜 응답을 낼 수 있다. 형이 이 한계를 받아들이고
-지금 켜기로 정했고(Q555), 워처를 별도 계정으로 옮기는 일은 `docs/follow-ups.md`의 후속 과제다.
-
-관련 경로: `automation/owner_origin.py`, `automation/owner_kakao.py`,
-`automation/yoodori_gate/yoodori_jobs.py`, `automation/yoodori_gate/yoodori_read_gate.py`,
-`dori/roles/okdori`·`dori/roles/yoodori`. 실제 설정·서비스 반영은 별도 운영 절차다.
+uid 대조는 상대가 `watcher_user` 계정이라는 것만 보장하므로, 워처와 카카오톡 로그인·코드는 옥도리 에이전트가
+쓸 수 없는 시스템 계정(`dori-kakao`)에서 돈다(형 Q556, 2026-11-16). 옥도리는 sudo 규칙 하나로 정해진
+카카오톡 명령만 그 계정을 통해 보내고, 파일 올리기도 옥도리 권한으로 읽은 파일만 넘긴다. 설치 절차는 포크
+`setups/discord-aoe/README.md` 「KakaoTalk under its own account」에 있다.

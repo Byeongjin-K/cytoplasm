@@ -24,6 +24,7 @@ class KakaoRelay:
     owner_ids: tuple[str, ...]
     watcher_user: str
     socket: str
+    relay_user: str
 
 
 class KakaoReference(TypedDict):
@@ -61,16 +62,16 @@ def load_kakao_relay(path: Path) -> KakaoRelay | None:
         return None
     match value:
         case {"kakao_relay": {"bot_id": str(bot), "owner_ids": list(owners),
-                              "watcher_user": str(user), "socket": str(name)}}:
+                              "watcher_user": str(user), "relay_user": str(relay_user), "socket": str(name)}}:
             try:
                 socket_bytes = name.encode()
             except UnicodeError:
                 return None
             if (DIGITS.fullmatch(bot) and owners
                     and all(isinstance(owner, str) and owner for owner in owners)
-                    and user and "\0" not in user
+                    and user and "\0" not in user and relay_user and "\0" not in relay_user and relay_user != user
                     and name != "off" and name and "\0" not in name and len(socket_bytes) <= 107):
-                return KakaoRelay(bot, tuple(owners), user, name)
+                return KakaoRelay(bot, tuple(owners), user, name, relay_user)
     return None
 
 
@@ -86,6 +87,9 @@ def socket_attestation(relay: KakaoRelay, request: ProofRequest) -> Attestation:
     deadline = time.monotonic() + 3
     try:
         uid = pwd.getpwnam(relay.watcher_user).pw_uid
+        # The relay Dori's agent could stop a watcher in its own account and answer in its place.
+        if uid == pwd.getpwnam(relay.relay_user).pw_uid:
+            raise KakaoRefused("watcher shares the relay account")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(max(0.001, deadline - time.monotonic()))
             peer.connect("\0" + relay.socket)

@@ -61,7 +61,8 @@ def watcher() -> Iterator[tuple[KakaoRelay, dict, list[dict]]]:
         thread = threading.Thread(target=serve)
         thread.start()
         try:
-            yield KakaoRelay(BOT, ("222",), pwd.getpwuid(os.getuid()).pw_name, name), reply, requests
+            relay_user = [account.pw_name for account in pwd.getpwall() if account.pw_uid != os.getuid()][-1]
+            yield KakaoRelay(BOT, ("222",), pwd.getpwuid(os.getuid()).pw_name, name, relay_user), reply, requests
         finally:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stop:
                 stop.connect("\0" + name)
@@ -144,6 +145,25 @@ def test_socket_peer_uid_must_match_configured_watcher(watcher) -> None:
     assert requests == []
 
 
+def test_socket_served_by_the_relay_account_is_refused(watcher) -> None:
+    # An agent-owned replacement: the relay Dori's own account serves the socket while the watcher runs elsewhere.
+    relay, _, requests = watcher
+    other = next(account for account in pwd.getpwall() if account.pw_uid != os.getuid())
+    with pytest.raises(OriginRefused, match="uid mismatch"):
+        verify_owner_origin(CHANNEL, MESSAGE, OWNER, "test", now=NOW, fetch=fetch_message(discord_message()),
+                            kakao_relay=replace(relay, watcher_user=other.pw_name,
+                                                relay_user=pwd.getpwuid(os.getuid()).pw_name))
+    assert requests == []
+
+
+def test_watcher_in_the_relay_account_is_refused(watcher) -> None:
+    relay, _, requests = watcher
+    with pytest.raises(OriginRefused, match="shares the relay account"):
+        verify_owner_origin(CHANNEL, MESSAGE, OWNER, "test", now=NOW, fetch=fetch_message(discord_message()),
+                            kakao_relay=replace(relay, relay_user=relay.watcher_user))
+    assert requests == []
+
+
 @pytest.mark.parametrize("card_answers", [False, True])
 def test_feature_off_and_release_never_accept_relay(watcher, card_answers: bool) -> None:
     _, _, requests = watcher
@@ -188,7 +208,9 @@ def test_five_distinct_references_are_accepted_with_injectable_attestation(watch
 
 @pytest.mark.parametrize("value", [None, [], {}, {"bot_id": BOT}, {"bot_id": BOT, "owner_ids": []},
     {"bot_id": BOT, "owner_ids": ["222"], "watcher_user": "watcher", "socket": "off"},
-    {"bot_id": BOT, "owner_ids": [222], "watcher_user": "watcher", "socket": "proof"}])
+    {"bot_id": BOT, "owner_ids": [222], "watcher_user": "watcher", "socket": "proof"},
+    {"bot_id": BOT, "owner_ids": ["222"], "watcher_user": "watcher", "socket": "proof"},
+    {"bot_id": BOT, "owner_ids": ["222"], "watcher_user": "watcher", "relay_user": "watcher", "socket": "proof"}])
 def test_malformed_relay_config_is_off(tmp_path: Path, value) -> None:
     config = tmp_path / "config.json"
     config.write_text(json.dumps({"kakao_relay": value}))
@@ -201,7 +223,7 @@ def test_yoodori_loads_opt_in_from_its_owner_config(watcher, tmp_path: Path) -> 
     config.parent.mkdir(parents=True)
     config.write_text(json.dumps({"owner_id": OWNER, "kakao_relay": {
         "bot_id": relay.bot_id, "owner_ids": list(relay.owner_ids),
-        "watcher_user": relay.watcher_user, "socket": relay.socket}}))
+        "watcher_user": relay.watcher_user, "relay_user": relay.relay_user, "socket": relay.socket}}))
     origin = jobs.verify_owner_origin(CHANNEL, MESSAGE, OWNER, "test", now=NOW, home=tmp_path,
                                       fetch=fetch_message(discord_message()))
     assert origin.kakao == ({"chat": "123", "log": "456", "sent_at": NOW - 120},)
@@ -218,7 +240,7 @@ def test_gate_persists_kakao_basis_for_read_and_write_jobs(watcher, tmp_path: Pa
     config.parent.mkdir(parents=True)
     config.write_text(json.dumps({"owner_id": OWNER, "kakao_relay": {
         "bot_id": relay.bot_id, "owner_ids": list(relay.owner_ids),
-        "watcher_user": relay.watcher_user, "socket": relay.socket}}))
+        "watcher_user": relay.watcher_user, "relay_user": relay.relay_user, "socket": relay.socket}}))
     monkeypatch.setattr(gate, "HOME", tmp_path)
     monkeypatch.setattr(gate, "_owner_id", lambda: OWNER)
     monkeypatch.setattr(gate, "_switched", lambda kind: True)
