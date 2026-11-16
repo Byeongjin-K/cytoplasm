@@ -28,6 +28,8 @@ ICON = "📬"
 #: A mail thread's name word; ``origin_notice.thread_icon`` gives names starting with it ✉️.
 MAIL_THREAD_WORD = "메일"
 _MAIL_THREAD_LOCK = "digest-mail-thread.lock"
+#: Prefix of the file holding a just-opened mail thread until the store has it.
+_MAIL_THREAD_OPENED = "digest-mail-thread-opened"
 _THREAD_TYPES = (10, 11, 12)
 _SUBJECT_LIMIT = 60
 
@@ -123,8 +125,14 @@ def mail_thread(uid: str, subject: str, card_channel_id: str) -> dict[str, str]:
     approval card all go there. The thread is keyed by the mail (uid), so pressing the
     same mail again, on either emoji or on a later digest's card, never opens a second
     one. A lock serialises the gateway press and the watch tick racing on one mail.
+
+    The new thread's id is written to a small file in the gate directory before the store
+    write, so a store failure right after Discord opened the thread is resumed by the next
+    press or tick (it adopts that thread) instead of opening a second one.
     """
     import fcntl
+    import hashlib
+    import json
 
     db = triage_gate.db_path()
     found = triage_store.digest_mail_thread(db, uid)
@@ -137,6 +145,12 @@ def mail_thread(uid: str, subject: str, card_channel_id: str) -> dict[str, str]:
         found = triage_store.digest_mail_thread(db, uid)
         if found is not None:
             return found
+        opened = lock_dir / f"{_MAIL_THREAD_OPENED}-{hashlib.sha256(uid.encode()).hexdigest()[:24]}.json"
+        if opened.exists():  # Discord opened it but the store write did not land last time
+            thread = json.loads(opened.read_text(encoding="utf-8"))
+            triage_store.save_digest_mail_thread(db, uid, thread, triage_core.utc_now())
+            opened.unlink(missing_ok=True)
+            return triage_store.digest_mail_thread(db, uid) or thread
         channel = triage_confirm.fetch_channel(card_channel_id)
         is_thread = isinstance(channel, dict) and channel.get("type") in _THREAD_TYPES
         parent = str(channel.get("parent_id") or "") if is_thread else ""
@@ -148,7 +162,11 @@ def mail_thread(uid: str, subject: str, card_channel_id: str) -> dict[str, str]:
         )
         guild = str(channel.get("guild_id") or "") if isinstance(channel, dict) else ""
         thread = {"thread_id": str(thread_id), "guild_id": guild}
+        partial = opened.with_suffix(".tmp")
+        partial.write_text(json.dumps(thread), encoding="utf-8")
+        partial.replace(opened)
         triage_store.save_digest_mail_thread(db, uid, thread, triage_core.utc_now())
+        opened.unlink(missing_ok=True)
         return triage_store.digest_mail_thread(db, uid) or thread
 
 
