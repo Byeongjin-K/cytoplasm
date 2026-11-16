@@ -416,7 +416,8 @@ def windows_supervise(layout: Layout, capture: Capture, which: Which, sleep: Cal
 
 
 def serve_unit(layout: Layout, capture: Capture, *, restart: bool) -> int:
-    """The Linux twin of the Windows 'Dori serve' task: dori serve in one user unit, running when this returns."""
+    """The Linux twin of the Windows 'Dori serve' task: dori serve in one user unit - a unit it creates is enabled and
+    started, a running one is restarted on --update, and one this account already stopped is left stopped."""
     if loops := [name for name in LOOP_UNITS if (layout.units / name).exists()]:
         print(f"DORI-SERVE-UNIT-SKIP {' '.join(loops)} 가 루프를 이미 돌린다 — {SERVE_UNIT} 는 만들지 않는다")
         return 0
