@@ -51,6 +51,7 @@ _FALLBACK = (0, json.dumps({"status": "ok", "sync": {"exit_code": 3,
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AUTOPHAGY_REPO_ROOT", str(_REPO))
     monkeypatch.setenv("WATCH_FAILURE_ROOT", str(tmp_path / "watch-failure"))
     cli = tmp_path / "mail_wrapper.py"
     _ = cli.write_text("", encoding="utf-8")
@@ -90,6 +91,52 @@ def test_tick_runs_the_existing_sync_path(monkeypatch, capsys) -> None:
     assert calls[0][1:] == [watch.os.environ[watch.CLI_ENV], "list", "--sync",
                             "--limit", str(watch.SYNC_LIMIT)]
     assert capsys.readouterr().out == ""
+
+
+def _switch(home: Path, value: bytes) -> None:
+    marker = home / ".hermes" / "mail-user-folders.mode"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_bytes(value)
+
+
+@pytest.mark.parametrize("marker,scope", [
+    (None, []), (b"off", []), (b"on", ["--user-folders"]), (b"on\n", []),
+])
+def test_tick_adds_the_user_folders_only_under_the_released_switch(
+    tmp_path: Path, monkeypatch, marker, scope
+) -> None:
+    # Given: the node marker of the mail-user-folders release switch (issue #251).
+    if marker is not None:
+        _switch(tmp_path, marker)
+    calls = _script(monkeypatch, [_ok(1)])
+    # When
+    assert watch.main() == 0
+    # Then: off, absent or broken keeps today's argv byte for byte.
+    assert calls[0][2:] == ["list", "--sync", "--limit", str(watch.SYNC_LIMIT), *scope]
+
+
+@pytest.mark.parametrize("words,scope", [
+    ([], []),
+    (["--user-folders"], ["--user-folders"]),
+    (["--user-folders", "--since-days", "31"], ["--user-folders", "--since-days", "31"]),
+    (["--user-folders", "--since-days", "01"], ["--user-folders", "--since-days", "1"]),
+])
+def test_now_takes_the_gate_scope(monkeypatch, capsys, words, scope) -> None:
+    calls = _script(monkeypatch, [_ok(2)])
+    assert watch.now(words) == 0
+    assert calls[0][2:] == ["list", "--sync", "--limit", str(watch.SYNC_LIMIT), *scope]
+    assert capsys.readouterr().out.strip() == "MAIL-SYNC-NOW ok new=2"
+
+
+@pytest.mark.parametrize("words", [
+    ["--user-folders", "--since-days", "0"], ["--user-folders", "--since-days", "32"],
+    ["--user-folders", "--since-days", "-1"], ["--since-days", "3"], ["--all-folders"],
+    ["--user-folders", "--user-folders"], ["--user-folders", "--since-days"],
+])
+def test_now_refuses_any_other_scope_before_collecting(monkeypatch, capsys, words) -> None:
+    calls = _script(monkeypatch, [])
+    assert watch.now(words) == 2
+    assert calls == [] and capsys.readouterr().out.startswith("MAIL-SYNC-NOW refused")
 
 
 def test_failed_collection_is_visible_to_timer_every_tick(monkeypatch, capsys) -> None:

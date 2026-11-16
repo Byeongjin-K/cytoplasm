@@ -44,6 +44,9 @@ python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py list --limit 5
 # 받은편지함 외 사용자 폴더까지 명시적으로 수집·조회
 python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py list --limit 20 --sync --all-folders
 
+# 받은편지함 + 사용자 폴더(휴지통·스팸·임시보관 제외, 최근 7일 또는 --since-days 1~31)를 수집·조회
+python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py list --limit 20 --sync --user-folders [--since-days 3]
+
 # 단건 조회 (--body는 agent 홈 안에서만; 마스킹 시 본문 대신 sha256+bytes)
 # mail.to·cc·bcc 는 저장된 받는 사람 그대로(형 Q393: 메일 한 통을 열 때만). bcc 는 보낸 메일만, null 이면
 # 2026-10-30 전에 저장돼 아직 수집이 안 채운 보낸 메일(10분 수집이 한 번에 25통씩 채운다).
@@ -66,7 +69,11 @@ python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py status
 stdout은 항상 **정확히 하나의 JSON 객체**다 (`"wrapper": "mail-wrapper-v1"`).
 기본 `list`는 받은편지함만 조회한다. `--all-folders`를 명시한 경우에만 vendor
 sync에 `--folders all`을 전달하고 DB의 모든 폴더를 조회하며, JSON에
-`"scope":"all-folders"`가 추가된다.
+`"scope":"all-folders"`가 추가된다(보낸메일은 이때도 `folder=sent`).
+`--user-folders`는 vendor sync에 `--folders inbox,sent,user --since-days N`(기본 7)을 넘겨 받은편지함·보낸편지함과
+함께 최근 N일 사용자 폴더 메일을 수집한다. 휴지통·스팸·임시보관과 이름을 읽을 수 없는 폴더는 가져오지 않고, N일보다 오래된
+메일은 목록을 더 읽지 않는다(과거 메일을 한꺼번에 채우지 않음). 조회는 받은편지함과 수집된 사용자 폴더만(보낸메일 제외)이고, 사용자
+폴더 메일에는 `folder:<id>`와 함께 `folder_name`(폴더 이름, `state.db`의 `folders` 표)이 붙으며 JSON에 `"scope":"user-folders"`가 추가된다.
 `search`는 수집 없이 `state.db`와 저장된 Markdown만 읽는다. 제목·보낸 사람만으로 맞은 메일이 먼저, 본문에서만
 맞은 메일이 뒤에 오고(각각 최신순), 본문 일치에는 앞뒤 60자 `snippet`이 붙는다(`--masked`면 빠짐).
 `searched`는 찾아본 메일 수, `without_body`는 본문 파일이 없어 제목·보낸 사람으로만 찾은 메일 수다.
@@ -138,7 +145,7 @@ python3 /srv/autophagy-skills/live/mail/scripts/triage_cli.py get <uid> --body
 - 승인된 초안의 실제 메일 발송.
 
 ### 1b. 10분마다 수집 (매일 07:00~24:00 KST)
-cron `mail-sync-watch`(`*/10 7-23 * * *`, no_agent, 2026-10-19 — 형 "매 분마다 갱신" 요청에 리드가 10분으로 정함: 한 번에 중앙값 61초·매번 새 로그인이라 1분은 하루 1,440번 로그인)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 수집은 한 번에 하나만 돈다(`~/.local/state/autophagy/mail-sync.lock`, 바쁘면 그 틱은 건너뜀). 실패한 틱은 다음 틱이 다시 시도한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 **평일 09~20시 틱에서** 새 메일 0건이 36회(약 6시간) 이어지면(`MAIL_SYNC_QUIET_AFTER`, 저녁·주말 틱은 세지 않음) 한 번 알리고, 회복 시 한 번 더 알린다. 형이 "메일 왔어?"처럼 지금 확인을 원하면 유돌이 게이트 `mail-sync`(형 메시지 근거 필수, 돌고 있는 수집이 있으면 기다림)로 한 번 수집한 뒤 `mail-list` 로 읽는다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-10분-수집과-지금-수집.md)
+cron `mail-sync-watch`(`*/10 7-23 * * *`, no_agent, 2026-10-19 — 형 "매 분마다 갱신" 요청에 리드가 10분으로 정함: 한 번에 중앙값 61초·매번 새 로그인이라 1분은 하루 1,440번 로그인)가 `mail_wrapper.py list --sync --limit 50` 을 실행해 새 기관메일을 `state.db` 에 저장한다(읽기 전용, 발송 없음). 릴리스 스위치 `mail-user-folders`(기본 꺼짐, 노드 표식 `~/.hermes/mail-user-folders.mode`)가 켜지면 `--user-folders`를 붙여 웹메일 규칙으로 바로 사용자 폴더에 들어간 최근 7일 메일도 수집하고, 다이제스트·분류도 그 메일을 받은편지함 메일처럼 읽는다(꺼져 있으면 지금 그대로 받은편지함만). 유돌 게이트 `mail-sync --all-folders [--since-days 1~31]`은 같은 범위·제외 규칙으로 지금 한 번 수집한다([소개](../../docs/기능소개/기관메일-사용자-폴더-수집.md)). 수집은 한 번에 하나만 돈다(`~/.local/state/autophagy/mail-sync.lock`, 바쁘면 그 틱은 건너뜀). 실패한 틱은 다음 틱이 다시 시도한다. 수집이 3회 연속 실패하거나(`MAIL_SYNC_ALERT_AFTER`) 성공했는데 **평일 09~20시 틱에서** 새 메일 0건이 36회(약 6시간) 이어지면(`MAIL_SYNC_QUIET_AFTER`, 저녁·주말 틱은 세지 않음) 한 번 알리고, 회복 시 한 번 더 알린다. 형이 "메일 왔어?"처럼 지금 확인을 원하면 유돌이 게이트 `mail-sync`(형 메시지 근거 필수, 돌고 있는 수집이 있으면 기다림)로 한 번 수집한 뒤 `mail-list` 로 읽는다. 사용자가 "메일이 안 들어온다"고 하면 이 알림 상태(`~/.hermes/watch-failure/mail-sync-watch.json`)와 `mail_wrapper.py status` 의 마지막 run 을 먼저 본다. 상세: [소개](../../docs/기능소개/기관메일-10분-수집과-지금-수집.md)
 
 ### 1c. 다이제스트 실패 → 수리 티켓 (매일 09:10 KST, 사용자 타이머)
 `mail-triage-repair-daily`(`40 9,13,19 * * *` — 다이제스트마다 40분 뒤, no_agent, `runner=systemd`)가 `mail_digest_repair_watch.py` 를 돌린다. 지난번 이후의 분류 실패(`classification_failed`)·`(요약 실패)`·`DIGEST-FAIL stage=… code=…`·트리아지 워처 실패를 종류마다 수리 티켓 하나로 올린다(`repair_cli.py manual`, 메일 제목·주소·본문 비노출, 자동 수리 없음). 같은 종류의 재발은 같은 카드의 재발로 센다. 2026-10-02 노드에 손으로 넣은 에이전트 모드 잡을 대신하며, 그 Hermes 잡은 지우지 않고 일시정지된다. 상세: [소개](../../docs/기능소개/정기-작업-사용자-타이머-이전.md)

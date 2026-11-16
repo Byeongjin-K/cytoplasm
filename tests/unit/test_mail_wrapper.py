@@ -256,7 +256,7 @@ def test_list_all_folders_opts_into_allfolder_sync_and_unfiltered_read(
         }],
     )
     monkeypatch.setattr(mail_wrapper, "_emit", lambda _payload, exit_code: exit_code)
-    args = Namespace(sync=True, limit=5, masked=False, all_folders=True)
+    args = Namespace(sync=True, limit=5, masked=False, all_folders=True, user_folders=False, since_days=None)
 
     # When: the wrapper performs the read-only list operation.
     rc = mail_wrapper.cmd_list(args)
@@ -265,6 +265,48 @@ def test_list_all_folders_opts_into_allfolder_sync_and_unfiltered_read(
     assert rc == 0
     assert ("sync", ["sync", "--limit", "5", "--folders", "all"]) in calls
     assert ("query", ("1 = 1", (), 5)) in calls
+
+
+def test_list_user_folders_syncs_them_within_the_day_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: a user-folder list request, with and without its own day limit (issue #251).
+    calls: list[list[str]] = []
+    monkeypatch.setattr(mail_wrapper, "_cfg", lambda: {"mask_salt": ""})
+    monkeypatch.setattr(mail_wrapper, "run_mailon",
+                        lambda _cfg, argv: calls.append(argv) or (0, "OK: 1 new mail(s)", ""))
+    monkeypatch.setattr(mail_wrapper, "_user_folder_where", lambda _cfg: ("user-where", ()))
+    monkeypatch.setattr(mail_wrapper, "_db_rows", lambda _cfg, where, params, limit: [{
+        "uid": "u1", "folder": "folder:60003", "subject": "s", "sender": "a@example.invalid",
+        "recv_date": "2026-11-16T00:00:00", "markdown_path": "m.md", "folder_name": "Project",
+    }] if where == "user-where" else [])
+    payloads: list[dict] = []
+    monkeypatch.setattr(mail_wrapper, "_emit", lambda payload, code: payloads.append(payload) or code)
+    base = {"sync": True, "limit": 5, "masked": False, "all_folders": False, "user_folders": True}
+
+    # When
+    assert mail_wrapper.cmd_list(Namespace(**base, since_days=None)) == 0
+    assert mail_wrapper.cmd_list(Namespace(**base, since_days=3)) == 0
+
+    # Then: inbox, sent and the user folders are synced, 7 days unless named; the read is the user scope.
+    assert calls == [["sync", "--limit", "5", "--folders", "inbox,sent,user", "--since-days", "7"],
+                     ["sync", "--limit", "5", "--folders", "inbox,sent,user", "--since-days", "3"]]
+    assert payloads[0]["scope"] == "user-folders"
+    assert payloads[0]["mails"][0]["folder_name"] == "Project"
+
+
+@pytest.mark.parametrize("extra", [
+    {"all_folders": True, "user_folders": True, "since_days": None},
+    {"all_folders": False, "user_folders": False, "since_days": 3},
+    {"all_folders": False, "user_folders": True, "since_days": 0},
+    {"all_folders": False, "user_folders": True, "since_days": 32},
+])
+def test_list_user_folder_flags_refuse_other_shapes(monkeypatch: pytest.MonkeyPatch, extra: dict) -> None:
+    # Given: a scope the wrapper does not take; no mailon run may start.
+    monkeypatch.setattr(mail_wrapper, "_cfg", lambda: {"mask_salt": ""})
+    monkeypatch.setattr(mail_wrapper, "run_mailon", lambda *_a: pytest.fail("mailon ran"))
+    monkeypatch.setattr(mail_wrapper, "_emit", lambda payload, code: code)
+    # When / Then
+    rc = mail_wrapper.cmd_list(Namespace(sync=True, limit=5, masked=False, **extra))
+    assert rc == mail_wrapper.WRAPPER_EXIT["usage_error"]
 
 
 def test_list_sync_auth_fail_surfaces_reauth_guidance(stub_repo: Path) -> None:

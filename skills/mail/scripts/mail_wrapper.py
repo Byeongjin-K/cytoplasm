@@ -32,6 +32,7 @@ import argparse
 import hashlib
 import json
 import re
+import mail_user_folders_mode
 from mailon_interface import (
     CONFIG_GUIDANCE,
     MAILON_INTERFACE,
@@ -45,6 +46,7 @@ from mail_wrapper_read import (
     _cfg,
     _db_rows,
     _render_mail,
+    _user_folder_where,
     distinct_addresses,
     rank_candidates,
     recipients,
@@ -99,10 +101,17 @@ def _mailon_failure(command: str, rc: int, stderr: str, **extra) -> int:
 def cmd_list(args) -> int:
     cfg = _cfg()
     sync_info = None
+    if args.all_folders and args.user_folders:
+        return _error("list", "usage_error", "--all-folders 또는 --user-folders 중 하나만.")
+    if args.since_days is not None and not (
+            args.user_folders and 1 <= args.since_days <= mail_user_folders_mode.MAX_SINCE_DAYS):
+        return _error("list", "usage_error", "--since-days 1-31 은 --user-folders 와 함께만.")
     if args.sync:
         sync_argv = ["sync", "--limit", str(args.limit)] + (
             ["--folders", "all"] if args.all_folders else []
-        )
+        ) + (["--folders", "inbox,sent,user", "--since-days",
+              str(args.since_days or mail_user_folders_mode.DEFAULT_SINCE_DAYS)]
+             if args.user_folders else [])
         rc, out, err = run_mailon(cfg, sync_argv)
         if rc in (1, 2, 10, 11, -6, -7):
             return _mailon_failure("list", rc, err)
@@ -117,7 +126,12 @@ def cmd_list(args) -> int:
                              stderr_lines=len(err.splitlines()),
                              stderr_bytes=len(err.encode("utf-8")),
                              note=SYNC_FALLBACK_NOTE)
-    where, params = ("1 = 1", ()) if args.all_folders else ("folder = ?", ("inbox",))
+    if args.all_folders:
+        where, params = "1 = 1", ()
+    elif args.user_folders:
+        where, params = _user_folder_where(cfg)
+    else:
+        where, params = "folder = ?", ("inbox",)
     rows = _db_rows(cfg, where, params, args.limit)
     if not rows:
         if sync_info and sync_info.get("exit_code") == 3:
@@ -132,6 +146,7 @@ def cmd_list(args) -> int:
         "mails": [_render_mail(r, args.masked, cfg["mask_salt"]) for r in rows],
     }
     payload.update({"scope": "all-folders"} if args.all_folders else {})
+    payload.update({"scope": "user-folders"} if args.user_folders else {})
     return _emit(payload, 0)
 
 
@@ -324,6 +339,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, default=5)
     for flag in ("sync", "all-folders", "masked"):
         s.add_argument(f"--{flag}", action="store_true", default=False)
+    s.add_argument("--user-folders", action="store_true", default=False,
+                   help="inbox plus user folders (never trash, spam, drafts); with --sync collect them too")
+    s.add_argument("--since-days", type=int, default=None,
+                   help="with --user-folders --sync: days back the user folders are collected (1-31, default 7)")
     s.set_defaults(fn=cmd_list)
 
     s = sub.add_parser("get", help="one mail by uid")

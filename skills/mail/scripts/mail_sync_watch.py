@@ -9,6 +9,10 @@ the timer runner owns failure counting). Successful zero-new-mail results are ke
 in ``~/.local/state/autophagy/mail-sync/collection.json`` for doctor scheduled-jobs; only weekday 09:00-19:59
 KST ticks advance that quiet count, so evenings and weekends never raise it. The retired
 watch-failure ledger is neither read nor updated.
+
+Issue #251: with the released ``mail-user-folders`` switch on, every collection also takes the
+user folders (trash, spam and drafts never) of the last few days; off keeps the argv above.
+``--now --user-folders [--since-days N]`` is the same scope asked through the YooDori gate.
 """
 from __future__ import annotations
 
@@ -84,14 +88,35 @@ def _payload(stdout: str) -> dict:
     return {}
 
 
-def _collect() -> tuple[bool, int | None, str]:
+def _scope() -> list[str]:
+    """The periodic scope: the user folders only under the released switch."""
+    import mail_user_folders_mode
+
+    return ["--user-folders"] if mail_user_folders_mode.mode() == "on" else []
+
+
+def _now_scope(words: list[str]) -> list[str] | None:
+    """``--now`` takes none, ``--user-folders`` or ``--user-folders --since-days N``; None refuses."""
+    import mail_user_folders_mode
+
+    if not words:
+        return _scope()
+    if words == ["--user-folders"]:
+        return words
+    if (len(words) == 3 and words[:2] == ["--user-folders", "--since-days"] and words[2].isdigit()
+            and 1 <= int(words[2]) <= mail_user_folders_mode.MAX_SINCE_DAYS):
+        return [*words[:2], str(int(words[2]))]
+    return None
+
+
+def _collect(scope: list[str]) -> tuple[bool, int | None, str]:
     """Run one sync: (collected, new mails or None when unknown, failure detail)."""
     cli = _cli()
     if not cli.exists():
         return False, None, "mail skill is not mounted"
     try:
         result = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
-            [sys.executable, str(cli), "list", "--sync", "--limit", str(SYNC_LIMIT)],
+            [sys.executable, str(cli), "list", "--sync", "--limit", str(SYNC_LIMIT), *scope],
             capture_output=True, text=True, timeout=TICK_TIMEOUT_SECONDS, check=False,
             cwd=str(Path.home()), env=dict(os.environ),
         )
@@ -138,15 +163,19 @@ def _lock(wait_seconds: float):
             time.sleep(2)
 
 
-def now() -> int:
+def now(words: list[str] | None = None) -> int:
     """YooDori's on-request collection: wait for a running one, then collect once."""
+    scope = _now_scope(words or [])
+    if scope is None:
+        print("MAIL-SYNC-NOW refused: --now takes only --user-folders [--since-days 1-31]")
+        return 2
     _load_env_secrets()
     held = _lock(NOW_WAIT_SECONDS)
     if held is None:
         print("MAIL-SYNC-NOW busy: a collection is still running; try again shortly")
         return 1
     with held:
-        collected, new, detail = _collect()
+        collected, new, detail = _collect(scope)
     if collected:
         print(f"MAIL-SYNC-NOW ok new={new if new is not None else '?'}")
         return 0
@@ -160,7 +189,7 @@ def main() -> int:
     if held is None:
         return 0  # a collection (an on-request one) is running; the next tick follows it
     with held:
-        collected, new, detail = _collect()
+        collected, new, detail = _collect(_scope())
     _record_collection(Path.home(), collected, new, _now())
     if not collected:
         print(f"{WATCH_NAME} error: {detail}"[:300])
@@ -192,7 +221,7 @@ def _record_collection(home: Path, collected: bool, new: int | None, now: dateti
 
 if __name__ == "__main__":
     try:
-        sys.exit(now() if sys.argv[1:] == ["--now"] else main())
+        sys.exit(now(sys.argv[2:]) if sys.argv[1:2] == ["--now"] else main())
     except Exception as error:  # noqa: BLE001 — cron alert path: one masked line
         print(f"{WATCH_NAME} error: {_redact(str(error))[:300]}")
         sys.exit(1)

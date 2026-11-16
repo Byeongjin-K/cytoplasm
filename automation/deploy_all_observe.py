@@ -221,6 +221,16 @@ def _derived(decl: Declaration, root: Path, call: Runner, _cache: dict[str, obje
         # Before the first release there is no marker; that is today's timed-only drafts.
         state = "ok" if mode == "off" and have == "-" else _state(want, have)
         return _Seen(want, want if state == "ok" else have, state)
+    if decl.attr("algorithm") == "mail-user-folders-v1":
+        mode = _cache.get("mail_user_folders", "off")
+        if mode not in ("on", "off"):
+            return _Seen("?", "?", "unknown")
+        want = _sha_text(str(mode))
+        rc, out = call(decl.account, ("sha", decl.destination))
+        have = out.strip() if rc == 0 else "-" if rc == 3 else "?"
+        # Before the first release there is no marker; that is today's inbox/sent-only collection.
+        state = "ok" if mode == "off" and have == "-" else _state(want, have)
+        return _Seen(want, want if state == "ok" else have, state)
     if decl.attr("algorithm") == "calendar-default-color-v1":
         from automation.calendar_default_color import COLORS
 
@@ -376,6 +386,7 @@ def collect(
     mail_html_reply: str = "off",
     mail_reply_closing: str = "keep",
     mail_schedule_all_day: str = "off",
+    mail_user_folders: str = "off",
     calendar_default_color: str = "off",
     document_ocr: str = "off",
     report_hub: str = "on",
@@ -408,6 +419,7 @@ def collect(
     cache["mail_html_reply"] = mail_html_reply
     cache["mail_reply_closing"] = mail_reply_closing
     cache["mail_schedule_all_day"] = mail_schedule_all_day
+    cache["mail_user_folders"] = mail_user_folders
     cache["calendar_default_color"] = calendar_default_color
     cache["document_ocr"] = document_ocr
     cache["owner_timers_off"] = owner_timers_off
@@ -455,6 +467,7 @@ def observe_node(
     mail_html_reply: str = "off",
     mail_reply_closing: str = "keep",
     mail_schedule_all_day: str = "off",
+    mail_user_folders: str = "off",
     calendar_default_color: str = "off",
     document_ocr: str = "off",
     report_hub: str = "on",
@@ -474,4 +487,5 @@ def observe_node(
                    agent_chat_channel=agent_chat_channel, peer_retired=peer_retired,
                    omo_relay_mode=omo_relay_mode, mail_html_reply=mail_html_reply,
                    mail_reply_closing=mail_reply_closing, mail_schedule_all_day=mail_schedule_all_day,
+                   mail_user_folders=mail_user_folders,
                    calendar_default_color=calendar_default_color, document_ocr=document_ocr)

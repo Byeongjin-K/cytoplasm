@@ -217,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mail-html-reply", choices=("on", "off"), default="off")
     parser.add_argument("--mail-reply-closing", choices=("keep", "omit"), default="keep")
     parser.add_argument("--mail-schedule-all-day", choices=("on", "off"), default="off")
+    parser.add_argument("--mail-user-folders", choices=("on", "off"), default="off")
     parser.add_argument("--calendar-default-color", choices=("off", *(str(i) for i in range(1, 12))), default="off")
     parser.add_argument("--document-ocr", choices=("on", "off"), default="off")
     parser.add_argument("--omo-relay", default="off", help="릴리스 호스트의 중계 설정 지문")
@@ -246,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
                                     if args.mail_reply_closing == "omit" else {}),
                                  **({"mail_schedule_all_day": args.mail_schedule_all_day}
                                     if args.mail_schedule_all_day == "on" else {}),
+                                 **({"mail_user_folders": args.mail_user_folders}
+                                    if args.mail_user_folders == "on" else {}),
                                  **({"calendar_default_color": args.calendar_default_color}
                                     if args.calendar_default_color != "off" else {}),
                                  **({"document_ocr": args.document_ocr} if args.document_ocr == "on" else {}),

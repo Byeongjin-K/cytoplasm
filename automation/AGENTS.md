@@ -31,6 +31,14 @@ agent 표식을 배포·재조회한다. `draft_reply`만 그 값을 읽어 알�
 agent 표식을 배포·재조회한다. 메일 `classify`가 두 일정 규칙 줄을 바꾸고, 캘린더는 메일이 넘긴 env와 표식이 함께
 켜졌을 때만 시각 없는 문장을 종일 초안으로 만든다. 카드 staging에는 이 모듈을 포함한다([소개](../docs/기능소개/메일-날짜만-일정-종일-초안.md)).
 
+기관메일 사용자 폴더 정기 수집은 `mail_user_folders`의 기본 꺼짐 릴리스 스위치다. 호스트
+`release-flags/mail-user-folders`의 정확한 `on`을 같은 HEAD 승인 표면에 묶고, 선언된 `push_file`로
+agent 표식 `.hermes/mail-user-folders.mode`를 배포·재조회한다. 메일 스킬은
+`skills/mail/scripts/mail_user_folders_mode.py`로 표식을 읽어 휴지통·스팸·임시보관을 뺀
+사용자 폴더의 최근 7일 메일을 정기 수집하고 분류·다이제스트에 포함한다. 꺼짐은 정기 수집의
+받은·보낸편지함과 분류·다이제스트의 받은편지함 동작을 바이트 그대로 보존하며 프롬프트는 바꾸지 않는다.
+카드 staging에는 이 모듈을 포함한다.
+
 캘린더 기본색은 `calendar_default_color`의 기본 꺼짐 릴리스 스위치다.
 `release-flags/calendar-default-color`의 정확한 Google id `1`~`11`과 HEAD를
 기존 승인에 묶고, 선언된 `push_file`로 agent 표식을 배포·재조회한다.

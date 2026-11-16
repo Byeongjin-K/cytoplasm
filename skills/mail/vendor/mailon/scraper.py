@@ -75,6 +75,8 @@ MAILON_ORIGIN = "https://mailon.kr"
 LIST_ENDPOINT = "/mail/list_async.json"
 VIEW_ENDPOINT = "/mail/view_async"
 PAGE_SIZE = 20
+#: Most all-folder pages one user-folder sync reads (500 rows); the date cutoff usually ends it first.
+USER_FOLDER_MAX_PAGES = 25
 
 # Attachment download strategy thresholds.
 # Small attachments: use in-browser fetch + base64 (simple, fast).
@@ -369,6 +371,8 @@ class InboxScraper:
         self.folder_label = folder_label
         self.all_folders = all_folders
         self.folder_uid: str | None = None
+        #: Sent folder uid: an all-folder row from it is stored as folder 'sent' (issue #251).
+        self.sent_uid: str | None = None
         self.large_download_budget_s = large_download_budget_s
 
     #: Seconds one urllib download may take in total; None keeps no limit.
@@ -437,17 +441,11 @@ class InboxScraper:
                                  poll_s=poll_interval_s)
 
     def _list_api_confirms(self, uid: str) -> bool:
-        saved = (self.folder_uid, self.all_folders)
-        self.folder_uid, self.all_folders = uid, False
         try:
-            data = self.fetch_list_page(1)
+            return bool(self.folder_info(uid))
         except Exception as error:
             log.warning("list_async check for folderUid %s failed: %s", uid, str(error)[:150])
             return False
-        finally:
-            self.folder_uid, self.all_folders = saved
-        folder = data.get("folder") or {}
-        return bool(data.get("result")) and str(folder.get("folderUid")) == uid
 
     # ------------------------------------------------------ list API
 
@@ -535,24 +533,7 @@ class InboxScraper:
                 if not uid or uid in seen:
                     continue
                 seen.add(uid)
-                # NOTE: isSeen is 0 for unread, 1 for read. Must use `!= None`
-                # pattern, NOT `or 1` (which would treat 0 as "no value").
-                is_seen_val = item.get("isSeen")
-                is_seen = int(is_seen_val) if is_seen_val is not None else 1
-                is_flag_val = item.get("isFlagged")
-                is_flag = int(is_flag_val) if is_flag_val is not None else 0
-                refs.append(MailRef(
-                    uid=uid,
-                    folder_uid=str(item.get("folderUid") or self.folder_uid),
-                    subject=str(item.get("subject") or ""),
-                    sender=str(item.get("adrFrom") or ""),
-                    to=str(item.get("adrTo") or ""),
-                    date=parse_millis(item.get("timeMillis")),
-                    size=int(item.get("msgSize") or 0),
-                    unread=(is_seen == 0),
-                    flagged=(is_flag != 0),
-                    attach_count=int(item.get("attachCount") or 0),
-                ))
+                refs.append(self._ref(uid, item))
                 page_new += 1
 
             total = data.get("folder", {}).get("newMsgNum")
@@ -572,6 +553,61 @@ class InboxScraper:
                 break
 
         return refs
+
+    def _ref(self, uid: str, item: dict) -> MailRef:
+        # NOTE: isSeen is 0 for unread, 1 for read. Must use `!= None`
+        # pattern, NOT `or 1` (which would treat 0 as "no value").
+        is_seen_val = item.get("isSeen")
+        is_seen = int(is_seen_val) if is_seen_val is not None else 1
+        is_flag_val = item.get("isFlagged")
+        is_flag = int(is_flag_val) if is_flag_val is not None else 0
+        return MailRef(
+            uid=uid,
+            folder_uid=str(item.get("folderUid") or self.folder_uid),
+            subject=str(item.get("subject") or ""),
+            sender=str(item.get("adrFrom") or ""),
+            to=str(item.get("adrTo") or ""),
+            date=parse_millis(item.get("timeMillis")),
+            size=int(item.get("msgSize") or 0),
+            unread=(is_seen == 0),
+            flagged=(is_flag != 0),
+            attach_count=int(item.get("attachCount") or 0),
+        )
+
+    def list_recent_all_folders(
+        self, since_millis: int, *, max_pages: int = USER_FOLDER_MAX_PAGES,
+    ) -> tuple[list[MailRef], bool]:
+        """Rows of every folder received at or after ``since_millis``, newest first.
+
+        The all-folder list is sorted by time, so the walk ends at the first older
+        row and never reads the whole mailbox (issue #251: a 10k-row walk took 116 s).
+        Returns the refs and whether ``max_pages`` cut the walk before the cutoff."""
+        assert self.folder_uid, "call resolve_inbox_folder_uid() first"
+        refs: list[MailRef] = []
+        seen: set[str] = set()
+        for page in range(1, max_pages + 1):
+            contents = _fetch_all_folder_page(self.browser, self.folder_uid, page)
+            for item in contents:
+                uid = str(item.get("mailUid") or "")
+                if int(item.get("timeMillis") or 0) < since_millis:
+                    return refs, False
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    refs.append(self._ref(uid, item))
+            if len(contents) < PAGE_SIZE:
+                return refs, False
+        return refs, True
+
+    def folder_info(self, uid: str) -> dict:
+        """The list API's ``folder`` object for one folder (its name, when the server gives one)."""
+        saved = (self.folder_uid, self.all_folders)
+        self.folder_uid, self.all_folders = uid, False
+        try:
+            data = self.fetch_list_page(1)
+        finally:
+            self.folder_uid, self.all_folders = saved
+        folder = data.get("folder") if data.get("result") else None
+        return folder if isinstance(folder, dict) and str(folder.get("folderUid")) == uid else {}
 
     # ---------------------------------------------------- mail detail
 
@@ -625,7 +661,9 @@ class InboxScraper:
 
         folder = self.folder_label
         if self.all_folders:
-            folder = "inbox" if ref.folder_uid == self.folder_uid else f"folder:{ref.folder_uid}"
+            folder = ("inbox" if ref.folder_uid == self.folder_uid
+                      else "sent" if self.sent_uid and ref.folder_uid == self.sent_uid
+                      else f"folder:{ref.folder_uid}")
         mail = Mail(
             uid=ref.uid,
             folder=folder,

@@ -48,7 +48,11 @@ def _wrapper_json(argv: list[str], *, timeout: int = 1200) -> tuple[int, dict]:
 
 
 def _list_mails(limit: int, sync: bool) -> list[dict]:
+    """Received mails to triage: the inbox, plus the user folders under the released switch (#251)."""
+    import mail_user_folders_mode
+
     argv = ["list", "--limit", str(limit)] + (["--sync"] if sync else [])
+    argv += ["--user-folders"] if mail_user_folders_mode.mode() == "on" else []
     rc, payload = _wrapper_json(argv)
     if rc == 5:
         return []
