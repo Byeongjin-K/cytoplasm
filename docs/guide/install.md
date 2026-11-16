@@ -23,7 +23,9 @@ curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.s
 `~/.cytoplasm/src` 에 클론한 뒤 릴리스의 `update-trust.pub` 지문을 README 값과 대조한다. 다르면
 `CYTO-LINUX-FINGERPRINT-MISMATCH`(윈도우 `CYTO-WINDOWS-FINGERPRINT-MISMATCH`)로 클론에서 아무것도 실행하지 않는다. 같으면
 서명된 최신 `vX.Y.Z` 태그를 체크아웃하고 `python3 -m automation.install.update` 가 아래 도리 설치기를 돈다. 같은 줄을
-다시 실행하면 업데이트다. 옵션은 줄 앞 환경변수 `CYTO_ROLES`(쉼표 목록)·`CYTO_OWNER_CALL`·`CYTO_HOME`.
+다시 실행하면 업데이트다. 옵션은 환경변수 `CYTO_ROLES`(쉼표 목록)·`CYTO_OWNER_CALL`·`CYTO_HOME` 이고, 리눅스는 파이프 뒤
+`bash` 바로 앞에 둔다(`curl -fsSL …/install.sh | CYTO_ROLES=okdori bash`). `CYTO_ROLES`·`CYTO_OWNER_CALL` 은 첫 설치에만 쓰인다.
+이미 설치한 뒤 역할을 더할 때는 아래 `--role` 명령을 쓴다.
 
 설치가 끝나면 사람이 할 일은 셋뿐이다.
 

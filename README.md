@@ -6,7 +6,7 @@
 메일·일정·회의록·노트를 대신 처리하지만, **내가 ✅ 를 누르지 않은 일은 절대 하지 않습니다.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](#빠른-시작)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#빠른-시작)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-FCC624?logo=linux&logoColor=black)](#빠른-시작)
 [![Latest tag](https://img.shields.io/github/v/tag/orientpine/cytoplasm?label=latest&color=success)](https://github.com/orientpine/cytoplasm/tags)
 [![Releases](https://img.shields.io/badge/releases-SSH%20signed-success)](#업데이트는-서명된-것만-설치됩니다)
@@ -47,7 +47,9 @@
 curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
 ```
 
-git 같은 기본 도구가 없으면 리눅스는 `sudo` 비밀번호(컴퓨터 로그인 비밀번호)를 한 번 묻습니다.
+git 같은 기본 도구가 없으면 리눅스는 `sudo` 비밀번호(컴퓨터 로그인 비밀번호)를 묻습니다. 입력하는 동안 글자나 별표가
+보이지 않는 게 정상이니 그대로 치고 `Enter` 를 누르세요. 터미널이 `curl: command not found`(curl 을 찾을 수 없음)라고 하면
+먼저 `sudo apt update && sudo apt install -y curl` 을 실행한 뒤 위 한 줄을 다시 붙여 넣습니다.
 
 **윈도우** — `시작` 버튼을 누르고 `powershell` 을 입력한 뒤 「Windows PowerShell」 을 그냥 클릭해 엽니다.
 「관리자 권한으로 실행」 은 고르지 마세요(필요 없고, 그러면 AI 에이전트 설치가 건너뛰어집니다). 아래 한 줄을
@@ -77,7 +79,7 @@ Update later: run the same line again. Open a new terminal so PATH picks up dori
 
 ### 2단계 — 디스코드 봇 만들고 값 네 개 구하기
 
-도리는 **내가 만든 봇**으로 디스코드에서 말합니다. 아래 네 값을 메모장에 모아 두세요.
+도리는 **내가 만든 봇**으로 디스코드에서 말합니다. 아래 네 값을 메모장(아무 메모 앱)에 모아 두세요.
 
 | 값 | 무엇인가 | 넣을 줄 |
 |---|---|---|
@@ -87,7 +89,8 @@ Update later: run the same line again. Open a new terminal so PATH picks up dori
 | 내 ID | 내 디스코드 계정의 번호. 도리는 이 사람의 말만 지시로 받습니다 | `DORI_DISCORD_OWNER` |
 
 1. **내 서버와 채널 만들기.** 디스코드 앱 왼쪽 줄 맨 아래 「+」(서버 추가) → 「직접 만들기」 → 「나와 친구들을 위한 서버」 →
-   이름을 정하고 만듭니다. 그 서버에 글 채널을 하나 만듭니다(예: `#dori`). 이미 있는 내 서버를 써도 됩니다.
+   이름을 정하고 만듭니다. 서버를 만들면 생기는 `#일반` 채널을 그대로 써도 되고, 채널 목록 옆 「+」 로 새 글 채널(예: `#dori`)을 만들어도 됩니다.
+   이미 있는 내 서버를 써도 됩니다.
 2. **봇 만들기.** 브라우저로 <https://discord.com/developers/applications> 에 디스코드 계정으로 들어가
    「New Application」 → 이름(예: Dori) → 「Create」.
 3. **토큰 받기.** 왼쪽 메뉴 「Bot」 → 「Reset Token」 → 확인 → 나온 긴 글자를 「Copy」 해 메모합니다.
@@ -115,14 +118,15 @@ open -e ~/.dori/dori.env                            # macOS (텍스트 편집기
 notepad "$env:USERPROFILE\.dori\dori.env"           # 윈도우 (메모장, 저장 Ctrl+S)
 ```
 
-파일 위쪽의 네 줄에서 `=` 뒤의 예시 값만 2단계에서 모은 값으로 바꿉니다. 띄어쓰기나 따옴표는 넣지 않습니다.
+파일 위쪽의 네 줄에서 `=` 뒤의 예시 값(`replace-with-your-bot-token` 과 1·2·3 이 18자리 늘어선 자리표시)만
+2단계에서 모은 값으로 바꿉니다. 아래는 어느 줄에 무엇을 넣는지 보여 주는 그림입니다. 띄어쓰기나 따옴표는 넣지 않습니다.
 `#` 으로 시작하는 줄과 나머지 줄은 그대로 둡니다.
 
 ```text
 DORI_DISCORD_TOKEN=replace-with-your-bot-token     ← 봇 토큰
-DORI_DISCORD_GUILD=111111111111111111              ← 서버 ID
-DORI_DISCORD_CHANNEL=222222222222222222            ← 채널 ID
-DORI_DISCORD_OWNER=333333333333333333              ← 내 ID
+DORI_DISCORD_GUILD=서버-ID-숫자                      ← 서버 ID
+DORI_DISCORD_CHANNEL=채널-ID-숫자                    ← 채널 ID
+DORI_DISCORD_OWNER=내-사용자-ID-숫자                 ← 내 ID
 ```
 
 저장하면 도리의 디스코드 수신이 다음 재시도(최대 5분) 때 저절로 붙습니다. 바로 붙이려면 리눅스는
@@ -133,7 +137,8 @@ DORI_DISCORD_OWNER=333333333333333333              ← 내 ID
 
 새 터미널(윈도우는 새 PowerShell)에서 `herdr` 를 입력하고 `Enter` 를 누릅니다. herdr 는 AI 에이전트 화면 여러 개를
 한 창에 띄워 두는 프로그램이고, 마우스로 클릭해서 씁니다. 왼쪽 목록에서 **「짱돌」** 작업 공간(도리의 리드)을 클릭하면
-AI 에이전트 omo 의 입력 화면이 보입니다. 리눅스는 브라우저 주소창에 `http://127.0.0.1:8181` 을 넣어도 같은 화면이 열립니다.
+AI 에이전트 omo 의 입력 화면이 보입니다. 리눅스는 브라우저 주소창에 `http://127.0.0.1:8181` 을 넣어도 같은 화면이 열립니다. 이때 비밀번호를 물으면
+터미널에서 `grep HERDR_WEB_PASSPHRASE ~/.config/herdr/web-8181.env` 를 실행해 `=` 뒤의 값을 넣으세요.
 
 1. 그 화면에 `/login` 을 입력하고 `Enter`.
 2. 목록에서 내 구독을 고릅니다. Claude 를 쓰면 **Anthropic Subscription (Claude Pro/Max)**,
@@ -160,15 +165,15 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 |---|---|
 | `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 그 줄이 무엇이 없는지 이름을 댑니다. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
 | `…-FINGERPRINT-MISMATCH` | 내려받은 것이 공식 배포본과 다르다는 뜻이라 설치기가 일부러 멈췄습니다. 다시 시도하지 말고 이슈로 알려 주세요 |
-| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP` | AI 에이전트 omo 를 못 깔았습니다(윈도우는 대개 관리자 창이라서). 그 줄에 적힌 명령을 **일반** 터미널(PowerShell)에서 실행한 뒤, 출력의 `DORI-LEAD-PANE` 줄 끝 명령(`herdr pane run …`)을 실행하면 짱돌 탭이 켜집니다 |
+| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP` | AI 에이전트 omo 를 못 깔았습니다(윈도우는 대개 관리자 창이라서). 짱돌 작업 공간은 만들어졌지만 그 안에 omo 가 켜지지 않은 상태입니다. 그 줄에 적힌 omo 설치 명령을 **일반** 터미널(PowerShell)에서 실행하고, 새 창에서 설치 출력의 `DORI-LEAD-PANE` 줄 끝에 있는 `herdr pane run …` 명령을 통째로 복사해 실행하면 짱돌 화면에 omo 가 켜집니다 |
 | PowerShell 이 빨간 글로 실행 정책(ExecutionPolicy)을 말함 | 한 줄을 고치지 말고 위에 적힌 그대로 붙여 넣으세요. 이미 그 설정이 들어 있습니다 |
-| 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | git, Python 3.11 이상, PowerShell 7 을 직접 깐 뒤 같은 한 줄을 다시 실행하세요 |
+| 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | 세 가지를 직접 깝니다. 각 페이지에서 Windows 용 설치 파일을 받아 실행하고 기본값 그대로 「Next」 로 진행합니다. [git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/)(첫 화면 아래 「Add python.exe to PATH」 를 꼭 체크), PowerShell 7(Microsoft Store 에서 「PowerShell」 검색 후 설치). 그다음 PowerShell 창을 새로 열고 같은 한 줄을 다시 실행하세요 |
 | `herdr`·`dori` 명령을 찾을 수 없음 | 터미널을 닫고 새로 여세요. 설치 직후의 창은 새 명령을 모릅니다 |
-| herdr 에 「짱돌」 이 없음 | macOS 이거나 위의 OMO-SKIP 경우입니다. 탭 하나에서 `omo` 를 직접 실행하고 4단계를 이어 가세요 |
+| herdr 에 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 없으면 설치 출력에 `DORI-LEAD-FAIL` 줄이 있는지 보고 같은 한 줄을 다시 실행하세요 |
 | 디스코드에서 답이 없음 | 아래 기록에서 `DISCORD_LISTENER_FATAL` 줄을 찾아보세요. `close=4004` 면 토큰이 틀렸습니다(2단계 3을 다시 하고 3단계에 새 토큰). `close=4014` 면 Message Content Intent 가 꺼져 있습니다(2단계 4). 그런 줄이 없으면 채널 ID·내 ID 가 맞는지, 봇이 그 채널을 볼 수 있는지(2단계 5) 확인하세요 |
 
-디스코드 수신 기록을 보는 곳: 리눅스는 `journalctl --user -u dori-serve -n 50`, 윈도우는
-`%USERPROFILE%\.dori\state\serve.log` 를 메모장으로 엽니다.
+디스코드 수신 기록을 보는 곳: 리눅스는 터미널에서 `journalctl --user -u dori-serve -n 50`, 윈도우는 PowerShell 에서
+`notepad "$env:USERPROFILE\.dori\state\serve.log"` 를 실행하고 메모장에서 `Ctrl`+`F` 로 `DISCORD_LISTENER_FATAL` 을 찾습니다.
 
 그래도 안 되면 [GitHub 이슈](https://github.com/orientpine/cytoplasm/issues)에 운영체제와 마지막에 나온 화면 몇 줄을
 붙여 알려 주세요. **봇 토큰과 `dori.env` 내용은 절대 붙이지 마세요.** 설치 단계별 자세한 내용은
@@ -177,8 +182,11 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 ### 업데이트
 
 새 릴리스가 나오면 **1단계의 같은 한 줄을 다시 실행**하면 됩니다. 넣어 둔 `dori.env` 와 설정은 그대로 남습니다.
-옥돌·무돌·공돌 같은 선택 역할은 줄 앞에 환경변수 `CYTO_ROLES=okdori,moodori,gongdori` 를 붙여 더합니다
-([설치 가이드](docs/guide/install.md#도리-기본-설치-p6)). 예전 방식으로 서버에 깔아 운영하던 분은
+
+옥돌·무돌·공돌 같은 선택 역할은 **처음 설치할 때** 고릅니다. 리눅스·macOS 는
+`curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | CYTO_ROLES=okdori,moodori bash`
+(`bash` 바로 앞), 윈도우는 한 줄 전에 `$env:CYTO_ROLES="okdori,moodori"` 를 먼저 실행합니다. 이미 설치한 뒤에 더하는 방법은
+[설치 가이드](docs/guide/install.md#도리-기본-설치-p6)의 `--role` 명령입니다. 예전 방식으로 서버에 깔아 운영하던 분은
 [릴리스 서명키 교체 공지](#릴리스-서명키-교체-공지-2026-10-19)와 [직접 설치와 레거시 노드](#직접-설치와-레거시-노드)를 보세요.
 
 ### 처음 보는 말 풀이
