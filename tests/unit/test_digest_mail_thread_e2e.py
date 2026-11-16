@@ -146,46 +146,51 @@ def test_a_store_failure_after_discord_opened_the_thread_reuses_it(
 
 
 def _reply_under_card(digest: str, card: dict, uid: str) -> dict:
-    """The owner's ordinary reply under the digest card, before the mail had its own thread."""
+    """The owner's ordinary reply under the digest card (no 📄/✍️ pressed yet)."""
     triage_cli.cmd_draft(argparse.Namespace(
         uid=uid, instruction="합성 지시: 감사 인사로 답해 줘", attachment=[], no_post=False,
         with_evidence=False, reply_all=False,
         digest_card={"channel_id": digest, "message_id": card["id"]},
     ))
-    draft = next(d for d in triage_gate.list_drafts() if d["uid"] == uid and d["status"] == "pending")
-    assert draft["approval_thread_id"] == digest
-    return draft
+    return next(d for d in triage_gate.list_drafts() if d["uid"] == uid and d["status"] == "pending")
 
 
-def test_an_earlier_undecided_card_moves_into_the_mail_thread(
+def test_a_reply_under_the_card_opens_the_mail_thread_for_its_card(
         world: World, monkeypatch: pytest.MonkeyPatch) -> None:
     _digest(monkeypatch, DAY1, _mails(("u-1", "합성 의견 요청", False)), {})
     digest, (card,) = _cards(world)
-    old = _reply_under_card(digest, card, "u-1")
-    assert _press(world, card, "📄", "body") == 1
+    draft = _reply_under_card(digest, card, "u-1")
+    assert len(world.threads_created) == 2
+    thread = world.threads_created[1]
+    assert draft["approval_thread_id"] == thread
+    assert any(m["id"] == draft["message_id"] for m in world.in_channel(thread))
+    assert not any(m["content"].startswith("📨") for m in world.in_channel(digest))
+    assert len([m for m in world.in_channel(digest) if m["reply_to"] == card["id"]]) == 1
+    assert _press(world, card, "✍️", "draft") == 1  # the same thread: a preview of that card
+    assert len(world.threads_created) == 2
+    assert any(m["content"].startswith("✍️ **이 메일의 회신 초안이 이미 있습니다**") for m in world.in_channel(thread))
+    assert [d["id"] for d in triage_gate.list_drafts() if d["uid"] == "u-1"] == [draft["id"]]
+
+
+def test_a_card_posted_in_the_digest_by_an_older_release_is_left_alone(
+        world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    import triage_digest_thread
+
+    _digest(monkeypatch, DAY1, _mails(("u-1", "합성 의견 요청", False)), {})
+    digest, (card,) = _cards(world)
+    with monkeypatch.context() as older:
+        older.setattr(triage_digest_thread, "mail_binding", lambda *_args: None)
+        old = _reply_under_card(digest, card, "u-1")
+    assert old["approval_thread_id"] == digest
+    body = world.messages[old["message_id"]]["content"]
     assert _press(world, card, "✍️", "draft") == 1
     thread = world.threads_created[1]
-    pending = [d for d in triage_gate.list_drafts() if d["uid"] == "u-1" and d["status"] == "pending"]
-    assert len(pending) == 1 and pending[0]["id"] != old["id"]
-    assert pending[0]["body"] == old["body"] and pending[0]["approval_thread_id"] == thread
-    assert any(m["id"] == pending[0]["message_id"] for m in world.in_channel(thread))
-    assert world.messages[old["message_id"]]["content"] == digest_reaction_actions.MOVED_NOTICE
-    closed = next(d for d in triage_gate.list_drafts() if d["id"] == old["id"])
-    assert closed["status"] == "expired"
-
-
-def test_a_card_the_owner_already_pressed_stays_where_it_is(
-        world: World, monkeypatch: pytest.MonkeyPatch) -> None:
-    _digest(monkeypatch, DAY1, _mails(("u-1", "합성 의견 요청", False)), {})
-    digest, (card,) = _cards(world)
-    old = _reply_under_card(digest, card, "u-1")
-    world.react(old["message_id"], "✅")
-    assert _press(world, card, "✍️", "draft") == 1
     drafts = [d for d in triage_gate.list_drafts() if d["uid"] == "u-1"]
     assert [d["id"] for d in drafts] == [old["id"]] and drafts[0]["status"] == "pending"
-    thread = world.threads_created[1]
+    assert world.messages[old["message_id"]]["content"] == body  # never closed or rewritten
     assert not any(m["content"].startswith("📨") for m in world.in_channel(thread))
-    assert world.messages[old["message_id"]]["content"] != digest_reaction_actions.MOVED_NOTICE
+    preview = next(m for m in world.in_channel(thread) if m["content"].startswith("✍️ **이 메일의 회신 초안이 이미 있습니다**"))
+    assert old["approval_thread_id"] in preview["content"]  # it points at the card where it is
 
 
 def test_body_and_draft_at_once_post_one_link_line(world: World, monkeypatch: pytest.MonkeyPatch) -> None:

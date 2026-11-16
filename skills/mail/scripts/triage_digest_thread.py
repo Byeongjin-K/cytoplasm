@@ -173,15 +173,26 @@ def mail_thread(uid: str, subject: str, card_channel_id: str) -> dict[str, str]:
 def mail_binding(surface: ModuleType, kind: object, directory: object, draft: dict) -> object | None:
     """The mail's own digest thread as the binding for its reply card, else None.
 
-    A thread that no longer validates falls back to the usual path (digest or request
-    thread): the card must still reach the owner.
+    A reply the owner asked for under a digest card before any 📄/✍️ opens that mail's
+    thread here (with the card's link line), so its card never lands in the digest and
+    never has to move later. A thread that no longer validates, or cannot be opened, falls
+    back to the usual path (digest or request thread): the card must still reach the owner.
     """
     if draft.get("kind") not in (None, "reply"):
         return None
-    thread = triage_store.digest_mail_thread(triage_gate.db_path(), str(draft.get("uid") or ""))
-    if thread is None:
-        return None
+    uid = str(draft.get("uid") or "")
+    thread = triage_store.digest_mail_thread(triage_gate.db_path(), uid)
+    origin = str(draft.get("origin_channel_id") or "")
+    card = str(draft.get("origin_message_id") or "")
     try:
+        if thread is None and uid and card and origin and _thread(origin) is not None:
+            import digest_reaction_actions
+
+            subject = str(draft.get("mail_subject") or "")
+            thread = digest_reaction_actions._mail_thread(  # noqa: SLF001 — the shared open + link step
+                {"uid": uid, "channel_id": origin, "message_id": card, "subject": subject}, subject)
+        if thread is None:
+            return None
         return surface.validate_stored_binding(  # type: ignore[attr-defined]
             surface.ApprovalBinding(  # type: ignore[attr-defined]
                 kind, surface.ApprovalSurface.AGENT_CHAT_THREAD,  # type: ignore[attr-defined]

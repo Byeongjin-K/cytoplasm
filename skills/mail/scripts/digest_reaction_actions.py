@@ -381,9 +381,7 @@ def _write_draft(card: dict, attempt: int = 1) -> str:
             ))
             if not triage_gate.has_draft_for(uid):  # the owner was asked in the thread instead
                 return "done"
-        draft = _pending_draft(uid)
-        if draft is not None and existed:
-            draft = _bring_card(draft, target)
+    draft = _pending_draft(uid)
     if draft is None:  # a draft exists but is no longer pending (sent/discarded)
         triage_confirm.post_in(
             target,
@@ -392,56 +390,6 @@ def _write_draft(card: dict, attempt: int = 1) -> str:
         return "done"
     triage_confirm.post_in(target, draft_preview(draft, existed=existed))
     return "done"
-
-
-#: Why an undecided card was closed when its mail moved to its own thread.
-MOVED_REASON: Final = "moved-to-mail-thread"
-MOVED_NOTICE: Final = "🧵 이 메일 스레드로 옮긴 카드 — 이 카드는 실행되지 않습니다. 메일 스레드의 새 카드에서 승인해 주세요."
-
-
-def _movable(draft: dict) -> bool:
-    """A plain reply card whose bytes can be rebuilt as is (no forward, share or Gmail reply)."""
-    return (draft.get("kind") in (None, "reply") and not draft.get("forward")
-            and not draft.get("drive_share") and not draft.get("reply_inherit")
-            and draft.get("reply_format") != "html-test")
-
-
-def _bring_card(draft: dict, thread_id: str) -> dict:
-    """An earlier, undecided card of this mail moves into the mail's thread (owner 2026-11-16).
-
-    A reply asked under the digest card before the mail had its own thread put its card in
-    the digest. The same draft is written again as a new card bound to the mail's thread
-    (``triage_binding`` prefers it), and only then is the old card closed through the usual
-    supersede close, which refuses a card the owner already pressed: that card stays where
-    it is and the preview points at it. A card never posted yet just posts here.
-    """
-    import mail_quote
-    import triage_approval
-    import triage_supersede
-
-    if draft.get("approval_thread_id") == thread_id:
-        return draft
-    if not str(draft.get("message_id") or ""):
-        return {**draft, "message_id": triage_approval.post_for_approval(draft)}
-    if not _movable(draft):
-        return draft
-    quote_html = (mail_quote.QuoteHtml(str(draft["quote_html"]), draft.get("quote_format") == "original")
-                  if draft.get("quote_html") else None)
-    moved = triage_gate.create_draft(
-        uid=str(draft["uid"]), sender=str(draft.get("sender") or ""),
-        mail_subject=str(draft.get("mail_subject") or ""), to=str(draft["to"]),
-        subject=str(draft["subject"]), body=str(draft["body"]),
-        category=str(draft.get("category") or ""), flags=tuple(draft.get("flags") or ()),
-        attachment_paths=tuple(item["source_path_private"] for item in draft.get("attachments") or ()),
-        cc=str(draft.get("cc") or ""), quote=str(draft.get("quote") or ""), quote_html=quote_html,
-        bcc=tuple(draft.get("bcc") or ()),
-        origin_channel_id=str(draft.get("origin_channel_id") or ""),
-        origin_message_id=str(draft.get("origin_message_id") or ""),
-    )
-    if not triage_supersede._close(draft, MOVED_REASON, MOVED_NOTICE):  # noqa: SLF001 — the supersede close
-        triage_gate.discard_draft(str(moved["id"]))  # the owner already decided the old card
-        return draft
-    return {**moved, "message_id": triage_approval.post_for_approval(moved)}
 
 
 def _run(action: str, card: dict, attempt: int) -> str:
