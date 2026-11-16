@@ -436,7 +436,7 @@ python3 -m automation.install.dori --role okdori --role moodori --owner-call 형
 | `dori-herdr-ttyd` | 웹 터미널 ttyd 1.7.7 을 `~/.local/bin/ttyd` 에(Linux) |
 | `dori-herdr-server` | 포크 유닛 `dori-herdr.service` 를 `~/.config/systemd/user/` 에 복사해 켠다. 유닛이 이미 있으면 덮지 않는다 |
 | `dori-herdr-web` | `herdr-web@<포트>`(기본 8181, `--web-port`)를 켠다. `~/.config/herdr/web-<포트>.env`(0600)는 없을 때만 쓰고, 옛 aoe 웹 비밀번호(`~/.config/agent-of-empires/serve.env`)가 없으면 새 비밀번호 `HERDR_WEB_PASSPHRASE` 를 만든다. 주소는 `--web-origin`(기본 `http://127.0.0.1:<포트>`). 다른 프로그램이 그 포트를 쓰면 켜지 않는다(`DORI-HERDR-WEB-PORT-BUSY`) |
-| `dori-serve-unit` | 윈도우 「Dori serve」 작업과 같은 `dori serve`(watch·레인 점검·디스코드 수신·세션 감시)를 사용자 유닛 `dori-serve.service` 로 켠다. `--update` 면 새 코드로 다시 켠다. 루프를 유닛 하나씩 돌리는 계정(`dori-inbound.service`·`dori-lanes.service`·`dori-session-watch.service` 중 하나라도 있음)은 수신이 두 번 되지 않게 만들지 않는다(`DORI-SERVE-UNIT-SKIP`) |
+| `dori-serve-unit` | 윈도우 「Dori serve」 작업과 같은 `dori serve`(watch·레인 점검·디스코드 수신·세션 감시)를 사용자 유닛 `dori-serve.service` 로 켠다. 이미 있던 유닛은 켜져 있으면 `--update` 때 새 코드로 다시 켜고, 사람이 꺼 둔 것은 그대로 둔다(`... stopped`). 루프를 유닛 하나씩 돌리는 계정(`dori-inbound.service`·`dori-lanes.service`·`dori-session-watch.service` 중 하나라도 있음)은 수신이 두 번 되지 않게 만들지 않는다(`DORI-SERVE-UNIT-SKIP`) |
 | `dori-herdr-lead` | config 를 이번에 새로 복사했을 때만 리드 폴더에 herdr workspace 를 열어 `omo --session-id <새 id>` 를 띄우고 `leadPane`·`defaultCwd` 를 적는다. omo 입력창이 뜨면 `DORI-LEAD-STARTED`, 아니면 화면 끝 줄과 함께 `DORI-LEAD-NOT-READY` |
 
 `systemctl --user` 를 쓸 수 없는 곳(macOS 등)은 바이너리만 깔고 유닛·리드는 건너뛴다(`DORI-HERDR-NO-SYSTEMD`).

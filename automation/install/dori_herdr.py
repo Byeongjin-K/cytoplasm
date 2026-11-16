@@ -151,7 +151,7 @@ def plan(layout: Layout, tools: Tools, key: str) -> list[tuple[str, str]]:
         ("herdr-ttyd", f"{layout.ttyd} ttyd {tools.ttyd_version} ({key}{', sha256 ' + ttyd.sha256[:12] if ttyd else ' — 받을 바이너리 없음, 웹 건너뜀'})"),
         ("herdr-server", f"{layout.units / _SERVER_UNIT} 를 켠다(systemctl --user, 이미 있으면 그대로)"),
         ("herdr-web", f"herdr-web@{layout.web_port} (ttyd {layout.web_port + tools.ttyd_offset}, 상태 {layout.web_port + tools.state_offset}) — {layout.web_env}(0600, 없을 때만) · 포트를 다른 프로그램이 쓰면 켜지 않음"),
-        ("serve-unit", f"{layout.units / SERVE_UNIT} = dori serve(도리 상시 루프, 디스코드 수신) — 켠다, --update 면 새 코드로 다시 켠다 · 루프별 유닛({LOOP_UNITS[0]} 등)이 있으면 그대로 둔다"),
+        ("serve-unit", f"{layout.units / SERVE_UNIT} = dori serve(도리 상시 루프, 디스코드 수신) — 새로 만들면 켠다, 켜져 있으면 --update 때 새 코드로 다시 켜고 꺼 둔 것은 그대로 둔다 · 루프별 유닛({LOOP_UNITS[0]} 등)이 있으면 그대로 둔다"),
         ("herdr-lead", "새로 복사한 config 이면 리드를 herdr pane 에 띄우고 leadPane 에 적는다"),
     ]
 
@@ -427,12 +427,22 @@ def serve_unit(layout: Layout, capture: Capture, *, restart: bool) -> int:
         _ = dest.write_text(SERVE_UNIT_TEXT, encoding="utf-8")
         state = "new"
     _ = _systemctl(capture, "daemon-reload")
-    restarted = restart and _systemctl(capture, "is-active", SERVE_UNIT)[0] == 0
-    code, out = _systemctl(capture, *(("restart", SERVE_UNIT) if restarted else ("enable", "--now", SERVE_UNIT)))
+    if state == "new":
+        action, verb = ("enable", "--now", SERVE_UNIT), "active"
+    elif _systemctl(capture, "is-active", SERVE_UNIT)[0] != 0:
+        # a unit this account already had and stopped stays stopped: the owner paused the loops, an update must not resume them
+        print(f"DORI-SERVE-UNIT {dest} {state} stopped — 꺼져 있어 그대로 둔다(켜려면 systemctl --user enable --now {SERVE_UNIT})")
+        return 0
+    elif restart:
+        action, verb = ("restart", SERVE_UNIT), "restarted"
+    else:
+        print(f"DORI-SERVE-UNIT {dest} {state} active")
+        return 0
+    code, out = _systemctl(capture, *action)
     if code != 0:
         print(f"DORI-SERVE-UNIT-FAIL {SERVE_UNIT}: {out.strip()[:200]}")
         return 6
-    print(f"DORI-SERVE-UNIT {dest} {state} {'restarted' if restarted else 'active'} — 디스코드 수신은 ~/.dori/dori.env 토큰을 읽는다")
+    print(f"DORI-SERVE-UNIT {dest} {state} {verb} — 디스코드 수신은 ~/.dori/dori.env 토큰을 읽는다")
     return 0
 
 

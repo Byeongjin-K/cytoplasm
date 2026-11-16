@@ -243,6 +243,19 @@ def test_an_update_restarts_a_running_serve_unit_on_the_new_code(home: Path) -> 
     assert again.ran("systemctl", "--user", "restart") == [("systemctl", "--user", "restart", "dori-serve.service")]
 
 
+def test_an_update_leaves_a_serve_unit_the_owner_stopped_stopped(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    world = _World()
+    assert _install(home, world) == 0
+    stopped = _World(active=set(world.active) - {"dori-serve.service"})
+    _ = capsys.readouterr()
+
+    assert _install(home, stopped, "--update") == 0
+
+    assert "dori-serve.service" not in stopped.active
+    assert [c for c in stopped.calls if c[:2] == ("systemctl", "--user") and "dori-serve.service" in c and c[2] != "is-active"] == []
+    assert "dori-serve.service same stopped" in capsys.readouterr().out
+
+
 def test_a_lead_left_without_omo_names_the_omo_installer_and_a_ready_session_id(
     home: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
