@@ -42,6 +42,12 @@
 `origin.sent_at`에는 전달 글과 카톡 글 중 가장 오래된 시각을 남긴다.
 카톡 본문은 작업 기록에 넣지 않는다.
 
+## 남은 한계
+
+uid 대조는 상대가 `watcher_user` 계정이라는 것만 보장한다. 워처를 옥도리 에이전트와 같은
+계정에서 돌리면 에이전트가 워처를 멈추고 가짜 응답을 낼 수 있다. 형이 이 한계를 받아들이고
+지금 켜기로 정했고(Q555), 워처를 별도 계정으로 옮기는 일은 `docs/follow-ups.md`의 후속 과제다.
+
 관련 경로: `automation/owner_origin.py`, `automation/owner_kakao.py`,
 `automation/yoodori_gate/yoodori_jobs.py`, `automation/yoodori_gate/yoodori_read_gate.py`,
 `dori/roles/okdori`·`dori/roles/yoodori`. 실제 설정·서비스 반영은 별도 운영 절차다.
