@@ -161,6 +161,7 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 ### 6단계 — 잘 됐는지 확인: 디스코드에 말 걸기
 
 2단계에서 ID 를 복사한 채널에 `안녕, 들려?` 라고 써 봅니다. 1~2분 안에 내가 만든 봇이 답하면 설치가 끝난 것입니다.
+3단계에서 값을 넣은 지 5분이 안 됐다면 수신이 아직 붙지 않았을 수 있으니 조금 더 기다려 보세요.
 그다음부터는 그 채널에 하고 싶은 일을 보통 말로 쓰면 됩니다. 답이 없으면 바로 아래 [막힐 때](#막힐-때)를 보세요.
 
 ### 막힐 때
@@ -168,19 +169,19 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 | 보이는 것 | 뜻과 할 일 |
 |---|---|
 | `CYTO-LINUX-NEEDS: Python 3.11 or newer …` | 우분투 22.04 처럼 기본 Python 이 오래된 경우입니다. `sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt install -y python3.12` 를 실행한 뒤 같은 한 줄을 다시 실행하세요. 설치기가 `python3.12` 를 찾아 씁니다 |
-| 그 밖의 `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 그 줄이 무엇이 없는지 이름을 댑니다. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
+| 그 밖의 `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 대개 그 줄이 무엇이 없는지 이름을 댑니다. 마지막 줄이 `exit 숫자` 뿐이면 그 위의 오류 줄을 읽으세요. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
 | `…-FINGERPRINT-MISMATCH` | 내려받은 것이 공식 배포본과 다르다는 뜻이라 설치기가 일부러 멈췄습니다. 다시 시도하지 말고 이슈로 알려 주세요 |
 | `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP`, 또는 짱돌 화면에 AI 입력창 대신 빈 명령줄만 보임 | AI 에이전트 omo 가 깔리지 않았거나 켜지지 않았습니다(윈도우는 대개 관리자 창에서 실행해서). 짱돌 작업 공간 자체는 있습니다. ① **일반** 창에서 omo 를 깝니다. 리눅스·macOS `curl -fsSL https://get.omo.dev/install.sh \| bash`, 윈도우 `irm https://get.omo.dev/install.ps1 \| iex`. ② 창을 새로 열고 `herdr` → 왼쪽의 「짱돌」 클릭 → 그 화면에 `omo` 를 입력하고 `Enter`. 그다음 4단계를 이어 갑니다 |
 | PowerShell 이 빨간 글로 실행 정책(ExecutionPolicy)을 말함 | 한 줄을 고치지 말고 위에 적힌 그대로 붙여 넣으세요. 이미 그 설정이 들어 있습니다 |
 | 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | 세 가지를 직접 깝니다. 각 페이지에서 Windows 용 설치 파일을 받아 실행하고 기본값 그대로 「Next」 로 진행합니다. [git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/)(첫 화면 아래 「Add python.exe to PATH」 를 꼭 체크), PowerShell 7(Microsoft Store 에서 「PowerShell」 검색 후 설치). 그다음 PowerShell 창을 새로 열고 같은 한 줄을 다시 실행하세요 |
 | `herdr`·`dori` 명령을 찾을 수 없음 | 터미널을 닫고 새로 여세요. 설치 직후의 창은 새 명령을 모릅니다 |
-| herdr 에 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 없으면 설치 출력에 `DORI-LEAD-FAIL` 줄이 있는지 보고 같은 한 줄을 다시 실행하세요 |
+| herdr 에 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 「짱돌」 자체가 없으면 같은 한 줄을 다시 실행하세요. 「짱돌」 은 있는데 빈 명령줄만 보이면(`DORI-LEAD-FAIL` 포함) 바로 위 줄처럼 그 화면에 `omo` 를 입력합니다 |
 | 디스코드에서 답이 없음 | 아래 기록에서 `DISCORD_LISTENER_FATAL` 줄을 찾아보세요. `close=4004` 면 토큰이 틀렸습니다(2단계 3을 다시 하고 3단계에 새 토큰). `close=4014` 면 Message Content Intent 가 꺼져 있습니다(2단계 4). 그런 줄이 없으면 채널 ID·내 ID 가 맞는지, 봇이 그 채널을 볼 수 있는지(2단계 5) 확인하세요 |
 
 디스코드 수신 기록을 보는 곳: 리눅스는 터미널에서 `journalctl --user -u dori-serve -n 50`, 윈도우는 PowerShell 에서
 `notepad "$env:USERPROFILE\.dori\state\serve.log"` 를 실행하고 메모장에서 `Ctrl`+`F` 로 `DISCORD_LISTENER_FATAL` 을 찾습니다.
 
-그래도 안 되면 [GitHub 이슈](https://github.com/orientpine/cytoplasm/issues)에 운영체제와 마지막에 나온 화면 몇 줄을
+그래도 안 되면 [GitHub 이슈](https://github.com/orientpine/cytoplasm/issues)(GitHub 계정이 필요합니다)에 운영체제와 마지막에 나온 화면 몇 줄을
 붙여 알려 주세요. **봇 토큰과 `dori.env` 내용은 절대 붙이지 마세요.** 설치 단계별 자세한 내용은
 [설치 가이드](docs/guide/install.md#도리-기본-설치-p6)에 있습니다.
 
