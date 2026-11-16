@@ -110,6 +110,7 @@ herdr 서버는 리드 pane 을 들고 있어서 재시작하지 않는다. 두 
 남지 않는다.
 
 omo 가 없으면 같은 줄이 omo 자체 설치기(`irm https://get.omo.dev/install.ps1 | iex`)로 깔고, 리드 탭에 omo 가 뜬다.
+omo 설치기는 관리자 PowerShell 에서 거부하므로 그때는 `CYTO-WINDOWS-OMO-SKIP` 를 남기고 나머지 설치를 마친다(일반 PowerShell 에서 그 줄을 따로 실행한 뒤 `DORI-LEAD-PANE` 줄의 명령으로 리드를 켠다. 리눅스는 `CYTO-LINUX-OMO-SKIP`).
 설치 뒤 `%USERPROFILE%\.dori\dori.env`(설치기가 만든다)의 네 줄에 봇 토큰·서버·채널·소유자 id 를 넣고, `herdr` 를 열어
 리드 탭에서 `/login` 한 뒤 "Dori mode" 라고 말한다.
 

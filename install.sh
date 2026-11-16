@@ -68,8 +68,9 @@ cyto_main() {
   bun --version
 
   step "omo (the agent the Dori lead runs in its herdr tab)"
-  have omo || { curl -fsSL https://get.omo.dev/install.sh </dev/null | bash; } || fail "omo's installer (https://get.omo.dev/install.sh)"
-  have omo || needs "omo (curl -fsSL https://get.omo.dev/install.sh | bash), then run this again"
+  # cytoplasm and Dori install without omo (the lead tab then waits for it); omo's installer may refuse root
+  have omo || { curl -fsSL https://get.omo.dev/install.sh </dev/null | bash; } || true
+  have omo || echo "CYTO-LINUX-OMO-SKIP: omo is not installed - the Dori lead tab waits for it. As yourself (not root): curl -fsSL https://get.omo.dev/install.sh | bash, then the command on the DORI-LEAD-PANE line below"
 
   local update_args=(-m automation.install.update --state "$root")
   if [ ! -d "$src/.git" ] || [ ! -f "$signers" ]; then

@@ -87,11 +87,18 @@ if (-not (FindPwsh)) { InstallWithWinget "Microsoft.PowerShell" "Dori runs its h
 if (-not (FindPwsh)) { throw "CYTO-WINDOWS-NEEDS: PowerShell 7.3 or newer (winget install Microsoft.PowerShell), then run this again" }
 
 Step "omo (the agent the Dori lead runs in its herdr tab)"
+# cytoplasm and Dori install without omo (the lead tab then waits for it); omo's installer refuses an Administrator shell
 if (-not (Have omo)) {
-  Invoke-RestMethod https://get.omo.dev/install.ps1 | Invoke-Expression
-  AddUserPath (Join-Path $env:USERPROFILE ".local\bin")
+  try {
+    Invoke-RestMethod https://get.omo.dev/install.ps1 | Invoke-Expression
+    AddUserPath (Join-Path $env:USERPROFILE ".local\bin")
+  } catch {
+    Write-Host "CYTO-WINDOWS-OMO-SKIP: $($_.Exception.Message)"
+  }
 }
-if (-not (Have omo)) { throw "CYTO-WINDOWS-NEEDS: omo (irm https://get.omo.dev/install.ps1 | iex), then run this again" }
+if (-not (Have omo)) {
+  Write-Host "CYTO-WINDOWS-OMO-SKIP: omo is not installed - the Dori lead tab waits for it. From a normal (not Administrator) PowerShell: irm https://get.omo.dev/install.ps1 | iex, then the command on the DORI-LEAD-PANE line below"
+}
 
 $src = Join-Path $InstallRoot "src"
 $signers = Join-Path $InstallRoot "update-allowed-signers"

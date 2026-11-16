@@ -81,6 +81,27 @@ def test_the_newest_signed_release_is_installed_with_the_trust_key_and_the_roles
                           "--role", "okdori", "--role", "moodori", "--owner-call", "boss"]
 
 
+def test_an_omo_installer_that_refuses_leaves_the_install_going_with_the_omo_line(
+    tmp_path: Path, channel: tuple[Path, Path, str]
+) -> None:
+    origin, key, fingerprint = channel
+    folder = _bin(tmp_path)
+    (folder / "omo").unlink()
+    _ = (folder / "curl").write_text("#!/bin/sh\necho 'omo installer: refusing to run as root' >&2\nexit 1\n", encoding="utf-8")
+    (folder / "curl").chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {**unit_node.env(), "HOME": str(home), "PATH": f"{folder}:/usr/bin:/bin",
+           "CYTO_REPO": str(origin), "CYTO_TRUST_KEY": str(key), "CYTO_EXPECT_FINGERPRINT": fingerprint}
+
+    done = subprocess.run(("bash",), input=(REPO / "install.sh").read_text(encoding="utf-8"),
+                          capture_output=True, text=True, env=env, check=False)
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "CYTO-LINUX-OMO-SKIP" in done.stdout and "https://get.omo.dev/install.sh" in done.stdout
+    assert any(line.startswith("FAKE-UPDATE") for line in done.stdout.splitlines())
+
+
 def test_a_key_whose_fingerprint_is_not_the_published_one_runs_nothing_from_the_clone(
     tmp_path: Path, channel: tuple[Path, Path, str]
 ) -> None:
