@@ -45,6 +45,7 @@ This eliminates all DOM-scraping fragility for listing + parsing.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import logging
 import re
@@ -95,6 +96,27 @@ EXTERNAL_MAX_ATTEMPTS = 10
 BUTTON_NAMES = frozenset({
     "모두저장", "저장", "미리보기", "전체저장", "다운로드", "Save", "Download all", "PC에 저장",
 })
+
+
+# The webmail's own hosts: only these get its session cookies when a slow in-page fetch is
+# streamed instead (2026-11-16), never a foreign host an attachment link happens to point at.
+WEBMAIL_HOSTS = frozenset({"mailon.kr"})
+WEBMAIL_SCHEME = "https"
+
+
+def is_webmail_link(href: str) -> bool:
+    parts = urlsplit(href or "")
+    return parts.scheme == WEBMAIL_SCHEME and parts.hostname in WEBMAIL_HOSTS
+
+
+class _WebmailOnlyCookieRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect, but the session cookie never leaves the webmail's own https hosts."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not is_webmail_link(newurl):
+            new.remove_header("Cookie")
+        return new
 
 
 def is_large_file_link(href: str) -> bool:
@@ -686,6 +708,7 @@ class InboxScraper:
 
         - declared_size <= SMALL_ATTACHMENT_MAX_BYTES (or unknown): in-browser
           fetch + base64 → Python decodes. Fast, simple. ~30MB memory ceiling.
+          If that eval times out, the same file is streamed via urllib with cookies.
         - declared_size >  SMALL_ATTACHMENT_MAX_BYTES: extract cookies from the
           agent-browser session, stream via Python urllib to disk. No memory
           limit. Handles 1GB+ files.
@@ -703,7 +726,16 @@ class InboxScraper:
                      declared_size, SMALL_ATTACHMENT_MAX_BYTES, uid, filename)
             self._download_large_via_urllib(href, target)
         else:
-            self._download_small_via_browser(href, target)
+            try:
+                self._download_small_via_browser(href, target)
+            except BrowserError as e:
+                # agent-browser ends every eval at a fixed 30 s CDP limit; the webmail sent one
+                # 456 KiB xlsx at about 19 KB/s (2026-11-16), so a slow file is streamed instead.
+                if "timed out" not in str(e) or not is_webmail_link(href):
+                    raise
+                log.info("in-page fetch timed out (%s); streaming via urllib: uid=%s %s",
+                         str(e)[-120:], uid, filename)
+                self._download_large_via_urllib(href, target)
 
         size = target.stat().st_size
         log.info("saved attachment uid=%s %s (%d bytes)",
@@ -755,7 +787,8 @@ class InboxScraper:
         deadline = None if budget is None else time.monotonic() + budget
         read_timeout = 300 if budget is None else min(300, BUDGETED_READ_TIMEOUT_S, budget)
         try:
-            with urllib.request.urlopen(req, timeout=read_timeout) as resp:
+            opener = urllib.request.build_opener(_WebmailOnlyCookieRedirect)
+            with opener.open(req, timeout=read_timeout) as resp:
                 # An expired large-file link answers 200 with MailOn's HTML notice page, not the file.
                 if not cookies and resp.headers.get_content_type() == "text/html":
                     raise RuntimeError("large-file link returned an HTML page (expired link)")
@@ -771,16 +804,19 @@ class InboxScraper:
                             raise TimeoutError(
                                 f"large download still unfinished after {budget:.0f}s "
                                 f"({f.tell()} bytes); left for a later retry")
+                    # read1 ends quietly when the server closes early; a cut file is not saved.
+                    expected = resp.headers.get("Content-Length")
+                    if expected and expected.isdigit() and f.tell() != int(expected):
+                        raise RuntimeError(
+                            f"download ended at {f.tell()} of {expected} bytes")
             tmp_path.replace(target)
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
-            if tmp_path.exists():
-                try:
-                    tmp_path.unlink()
-                except OSError:
-                    pass
+        except BaseException as e:
+            tmp_path.unlink(missing_ok=True)
             if isinstance(e, TimeoutError):
                 raise RuntimeError(str(e)) from e
-            raise RuntimeError(f"urllib download failed: {e}") from e
+            if isinstance(e, (urllib.error.URLError, http.client.HTTPException)):
+                raise RuntimeError(f"urllib download failed: {e}") from e
+            raise
 
     def _get_cookie_header_from_browser(self) -> str:
         """Export cookies from the agent-browser session and format as
