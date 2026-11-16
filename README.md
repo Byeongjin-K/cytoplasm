@@ -127,7 +127,21 @@ action_hash : sha256:7f3c…a19b
 
 ## 빠른 시작
 
-### 도리 기본 설치
+### 리눅스 (한 줄)
+
+터미널에 한 줄을 붙여 넣습니다. git 이 없으면 `sudo` 비밀번호를 한 번 묻습니다.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | bash
+```
+
+git·Python 3.11+·Bun·omo(도리 리드가 쓰는 에이전트)가 없으면 깔고, 서명된 최신 릴리스를 확인한 뒤
+도리를 설치합니다. 리드 탭이 herdr 에 뜨고, 디스코드 수신 같은 상시 루프는 사용자 유닛 `dori-serve.service` 가
+살려 둡니다. 끝나면 할 일은 셋입니다. `~/.dori/dori.env` 의 `DORI_DISCORD_TOKEN`·`GUILD`·`CHANNEL`·`OWNER` 네 줄을
+자기 봇 값으로 바꾸고, 리드 탭(`herdr` 또는 웹 `http://127.0.0.1:8181`)에서 `/login` 으로 모델에 로그인한 뒤
+"Dori mode" 라고 합니다. 새 릴리스가 나오면 **같은 줄을 다시 실행**하면 업데이트됩니다.
+
+### 도리 기본 설치 (체크아웃에서 직접)
 
 신규 설치는 고정된 도리 포크와 리드+YooDori 역할을 준비합니다. 옥돌·무돌·공돌은 선택이며
 Hermes는 설치하지 않습니다. Python 3.11 이상, 실제 설치에는 git·Bun이 필요합니다.
@@ -152,10 +166,10 @@ PowerShell 에 한 줄을 붙여 넣습니다. 관리자 권한은 필요 없습
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.ps1 | iex"
 ```
 
-git·Python·Bun·PowerShell 7 이 없으면 winget 으로 깔고, 서명된 최신 릴리스를 확인한 뒤
+git·Python·Bun·PowerShell 7·omo 가 없으면 winget 과 각자의 설치기로 깔고, 서명된 최신 릴리스를 확인한 뒤
 도리를 설치합니다. 로그온 때 도는 작업 스케줄러 항목 두 개(「Dori herdr server」, 「Dori serve」)가
-systemd 대신 루프를 살려 둡니다. 새 릴리스가 나오면 **같은 줄을 다시 실행**하면 업데이트됩니다.
-Linux·macOS 에서는 체크아웃에서 `python3 -m automation.install.update` 가 같은 일을 합니다.
+systemd 대신 루프를 살려 둡니다. 끝난 뒤 할 일은 리눅스와 같습니다(`%USERPROFILE%\.dori\dori.env` 네 줄, 리드 탭 `/login`).
+새 릴리스가 나오면 **같은 줄을 다시 실행**하면 업데이트됩니다.
 자세한 내용은 [설치 가이드 「윈도우」](docs/guide/install.md#윈도우네이티브-wsl-없음)에 있습니다.
 
 ### 필요한 것
