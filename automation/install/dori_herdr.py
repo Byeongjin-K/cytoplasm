@@ -264,7 +264,8 @@ def _env_ports(layout: Layout) -> list[int]:
 def write_private(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    # LF on every OS: the fork reads dori.env line by line and a Windows CRLF line never matches (DORI_DISCORD_TOKEN is not set)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
         _ = handle.write(text)
 
 
