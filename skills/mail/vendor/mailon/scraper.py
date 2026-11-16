@@ -686,6 +686,7 @@ class InboxScraper:
 
         - declared_size <= SMALL_ATTACHMENT_MAX_BYTES (or unknown): in-browser
           fetch + base64 → Python decodes. Fast, simple. ~30MB memory ceiling.
+          If that eval times out, the same file is streamed via urllib with cookies.
         - declared_size >  SMALL_ATTACHMENT_MAX_BYTES: extract cookies from the
           agent-browser session, stream via Python urllib to disk. No memory
           limit. Handles 1GB+ files.
@@ -703,7 +704,15 @@ class InboxScraper:
                      declared_size, SMALL_ATTACHMENT_MAX_BYTES, uid, filename)
             self._download_large_via_urllib(href, target)
         else:
-            self._download_small_via_browser(href, target)
+            try:
+                self._download_small_via_browser(href, target)
+            except BrowserError as e:
+                # agent-browser ends every eval at a fixed 30 s CDP limit; the webmail sent one
+                # 456 KiB xlsx at about 19 KB/s (2026-11-16), so a slow file is streamed instead.
+                if "timed out" not in str(e):
+                    raise
+                log.info("in-page fetch timed out; streaming via urllib: uid=%s %s", uid, filename)
+                self._download_large_via_urllib(href, target)
 
         size = target.stat().st_size
         log.info("saved attachment uid=%s %s (%d bytes)",
