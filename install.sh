@@ -63,12 +63,12 @@ cyto_main() {
 
   step "bun"
   export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
-  have bun || { curl -fsSL https://bun.sh/install | bash </dev/null; } || fail "bun's installer (https://bun.sh/install)"
+  have bun || { curl -fsSL https://bun.sh/install </dev/null | bash; } || fail "bun's installer (https://bun.sh/install)"
   have bun || needs "bun (curl -fsSL https://bun.sh/install | bash), then run this again"
   bun --version
 
   step "omo (the agent the Dori lead runs in its herdr tab)"
-  have omo || { curl -fsSL https://get.omo.dev/install.sh | bash </dev/null; } || fail "omo's installer (https://get.omo.dev/install.sh)"
+  have omo || { curl -fsSL https://get.omo.dev/install.sh </dev/null | bash; } || fail "omo's installer (https://get.omo.dev/install.sh)"
   have omo || needs "omo (curl -fsSL https://get.omo.dev/install.sh | bash), then run this again"
 
   local update_args=(-m automation.install.update --state "$root")
