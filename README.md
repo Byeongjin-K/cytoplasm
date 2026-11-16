@@ -68,7 +68,7 @@ Update later: run the same line again. Open a new terminal so PATH picks up dori
 ```
 
 창을 닫기 전에 출력에 `OMO-SKIP` 이나 `DORI-LEAD-FAIL` 이 들어간 줄이 있었는지 한 번 훑어보세요. 있으면 설치는 됐지만
-짱돌 화면에 AI 에이전트가 켜지지 않은 것이라 [막힐 때](#막힐-때) 표의 그 줄을 따라 하면 됩니다(창을 닫아도 고칠 수 있습니다).
+리드 탭에 AI 에이전트가 켜지지 않은 것이라 [막힐 때](#막힐-때) 표의 그 줄을 따라 하면 됩니다(창을 닫아도 고칠 수 있습니다).
 
 **터미널(PowerShell) 창을 닫고 새로 엽니다.** 그래야 방금 깐 `herdr`·`dori`·`omo` 명령을 찾습니다.
 중간에 멈추거나 빨간 글이 나오면 [막힐 때](#막힐-때)를 보세요.
@@ -141,7 +141,7 @@ DORI_DISCORD_OWNER=내-사용자-ID-숫자                 ← 내 ID
 ### 4단계 — 리드 탭을 열고 `/login`
 
 새 터미널(윈도우는 새 PowerShell)에서 `herdr` 를 입력하고 `Enter` 를 누릅니다. herdr 는 AI 에이전트 화면 여러 개를
-한 창에 띄워 두는 프로그램이고, 마우스로 클릭해서 씁니다. 왼쪽 목록에서 **「짱돌」** 작업 공간(도리의 리드)을 클릭하면
+한 창에 띄워 두는 프로그램이고, 마우스로 클릭해서 씁니다. 왼쪽 목록에서 **「짱돌」** 작업 공간을 클릭하면 리드 탭이 열립니다(「짱돌」 은 설치기가 리드에 붙이는 이름입니다). 그러면
 AI 에이전트 omo 의 입력 화면이 보입니다. 리눅스는 브라우저 주소창에 `http://127.0.0.1:8181` 을 넣어도 같은 화면이 열립니다. 이때 비밀번호를 물으면
 터미널에서 `grep HERDR_WEB_PASSPHRASE ~/.config/herdr/web-8181.env` 를 실행해 `=` 뒤의 값을 넣으세요.
 
@@ -155,7 +155,7 @@ herdr 창을 닫아도 도리는 뒤에서 계속 돕니다. 다시 보려면 `h
 
 ### 5단계 — "Dori mode" 라고 말하기
 
-같은 짱돌 화면에 `Dori mode` 라고 입력하고 `Enter`. 도리가 먼저 자기를 뭐라고 부를지 묻습니다. "Dori" 라고 해도 되고,
+같은 리드 탭에 `Dori mode` 라고 입력하고 `Enter`. 도리가 먼저 자기를 뭐라고 부를지 묻습니다. "Dori" 라고 해도 되고,
 ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리가 디스코드 채널과 연결하고 지시를 기다립니다.
 다음에 다시 켤 때도 같은 화면에서 그 이름으로 "○○ mode" 라고 하면 됩니다.
 
@@ -172,11 +172,11 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 | `CYTO-LINUX-NEEDS: Python 3.11 or newer …` | 우분투 22.04 처럼 기본 Python 이 오래된 경우입니다. `sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt install -y python3.12` 를 실행한 뒤 같은 한 줄을 다시 실행하세요. 설치기가 `python3.12` 를 찾아 씁니다 |
 | 그 밖의 `CYTO-LINUX-NEEDS: …` 또는 `CYTO-LINUX-FAIL: …`(윈도우 `CYTO-WINDOWS-…`) | 대개 그 줄이 무엇이 없는지 이름을 댑니다. 마지막 줄이 `exit 숫자` 뿐이면 그 위의 오류 줄을 읽으세요. 말한 것을 깔거나 고친 뒤 **같은 한 줄을 다시** 실행하세요. 여러 번 실행해도 안전합니다 |
 | `…-FINGERPRINT-MISMATCH` | 내려받은 것이 공식 배포본과 다르다는 뜻이라 설치기가 일부러 멈췄습니다. 다시 시도하지 말고 이슈로 알려 주세요 |
-| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP`, 또는 짱돌 화면에 AI 입력창 대신 빈 명령줄만 보임 | AI 에이전트 omo 가 깔리지 않았거나 켜지지 않았습니다(윈도우는 대개 관리자 창에서 실행해서). 짱돌 작업 공간 자체는 있습니다. ① **일반** 창에서 omo 를 깝니다. 리눅스·macOS `curl -fsSL https://get.omo.dev/install.sh \| bash`, 윈도우 `irm https://get.omo.dev/install.ps1 \| iex`. ② 창을 새로 열고 `herdr` → 왼쪽의 「짱돌」 클릭 → 그 화면에 `omo` 를 입력하고 `Enter`. 그다음 4단계를 이어 갑니다 |
+| `CYTO-LINUX-OMO-SKIP` / `CYTO-WINDOWS-OMO-SKIP`, 또는 리드 탭에 AI 입력창 대신 빈 명령줄만 보임 | AI 에이전트 omo 가 깔리지 않았거나 켜지지 않았습니다(윈도우는 대개 관리자 창에서 실행해서). 리드 탭(「짱돌」) 자체는 있습니다. ① **일반** 창에서 omo 를 깝니다. 리눅스·macOS `curl -fsSL https://get.omo.dev/install.sh \| bash`, 윈도우 `irm https://get.omo.dev/install.ps1 \| iex`. ② 창을 새로 열고 `herdr` → 왼쪽의 「짱돌」 클릭 → 그 화면에 `omo` 를 입력하고 `Enter`. 그다음 4단계를 이어 갑니다 |
 | PowerShell 이 빨간 글로 실행 정책(ExecutionPolicy)을 말함 | 한 줄을 고치지 말고 위에 적힌 그대로 붙여 넣으세요. 이미 그 설정이 들어 있습니다 |
 | 윈도우에서 `winget` 을 찾을 수 없음(회사 PC 등) | 세 가지를 직접 깝니다. 각 페이지에서 Windows 용 설치 파일을 받아 실행하고 기본값 그대로 「Next」 로 진행합니다. [git](https://git-scm.com/download/win), [Python](https://www.python.org/downloads/)(첫 화면 아래 「Add python.exe to PATH」 를 꼭 체크), PowerShell 7(Microsoft Store 에서 「PowerShell」 검색 후 설치). 그다음 PowerShell 창을 새로 열고 같은 한 줄을 다시 실행하세요 |
 | `herdr`·`dori` 명령을 찾을 수 없음 | 터미널을 닫고 새로 여세요. 설치 직후의 창은 새 명령을 모릅니다 |
-| herdr 에 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 「짱돌」 자체가 없으면 같은 한 줄을 다시 실행하세요. 「짱돌」 은 있는데 빈 명령줄만 보이면(`DORI-LEAD-FAIL` 포함) 바로 위 줄처럼 그 화면에 `omo` 를 입력합니다 |
+| herdr 왼쪽 목록에 리드 탭 「짱돌」 이 없음 | macOS 는 원래 만들지 않습니다. `herdr` 를 처음 열면 작업 공간 하나가 저절로 생기니, 그 화면에 `omo` 를 입력하고 `Enter` 를 눌러 4단계를 이어 가세요. 리눅스·윈도우에서 「짱돌」 자체가 없으면 같은 한 줄을 다시 실행하세요. 「짱돌」 은 있는데 빈 명령줄만 보이면(`DORI-LEAD-FAIL` 포함) 바로 위 줄처럼 그 화면에 `omo` 를 입력합니다 |
 | 디스코드에서 답이 없음 | 아래 기록에서 `DISCORD_LISTENER_FATAL` 줄을 찾아보세요. `close=4004` 면 토큰이 틀렸습니다(2단계 3을 다시 하고 3단계에 새 토큰). `close=4014` 면 Message Content Intent 가 꺼져 있습니다(2단계 4). 그런 줄이 없으면 채널 ID·내 ID 가 맞는지, 봇이 그 채널을 볼 수 있는지(2단계 5) 확인하세요 |
 
 디스코드 수신 기록을 보는 곳: 리눅스는 터미널에서 `grep DISCORD_LISTENER_FATAL ~/.dori/state/serve.log | tail -5`(아무것도 안 나오면 그 오류가 없는 것), 윈도우는 PowerShell 에서
@@ -190,7 +190,7 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 
 새 릴리스가 나오면 **1단계의 같은 한 줄을 다시 실행**하면 됩니다. 넣어 둔 `dori.env` 와 설정은 그대로 남습니다.
 
-옥돌·무돌·공돌 같은 선택 역할은 **처음 설치할 때** 고릅니다. 리눅스·macOS 는
+더 붙일 수 있는 선택 역할(옥돌=카카오톡 대화 요약·답장, 무돌=회사 업무·긴 문서, 공돌=연구 실험)은 **처음 설치할 때** 고릅니다. 리눅스·macOS 는
 `curl -fsSL https://raw.githubusercontent.com/orientpine/cytoplasm/main/install.sh | CYTO_ROLES=okdori,moodori bash`
 (`bash` 바로 앞), 윈도우는 한 줄 전에 `$env:CYTO_ROLES="okdori,moodori"` 를 먼저 실행합니다. 이미 설치한 뒤에 더하는 방법은
 [설치 가이드](docs/guide/install.md#도리-기본-설치-p6)의 `--role` 명령입니다. 예전 방식으로 서버에 깔아 운영하던 분은
@@ -201,12 +201,12 @@ ShipDori 처럼 끝이 Dori 인 이름도 됩니다. 이름을 정하면 도리�
 | 말 | 뜻 |
 |---|---|
 | 도리(Dori) | 디스코드로 지시를 받아 일을 하고 결과를 알려 주는 상시 비서. 이 설치가 까는 것 |
-| 짱돌(리드)·유돌(YooDori) | 기본으로 깔리는 두 역할. 짱돌은 지시를 받아 일을 나눠 맡기는 리드, 유돌은 메일·일정·할 일·문서를 맡는 비서 |
-| 옥돌·무돌·공돌 | 원하면 더하는 선택 역할 |
+| 짱돌·유돌 | 기본으로 깔리는 두 역할의 이름. 짱돌(ZzangDori)은 지시를 받아 일을 나눠 맡기는 리드, 유돌(YooDori)은 메일·일정·할 일·문서를 맡는 비서 |
+| 옥돌·무돌·공돌 | 원하면 더하는 선택 역할의 이름. 옥돌은 카카오톡 대화 요약과 확인받은 답장, 무돌은 회사 업무 시스템과 긴 문서, 공돌은 연구 실험 |
 | 터미널·PowerShell | 글자로 명령을 입력하는 창. 리눅스·macOS 는 「터미널」, 윈도우는 「PowerShell」 |
 | omo | 도리 안에서 실제로 생각하고 일하는 AI 에이전트 프로그램. `/login` 으로 내 AI 구독에 연결 |
 | herdr | 여러 AI 에이전트 화면(탭)을 한 창에 띄워 두는 프로그램. 창을 닫아도 뒤에서 계속 돎 |
-| 리드 탭·작업 공간 | herdr 안에서 짱돌이 도는 화면. 도리가 일을 맡길 때는 일마다 새 탭(레인, lane)을 엽니다 |
+| 리드 탭·작업 공간 | herdr 안에서 리드(짱돌)가 도는 화면. 도리가 일을 맡길 때는 일마다 새 탭(레인, lane)을 엽니다 |
 | `dori.env` | 봇 토큰·ID 를 넣는 내 설정 파일. 비밀이 들어 있음 |
 | 서명된 릴리스·지문 | 설치기가 내려받은 것이 진짜 배포본인지 자동으로 확인하는 장치. 사람이 할 일은 없음 |
 | 승인 카드(✅/⛔) | 메일 발송처럼 바깥으로 나가는 일 전에 디스코드에 올라오는 확인 카드. ✅ 를 눌러야 실행 |
