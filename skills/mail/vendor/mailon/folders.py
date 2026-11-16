@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections import Counter
 from typing import Callable, Protocol
 from urllib.parse import urlencode
@@ -292,94 +291,60 @@ def _infer_sent_uid(
 
 # --------------------------------------------------- user folders (issue #251)
 
-#: Sidebar names of the system folders a user-folder sync never collects.
-EXCLUDED_SIDEBAR_NAMES = ("휴지통", "스팸메일함", "임시보관함")
-#: Folder names (case-folded) that are never user folders: trash, spam, drafts, inbox, sent.
+#: Folder names (case-folded) never collected, even on a user folder: trash, spam, drafts, inbox, sent.
 EXCLUDED_FOLDER_NAMES = frozenset({
     "휴지통", "스팸메일함", "스팸편지함", "스팸함", "스팸", "임시보관함", "임시보관", "임시저장함",
     "받은메일함", "보낸메일함", "trash", "deleted items", "spam", "junk", "junk e-mail",
     "drafts", "draft", "inbox", "sent", "sent items",
 })
-_NAME_KEYS = ("folderName", "name", "fullName", "displayName")
-_COUNT_SUFFIX = re.compile(r"(?:\s+\d+|\s*\(\d+\))$")
+#: Folder-tree node kinds (2026-11-16 live tree). The list API's ``folder`` object carries
+#: no name (``nameFolder`` is empty for every folder) and the sidebar markup carries no
+#: folderUid, so names come from the page's own tree. Under the "my mailboxes" group a user
+#: folder is ``actionType`` 20 with ``folderType`` 0; a tag is 20 with ``folderType`` 1, and
+#: the system folders have their own types (inbox 1, sent 4, drafts 5, trash 7, spam 91, ...).
+USER_FOLDER_ACTION_TYPE = 20
+MAIL_FOLDER_TYPE = 0
 
-_SIDEBAR_NAMES_JS = r"""
+_TREE_NODES_JS = r"""
 (() => {
-  const RX = /folderUid[^0-9]{0,8}(\d{3,})/;
-  const docs = [document];
-  for (const f of document.querySelectorAll('iframe')) {
-    try { if (f.contentDocument) docs.push(f.contentDocument); } catch (e) {}
-  }
-  const out = {};
-  for (const doc of docs) {
-    let nodes = [];
-    try { nodes = Array.from(doc.querySelectorAll('a,li')); } catch (e) { continue; }
-    for (const el of nodes) {
-      if (el.closest('.mail-metadata, table')) continue;
-      const html = el.outerHTML || '';
-      if (html.length > 2000) continue;
-      const m = html.match(RX);
-      const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
-      if (m && t && t.length <= 40 && !(m[1] in out)) out[m[1]] = t;
-    }
-  }
-  return JSON.stringify(out);
+  const tree = window.mailboxTree;
+  if (!tree || !tree.objNodes) return 'null';
+  return JSON.stringify(Object.values(tree.objNodes).map(n => {
+    const d = n.objNodeRawData || {};
+    return {nodeId: d.nodeId, text: d.text, actionType: d.actionType, folderType: d.folderType};
+  }));
 })()
 """
 
 
-def folder_name(raw: str) -> str:
-    """A sidebar label without its unread count ("과제A (3)" -> "과제A")."""
-    return _COUNT_SUFFIX.sub("", raw.strip()).strip()
+def select_user_folders(browser: FolderBrowser, *, exclude_uids: set[str]) -> dict[str, str]:
+    """folderUid -> name of every user folder in the page's folder tree.
 
-
-def sidebar_folder_names(browser: FolderBrowser) -> dict[str, str]:
-    """folderUid -> label of every folder link in the page and its frames (best-effort)."""
+    A folder is collected only when the tree marks it a user mail folder (not a system
+    folder or a tag), its name is known and is not a trash/spam/drafts/inbox/sent name,
+    and its uid is not one of ``exclude_uids``. An unreadable tree or a nameless folder
+    collects nothing: it might be the trash (fail-closed)."""
     try:
-        found = json.loads(_unwrap(browser.eval_js(_SIDEBAR_NAMES_JS)))
+        nodes = json.loads(_unwrap(browser.eval_js(_TREE_NODES_JS)))
     except Exception as error:
-        log.warning("folder name harvest failed: %s", str(error)[:150])
+        log.warning("folder tree read failed: %s; no user folder collected", str(error)[:150])
         return {}
-    if not isinstance(found, dict):
+    if not isinstance(nodes, list):
+        log.warning("folder tree not found on the mail page; no user folder collected")
         return {}
-    return {str(uid): folder_name(str(name)) for uid, name in found.items() if str(name).strip()}
-
-
-def select_user_folders(
-    browser: FolderBrowser,
-    candidates: set[str],
-    *,
-    exclude_uids: set[str],
-    folder_info: Callable[[str], dict],
-) -> dict[str, str]:
-    """The candidate folders that are user folders, with their names.
-
-    A folder is collected only when its name is known and is not a system folder
-    (trash, spam, drafts, inbox, sent), and its uid is not one of ``exclude_uids``
-    nor a sidebar trash/spam/drafts uid. A folder whose name cannot be read is
-    skipped: an unnamed folder might be the trash (fail-closed)."""
-    excluded = set(exclude_uids)
-    for name in EXCLUDED_SIDEBAR_NAMES:
-        uid = _harvest_from_frames(browser, name)
-        if uid:
-            excluded.add(uid)
-    sidebar: dict[str, str] | None = None
     chosen: dict[str, str] = {}
-    for uid in sorted(candidates - excluded):
-        try:
-            info = folder_info(uid)
-        except Exception as error:
-            log.warning("folder %s info failed: %s", uid, str(error)[:150])
-            info = {}
-        name = next((folder_name(str(info[key])) for key in _NAME_KEYS if str(info.get(key) or "").strip()), "")
-        if not name:
-            if sidebar is None:
-                sidebar = sidebar_folder_names(browser)
-            name = sidebar.get(uid, "")
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        uid = str(node.get("nodeId") or "")
+        if (node.get("actionType") != USER_FOLDER_ACTION_TYPE or node.get("folderType") != MAIL_FOLDER_TYPE
+                or not uid.isdigit() or uid in exclude_uids):
+            continue
+        name = str(node.get("text") or "").strip()  # the node text carries no unread count
         if not name:
             log.warning("folder %s has no readable name; not collected", uid)
         elif name.casefold() in EXCLUDED_FOLDER_NAMES:
-            log.info("folder %s (%s) is a system folder; not collected", uid, name)
+            log.info("folder %s (%s) is named like a system folder; not collected", uid, name)
         else:
             chosen[uid] = name
     return chosen

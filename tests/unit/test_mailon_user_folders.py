@@ -1,8 +1,8 @@
-"""mailon 사용자 폴더 수집 (사이토플라즘 #251) — 가짜 MailOn 응답으로만 본다.
+"""mailon 사용자 폴더 수집 (사이토플라즘 #251) — 실측 모양을 본뜬 가짜 MailOn 응답으로 본다.
 
 웹메일 규칙이 받은편지함을 거치지 않고 사용자 폴더로 바로 넣은 메일을 정기 수집이 놓쳤다.
-사용자 폴더 수집은 휴지통·스팸·임시보관을 가져오지 않고, 최근 N일 밖은 목록도 더 읽지 않으며,
-보낸메일은 어느 경로로 받든 folder='sent'로 남고, 폴더 이름은 folders 표에 남는다.
+사용자 폴더 수집은 휴지통·스팸·임시보관·태그를 가져오지 않고, 폴더마다 최근 N일 밖은 목록도 더
+읽지 않으며, 보낸메일은 어느 경로로 받든 folder='sent'로 남고, 폴더 이름은 folders 표에 남는다.
 """
 
 from __future__ import annotations
@@ -48,7 +48,32 @@ from mailon.state import StateDB  # noqa: E402
 
 import mail_wrapper_read  # noqa: E402
 
-INBOX, SENT, TRASH, SPAM, DRAFTS, PROJECT, UNNAMED = "100", "200", "700", "701", "702", "800", "900"
+INBOX, SELF, SENT, DRAFTS, TRASH, SPAM = "100", "101", "102", "103", "105", "107"
+PROJECT, OTHER, SPAM_NAMED, UNNAMED, TAG = "800", "801", "802", "803", "300"
+# The folder tree of the live webmail (2026-11-16, read-only probe), uids and user names
+# replaced: system folders keep their real actionType, the "my mailboxes" group (-5) holds the
+# user folders (actionType 20, folderType 0) - one of them really is named like the spam box -
+# and the tag group (-3) holds tags (actionType 20, folderType 1). Group and root ids are not
+# numbers. The list API's folder object names no folder (nameFolder is empty).
+_LIVE_TREE = [
+    {"nodeId": "0", "text": "", "actionType": 0, "folderType": 0},
+    {"nodeId": INBOX, "text": "Inbox", "actionType": 1, "folderType": 0},
+    {"nodeId": SELF, "text": "Self box", "actionType": 8, "folderType": 0},
+    {"nodeId": SENT, "text": "Sent", "actionType": 4, "folderType": 0},
+    {"nodeId": DRAFTS, "text": "Drafts", "actionType": 5, "folderType": 0},
+    {"nodeId": "104", "text": "Scheduled", "actionType": 6, "folderType": 0},
+    {"nodeId": SPAM, "text": "Spam folder", "actionType": 91, "folderType": 0},
+    {"nodeId": "-8", "text": "Approval mail", "actionType": 80, "folderType": 0},
+    {"nodeId": TRASH, "text": "Trash", "actionType": 7, "folderType": 0},
+    {"nodeId": "-5", "text": "My mailboxes", "actionType": 10, "folderType": 0},
+    {"nodeId": SPAM_NAMED, "text": "스팸메일함", "actionType": 20, "folderType": 0},
+    {"nodeId": PROJECT, "text": "과제A", "actionType": 20, "folderType": 0},
+    {"nodeId": OTHER, "text": "과제B 2026", "actionType": 20, "folderType": 0},
+    {"nodeId": UNNAMED, "text": "", "actionType": 20, "folderType": 0},
+    {"nodeId": "-6", "text": "Shared mailbox", "actionType": 60, "folderType": 0},
+    {"nodeId": "-3", "text": "Tags", "actionType": 10, "folderType": 0},
+    {"nodeId": TAG, "text": "Work", "actionType": 20, "folderType": 1},
+]
 DAY_MS = 24 * 60 * 60 * 1000
 _BODY = re.compile(r'body:("(?:[^"\\]|\\.)*")')
 _VIEW = "<view {subject}>"
@@ -71,12 +96,13 @@ def _row(uid: str, folder: str, age_days: float) -> dict:
 
 
 class FakeMailOn:
-    """Answers the scraper's in-page fetches like the webmail would; records what was asked."""
+    """Answers the scraper's in-page calls like the webmail would; records what was asked."""
 
-    def __init__(self, pages: list[list[dict]], names: dict[str, str]) -> None:
-        self.pages = pages
-        self.names = names
+    def __init__(self, folders: dict[str, list[list[dict]]], tree: list[dict] | None = _LIVE_TREE) -> None:
+        self.folders = folders
+        self.tree = tree
         self.all_pages: list[int] = []
+        self.folder_pages: list[tuple[str, int]] = []
         self.viewed: list[str] = []
 
     def eval_js(self, script: str) -> str:
@@ -88,17 +114,20 @@ class FakeMailOn:
             match = _BODY.search(script)
             assert match, "list fetch without a form body"
             body = parse_qs(json.loads(match[1]))
+            page = int(body["currentPage"][0])
             if body["allFolder"] == ["true"]:
-                page = int(body["currentPage"][0])
                 self.all_pages.append(page)
-                rows = self.pages[page - 1] if page <= len(self.pages) else []
-                return json.dumps(json.dumps({"result": True, "contents": rows}))
+                rows = [row for pages in self.folders.values() for rows in pages for row in rows]
+                return json.dumps(json.dumps({"result": True, "contents": rows[(page - 1) * 20:page * 20]}))
             uid = body["folderUid"][0]
-            folder = {"folderUid": int(uid), **({"folderName": self.names[uid]} if uid in self.names else {})}
-            return json.dumps(json.dumps({"result": True, "folder": folder, "contents": []}))
-        if "const NAME =" in script:  # sidebar uid harvest by folder name
-            return json.dumps(TRASH if json.dumps("휴지통") in script else None)
-        return json.dumps("{}")  # sidebar name harvest: nothing readable
+            self.folder_pages.append((uid, page))
+            pages = self.folders.get(uid, [])
+            folder = {"folderUid": int(uid), "nameFolder": "", "folderType": 0, "totalMsgNum": 0}
+            rows = pages[page - 1] if page <= len(pages) else []
+            return json.dumps(json.dumps({"result": True, "folder": folder, "contents": rows}))
+        if "mailboxTree" in script:
+            return json.dumps(json.dumps(self.tree))
+        return json.dumps("null")
 
     def wait_ms(self, _ms: int) -> None:
         return None
@@ -121,43 +150,63 @@ def _sync(tmp_path: Path, mailon: FakeMailOn, since_days: int = 7) -> tuple[int,
     return mailon_main._sync_user_folders(db, _scraper(mailon), cfg, 50, tmp_path, since_days), db
 
 
-def test_user_folders_are_collected_and_trash_spam_drafts_are_not(tmp_path: Path) -> None:
-    # Given: one page of recent rows across every kind of folder; the trash uid comes from the
-    # sidebar, spam and drafts are named only by the list API, one folder has no name at all.
-    rows = [_row("u-inbox", INBOX, 0.1), _row("u-sent", SENT, 0.2), _row("u-trash", TRASH, 0.3),
-            _row("u-spam", SPAM, 0.4), _row("u-drafts", DRAFTS, 0.5), _row("u-project", PROJECT, 0.6),
-            _row("u-unnamed", UNNAMED, 0.7)]
-    mailon = FakeMailOn([rows], {SPAM: "스팸메일함", DRAFTS: "임시보관함", PROJECT: "과제A (3)", TRASH: "과제B"})
+def test_user_folders_come_from_the_folder_tree_and_system_folders_and_tags_do_not(tmp_path: Path) -> None:
+    # Given: the live tree shape and one recent mail in every folder it lists.
+    uids = [INBOX, SELF, SENT, DRAFTS, TRASH, SPAM, PROJECT, OTHER, SPAM_NAMED, UNNAMED, TAG]
+    mailon = FakeMailOn({uid: [[_row(f"u{uid}", uid, 0.5)]] for uid in uids})
 
     # When
     new, db = _sync(tmp_path, mailon)
 
-    # Then: only the named user folder's mail is fetched and stored, under its own folder id.
-    assert new == 1
-    assert mailon.viewed == ["u-project"]
-    assert _messages(db.path) == {"u-project": f"folder:{PROJECT}"}
+    # Then: only the two named user folders are listed, fetched and stored under their own ids.
+    assert sorted(uid for uid, _page in mailon.folder_pages) == [PROJECT, OTHER]
+    assert new == 2 and sorted(mailon.viewed) == [f"u{PROJECT}", f"u{OTHER}"]
+    assert _messages(db.path) == {f"u{PROJECT}": f"folder:{PROJECT}", f"u{OTHER}": f"folder:{OTHER}"}
     with sqlite3.connect(db.path) as conn:
-        assert conn.execute("SELECT folder_uid, name, kind FROM folders").fetchall() == [(PROJECT, "과제A", "user")]
+        assert sorted(conn.execute("SELECT folder_uid, name, kind FROM folders")) == [
+            (PROJECT, "과제A", "user"), (OTHER, "과제B 2026", "user")]
 
 
-def test_the_walk_stops_at_the_day_limit_and_never_backfills(tmp_path: Path) -> None:
+def test_an_unreadable_folder_tree_collects_nothing(tmp_path: Path) -> None:
+    mailon = FakeMailOn({PROJECT: [[_row("p", PROJECT, 0.5)]]}, tree=None)
+
+    new, db = _sync(tmp_path, mailon)
+
+    assert new == 0 and mailon.folder_pages == [] and mailon.viewed == [] and _messages(db.path) == {}
+
+
+def test_each_folder_walk_stops_at_the_day_limit_and_never_backfills(tmp_path: Path) -> None:
     # Given: page 1 recent, page 2 crosses the 7-day cutoff, page 3 would be older still.
     page1 = [_row(f"r{n}", PROJECT, 1) for n in range(20)]
     page2 = [_row("r-new", PROJECT, 6), _row("r-old", PROJECT, 8)] + [_row(f"o{n}", PROJECT, 9) for n in range(18)]
     page3 = [_row(f"x{n}", PROJECT, 20) for n in range(20)]
-    mailon = FakeMailOn([page1, page2, page3], {PROJECT: "과제A"})
+    mailon = FakeMailOn({PROJECT: [page1, page2, page3]})
 
     # When
     new, db = _sync(tmp_path, mailon)
 
     # Then: page 3 is never asked for, and nothing older than the cutoff is fetched or stored.
-    assert mailon.all_pages == [1, 2]
+    assert [page for uid, page in mailon.folder_pages if uid == PROJECT] == [1, 2]
     assert new == 21 and "r-old" not in _messages(db.path)
     assert not {"r-old", "o0", "x0"} & set(mailon.viewed)
 
 
+def test_old_user_folder_mail_is_reached_past_a_full_inbox(tmp_path: Path) -> None:
+    # Given: 600 newer inbox mails (more than the 25-page cap of the all-folder list) and an
+    # old user-folder mail - the 2026-11-16 ten-year run hit the cap and stored nothing.
+    inbox = [[_row(f"i{p}-{n}", INBOX, 0.01) for n in range(20)] for p in range(30)]
+    mailon = FakeMailOn({INBOX: inbox, PROJECT: [[_row("old", PROJECT, 900)]]})
+
+    # When
+    new, db = _sync(tmp_path, mailon, since_days=3650)
+
+    # Then: the user folder is read on its own; the inbox is never walked.
+    assert new == 1 and _messages(db.path) == {"old": f"folder:{PROJECT}"}
+    assert mailon.all_pages == [] and {uid for uid, _page in mailon.folder_pages} == {PROJECT, OTHER}
+
+
 def test_a_second_run_fetches_only_new_mail(tmp_path: Path) -> None:
-    mailon = FakeMailOn([[_row("a", PROJECT, 1), _row("b", PROJECT, 2)]], {PROJECT: "과제A"})
+    mailon = FakeMailOn({PROJECT: [[_row("a", PROJECT, 1), _row("b", PROJECT, 2)]]})
     _sync(tmp_path, mailon)
     mailon.viewed.clear()
 
@@ -168,7 +217,7 @@ def test_a_second_run_fetches_only_new_mail(tmp_path: Path) -> None:
 
 def test_sent_mail_stays_sent_on_the_all_folder_path() -> None:
     # Given: the manual --folders all walk meets a row of the sent folder (issue #251 item 2).
-    mailon = FakeMailOn([], {})
+    mailon = FakeMailOn({})
     scraper = _scraper(mailon)
     ref = MailRef(uid="s1", folder_uid=SENT, subject="", sender="", to="", date=datetime(2026, 11, 16),
                   size=1, unread=False, flagged=False, attach_count=0)

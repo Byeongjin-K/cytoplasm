@@ -231,19 +231,21 @@ def _sync_user_folders(db: StateDB, scraper: InboxScraper, cfg, limit: int,
 
     Issue #251: webmail rules file mail straight into user folders, past the inbox.
     Trash, spam and drafts are never collected, nor a folder whose name is unknown;
-    nothing older than the cutoff is fetched, so a first run does not backfill."""
+    nothing older than the cutoff is fetched, so a first run does not backfill.
+    Each user folder is listed on its own, so inbox volume never hides its mail."""
     since = datetime.now() - timedelta(days=since_days)
-    refs, capped = scraper.list_recent_all_folders(int(since.timestamp() * 1000))
-    if capped:
-        log.warning("[user] page cap reached before the %d-day cutoff; newest rows only", since_days)
+    since_millis = int(since.timestamp() * 1000)
     known = {scraper.folder_uid or "", scraper.sent_uid or ""} - {""}
-    folders = select_user_folders(
-        scraper.browser, {ref.folder_uid for ref in refs}, exclude_uids=known,
-        folder_info=scraper.folder_info)
+    folders = select_user_folders(scraper.browser, exclude_uids=known)
+    skip = db.all_uids()
+    new_refs = []
     for uid, name in folders.items():
         db.record_folder(uid, name=name)
-    skip = db.all_uids()
-    new_refs = [ref for ref in refs if ref.folder_uid in folders and ref.uid not in skip]
+        refs, capped = scraper.list_recent_folder(uid, since_millis)
+        if capped:
+            log.warning("[user] folder %s: page cap reached before the %d-day cutoff; newest rows only",
+                        uid, since_days)
+        new_refs.extend(ref for ref in refs if ref.uid not in skip)
     log.info("[user] %d folder(s), %d new mail(s) since %s", len(folders), len(new_refs),
              since.date().isoformat())
     new_count = 0
