@@ -1,0 +1,47 @@
+# 카톡에서 시킨 일도 유도리에게 넘기기
+
+옥도리가 카톡에서 받은 형의 요청을 페어 채널로 넘기면, 유도리 노드가 워처 기록으로
+검증한 뒤 작업 근거로 받는다. 봇이 쓴 전달 글이라는 이유만으로 형의 요청을 거절하던
+문제를 해결한다. 기본은 꺼짐이며 기존 디스코드 글·질문 카드 답·할 일·주문 경로는 그대로다.
+
+## 사용 흐름
+
+형이 카톡에서 다른 도리의 일을 시키면 옥도리가 페어 채널에서 담당 도리를 지목한다.
+형의 말만 원문 그대로 인용하고 inbox 행의 `channel_id`와 `id`를 사용해
+`-# 카톡 근거 kakao:<chat_id>/<log_id>` 줄을 메시지마다 하나씩 붙인다.
+유도리는 전달 글 자체의 디스코드 좌표를 기존 `--origin-channel-id`·`--origin-message-id`로 준다.
+문서·특허·전사·회의록 잡, 계정 안 쓰기와 메일 첨부 글 읽기가 같은 근거 검증을 쓴다.
+
+노드는 설정한 옥도리 봇 자신의 비웹훅 글인지, 좌표·채널이 기존 소유자 글과 같은
+검사를 통과하는지 확인한다. 전달 글과 참조한 카톡 글은 모두 24시간 이내여야 한다.
+서로 다른 참조 1~5개를 워처 소켓에 물어 소유자 카톡 id·원문 인용·시각을 모두 확인한다.
+다른 봇·다른 사람의 글·인용 불일치·없는 기록·오래된 기록·소켓 오류는 거절한다.
+메일 발송·바깥 초대·공유는 계속 형의 승인 카드가 필요하다. 릴리스 근거에는 이 예외를 켜지 않는다.
+
+## 노드 설정
+
+기존 `~/.hermes/interop/config.json`의 `owner_id`와 나란히 다음 키를 둔다.
+아래 꺾쇠 자리표시자를 설치의 실제 값으로 바꾼다. 설정 없음·잘못된 형식은 꺼짐이다.
+
+```json
+{
+  "owner_id": "<소유자 디스코드 id>",
+  "kakao_relay": {
+    "bot_id": "<옥도리 디스코드 봇 id>",
+    "owner_ids": ["<소유자 카카오톡 id>"],
+    "watcher_user": "<워처 실행 계정>",
+    "socket": "dori-kakao-proof"
+  }
+}
+```
+
+`bot_id`·`owner_ids`는 숫자 문자열이다. `watcher_user`는 워처를 실제 실행하는 OS 계정이다.
+추상 유닉스 소켓 `socket`의 `SO_PEERCRED` uid를 그 계정 uid와 대조한 뒤에만
+전달 글을 보내며 한 조회의 제한 시간은 총 3초다. 워처는 본문을 응답하지 않는다.
+작업 `spec.json`의 `origin.kakao`에는 `chat`·`log`·`sent_at`만,
+`origin.sent_at`에는 전달 글과 카톡 글 중 가장 오래된 시각을 남긴다.
+카톡 본문은 작업 기록에 넣지 않는다.
+
+관련 경로: `automation/owner_origin.py`, `automation/owner_kakao.py`,
+`automation/yoodori_gate/yoodori_jobs.py`, `automation/yoodori_gate/yoodori_read_gate.py`,
+`dori/roles/okdori`·`dori/roles/yoodori`. 실제 설정·서비스 반영은 별도 운영 절차다.

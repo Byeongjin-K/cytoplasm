@@ -9,7 +9,7 @@ Q231의 예외는 `auto_write`의 릴리스 승인된 Plaud 자동 쓰기뿐이�
 `auto_write.record(kind, Entry)`·`summarize(now)`·`release_kinds(home)`는 종류별로 공유한다.
 Q233의 다른 종류도 같은 원장·요약을 쓴다(`calendar`·`todo`·`obsidian`·`drive-save`·`project-board`, 종류마다 스위치 하나).
 두 번째 종류 `yoodori` 는 유돌 게이트의 형 명령 잡(위키·문서·특허·전사·회의록)이며, `yoodori_gate/yoodori_jobs.py` 가
-근거 메시지가 형 본인의 24시간 안 글(또는 형이 버튼을 누른 유돌 질문 카드, 카드 올린 지 24시간 안)인지 확인한 뒤에만 돌고 성공한 쓰기를 그 링크와 함께 원장에 남긴다([소개](../docs/기능소개/유돌-형-명령-통로.md)).
+근거 메시지가 형 본인의 24시간 안 글(또는 형이 버튼을 누른 유돌 질문 카드, 카드 올린 지 24시간 안)인지 확인한 뒤에만 돌고 성공한 쓰기를 그 링크와 함께 원장에 남긴다([소개](../docs/기능소개/유돌-형-명령-통로.md)). 명시적 `kakao_relay` 설정이 있으면 옥도리의 페어 채널 전달 글도 워처 uid·소유자·원문 인용·24시간을 모두 검증해 받으며, 작업 기록에는 참조와 가장 오래된 시각만 남긴다([소개](../docs/기능소개/kakao-owner-basis.md)). 릴리스는 이 예외를 켜지 않는다.
 대부분 서브패키지는 `python3 -m automation.<pkg>` 또는 `<pkg>/*_cli.py`로 실행.
 
 기관메일 HTML 회신은 `mail_html_reply`의 기본 꺼짐 릴리스 스위치다. 호스트

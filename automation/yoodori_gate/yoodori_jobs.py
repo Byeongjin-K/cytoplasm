@@ -22,6 +22,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from automation.owner_kakao import KakaoReference
 
 DISCORD_EPOCH_MS = 1420070400000
 ORIGIN_MAX_AGE_S = 24 * 3600
@@ -41,6 +45,8 @@ class Origin:
     channel_id: str
     message_id: str
     link: str
+    kakao: tuple[KakaoReference, ...] = ()
+    sent_at: float | None = None
 
 
 Fetch = Callable[[str, str], dict]
@@ -60,17 +66,20 @@ def _discord_get(path: str, token: str) -> dict:
 
 def verify_owner_origin(
     channel_id: str, message_id: str, owner_id: str, token: str, *,
-    now: float | None = None, fetch: Fetch = _discord_get,
+    now: float | None = None, fetch: Fetch = _discord_get, home: Path | None = None,
 ) -> Origin:
     """The origin must be the owner's own (non-bot) message, or his tap on a question card, from the last 24 hours
     (owner 2026-11-06 17:04 KST "카드 버튼 답을 노드가 근거로 받게 바꿔.")."""
     from automation.owner_origin import OriginRefused, verify_owner_origin as verify
+    from automation.owner_kakao import load_kakao_relay
 
     try:
-        found = verify(channel_id, message_id, owner_id, token, now=now, fetch=fetch, card_answers=True)
+        relay = load_kakao_relay((home or Path.home()) / ".hermes/interop/config.json")
+        found = verify(channel_id, message_id, owner_id, token, now=now, fetch=fetch,
+                       card_answers=True, kakao_relay=relay)
     except OriginRefused as error:
         raise JobRefused(str(error)) from None
-    return Origin(found.channel_id, found.message_id, found.link)
+    return Origin(found.channel_id, found.message_id, found.link, found.kakao, found.sent_at)
 
 
 def _discord_json(path: str, token: str) -> object:

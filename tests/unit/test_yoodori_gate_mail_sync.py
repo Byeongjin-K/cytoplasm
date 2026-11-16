@@ -52,7 +52,7 @@ def test_mail_sync_starts_only_for_a_verified_owner_message(home: Path, monkeypa
 def test_mail_sync_records_the_owner_link_when_verified(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: the owner's own message.
     link = "https://discord.com/channels/9/123456789/987654321"
-    monkeypatch.setattr(jobs, "verify_owner_origin", lambda *a, **k: SimpleNamespace(link=link))
+    monkeypatch.setattr(jobs, "verify_owner_origin", lambda *a, **k: jobs.Origin("123456789", "987654321", link))
     # When: the job starts.
     gate.run_job(gate.build_job(["mail-sync", *ORIGIN]))
     # Then: its record carries the owner link and is not a write.
