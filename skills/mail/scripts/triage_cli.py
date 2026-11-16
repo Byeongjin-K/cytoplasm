@@ -134,7 +134,7 @@ def _ask_owner(args: argparse.Namespace, questions: tuple[str, ...]) -> int:
     if card.get("channel_id") and card.get("message_id") and not args.no_post:
         import digest_reaction_actions
 
-        digest_reaction_actions.post_question(card, questions)
+        digest_reaction_actions.post_question({**card, "uid": args.uid}, questions)
         posted = 1
     print(f"DRAFT-QUESTION uid={triage_core.mask_value(args.uid)} posted={posted}")
     for question in questions:

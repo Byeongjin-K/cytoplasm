@@ -78,8 +78,9 @@ def _discord(
         if (method, path) == ("POST", "/channels/chan-1/threads"):  # a full-text thread
             OPENED.append(dict(payload))  # type: ignore[arg-type]
             return {"id": BODY_THREAD}
+        # Only the new thread's big title goes through ``_api``; every other post is ``post_in``.
         assert (method, path) == ("POST", f"/channels/{BODY_THREAD}/messages"), (method, path)
-        posted.append((BODY_THREAD, str(payload["content"])))  # type: ignore[index]
+        OPENED[-1]["title"] = str(payload["content"])  # type: ignore[index]
         return {"id": "title-1"}
 
     posted: list[tuple[str, str]] = []
@@ -129,12 +130,15 @@ def test_the_same_owner_reaction_seen_on_every_tick_posts_the_body_once(
 
     assert (first, second) == (1, 0)
     assert posted == after_first
-    assert OPENED == []  # full text is a reply, not a new thread
+    # 2026-11-16: the mail's own thread holds the text; the card gets one link line.
+    assert [(thread["name"], thread["title"]) for thread in OPENED] == [
+        ("🔄 ✉️ 합성 제목", "## ✉️ 메일 · 합성 제목")]
     under_card = [body for channel, body in posted if channel == "thread-1"]
-    assert len(under_card) == 2
-    assert under_card[0].startswith("📄 **전문** · 합성 제목") and "합성 본문입니다" in under_card[0]
-    assert under_card[1] == "📎 첨부 2건 (이름만)\n- 계획서.pdf\n- 예산 표.xlsx"
-    assert all(channel == "thread-1" for channel, _ in posted)
+    assert len(under_card) == 1 and under_card[0].startswith("🧵 전문·회신 초안은 ")
+    in_thread = [body for channel, body in posted if channel == BODY_THREAD]
+    assert len(in_thread) == 2
+    assert in_thread[0].startswith("📄 **전문** · 합성 제목") and "합성 본문입니다" in in_thread[0]
+    assert in_thread[1] == "📎 첨부 2건 (이름만)\n- 계획서.pdf\n- 예산 표.xlsx"
 
 
 def test_a_failed_read_is_retried_later_and_capped(
@@ -225,6 +229,8 @@ def test_the_draft_reaction_writes_a_draft_that_the_watch_tick_does_not_send(
     assert [(r["uid"], r["status"]) for r in records] == [("u-1", "pending")]
     assert cards[0] == records[0]["id"]
     replies = [body for channel, body in posted if channel == "thread-1"]
+    assert len(replies) == 1 and replies[0].startswith("🧵 ")  # the link line under the card
+    replies = [body for channel, body in posted if channel == BODY_THREAD]
     assert replies[0] == actions.DRAFT_ACK  # said once before the model call
     previews = replies[1:]
     assert len(previews) == 1
@@ -258,7 +264,8 @@ def test_a_draft_reaction_that_needs_the_owner_asks_under_the_card_without_a_car
     assert actions.run_tick(now=_NOW) == 0  # once per card and action
 
     assert list((tmp_path / "gate" / "drafts").glob("*.json")) == []
-    replies = [body for channel, body in posted if channel == "thread-1"]
+    assert [body[:2] for channel, body in posted if channel == "thread-1"] == ["🧵 "]
+    replies = [body for channel, body in posted if channel == BODY_THREAD]
     assert replies[0] == actions.DRAFT_ACK
     assert len(replies) == 2 and replies[1].startswith(actions.QUESTION_HEAD)
     assert "- 참석하시나요?" in replies[1] and "`1016-0800-1`" in replies[1]
@@ -331,7 +338,7 @@ def test_a_press_heard_by_the_gateway_runs_that_card_once_and_the_tick_does_not_
     assert actions.run_card("card-1", now=_NOW) == 1
     assert actions.run_card("card-1", now=_NOW) == 0
     assert actions.run_tick(now=_NOW) == 0
-    assert OPENED == [] and len(posted) == 2  # text + attachments, once
+    assert len(OPENED) == 1 and len(posted) == 3  # link line, text + attachments, once
 
 
 def test_a_press_on_a_message_that_is_not_a_digest_card_reads_nothing(
@@ -387,10 +394,10 @@ def test_pressing_body_again_points_at_the_same_thread_without_opening_another(
     assert actions.run_card("card-1", now=_NOW, pressed="body") == 0
     assert actions.run_tick(now=_NOW) == 0  # the tick never re-posts the link
 
-    assert OPENED == []
+    assert len(OPENED) == 1  # the same mail's thread, not a second one
     assert len(posted[len(before):]) == 1  # a pointer, not another copy of the text
-    assert posted[-1][0] == "thread-1"
-    assert triage_store.digest_body_thread(db, "card-1")["thread_id"] == "thread-1"
+    assert posted[-1][0] == "thread-1" and posted[-1][1].startswith("🧵 ")
+    assert triage_store.digest_body_thread(db, "card-1")["thread_id"] == BODY_THREAD
 
 
 def test_a_failure_after_the_thread_opened_resumes_in_that_thread(
@@ -412,8 +419,9 @@ def test_a_failure_after_the_thread_opened_resumes_in_that_thread(
     assert actions.run_tick(now=_NOW) == 0
     assert actions.run_tick(now=_NOW) == 1
 
-    assert OPENED == []  # the retry reused the original digest thread
-    assert [c for c, _ in posted].count("thread-1") == 2
+    assert len(OPENED) == 1  # the retry reused the thread it opened
+    assert [c for c, _ in posted].count("thread-1") == 1  # the link line, once
+    assert [c for c, _ in posted].count(BODY_THREAD) == 2
 
 
 def test_a_long_body_goes_to_its_thread_in_parts_under_the_limit(
@@ -425,6 +433,6 @@ def test_a_long_body_goes_to_its_thread_in_parts_under_the_limit(
 
     assert actions.run_tick(now=_NOW) == 1
 
-    in_thread = [body for channel, body in posted if channel == "thread-1"]
+    in_thread = [body for channel, body in posted if channel == BODY_THREAD]
     assert len(in_thread) > 4 and all(len(body) <= 2000 for body in in_thread)
-    assert all(channel == "thread-1" for channel, _ in posted)
+    assert [channel for channel, _ in posted].count("thread-1") == 1

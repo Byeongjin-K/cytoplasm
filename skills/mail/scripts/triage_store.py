@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS digest_body_threads (
     stage TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS digest_mail_threads (
+    uid TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS digest_card_links (
+    message_id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 # Columns added after the first release: (name, DDL) appended in place on old DBs.
 _DIGEST_ITEM_ADDED_COLUMNS = (
@@ -358,6 +369,56 @@ def save_digest_body_thread(
             "DO UPDATE SET thread_id = excluded.thread_id, guild_id = excluded.guild_id, "
             "stage = excluded.stage, updated_at = excluded.updated_at",
             (message_id, thread["thread_id"], thread["guild_id"], thread["stage"], now),
+        )
+
+
+def digest_mail_thread(db_path: Path, uid: str) -> dict[str, str] | None:
+    """The mail's own thread a digest 📄/✍️ opened (owner 2026-11-16), or None."""
+    if not uid or not db_path.exists():
+        return None
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT thread_id, guild_id FROM digest_mail_threads WHERE uid = ?", (uid,),
+        ).fetchone()
+    return {"thread_id": str(row[0]), "guild_id": str(row[1])} if row else None
+
+
+def save_digest_mail_thread(db_path: Path, uid: str, thread: dict[str, str], now: str) -> None:
+    """Record the mail's thread once; the first recorded thread stays the mail's thread."""
+    with _connect(db_path) as connection:
+        connection.execute(
+            "INSERT OR IGNORE INTO digest_mail_threads VALUES (?, ?, ?, ?)",
+            (uid, thread["thread_id"], thread["guild_id"], now),
+        )
+
+
+def is_digest_mail_thread(db_path: Path, thread_id: str) -> bool:
+    """Whether ``thread_id`` is one mail's own thread (not a shared digest thread)."""
+    if not thread_id or not db_path.exists():
+        return False
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT 1 FROM digest_mail_threads WHERE thread_id = ? LIMIT 1", (thread_id,),
+        ).fetchone()
+    return row is not None
+
+
+def digest_card_link(db_path: Path, message_id: str) -> str:
+    """The mail thread a digest card's link line already points at, or ''."""
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT thread_id FROM digest_card_links WHERE message_id = ?", (message_id,),
+        ).fetchone()
+    return str(row[0]) if row else ""
+
+
+def save_digest_card_link(db_path: Path, message_id: str, thread_id: str, now: str) -> None:
+    """Record that the card's link line to its mail thread is posted."""
+    with _connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO digest_card_links VALUES (?, ?, ?) ON CONFLICT(message_id) "
+            "DO UPDATE SET thread_id = excluded.thread_id, updated_at = excluded.updated_at",
+            (message_id, thread_id, now),
         )
 
 

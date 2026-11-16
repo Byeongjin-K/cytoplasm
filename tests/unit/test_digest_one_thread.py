@@ -84,6 +84,9 @@ def test_a_draft_reaction_puts_the_reply_card_in_the_digest_thread_under_its_mai
     monkeypatch.setattr(triage_cli, "cmd_draft", lambda args: calls.append(args) or 0)
     monkeypatch.setattr(digest_reaction_actions, "_pending_draft", lambda _uid: None)
     monkeypatch.setattr(triage_confirm, "post_in", lambda *_a, **_k: "m")
+    # The mail's own thread (2026-11-16) is covered by test_digest_mail_thread_e2e.py; here the
+    # mail has none recorded, which is also the binding of a reply asked on the card by Discord reply.
+    monkeypatch.setattr(digest_reaction_actions, "_mail_thread", lambda *_a: {"thread_id": "t", "guild_id": ""})
 
     # When ✍️ asks for that mail's reply draft.
     digest_reaction_actions._write_draft({"uid": "u-1", "channel_id": THREAD, "message_id": CARD})

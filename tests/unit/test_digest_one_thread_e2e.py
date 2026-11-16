@@ -265,22 +265,27 @@ def test_one_digest_day_on_the_owners_screen(world: World, monkeypatch: pytest.M
     assert calendar_card["reply_to"] == cards[1]["id"]
     assert "[승인 카드](" in world.messages[cards[1]["id"]]["content"]
 
-    # Q2: ✍️ on mail 1 -> the reply card stands under it in the same thread, no new thread.
+    # Q2 (2026-11-16): ✍️ on mail 1 -> that mail's own thread opens beside the digest thread and holds
+    # the writing note, the preview and the reply card; the mail card gets one link line.
     world.react(cards[0]["id"], "✍️")
     threads_before = list(world.threads_created)
     assert digest_reaction_actions.run_tick(now=datetime(2026, 10, 16, 23, 5, tzinfo=UTC)) == 1  # one action ran
-    reply_card = next(m for m in world.in_channel(thread["id"]) if "sha256:" in m["content"] and m is not calendar_card)
-    assert reply_card["reply_to"] == cards[0]["id"]
-    preview = next(m for m in world.in_channel(thread["id"]) if m["content"].startswith("✍️"))
-    assert preview["reply_to"] == cards[0]["id"]
-    assert world.threads_created == threads_before
+    assert len(world.threads_created) == len(threads_before) + 1
+    mail_thread = world.channels[world.threads_created[-1]]
+    assert mail_thread["parent_id"] == AGENT_CHAT
+    in_mail = world.in_channel(mail_thread["id"])
+    reply_card = next(m for m in in_mail if "sha256:" in m["content"])
+    assert any(m["content"].startswith("✍️ **회신 초안을 썼습니다") for m in in_mail)
+    under_card = [m for m in world.in_channel(thread["id"]) if m["reply_to"] == cards[0]["id"]]
+    assert [m["content"][:2] for m in under_card] == ["🧵 "]
 
-    # Q4: ⛔ on the reply card -> result under it, the thread stays open and gets the 🔔 mark.
+    # Q4: ⛔ on the reply card -> result in the mail's thread, which closes; the digest thread keeps 🔔
+    # for its event card that still waits.
     world.react(reply_card["id"], "⛔")
     triage_cli.cmd_watch(argparse.Namespace())
-    result = [m for m in world.in_channel(thread["id"]) if m["reply_to"] == reply_card["id"]]
-    assert result and not thread.get("archived")
-    assert thread["name"].startswith("🔔 ")
+    assert any("⛔ 발송 취소" in m["content"] for m in world.in_channel(mail_thread["id"]))
+    assert mail_thread["name"].startswith("⛔ ✉️ ") and mail_thread["archived"] is True
+    assert thread["name"].startswith("🔔 ") and not thread.get("archived")
 
     # Q6: a mail reminder and a calendar reminder at the same moment -> one message, two lines.
     triage_digest_thread.deliver_reminder(thread["id"], "⏰ 승인 대기 3시간 · 메일 카드")

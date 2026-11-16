@@ -143,6 +143,12 @@ def _request_binding(
     DM 은 재사용 대상이 아니다(표면 모듈이 판정한다).
     """
     owner_id = triage_confirm.owner_id()
+    import triage_digest_thread  # a reply asked for on a digest card joins that day's thread
+
+    # A mail whose digest 📄/✍️ opened its own thread keeps every reply card there (2026-11-16).
+    own = triage_digest_thread.mail_binding(surface_module, kind, directory, draft)
+    if own is not None:
+        return own
     # A mail keeps its first thread even after its previous card became terminal.
     # The approval key (kind + uid), not its subject or shared digest, is its identity.
     previous = sorted(
@@ -164,8 +170,6 @@ def _request_binding(
     reused = surface_module.reuse_request_thread(kind, outstanding, directory, owner_id)
     if reused is not None:
         return reused
-    import triage_digest_thread  # a reply asked for on a digest card joins that day's thread
-
     shared = triage_digest_thread.digest_binding(surface_module, kind, directory, draft)
     if shared is not None:
         return shared

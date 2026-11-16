@@ -18,11 +18,18 @@ from types import ModuleType
 import triage_approval
 import triage_binding
 import triage_confirm
+import triage_core
 import triage_gate
+import triage_store
 import triage_transport
 
 LABEL = "기관메일"
 ICON = "📬"
+#: A mail thread's name word; ``origin_notice.thread_icon`` gives names starting with it ✉️.
+MAIL_THREAD_WORD = "메일"
+_MAIL_THREAD_LOCK = "digest-mail-thread.lock"
+_THREAD_TYPES = (10, 11, 12)
+_SUBJECT_LIMIT = 60
 
 
 def _shared() -> ModuleType:
@@ -106,6 +113,71 @@ def digest_binding(surface: ModuleType, kind: object, directory: object, draft: 
         return None
 
 
+def mail_thread(uid: str, subject: str, card_channel_id: str) -> dict[str, str]:
+    """This mail's own thread for its digest 📄/✍️, opened once and then reused (owner 2026-11-16).
+
+    Owner: "다이제스트에서 전문 확인 및 초안 작성 누르면 별도 스레드로 진행되게 해". Discord does not
+    nest threads and the card sits inside the day's digest thread, so the mail's thread
+    opens in that thread's parent channel (the approval channel) through the shared
+    ``origin_notice.resolve_thread_id``; its full text, draft questions, preview and
+    approval card all go there. The thread is keyed by the mail (uid), so pressing the
+    same mail again, on either emoji or on a later digest's card, never opens a second
+    one. A lock serialises the gateway press and the watch tick racing on one mail.
+    """
+    import fcntl
+
+    db = triage_gate.db_path()
+    found = triage_store.digest_mail_thread(db, uid)
+    if found is not None:
+        return found
+    lock_dir = triage_gate.gate_dir()
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (lock_dir / _MAIL_THREAD_LOCK).open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        found = triage_store.digest_mail_thread(db, uid)
+        if found is not None:
+            return found
+        channel = triage_confirm.fetch_channel(card_channel_id)
+        is_thread = isinstance(channel, dict) and channel.get("type") in _THREAD_TYPES
+        parent = str(channel.get("parent_id") or "") if is_thread else ""
+        origin_notice = triage_confirm._origin_notice()  # noqa: SLF001 — interop runtime import
+        label = f"{MAIL_THREAD_WORD} · {' '.join(subject.split())[:_SUBJECT_LIMIT] or '제목 없음'}"
+        thread_id = origin_notice.resolve_thread_id(
+            triage_confirm._api,  # noqa: SLF001 — shared rate-limited Discord client
+            origin_notice.OriginRef(channel_id=parent or card_channel_id), label,
+        )
+        guild = str(channel.get("guild_id") or "") if isinstance(channel, dict) else ""
+        thread = {"thread_id": str(thread_id), "guild_id": guild}
+        triage_store.save_digest_mail_thread(db, uid, thread, triage_core.utc_now())
+        return triage_store.digest_mail_thread(db, uid) or thread
+
+
+def mail_binding(surface: ModuleType, kind: object, directory: object, draft: dict) -> object | None:
+    """The mail's own digest thread as the binding for its reply card, else None.
+
+    A thread that no longer validates falls back to the usual path (digest or request
+    thread): the card must still reach the owner.
+    """
+    if draft.get("kind") not in (None, "reply"):
+        return None
+    thread = triage_store.digest_mail_thread(triage_gate.db_path(), str(draft.get("uid") or ""))
+    if thread is None:
+        return None
+    try:
+        return surface.validate_stored_binding(  # type: ignore[attr-defined]
+            surface.ApprovalBinding(  # type: ignore[attr-defined]
+                kind, surface.ApprovalSurface.AGENT_CHAT_THREAD,  # type: ignore[attr-defined]
+                thread["thread_id"], surface.POLICY_VERSION,  # type: ignore[attr-defined]
+                thread["guild_id"] or None,
+            ),
+            directory, triage_confirm.owner_id(),
+        )
+    except Exception as error:  # noqa: BLE001 — fall back to the usual thread
+        print(f"DIGEST-MAIL-THREAD-BINDING-FAIL draft={draft.get('id')} err={type(error).__name__}",
+              file=sys.stderr)
+        return None
+
+
 def card_for(draft: dict, channel_id: str) -> str:
     """The mail card a digest draft's approval card replies under, when posted in its thread."""
     origin = str(draft.get("origin_channel_id") or "")
@@ -123,7 +195,12 @@ def is_digest_draft(draft: dict) -> bool:
     a thread other cards still wait in.
     """
     thread = str(draft.get("approval_thread_id") or "")
-    return bool(thread) and thread == str(draft.get("origin_channel_id") or "")
+    if not thread or thread != str(draft.get("origin_channel_id") or ""):
+        return False
+    try:  # a mail's own thread closes with its result like any request thread
+        return not triage_store.is_digest_mail_thread(triage_gate.db_path(), thread)
+    except Exception:  # noqa: BLE001 — unknown: never close a thread other cards may wait in
+        return True
 
 
 def deliver_reminder(channel_id: str, content: str) -> None:
