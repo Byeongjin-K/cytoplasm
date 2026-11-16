@@ -1,0 +1,2 @@
+# Dynamic release-host mode, verified against the node marker by the release probe.
+agent|automation/mail_user_folders|.hermes/mail-user-folders.mode|v2:derived;algorithm=mail-user-folders-v1
