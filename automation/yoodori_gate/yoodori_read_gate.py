@@ -883,10 +883,12 @@ def run_job(job: Job) -> int:
     env = job_env(HOME, RELEASE, ENV)
     # A todo basis was checked (dashboard, card, target) and its use recorded before the job was built.
     link = job.todo_link
+    basis = None
     if job.name in ORIGIN_READ_JOBS and not job.todo_id:
         _, notice_bot = _release_modules()
-        link = yoodori_jobs.verify_owner_origin(
-            job.channel_id, job.message_id, _owner_id(), notice_bot.resolve_token(environ=env)).link
+        basis = yoodori_jobs.verify_owner_origin(
+            job.channel_id, job.message_id, _owner_id(), notice_bot.resolve_token(environ=env), home=HOME)
+        link = basis.link
     if job.write:
         auto_write, notice_bot = _release_modules()
         try:
@@ -897,11 +899,13 @@ def run_job(job: Job) -> int:
             raise Refused(f"owner-command writes are off on this node (release switch auto-write-{job.kind})")
         if job.needs_origin and not job.todo_id:
             token = notice_bot.resolve_token(environ=env)
-            link = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token).link
+            basis = yoodori_jobs.verify_owner_origin(job.channel_id, job.message_id, _owner_id(), token, home=HOME)
+            link = basis.link
     path = yoodori_jobs.new_job(HOME, {
         "name": job.name, "argv": job.argv, "write": job.write, "label": job.label,
         "timeout": job.timeout, "kind": job.kind, "marker": job.marker,
         "origin": {"channel_id": job.channel_id, "message_id": job.message_id, "link": link,
+                   **({"kakao": list(basis.kakao), "sent_at": basis.sent_at} if basis and basis.kakao else {}),
                    **({"todo_id": job.todo_id} if job.todo_id else {})},
     })
     yoodori_jobs.launch(path, env)
@@ -1010,7 +1014,7 @@ def main() -> int:
             if basis is None:
                 _, notice_bot = _release_modules()
                 token = notice_bot.resolve_token(environ=job_env(HOME, RELEASE, ENV))
-                yoodori_jobs.verify_owner_origin(argv[2], argv[3], _owner_id(), token)
+                yoodori_jobs.verify_owner_origin(argv[2], argv[3], _owner_id(), token, home=HOME)
             if argv[1] != "--all":
                 path, digest, size = stage_mail_attachment(HOME, STAGING, argv[0], argv[1])
                 print(f"STAGED {path.name} sha256={digest} bytes={size} path={path} original={argv[1]}")

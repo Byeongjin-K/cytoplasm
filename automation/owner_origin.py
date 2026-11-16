@@ -16,7 +16,11 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 from urllib.parse import quote
+
+if TYPE_CHECKING:
+    from automation.owner_kakao import Attest, KakaoReference, KakaoRelay
 
 DISCORD_EPOCH_MS = 1420070400000
 ORIGIN_MAX_AGE_S = 24 * 3600
@@ -40,6 +44,8 @@ class Origin:
     channel_id: str
     message_id: str
     link: str
+    kakao: tuple[KakaoReference, ...] = ()
+    sent_at: float | None = None
 
 
 Fetch = Callable[[str, str], dict]
@@ -60,6 +66,7 @@ def _discord_get(path: str, token: str) -> dict:
 def verify_owner_origin(
     channel_id: str, message_id: str, owner_id: str, token: str, *,
     now: float | None = None, fetch: Fetch = _discord_get, card_answers: bool = False, any_card_bot: bool = False,
+    kakao_relay: KakaoRelay | None = None, attest: Attest | None = None,
 ) -> Origin:
     """The origin must be the owner's own (non-bot) message from the last 24 hours.
 
@@ -67,6 +74,8 @@ def verify_owner_origin(
     see ``_card_answered``. Its 24 hours run from the card's posting (the message id's time), which no later edit of
     the bot's own message can move, as on the egress gate (fork #370). With ``any_card_bot`` (the release) the card may
     be any bot's own post, not only this node bot's: the release card is asked by the Dori that cuts the release.
+    ``kakao_relay`` opts YooDori into authenticated watcher attestations for an OkDori relay; release callers
+    never pass it. Only reference coordinates and their oldest timestamp are returned, never Kakao text.
     """
     if not token:
         raise OriginRefused("origin check needs the node Discord credential")
@@ -80,16 +89,35 @@ def verify_owner_origin(
     except (OSError, ValueError, urllib.error.URLError):
         raise OriginRefused("origin message could not be read; nothing was run") from None
     author = message.get("author")
+    kakao: tuple[KakaoReference, ...] = ()
     if (isinstance(author, dict) and str(author.get("id")) == owner_id
             and not author.get("bot") and str(message.get("id")) == message_id):
         when = sent
     elif card_answers and _card_answered(message, channel_id, message_id, token, fetch, any_bot=any_card_bot):
         when = sent
+    elif kakao_relay is not None:
+        from automation.owner_kakao import KakaoRefused, socket_attestation, verify_references
+
+        if (not isinstance(author, dict) or str(author.get("id")) != kakao_relay.bot_id
+                or author.get("bot") is not True or message.get("webhook_id")
+                or str(message.get("id")) != message_id or str(message.get("channel_id")) != channel_id
+                or not isinstance(message.get("content"), str)):
+            raise OriginRefused("kakao relay refused: not the configured bot's own post")
+        if not 0 <= moment - sent <= ORIGIN_MAX_AGE_S:
+            raise OriginRefused("kakao relay refused: post outside 24 hours")
+        _place(channel_id, message_id, channel, "origin")
+        try:
+            kakao = verify_references(kakao_relay, message["content"], now=moment,
+                                      max_age=ORIGIN_MAX_AGE_S, attest=attest or socket_attestation)
+        except KakaoRefused as error:
+            raise OriginRefused(str(error)) from None
+        when = min(sent, *(record["sent_at"] for record in kakao))
     else:
         raise OriginRefused("origin message is not the owner's own message")
     if not 0 <= moment - when <= ORIGIN_MAX_AGE_S:
         raise OriginRefused("origin message is older than 24 hours; ask the owner again")
-    return Origin(channel_id, message_id, _place(channel_id, message_id, channel, "origin"))
+    return Origin(channel_id, message_id, _place(channel_id, message_id, channel, "origin"),
+                  kakao, when if kakao else None)
 
 
 def card_text(message: dict) -> str | None:
