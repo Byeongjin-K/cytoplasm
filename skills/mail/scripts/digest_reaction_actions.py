@@ -17,10 +17,17 @@ ones:
   calls ``run_tick`` over every recent card, so a press the gateway missed (restart,
   disconnect) is still acted on.
 
+Each mail gets its own thread (owner 2026-11-16: "다이제스트에서 전문 확인 및 초안 작성 누르면
+별도 스레드로 진행되게 해"): the first 📄 or ✍️ on a mail opens that mail's thread
+(``triage_digest_thread.mail_thread``) and leaves one link line under its card; everything
+that press produces goes into the mail's thread, so several mails never mix in the digest
+thread. Pressing the same mail again reuses that thread and posts the link once more.
+The reply approval card lands there too (``triage_binding`` binds a reply of that mail to it).
+
 What each emoji does:
 
 - 📄 posts the mail's full text (``mail_body_view.render(full=True)``, already split
-  under Discord's limit) and its attachment names into the card's thread.
+  under Discord's limit) and its attachment names into the mail's thread.
 - ✍️ runs the existing owner-instruction draft path (``triage_cli.cmd_draft``), which
   writes the draft and posts the standard mail approval card; the thread gets a
   preview and the card link. Nothing is sent here — sending stays the owner's ✅ on
@@ -72,8 +79,10 @@ DRAFT_INSTRUCTION: Final = (
 QUESTION_HEAD: Final = "✍️ **회신을 쓰기 전에 정해 주실 것이 있습니다**"
 _URL: Final = re.compile(r"\burl=(\S+)")
 DRAFT_ACK: Final = (
-    "✍️ 회신 초안을 쓰고 있습니다 — 1분쯤 걸려요. 다 쓰면 이 카드 아래에 미리보기와 승인 카드 링크를 올립니다."
+    "✍️ 회신 초안을 쓰고 있습니다 — 1분쯤 걸려요. 다 쓰면 이 스레드에 미리보기와 승인 카드를 올립니다."
 )
+#: Link label under a digest card for its mail's own thread.
+MAIL_THREAD_LABEL: Final = "이 메일 스레드"
 _ACTION_LABEL: Final = {"body": "📄 전문", "draft": "✍️ 회신 초안"}
 #: Label for links to a full-text delivery, including older separate-thread records.
 BODY_THREAD_LABEL: Final = "전문"
@@ -161,11 +170,55 @@ def body_parts(mail: dict, subject: str) -> list[str]:
     return parts
 
 
-def _open_body_thread(card: dict, subject: str) -> dict[str, str]:
-    """Full text belongs to the mail card's digest thread, never a sibling thread."""
-    channel = triage_confirm.fetch_channel(str(card["channel_id"]))
-    guild = str(channel.get("guild_id") or "") if isinstance(channel, dict) else ""
-    return {"thread_id": str(card["channel_id"]), "guild_id": guild, "stage": "linked"}
+def _thread_url(thread: dict[str, str]) -> str | None:
+    try:
+        triage_confirm._origin_notice()  # noqa: SLF001 — puts the interop runtime on the path
+        from automation.interop.owner_message import discord_link
+    except ImportError:
+        return None
+    return discord_link(space="guild" if thread["guild_id"] else "unknown",
+                        channel_id=thread["thread_id"], guild_id=thread["guild_id"] or None).url
+
+
+def mail_link_line(thread: dict[str, str], subject: str) -> str:
+    """The one line under a digest card that points at its mail's own thread."""
+    url = _thread_url(thread)
+    if url:
+        from automation.interop.owner_message import masked_discord_link
+
+        where = masked_discord_link(url, MAIL_THREAD_LABEL)
+    else:
+        where = f"스레드 「✉️ {' '.join(subject.split())[:_SUBJECT_LIMIT]}」"
+    return _inert(f"🧵 전문·회신 초안은 {where}에서 이어집니다.")
+
+
+def _mail_thread(card: dict, subject: str) -> dict[str, str]:
+    """The mail's own thread (opened on its first press) with the card's link line posted once.
+
+    📄 and ✍️ hold separate claims, so both can reach here at once (gateway press and the
+    watch tick); a lock around check-post-record keeps the first link line single.
+    """
+    import fcntl
+
+    import triage_digest_thread
+
+    thread = triage_digest_thread.mail_thread(str(card["uid"]), subject, str(card["channel_id"]))
+    db = triage_gate.db_path()
+    message_id = str(card["message_id"])
+    lock_dir = triage_gate.gate_dir()
+    lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (lock_dir / "digest-card-link.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if triage_store.digest_card_link(db, message_id) != thread["thread_id"]:
+            triage_confirm.post_in(str(card["channel_id"]), mail_link_line(thread, subject),
+                                   reply_to=message_id)
+            triage_store.save_digest_card_link(db, message_id, thread["thread_id"],
+                                               triage_core.utc_now())
+    return thread
+
+
+def _known_mail_thread(card: dict) -> dict[str, str] | None:
+    return triage_store.digest_mail_thread(triage_gate.db_path(), str(card.get("uid") or ""))
 
 
 def body_link_line(thread: dict[str, str], subject: str) -> str:
@@ -185,9 +238,11 @@ def body_link_line(thread: dict[str, str], subject: str) -> str:
 
 
 def _show_body(card: dict) -> str:
-    """📄: reply with full text in the card's digest thread.
+    """📄: the full text in the mail's own thread, a link line under the card.
 
-    Existing delivery stages remain replayable, so a retry never duplicates posted text.
+    Each step is recorded before the next (``digest_body_threads.stage``), so a retry
+    resumes where it stopped and never posts the text twice. Records written by older
+    releases (text under the card, or a separate 📄 thread) are replayed as they were.
     """
     db = triage_gate.db_path()
     message_id = str(card["message_id"])
@@ -197,7 +252,7 @@ def _show_body(card: dict) -> str:
     mail = triage_transport._get_mail(str(card["uid"]))  # noqa: SLF001 — the digest's read path
     subject = str(card.get("subject") or mail.get("subject") or "")
     if thread is None:
-        thread = _open_body_thread(card, subject)
+        thread = {**_mail_thread(card, subject), "stage": "linked"}
         triage_store.save_digest_body_thread(db, message_id, thread, triage_core.utc_now())
     if thread["stage"] == "opened":
         triage_confirm.post_in(str(card["channel_id"]), body_link_line(thread, subject),
@@ -221,14 +276,20 @@ def _show_body(card: dict) -> str:
     return "done" if posted == len(parts) else "partial"
 
 
-def _relink(card: dict) -> bool:
-    """A repeat 📄 on a card whose text is already in its thread: the link once more."""
+def _relink(card: dict, action: str) -> bool:
+    """A repeat 📄/✍️ on a card already handled: the link to its mail's thread once more."""
     db = triage_gate.db_path()
     message_id = str(card["message_id"])
-    thread = triage_store.digest_body_thread(db, message_id)
-    if thread is None or thread["stage"] != "posted":
+    if triage_store.digest_action_status(db, message_id, action) not in ("done", "partial"):
         return False
-    if triage_store.digest_action_status(db, message_id, "body") not in ("done", "partial"):
+    own = _known_mail_thread(card)
+    if own is not None:
+        triage_confirm.post_in(str(card["channel_id"]),
+                               mail_link_line(own, str(card.get("subject") or "")),
+                               reply_to=message_id)
+        return True
+    thread = triage_store.digest_body_thread(db, message_id)
+    if action != "body" or thread is None or thread["stage"] != "posted":
         return False
     triage_confirm.post_in(str(card["channel_id"]),
                            body_link_line(thread, str(card.get("subject") or "")),
@@ -270,10 +331,13 @@ def draft_preview(draft: dict, *, existed: bool) -> str:
     ]))[:2000]
 
 
-def question_text(questions: tuple[str, ...], reply_key: str = "") -> str:
-    """The owner's question under a mail card: what to decide and how to answer."""
-    where = (f"이 글이나 위 메일 카드(회신 키 `{reply_key}`)에 답장으로" if reply_key
-             else "위 메일 카드에 답장으로")
+def question_text(questions: tuple[str, ...], reply_key: str = "", *, in_thread: bool = False) -> str:
+    """The owner's question for a mail: what to decide and how to answer."""
+    if in_thread:
+        where = f"이 글에 답장으로(회신 키 `{reply_key}`)" if reply_key else "이 글에 답장으로"
+    else:
+        where = (f"이 글이나 위 메일 카드(회신 키 `{reply_key}`)에 답장으로" if reply_key
+                 else "위 메일 카드에 답장으로")
     return _inert("\n".join([
         QUESTION_HEAD,
         *(f"- {question}" for question in questions[:8]),
@@ -282,9 +346,14 @@ def question_text(questions: tuple[str, ...], reply_key: str = "") -> str:
 
 
 def post_question(card: dict, questions: tuple[str, ...]) -> None:
-    """Ask the owner under the digest card instead of posting a card with blanks."""
+    """Ask the owner in the mail's own thread (else under the card) instead of a card with blanks."""
+    db = triage_gate.db_path()
     message_id = str(card.get("message_id") or "")
-    reply_key = triage_store.reply_key_for_message(triage_gate.db_path(), message_id)
+    reply_key = triage_store.reply_key_for_message(db, message_id)
+    own = _known_mail_thread(card)
+    if own is not None:
+        triage_confirm.post_in(own["thread_id"], question_text(questions, reply_key, in_thread=True))
+        return
     triage_confirm.post_in(str(card["channel_id"]), question_text(questions, reply_key),
                            reply_to=message_id)
 
@@ -296,6 +365,7 @@ def _write_draft(card: dict, attempt: int = 1) -> str:
     import triage_cli
 
     uid = str(card["uid"])
+    target = _mail_thread(card, str(card.get("subject") or ""))["thread_id"]
     lock_dir = triage_gate.gate_dir()
     lock_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (lock_dir / "reply-request.lock").open("a") as lock:
@@ -303,25 +373,22 @@ def _write_draft(card: dict, attempt: int = 1) -> str:
         existed = triage_gate.has_draft_for(uid)
         if not existed:
             if attempt == 1:  # the model call takes a while — say it started, once
-                triage_confirm.post_in(str(card["channel_id"]), DRAFT_ACK,
-                                       reply_to=str(card["message_id"]))
+                triage_confirm.post_in(target, DRAFT_ACK)
             triage_cli.cmd_draft(argparse.Namespace(
                 uid=uid, instruction=DRAFT_INSTRUCTION, attachment=[], no_post=False,
                 with_evidence=False, reply_all=False,
                 digest_card={"channel_id": card["channel_id"], "message_id": card["message_id"]},
             ))
-            if not triage_gate.has_draft_for(uid):  # the owner was asked under the card instead
+            if not triage_gate.has_draft_for(uid):  # the owner was asked in the thread instead
                 return "done"
     draft = _pending_draft(uid)
     if draft is None:  # a draft exists but is no longer pending (sent/discarded)
         triage_confirm.post_in(
-            str(card["channel_id"]),
-            "✍️ 이 메일의 초안은 이미 처리됐습니다(발송 또는 폐기). 새 초안은 이 메시지에 답장으로 요청해 주세요.",
-            reply_to=str(card["message_id"]),
+            target,
+            "✍️ 이 메일의 초안은 이미 처리됐습니다(발송 또는 폐기). 새 초안은 메일 카드에 답장으로 요청해 주세요.",
         )
         return "done"
-    triage_confirm.post_in(str(card["channel_id"]), draft_preview(draft, existed=existed),
-                           reply_to=str(card["message_id"]))
+    triage_confirm.post_in(target, draft_preview(draft, existed=existed))
     return "done"
 
 
@@ -334,12 +401,13 @@ def _run(action: str, card: dict, attempt: int) -> str:
 def _gave_up(card: dict, action: str) -> None:
     """The last allowed attempt failed — say so under the card (best-effort)."""
     try:
-        triage_confirm.post_in(
-            str(card["channel_id"]),
-            f"⚠️ {_ACTION_LABEL[action]}을 {MAX_ATTEMPTS}번 시도했지만 가져오지 못했습니다. "
-            "이 카드에 답장으로 다시 요청해 주세요.",
-            reply_to=str(card["message_id"]),
-        )
+        text = (f"⚠️ {_ACTION_LABEL[action]}을 {MAX_ATTEMPTS}번 시도했지만 가져오지 못했습니다. "
+                "이 카드에 답장으로 다시 요청해 주세요.")
+        own = _known_mail_thread(card)
+        if own is not None:
+            triage_confirm.post_in(own["thread_id"], text.replace("이 카드에", "메일 카드에"))
+        else:
+            triage_confirm.post_in(str(card["channel_id"]), text, reply_to=str(card["message_id"]))
     except Exception as error:  # noqa: BLE001 — the notice must never fail the tick
         print(f"DIGEST-REACTION-NOTICE-FAIL action={action} err={type(error).__name__}",
               file=sys.stderr)
@@ -369,8 +437,8 @@ def _act(card: dict, owner: str, db, *, pressed: str = "") -> int:
             db, str(card["message_id"]), action, stamp, max_attempts=MAX_ATTEMPTS,
         )
         if not attempt:
-            if action == "body" and pressed == "body" and _relink(card):
-                print(f"DIGEST-REACTION action=body item={card['item_no']} status=relinked")
+            if pressed == action and _relink(card, action):
+                print(f"DIGEST-REACTION action={action} item={card['item_no']} status=relinked")
             continue
         try:
             status = _run(action, card, attempt)

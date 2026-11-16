@@ -152,6 +152,8 @@ def state_thread_name(name: str, mark: str) -> str:
     labels = [KIND_LABELS[kind] for kind in KIND_ICONS if KIND_ICONS[kind] == icon]
     if icon == "📬":
         labels.append("기관메일")
+    if icon == "✉️":  # a digest mail's own thread, opened as ``메일 · <subject>`` (2026-11-16)
+        labels.append("메일")
     for label in labels:
         subject = subject.removeprefix(f"{label} · ")
     subject = re.sub(r"^(?:(?:re|fw|fwd)\s*:\s*)+", "", subject, flags=re.IGNORECASE)

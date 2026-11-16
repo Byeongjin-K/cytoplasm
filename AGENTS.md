@@ -182,7 +182,7 @@
 
 ## 요청별 승인 스레드 규칙 (cha 지시, 2026-09-01)
 
-- 형 전용 승인은 요청 하나에 스레드 하나: 카드·리마인더·결과가 거기서 끝난다. 메일 새 판·취소/만료 뒤 재초안도 같은 메일의 첫 스레드를 재사용한다. 📄 전문은 그날 다이제스트 카드 답글이다. 미결 카드는 🔔, 정산된 다이제스트는 ✅(지난 날짜만 아카이브). 종결은 ✅/⛔/💤, 실패는 ❗로 열어 둔다.
+- 형 전용 승인은 요청 하나에 스레드 하나: 카드·리마인더·결과가 거기서 끝난다. 메일 새 판·취소/만료 뒤 재초안도 같은 메일의 첫 스레드를 재사용한다. 다이제스트 카드의 📄·✍️ 는 그 메일 하나만의 스레드를 열어 전문·초안·승인 카드를 거기서 끝내고, 같은 메일은 그 스레드를 다시 쓴다(2026-11-16). 미결 카드는 🔔, 정산된 다이제스트는 ✅(지난 날짜만 아카이브). 종결은 ✅/⛔/💤, 실패는 ❗로 열어 둔다.
 - `resolve_new_binding(kind, directory, owner, request=RequestThread(title=…, origin_channel_id=…, origin_message_id=…))` 필수. 지시가 이미 스레드 안일 때만 그 스레드에. 안내 문구는 `request_thread_notice`만. 제목은 마스킹 값만: mail=제목, todo=할 일 제목, coordination=조율 라벨, calendar·patent-prep·repair=id, obsidian=노트 파일명(확장자 포함, 디렉터리·본문 제외).
 - `binding.channel_id`를 `approval_thread_id`로 승인 해시 밖에 저장하고 결과 통지 dict에 싣는다. 자체 스레드 생성·PATCH 금지, 종결은 `origin_notice.close_thread`. 강제 `tests/unit/test_request_thread_adoption_conformance.py`(`request=` 없는 호출 금지), 예외는 공급망 표면 `skill_gate_surface.SupplyChainSurface.new`만 `_KIND_THREAD_EXEMPT`에 사유와. 런타임 먼저 배포.
 원문: [RULES.md](RULES.md) 「요청별 승인 스레드 규칙」 · 장부 `request-thread`
