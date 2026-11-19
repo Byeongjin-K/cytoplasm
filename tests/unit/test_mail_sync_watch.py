@@ -34,9 +34,11 @@ def _load() -> ModuleType:
 watch = _load()
 
 
-def _ok(new: int) -> tuple[int, str]:
+def _ok(new: int, newest: str | None = None) -> tuple[int, str]:
     payload = {"status": "ok", "command": "list",
                "sync": {"exit_code": 0, "meaning": "ok", "new_mails": new}}
+    if newest is not None:  # the rows the wrapper lists back, newest first
+        payload["mails"] = [{"uid": "u2", "date": newest}, {"uid": "u1", "date": "2026-10-01T00:00:00"}]
     return 0, json.dumps(payload)
 
 
@@ -163,6 +165,55 @@ def test_successful_but_empty_collection_is_told_after_the_quiet_threshold(
     assert printed == ["", "", "", ""]
     state = json.loads((Path.home() / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["new_mails"] == 3 and state["zero_weekday_streak"] == 0
+
+
+def _streak() -> int:
+    state = json.loads((Path.home() / ".local/state/autophagy/mail-sync/collection.json").read_text())
+    return state["zero_weekday_streak"]
+
+
+def test_mail_another_sync_stored_first_starts_the_quiet_count_over(monkeypatch, capsys) -> None:
+    # Given: two ticks that find nothing new while the store's newest mail stays put.
+    _ticks(monkeypatch, capsys, [_ok(0, "2026-10-19T00:10:00"), _ok(0, "2026-10-19T00:10:00")])
+    assert _streak() == 2
+    # When: another sync (a node's project-board sync, --now) stored a newer mail before this tick
+    _ticks(monkeypatch, capsys, [_ok(0, "2026-10-19T00:31:00")])
+    # Then: mail is being collected, so the quiet count starts over (issue #256).
+    assert _streak() == 0
+
+
+def test_a_store_that_stays_put_still_fails_doctor(tmp_path: Path, monkeypatch, capsys) -> None:
+    from automation.doctor import scheduled
+
+    # Given / When: six workday hours of successful ticks and the store's newest mail never moves
+    _ticks(monkeypatch, capsys, [_ok(0, "2026-10-19T00:10:00")] * 36)
+    # Then: collection has really stopped storing mail, and doctor still says so.
+    checks = scheduled.observe(tmp_path, _REPO, lambda *_a: (0, ""), watch._now())
+    assert _streak() == 36 and [c.name for c in checks] == ["mail-sync-quiet"]
+
+
+def test_the_tick_hands_its_held_lock_to_the_wrapper(tmp_path: Path, monkeypatch) -> None:
+    # Given: the wrapper takes the collection lock itself, so the tick must not make it wait on the tick.
+    child = ("import importlib.util, sys; spec = importlib.util.spec_from_file_location('w', sys.argv[1]);"
+             " w = importlib.util.module_from_spec(spec); spec.loader.exec_module(w);"
+             " print('HELD' if w.collection_lock(0) is not None else 'BUSY')")
+    seen: list[str] = []
+
+    def fake_run(argv, **kwargs):
+        with subprocess.Popen([sys.executable, "-c", child, str(_PATH)], stdout=subprocess.PIPE, text=True,
+                              env=kwargs["env"], pass_fds=kwargs["pass_fds"]) as proc:
+            seen.append(proc.communicate()[0].strip())
+        stranger = dict(kwargs["env"], **{watch.LOCK_FD_ENV: "0"})  # a descriptor that is not the lock
+        with subprocess.Popen([sys.executable, "-c", child, str(_PATH)], stdout=subprocess.PIPE, text=True,
+                              stdin=subprocess.DEVNULL, env=stranger) as proc:
+            seen.append(proc.communicate()[0].strip())
+        return subprocess.CompletedProcess(argv, *_ok(1), "")
+
+    monkeypatch.setattr(watch.subprocess, "run", fake_run)
+    # When
+    assert watch.main() == 0
+    # Then: the wrapper keeps the tick's lock; anything else still finds the collection busy.
+    assert seen == ["HELD", "BUSY"]
 
 
 def test_alert_threshold_is_configurable(monkeypatch, capsys) -> None:

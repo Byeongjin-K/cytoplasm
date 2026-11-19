@@ -24,9 +24,10 @@ def _state(path: Path) -> dict:
 def observe(home: Path, repo: Path, run: Run, now: datetime) -> tuple[JobCheck, ...]:
     checks: list[JobCheck] = []
     collection = _state(home / ".local/state/autophagy/mail-sync/collection.json")
-    if now.astimezone(KST).weekday() < 5 and collection.get("zero_weekday_streak", 0) >= 36:  # six workday hours at 10-minute ticks
+    if now.astimezone(KST).weekday() < 5 and collection.get("zero_weekday_streak", 0) >= 36:
+        # Six workday hours at 10-minute ticks in which no sync stored a newer mail (issue #256).
         checks.append(JobCheck("mail-sync-quiet", Status.FAIL,
-                               "평일 기관메일 수집 성공 후 새 메일 0건이 6회 이상 이어짐"))
+                               "평일 기관메일 수집은 성공하지만 저장소에 새 메일이 6시간 넘게 없음"))
     runtime = home / ".hermes/mailon-runtime"
     if runtime.exists():
         code, _ = run(

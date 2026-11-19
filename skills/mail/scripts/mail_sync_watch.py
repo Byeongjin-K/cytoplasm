@@ -13,6 +13,13 @@ watch-failure ledger is neither read nor updated.
 Issue #251: with the released ``mail-user-folders`` switch on, every collection also takes the
 user folders (trash, spam and drafts never) of the last few days; off keeps the argv above.
 ``--now --user-folders [--since-days N]`` is the same scope asked through the YooDori gate.
+
+Issue #256: other syncs store mail too (``--now``, the agent's own ``list --sync``, a node's
+project-board sync), so a tick that finds nothing new proves nothing on its own. The quiet count
+also starts over when the store's newest mail (the newest date the tick lists back) moved since
+the last tick; only a store that stays as it was keeps counting. Every ``list --sync`` takes this
+file's collection lock, so two syncs never write the store at once: the tick hands its held lock
+to the wrapper it runs (``MAIL_SYNC_LOCK_FD``) instead of waiting on itself.
 """
 from __future__ import annotations
 
@@ -42,6 +49,8 @@ SYNC_LIMIT: Final = 50
 TICK_TIMEOUT_SECONDS: Final = 1200
 _ENV_SECRETS: Final = Path.home() / ".env.secrets"
 LOCK_ENV: Final = "MAIL_SYNC_LOCK"
+#: The held collection lock this tick hands to the wrapper it runs.
+LOCK_FD_ENV: Final = "MAIL_SYNC_LOCK_FD"
 #: --now waits at most this long for a running collection before giving up.
 NOW_WAIT_SECONDS: Final = 1500
 KST: Final = timezone(timedelta(hours=9))
@@ -124,31 +133,40 @@ def _now_scope(words: list[str]) -> list[str] | None:
     return None
 
 
-def _collect(scope: list[str]) -> tuple[bool, int | None, str]:
-    """Run one sync: (collected, new mails or None when unknown, failure detail)."""
+def _newest(payload: dict) -> str | None:
+    """The newest mail date the wrapper listed back from the store (rows come newest first)."""
+    mails = payload.get("mails")
+    dates = [mail["date"] for mail in mails if isinstance(mail, dict) and isinstance(mail.get("date"), str)
+             and mail["date"]] if isinstance(mails, list) else []
+    return max(dates, default=None)
+
+
+def _collect(scope: list[str], held) -> tuple[bool, int | None, str | None, str]:
+    """Run one sync under the held lock: (collected, new mails or None, newest stored date, detail)."""
     cli = _cli()
     if not cli.exists():
-        return False, None, "mail skill is not mounted"
+        return False, None, None, "mail skill is not mounted"
     try:
         result = subprocess.run(  # noqa: S603 — fixed argv, agent-owned script
             [sys.executable, str(cli), "list", "--sync", "--limit", str(SYNC_LIMIT), *scope],
             capture_output=True, text=True, timeout=TICK_TIMEOUT_SECONDS, check=False,
-            cwd=str(Path.home()), env=dict(os.environ),
+            cwd=str(Path.home()), env={**os.environ, LOCK_FD_ENV: str(held.fileno())},
+            pass_fds=(held.fileno(),),
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return False, None, type(error).__name__
+        return False, None, None, type(error).__name__
     payload = _payload(result.stdout)
     sync = payload.get("sync") if isinstance(payload.get("sync"), dict) else {}
     if result.returncode == 0 and sync.get("exit_code") == 0:
         new = sync.get("new_mails")
-        return True, new if isinstance(new, int) else None, ""
+        return True, new if isinstance(new, int) else None, _newest(payload), ""
     parts = [f"rc={result.returncode}"]
     for key in ("error_code", "failure_signature"):
         if payload.get(key):
             parts.append(f"{key}={payload[key]}")
     if sync.get("fallback"):
         parts.append(f"fallback={sync['fallback']}")
-    return False, None, _redact(" ".join(parts))[:200]
+    return False, None, None, _redact(" ".join(parts))[:200]
 
 
 def _now() -> datetime:
@@ -159,12 +177,26 @@ def _workday(moment: datetime) -> bool:
     return moment.weekday() < 5 and 9 <= moment.hour < 20
 
 
-def _lock(wait_seconds: float):
-    """The one collection at a time: return the held lock file, or None when still busy."""
+def collection_lock(wait_seconds: float):
+    """The one collection at a time: return the held lock file, or None when still busy.
+
+    ``mail_wrapper.py list --sync`` takes it too. A wrapper run by a tick that holds it gets the
+    held lock's descriptor in ``MAIL_SYNC_LOCK_FD`` and keeps it, once that descriptor is the lock
+    file itself; anything else queues like any other collection.
+    """
     # Outside ~/.hermes on purpose: that tree is being retired on the node (no new paths there).
     path = Path(os.environ.get(LOCK_ENV, "")
                 or Path.home() / ".local/state/autophagy/mail-sync.lock").expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
+    inherited = os.environ.get(LOCK_FD_ENV, "")
+    if inherited.isdigit():
+        try:
+            same = os.path.samestat(os.fstat(int(inherited)), path.stat())
+            if same:
+                fcntl.flock(int(inherited), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return os.fdopen(int(inherited), "a", closefd=False)
+        except OSError:
+            pass  # not the held lock after all: wait for it below
     handle = path.open("a")
     deadline = time.monotonic() + wait_seconds
     while True:
@@ -185,12 +217,12 @@ def now(words: list[str] | None = None) -> int:
         print("MAIL-SYNC-NOW refused: --now takes only --user-folders [--since-days 1-31]")
         return 2
     _load_env_secrets()
-    held = _lock(NOW_WAIT_SECONDS)
+    held = collection_lock(NOW_WAIT_SECONDS)
     if held is None:
         print("MAIL-SYNC-NOW busy: a collection is still running; try again shortly")
         return 1
     with held:
-        collected, new, detail = _collect(scope)
+        collected, new, _newest_date, detail = _collect(scope, held)
     if collected:
         print(f"MAIL-SYNC-NOW ok new={new if new is not None else '?'}")
         return 0
@@ -200,32 +232,39 @@ def now(words: list[str] | None = None) -> int:
 
 def main() -> int:
     _load_env_secrets()
-    held = _lock(0)
+    held = collection_lock(0)
     if held is None:
         return 0  # a collection (an on-request one) is running; the next tick follows it
     with held:
-        collected, new, detail = _collect(_scope())
-    _record_collection(Path.home(), collected, new, _now())
+        collected, new, newest, detail = _collect(_scope(), held)
+    _record_collection(Path.home(), collected, new, newest, _now())
     if not collected:
         print(f"{WATCH_NAME} error: {detail}"[:300])
     return 0 if collected else 1
 
 
-def _record_collection(home: Path, collected: bool, new: int | None, now: datetime) -> None:
-    """Keep the result doctor's meaning check needs, not another failure incident."""
+def _record_collection(home: Path, collected: bool, new: int | None, newest: str | None,
+                       now: datetime) -> None:
+    """Keep the result doctor's meaning check needs, not another failure incident.
+
+    The quiet count starts over when this tick stored mail or the store's newest mail moved since
+    the last tick (another sync stored it first, issue #256); a store that stays put keeps counting.
+    """
     path = home / ".local/state/autophagy/mail-sync/collection.json"
     try:
         previous = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         previous = {}
     streak = int(previous.get("zero_weekday_streak", 0))
+    seen = previous.get("newest_mail") if isinstance(previous.get("newest_mail"), str) else None
+    moved = newest is not None and seen is not None and newest > seen
     local = now.astimezone(KST)
-    if local.weekday() >= 5 or (collected and new != 0):
+    if local.weekday() >= 5 or (collected and (new != 0 or moved)):
         streak = 0  # a weekend or new mail starts over; Friday's count never alarms on Monday
     elif collected and _workday(local):
         streak += 1
     payload = {"last_run_at": now.isoformat(), "last_status": "ok" if collected else "error",
-               "new_mails": new, "zero_weekday_streak": streak}
+               "new_mails": new, "zero_weekday_streak": streak, "newest_mail": newest or seen}
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)

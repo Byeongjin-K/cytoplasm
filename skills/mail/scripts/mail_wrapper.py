@@ -33,6 +33,7 @@ import hashlib
 import json
 import re
 import mail_user_folders_mode
+from mail_sync_watch import NOW_WAIT_SECONDS, collection_lock
 from mailon_interface import (
     CONFIG_GUIDANCE,
     MAILON_INTERFACE,
@@ -57,6 +58,10 @@ from mail_wrapper_read import (
     mask_value,
     run_mailon,
 )
+
+
+#: `list --sync` waits this long for a running collection, like YooDori's on-request one.
+SYNC_LOCK_WAIT_SECONDS = NOW_WAIT_SECONDS
 
 
 def _emit(payload: dict, exit_code: int) -> int:
@@ -112,7 +117,12 @@ def cmd_list(args) -> int:
         ) + (["--folders", "inbox,sent,user", "--since-days",
               str(args.since_days or mail_user_folders_mode.DEFAULT_SINCE_DAYS)]
              if args.user_folders else [])
-        rc, out, err = run_mailon(cfg, sync_argv)
+        # One sync writes the store at a time (issue #256): wait for a running collection.
+        held = collection_lock(SYNC_LOCK_WAIT_SECONDS)
+        if held is None:
+            return _error("list", "timeout", "다른 기관메일 수집이 아직 진행 중(수집 잠금). 잠시 뒤 다시.")
+        with held:
+            rc, out, err = run_mailon(cfg, sync_argv)
         if rc in (1, 2, 10, 11, -6, -7):
             return _mailon_failure("list", rc, err)
         sync_info = {"exit_code": rc,

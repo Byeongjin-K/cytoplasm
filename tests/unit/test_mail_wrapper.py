@@ -83,6 +83,14 @@ ROWS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _own_collection_lock(tmp_path: Path, monkeypatch) -> Path:
+    lock = tmp_path / "mail-sync.lock"
+    monkeypatch.setenv("MAIL_SYNC_LOCK", str(lock))
+    monkeypatch.delenv("MAIL_SYNC_LOCK_FD", raising=False)
+    return lock
+
+
 @pytest.fixture()
 def stub_repo(tmp_path: Path, monkeypatch) -> Path:
     repo = tmp_path / "repo"
@@ -225,6 +233,32 @@ def test_list_all_folders_sync_requests_vendor_all_scope(
     # Then: the vendor sync receives an explicit all-folder scope.
     assert rc == 0
     assert calls == [["sync", "--limit", "5", "--folders", "all"]]
+
+
+def test_list_sync_waits_its_turn_behind_a_running_collection(
+    stub_repo: Path, monkeypatch: pytest.MonkeyPatch, _own_collection_lock: Path,
+) -> None:
+    # Given: another collection (the 10-minute tick) holds the collection lock (issue #256).
+    import fcntl
+
+    ran: list[list[str]] = []
+
+    def run_mailon(_cfg: dict, argv: list[str]) -> tuple[int, str, str]:
+        ran.append(argv)
+        return 0, "OK: 1 new mail(s) (retries: 0 recovered, 0 still failing)", ""
+
+    monkeypatch.setattr(mail_wrapper, "run_mailon", run_mailon)
+    monkeypatch.setattr(mail_wrapper, "SYNC_LOCK_WAIT_SECONDS", 0)
+    args = mail_wrapper.build_parser().parse_args(["list", "--limit", "5", "--sync", "--masked"])
+    with _own_collection_lock.open("a") as other:
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # When: a second sync (a node's project-board sync) asks while it runs
+        busy = mail_wrapper.cmd_list(args)
+
+    # Then: it never writes the store beside it, and syncs once the lock is free.
+    assert busy == mail_wrapper.WRAPPER_EXIT["timeout"] and ran == []
+    assert mail_wrapper.cmd_list(args) == 0 and len(ran) == 1
 
 
 def test_list_sync_ok_parses_new_mails(stub_repo: Path) -> None:
