@@ -52,6 +52,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -826,7 +827,9 @@ class InboxScraper:
         )
 
         # urllib.request.urlopen streams the response; copy to disk in chunks
-        tmp_path = target.with_suffix(target.suffix + ".part")
+        # One partial file per download: the sync tick and the archive recovery can fetch the same
+        # attachment at once, and one giving up must not delete or overwrite the other's bytes.
+        tmp_path = target.with_name(f"{target.name}.{uuid.uuid4().hex[:12]}.part")
         budget = self.large_download_budget_s
         deadline = None if budget is None else time.monotonic() + budget
         read_timeout = 300 if budget is None else min(300, BUDGETED_READ_TIMEOUT_S, budget)

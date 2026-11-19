@@ -160,13 +160,73 @@ def test_a_trickling_large_download_stops_once_its_total_budget_is_spent(
     assert not list((tmp_path / "att" / "9831024").glob("*"))
 
 
-def test_without_a_budget_the_archive_recovery_still_downloads_the_whole_file(
+def test_with_the_archive_recovery_budget_the_whole_slow_file_downloads(
         tmp_path, server, monkeypatch):
-    # Given: the same slow clock, but no budget (mail_attachment_retry.py's scraper).
+    # Given: the same slow clock, and the time mail_attachment_retry.py gives a big file.
     _slow_clock(monkeypatch)
     monkeypatch.setattr(scraper_mod, "URLLIB_CHUNK_SIZE", 1000)
-    saved = _scraper(tmp_path)._download_attachment("9831024", "a.pptx", server)
+    s = _scraper(tmp_path)
+    s.large_download_budget_s = 2580.0
+    saved = s._download_attachment("9831024", "a.pptx", server)
     assert saved.local_path.read_bytes() == BODY
+
+
+# --- 2026-11-19: a large file the webmail sends slower than the sync's budget ----------------
+
+SLOW_BODY = bytes(range(256)) * 256  # 64 KiB
+
+
+class _SlowHandler(http.server.BaseHTTPRequestHandler):
+    """Sends the whole file in 16 pieces 0.1 s apart and ignores Range, like the webmail."""
+
+    def do_GET(self):  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(SLOW_BODY)))
+        self.end_headers()
+        piece = len(SLOW_BODY) // 16
+        for start in range(0, len(SLOW_BODY), piece):
+            self.wfile.write(SLOW_BODY[start:start + piece])
+            self.wfile.flush()
+            __import__("time").sleep(0.1)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def slow(monkeypatch):
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _SlowHandler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    monkeypatch.setattr(scraper_mod, "LARGE_FILE_HOSTS", frozenset({"127.0.0.1"}))
+    yield f"http://127.0.0.1:{httpd.server_address[1]}/bigfileDownload/x/c.hwp"
+    httpd.shutdown()
+
+
+def test_the_retry_finishes_a_file_the_sync_gives_up_on_even_when_both_fetch_it_at_once(
+        tmp_path, slow):
+    # Given: the sync's short budget and the archive recovery's long one on the same file.
+    sync, retry = _scraper(tmp_path), _scraper(tmp_path)
+    sync.large_download_budget_s, retry.large_download_budget_s = 0.5, 30.0
+    results: dict[str, object] = {}
+
+    def run(name, scraper):
+        try:
+            results[name] = scraper._download_attachment("10254115", "c.hwp", slow)
+        except RuntimeError as error:
+            results[name] = error
+
+    # When: both download it at the same time, as a sync tick and an archive tick can.
+    threads = [threading.Thread(target=run, args=item)
+               for item in (("retry", retry), ("sync", sync))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    # Then: the sync stops at its budget, the retry still saves the complete file, and no
+    # partial file is left.
+    assert isinstance(results["sync"], RuntimeError) and "unfinished" in str(results["sync"])
+    assert results["retry"].local_path.read_bytes() == SLOW_BODY
+    assert [p.name for p in (tmp_path / "att" / "10254115").iterdir()] == ["c.hwp"]
 
 
 def _db_with_failure(tmp_path, href, *, seconds_ago):

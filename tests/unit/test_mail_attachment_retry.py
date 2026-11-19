@@ -86,7 +86,7 @@ def test_failed_then_successful_retry_uploads_once(old_state: Path, monkeypatch)
     # Given: the first re-fetch still fails, the second returns the bytes.
     calls: list[tuple[str, str]] = []
 
-    def fetch(uid: str, filename: str) -> None:
+    def fetch(uid: str, filename: str, timeout_s: float) -> None:
         calls.append((uid, filename))
         if len(calls) == 2:
             _recover(old_state)
@@ -105,7 +105,7 @@ def test_cap_sends_one_notice_and_stops_fetching(old_state: Path, monkeypatch) -
     # Given: every fetch fails.
     calls: list[str] = []
     notices: list[str] = []
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: calls.append(uid))
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: calls.append(uid))
     monkeypatch.setattr(syncer.retry, "notify_exhausted", lambda text: notices.append(text) or True)
     # When: more ticks than the budget run.
     results = [syncer.sync(client=FakeDrive()) for _ in range(8)]
@@ -120,7 +120,7 @@ def test_cap_sends_one_notice_and_stops_fetching(old_state: Path, monkeypatch) -
 def test_failed_notice_is_retried_next_tick(old_state: Path, monkeypatch) -> None:
     # Given: the first exhausted notice cannot be delivered.
     notices: list[str] = []
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: None)
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: None)
 
     def notify(text: str) -> bool:
         notices.append(text)
@@ -139,7 +139,7 @@ def test_old_failed_row_is_retried_without_losing_archived_rows(old_state: Path,
     # Given: the old MailOn retry counter is already exhausted.
     with sqlite3.connect(old_state) as db:
         db.execute("UPDATE attachments SET attempts=5")
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: _recover(old_state))
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: _recover(old_state))
     drive = FakeDrive()
     # When: the first upgraded tick runs.
     result = syncer.sync(client=drive)
@@ -153,7 +153,7 @@ def test_missing_ok_file_is_refetched(old_state: Path, monkeypatch) -> None:
     # Given: MailOn claims success but its local file is gone.
     with sqlite3.connect(old_state) as db:
         db.execute("UPDATE attachments SET status='ok', local_path='/missing/report.pdf'")
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: _recover(old_state))
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: _recover(old_state))
     # When: the archive tick runs.
     result = syncer.sync(client=FakeDrive())
     # Then: the missing bytes are fetched before upload.
@@ -179,9 +179,10 @@ def test_fetch_adapter_uses_mailon_downloader_and_closes_browser(old_state, monk
     browser = SimpleNamespace(close=lambda: calls.append(("closed",)))
 
     class Scraper:
-        def __init__(self, actual_browser, directory):
+        def __init__(self, actual_browser, directory, *, large_download_budget_s):
             assert actual_browser is browser
             assert directory == cfg.attachments_dir
+            calls.append(("budget", 0 < large_download_budget_s <= 600))
 
         def _download_attachment(self, uid, name, href, *, declared_size):
             calls.append((uid, name, href, declared_size))
@@ -211,11 +212,14 @@ def test_fetch_adapter_uses_mailon_downloader_and_closes_browser(old_state, monk
         module = ModuleType(name)
         module.__dict__.update(attributes)
         monkeypatch.setitem(sys.modules, name, module)
-    monkeypatch.setattr(sys, "argv", ["retry", "u1", "report.pdf"])
-    # When: the isolated fetch entry point runs.
+    monkeypatch.setattr(sys, "argv", ["retry", "u1", "report.pdf", "600"])
+    # When: the isolated fetch entry point runs with 600 s of its own.
     assert retry.main() == 0
-    # Then: it uses the stored URL even at five old attempts, and closes its own browser.
-    assert calls == [("u1", "report.pdf", "https://mail.example/attachment/1", 3), ("closed",)]
+    # Then: it uses the stored URL even at five old attempts, keeps the download inside its own
+    # time, and closes its own browser.
+    assert calls == [
+        ("budget", True), ("u1", "report.pdf", "https://mail.example/attachment/1", 3), ("closed",),
+    ]
     assert retry._available("u1", "report.pdf")
 
 
@@ -236,13 +240,49 @@ def test_fetch_subprocess_receives_wrapper_credentials(old_state, monkeypatch) -
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(retry.subprocess, "run", run)
-    # When: the archive asks for one attachment.
-    retry.fetch_attachment("u1", "report.pdf")
-    # Then: the existing runtime and wrapper environment are explicitly forwarded.
+    # When: the archive asks for one attachment with 900 s.
+    retry.fetch_attachment("u1", "report.pdf", 900)
+    # Then: the existing runtime and wrapper environment are explicitly forwarded, and the
+    # child is told to stop a minute before it would be killed.
     argv, kwargs = calls[0]
-    assert argv[0] == "/runtime/python" and argv[-2:] == ["u1", "report.pdf"]
+    assert argv[0] == "/runtime/python" and argv[-3:] == ["u1", "report.pdf", "840"]
     assert kwargs["env"] == {"HOME": "/private", "TEST": "yes"}
-    assert kwargs["cwd"] == old_state.parent and kwargs["timeout"] == 17
+    assert kwargs["cwd"] == old_state.parent and kwargs["timeout"] == 900
+
+
+def test_a_big_retry_gets_the_time_its_size_needs_and_one_tick_stays_inside_its_limit(
+        old_state, monkeypatch) -> None:
+    # Given: the 2026-11-19 file (31,399,424 bytes, size unknown as on a large-file link) and a
+    # second unknown-size file, and a clock where every fetch takes the whole time it was given.
+    with sqlite3.connect(old_state) as db:
+        db.execute("UPDATE attachments SET size_bytes=NULL")
+        db.execute("INSERT INTO attachments VALUES "
+                   "('u1','big.hwp',NULL,1792000000,'fail',3,'/bigfileDownload/x',NULL)")
+    now = [0.0]
+    monkeypatch.setattr(syncer.retry, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    given: list[tuple[str, float]] = []
+
+    def fetch(uid: str, name: str, timeout_s: float) -> None:
+        given.append((name, timeout_s))
+        now[0] += timeout_s
+
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", fetch)
+    # When: two archive ticks run.
+    syncer.sync(client=FakeDrive())
+    first_tick = list(given)
+    syncer.sync(client=FakeDrive())
+    # Then: the first fetch has the time 31.4 MB needs at the slowest rate seen (17 KB/s) and
+    # more than the old 900 s; the tick does not start a second fetch it cannot finish under
+    # the watch's 3600 s, and that file is fetched next tick without losing an attempt.
+    assert len(first_tick) == 1
+    assert first_tick[0][1] >= 31_399_424 / (17 * 1024) > 900
+    assert first_tick[0][1] <= syncer.retry.TICK_FETCH_BUDGET_S < 3600
+    assert [name for name, _ in given] == ["big.hwp", "report.pdf"]
+    key = archive.attachment_key("u1", "report.pdf")
+    with sqlite3.connect(archive.STATE_DB) as db:
+        assert db.execute(
+            "SELECT attempts FROM download_retries WHERE attachment_key=?", (key,)
+        ).fetchone() == (1,)
 
 
 def test_owner_facade_gets_the_single_notice_line(old_state, monkeypatch) -> None:
