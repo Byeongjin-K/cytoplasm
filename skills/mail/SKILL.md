@@ -47,6 +47,9 @@ python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py list --limit 20 
 # 받은편지함 + 사용자 폴더(휴지통·스팸·임시보관 제외, 최근 7일 또는 --since-days 1~31)를 수집·조회
 python3 /srv/autophagy-skills/live/mail/scripts/mail_wrapper.py list --limit 20 --sync --user-folders [--since-days 3]
 
+# --sync 는 한 번에 하나만 저장소에 쓴다: 10분 수집이 돌고 있으면 끝날 때까지(최대 25분) 기다리고,
+# 그래도 안 끝나면 error_code=timeout(다른 수집 진행 중)으로 돌아온다.
+
 # 단건 조회 (--body는 agent 홈 안에서만; 마스킹 시 본문 대신 sha256+bytes)
 # mail.to·cc·bcc 는 저장된 받는 사람 그대로(형 Q393: 메일 한 통을 열 때만). bcc 는 보낸 메일만, null 이면
 # 2026-10-30 전에 저장돼 아직 수집이 안 채운 보낸 메일(10분 수집이 한 번에 25통씩 채운다).

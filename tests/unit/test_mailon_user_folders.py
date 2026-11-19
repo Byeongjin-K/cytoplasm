@@ -253,6 +253,33 @@ def test_user_scope_needs_a_day_limit(tmp_path: Path, monkeypatch) -> None:
     assert finished == ["fail", "fail", "fail"]
 
 
+def test_a_user_folder_sync_counts_its_inbox_mail(tmp_path: Path, monkeypatch, capsys) -> None:
+    # Given: the switch-on periodic scope (inbox, sent and the user folders) and one new inbox mail.
+    from mailon_interface import MAILON_INTERFACE
+
+    mailon = FakeMailOn({INBOX: [[_row("i-new", INBOX, 0.01)]]})
+    mailon.close = lambda: None  # type: ignore[attr-defined]
+    monkeypatch.setattr(mailon_main, "load_config", lambda: SimpleNamespace(
+        logs_dir=tmp_path / "logs", state_db_path=tmp_path / "state.db", attachments_dir=tmp_path / "att",
+        mails_dir=tmp_path / "data" / "mails", max_mails_per_run=50, mailon_id="owner@example.invalid"))
+    monkeypatch.setattr(mailon_main, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(mailon_main, "_setup_logging", lambda *_a, **_k: None)
+    monkeypatch.setattr(mailon_main, "_make_browser", lambda _cfg: mailon)
+    monkeypatch.setattr(mailon_main, "login", lambda *_a: None)
+    monkeypatch.setattr(mailon_main, "resolve_folder_uid", lambda *_a, **_k: SENT)
+    monkeypatch.setattr(InboxScraper, "resolve_inbox_folder_uid", lambda self: setattr(self, "folder_uid", INBOX))
+    for name in ("prune_buttons", "backfill_large_links", "backfill_bcc"):  # later passes, not the count
+        monkeypatch.setattr(mailon_main, name, lambda *_a, **_k: None)
+    args = SimpleNamespace(folders="inbox,sent,user", limit=50, full_scan=False, since_days=7)
+
+    # When
+    assert mailon_main.cmd_sync(args) == 0
+
+    # Then: the inbox mail is in the new-mail count the 10-minute collection records (issue #256).
+    match = re.search(MAILON_INTERFACE["stdout_patterns"]["sync_ok"], capsys.readouterr().out, re.M)
+    assert match and match["new"] == "1" and _messages(tmp_path / "state.db") == {"i-new": "inbox"}
+
+
 def _no_browser(_cfg):
     raise AssertionError("no browser may open for a refused scope")
 

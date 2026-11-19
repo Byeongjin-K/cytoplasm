@@ -136,10 +136,10 @@ def test_collection_result_retains_weekday_zeroes_without_old_ledger(tmp_path) -
 
     monday = datetime(2026, 10, 19, 1, tzinfo=UTC)
     for _ in range(6):
-        sync._record_collection(tmp_path, True, 0, monday)
+        sync._record_collection(tmp_path, True, 0, "2026-10-19T00:10:00", monday)
     state = json.loads((tmp_path / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["zero_weekday_streak"] == 6
-    sync._record_collection(tmp_path, True, 0, datetime(2026, 10, 24, 1, tzinfo=UTC))
+    sync._record_collection(tmp_path, True, 0, "2026-10-19T00:10:00", datetime(2026, 10, 24, 1, tzinfo=UTC))
     state = json.loads((tmp_path / ".local/state/autophagy/mail-sync/collection.json").read_text())
     assert state["zero_weekday_streak"] == 0
     assert not (tmp_path / ".hermes/watch-failure").exists()
