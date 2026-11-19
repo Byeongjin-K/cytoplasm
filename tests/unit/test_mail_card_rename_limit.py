@@ -408,3 +408,38 @@ def test_a_half_posted_card_is_adopted_instead_of_wedging_the_key(
         f"/channels/{THREAD}/messages/{CARD}/reactions/{triage_confirm.quote(emoji, safe='')}/@me"
         for emoji in ("✅", "⛔")
     ]
+
+
+@pytest.mark.parametrize(("first", "second", "mark"), [
+    ("executed", "CANCELLED", "✅"),
+    ("executed", "EXPIRED", "✅"),
+    ("cancelled", "CANCELLED", "⛔"),
+])
+def test_a_thread_where_a_mail_was_sent_stays_done_whatever_its_other_card_ends_with(
+    first: str, second: str, mark: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: 2026-11-18 - the owner sent one mail of a thread (✅) while an older draft's card still waited
+    # there, then cancelled that older card (⛔): the thread was renamed cancelled although a mail had gone out.
+    api = _compose_api(tmp_path, monkeypatch, "🔔 " + NAME)
+    assert _compose() == 0
+    draft, = triage_gate.list_drafts()
+    _open_thread(api, "🔔 ✉️ request")
+    _notices_through_api(monkeypatch)
+    path = triage_gate._draft_path(str(draft["id"]))
+    older = {**draft, "id": "0ld0ld", "message_id": "300000000000000001"}
+    triage_gate.write_json(path.with_name("0ld0ld.json"), older)
+    # When: the newer card is decided while the older one waits.
+    decided = {**draft, "status": first}
+    triage_gate.write_json(path, decided)
+    outcome = triage_confirm.SENT_OUTCOME if first == "executed" else triage_confirm.CANCELLED_OUTCOME
+    calls = len(api.calls)
+    triage_confirm.notify_result(decided, first, outcome=outcome)
+    # Then: the waiting older card keeps the thread 🔔.
+    assert _renames(api, calls) == []
+    # When: the older card ends too.
+    ended = {**older, "status": "cancelled" if second == "CANCELLED" else "expired"}
+    triage_gate.write_json(path.with_name("0ld0ld.json"), ended)
+    triage_confirm.notify_result(ended, ended["status"], outcome=second)
+    # Then: a thread where a mail was sent shows done; without a send, the last result.
+    assert _renames(api, calls)[-1] == {"name": f"{mark} ✉️ request", "archived": True}
+    assert _marks(tmp_path) == []

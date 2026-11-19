@@ -294,8 +294,11 @@ def _thread_marks() -> Path:
 PENDING_MARK = "🔔"
 #: How long a mark waits for another process marking the same thread (one GET and one PATCH, no 429 wait).
 _THREAD_LOCK_SECONDS = 20.0
+SENT_MARK = "✅"
 #: End marks that close (archive) the thread; ❗ failed stays open for the owner, like 🔔.
-_CLOSING_MARKS = frozenset({"✅", "⛔", "💤"})
+_CLOSING_MARKS = frozenset({SENT_MARK, "⛔", "💤"})
+#: End marks of a card that sent nothing; a mail already sent in the same thread outranks them.
+_ENDED_UNSENT = frozenset({"⛔", "💤"})
 
 
 def waiting_threads(drafts: Iterable[Mapping[str, JsonValue]]) -> set[str]:
@@ -318,7 +321,9 @@ def mark_thread(thread_id: str, mark: str | None = None, *, exclude: str = "", c
     first, then reads the draft store, where a card still waiting in the thread wins with 🔔 (lead
     2026-11-12: what the owner still has to press comes first; ``exclude`` is the draft whose
     result is being delivered). Otherwise the newest card's result wins, a final one (✅ ⛔ 💤)
-    over ❗ for the same card, so no clock decides the order. A card is bound before
+    over ❗ for the same card, so no clock decides the order; but once a mail of the thread was
+    sent, a later ⛔ or 💤 of another card there leaves it ✅ (owner 2026-11-18: an old draft
+    cancelled after the mail went out must not show the thread cancelled). A card is bound before
     its 🔔 is recorded and a result's status before its end mark, so a wish recorded after the
     listing is never decided on a staler store, and only the listed files are removed. A name that
     already shows the mark costs no rename: Discord allows two name edits per ten minutes, and a
@@ -338,12 +343,16 @@ def mark_thread(thread_id: str, mark: str | None = None, *, exclude: str = "", c
         wishes = _recorded_marks(root, thread_id)
         if not wishes:
             return True
+        drafts = triage_gate.list_drafts()
         waiting = thread_id in waiting_threads(
-            draft for draft in triage_gate.list_drafts() if not exclude or draft.get("id") != exclude)
+            draft for draft in drafts if not exclude or draft.get("id") != exclude)
         ended = [wish for _, wish in wishes if wish[0] != PENDING_MARK]
         shown = _settled_mark(root, thread_id)
         if waiting or ended:
             newest = max([*ended, *([shown] if shown else [])], key=lambda wish: (wish[1], wish[0] in _CLOSING_MARKS), default=(PENDING_MARK, 0))
+            sent = _sent_card(drafts, thread_id)
+            if newest[0] in _ENDED_UNSENT and sent is not None:
+                newest = (SENT_MARK, sent)
             done = _apply_mark(thread_id, PENDING_MARK if waiting else newest[0])
             if done and not waiting:
                 _settle_mark(root, thread_id, newest)
@@ -353,6 +362,15 @@ def mark_thread(thread_id: str, mark: str | None = None, *, exclude: str = "", c
             for path, _ in wishes:
                 path.unlink(missing_ok=True)
         return done
+
+
+def _sent_card(drafts: Iterable[Mapping[str, JsonValue]], thread_id: str) -> int | None:
+    """The newest card of the thread whose mail was sent: its draft is executed, and an executed draft is kept."""
+    return max((
+        int(str(draft.get("message_id"))) for draft in drafts
+        if draft.get("status") == "executed" and str(draft.get("approval_thread_id") or "") == thread_id
+        and str(draft.get("message_id") or "").isdigit()
+    ), default=None)
 
 
 def _settled_mark(root: Path, thread_id: str) -> tuple[str, int] | None:
