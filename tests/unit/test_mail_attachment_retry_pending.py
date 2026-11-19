@@ -13,7 +13,7 @@ from tests.unit.test_mail_attachment_retry import (
 
 def test_pending_download_tick_is_success_and_silent(old_state, monkeypatch, capsys):
     # Given: the downloader has not recovered yet.
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: None)
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: None)
     monkeypatch.setattr(syncer, "drive_client", FakeDrive)
     monkeypatch.setattr(syncer.mail_runtime, "governed_copy_refusal", lambda path: "")
     monkeypatch.setattr(sys, "argv", ["mail_attachment_drive_sync.py"])
@@ -35,7 +35,7 @@ def test_exhaustion_groups_all_new_items_and_marks_only_after_delivery(old_state
             )
             source.execute("INSERT INTO messages VALUES (?, '2026-10-15T10:00:00', 'inbox')",
                            (f"u{index + 2}",))
-    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name: None)
+    monkeypatch.setattr(syncer.retry, "fetch_attachment", lambda uid, name, s: None)
     sent = []
     monkeypatch.setattr(syncer.retry, "notify_exhausted", lambda text: sent.append(text) or True)
     # When: all five budgeted ticks and one later tick run.
