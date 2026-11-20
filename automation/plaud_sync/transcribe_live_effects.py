@@ -43,10 +43,12 @@ from .lifelog_model import ExtractionOutcome, LifelogRecording
 from .mcp_client import PlaudMcpClient, PlaudMcpError, text_content
 from .mcp_transport import JsonValue
 from .model import PlaudSyncRecord, PlaudSyncState
-from .store import load_note_body, load_state, save_note_body, save_state, save_transcript
+from .store import (keep_transcript, kept_transcript, load_note_body, load_state,
+                    release_kept_transcript, save_note_body, save_state, save_transcript)
 from .terms import glossary as lifelog_glossary
 from .terms import record as record_note_corrections
 from .transcribe import CliResult, TranscribeError
+from .transcribe_text import transcript_stem
 from .transcript_corrector import CommandCorrector, Corrector
 
 CLI_ENV: Final = "SPEECHTOTEXT_CLI"
@@ -233,6 +235,12 @@ class LiveEffects:
         cli = cli_path(self.env)
         if not cli.is_file():
             raise TranscribeError(f"speechtotext CLI 미마운트: {cli}", counted=False)
+        kept = kept_transcript(self.state_dir, label)
+        if kept is not None:
+            # The CLI already finished this recording and only the promotion after it failed
+            # (2026-11-20: a 23-hour transcript, then extraction timed out): never decode it again.
+            print("PLAUD-TRANSCRIPT-REUSED", file=sys.stderr)
+            return CliResult(0, kept[0], kept[1], "")
         work = self.state_dir / "transcripts" / ".work"
         child = {**self.env, **_CHILD_OVERRIDES, "SPEECHTOTEXT_TRANSCRIPT_DIR": str(work)}
         argv = [sys.executable, str(cli), "transcribe", "--file", str(audio), "--label", label]
@@ -249,6 +257,7 @@ class LiveEffects:
         result = _cli_result(completed)
         if result.transcript_path is not None:
             _ = move_snapshot(result.transcript_path, self.env)
+            keep_transcript(self.state_dir, label, result.transcript_path, result.model)
         return result
 
     def _cli_timeout(self) -> float:
@@ -281,6 +290,8 @@ class LiveEffects:
             records = dict(state.records)
             records[after.recording_id] = after
             self._save_state(PlaudSyncState(state.version, state.last_poll_at, records))
+        if after.status != "transcribing":
+            release_kept_transcript(self.state_dir, transcript_stem(before))
         return True
 
     def archive_audio(self, path: Path, source: AudioSource, stem: str) -> None:

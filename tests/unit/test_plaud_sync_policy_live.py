@@ -12,7 +12,9 @@ from automation import pipeline_lock
 from automation.plaud_sync import transcribe_live, transcribe_live_effects
 from automation.plaud_sync.audio import AudioSource
 from automation.plaud_sync.fetch import CloudTranscript
-from automation.plaud_sync.lifelog_model import ExtractionOutcome, ExtractionSkipped, LifelogRecording
+from automation.plaud_sync.lifelog_model import (
+    ExtractionOutcome, ExtractionSkipped, LifelogExtractError, LifelogRecording,
+)
 from automation.plaud_sync.model import PlaudSyncState
 from automation.plaud_sync.store import load_state, save_note_body, save_state
 from automation.plaud_sync.transcribe import CliResult
@@ -188,3 +190,38 @@ def test_a_recording_longer_than_the_job_times_out_counted_and_the_next_one_goes
     assert "시간 제한" in (records["rec-long"].last_block_reason or "")
     assert second is not None and "transcribed=1 fallback=0 retry=0" in (second.line or "")
     assert records["rec-new"].status == "planned"
+
+
+def test_a_finished_transcript_survives_a_failed_extraction_and_is_not_decoded_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: the CLI finishes, then the field extraction fails once (the model timed out on a
+    # 120 KB prompt on 2026-11-20); extraction failures wait without counting.
+    runs = tmp_path / "runs.txt"
+    cli = tmp_path / "cli.py"
+    cli.write_text(_PER_FILE_CLI.replace("audio = ", "open(os.environ['RUNS'], 'a').write('x')\naudio = ", 1),
+                   encoding="utf-8")
+    failures = [LifelogExtractError("LLM 호출 실패: CodexUnavailableError")]
+
+    class FlakyExtract(OfflineEffects):
+        transcribe = transcribe_live.LiveEffects.transcribe
+
+        def extract(self, recording: LifelogRecording) -> ExtractionOutcome:
+            if failures:
+                raise failures.pop()
+            return ExtractionSkipped("test")
+
+    save_state(tmp_path / "state.json", PlaudSyncState(1, None, {_RECORD.recording_id: _RECORD}))
+    save_note_body(tmp_path, _RECORD.recording_id, EMPTY_DRAFT)
+    env = {"HOME": str(tmp_path), "SPEECHTOTEXT_CLI": str(cli), "RUNS": str(runs)}
+    monkeypatch.setattr(transcribe_live, "LiveEffects", FlakyExtract)
+
+    # When: two ticks
+    for _ in range(2):
+        _ = transcribe_live.run_transcribe_step(
+            state_dir=tmp_path, lock_path=tmp_path / "watch.lock", env=env, now=lambda: NOW,
+        )
+
+    # Then: the CLI ran once and the second tick promoted the kept transcript
+    assert runs.read_text(encoding="utf-8") == "x"
+    assert load_state(tmp_path / "state.json").records[_RECORD.recording_id].status == "planned"

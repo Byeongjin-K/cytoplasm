@@ -312,6 +312,31 @@ def test_transcribe_effect_when_the_job_has_no_time_left_then_waits_without_coun
     assert not log.exists()
 
 
+def test_transcribe_effect_reuses_a_finished_transcript_until_the_record_leaves_transcribing(
+    tmp_path: Path,
+) -> None:
+    # 2026-11-20: a 23-hour transcript finished, the field extraction after it timed out, and the next
+    # tick decoded the whole recording again. A finished transcript is now reused until the commit.
+    fake = tmp_path / "fake_cli.py"
+    fake.write_text(_FAKE_CLI, encoding="utf-8")
+    log = tmp_path / "cli.json"
+    state_dir = _state_dir(tmp_path, _RECORD)
+    effects = _effects(tmp_path, SPEECHTOTEXT_CLI=str(fake), FAKE_CLI_LOG=str(log))
+    label = "2026-09-01-standup--08008c284627"
+    audio = tmp_path / "rec-001.mp3"
+
+    first = effects.transcribe(audio, label)
+    log.unlink()
+    again = effects.transcribe(audio, label)
+
+    assert again == first and not log.exists(), "a finished transcript must not run the CLI again"
+    assert effects.commit(_RECORD, replace(_RECORD, status="planned"), None)
+    assert (state_dir / "transcripts" / ".work").is_dir() and first.transcript_path is not None
+    assert first.transcript_path.is_file(), "releasing the pointer never removes the transcript"
+    _ = effects.transcribe(audio, label)
+    assert log.exists(), "after the record left transcribing a new attempt transcribes afresh"
+
+
 def test_cli_path_prefers_the_override_then_the_governed_live_mount(tmp_path: Path) -> None:
     assert cli_path({"SPEECHTOTEXT_CLI": "/opt/x/speechtotext_cli.py"}) == Path("/opt/x/speechtotext_cli.py")
     assert cli_path({"AUTOPHAGY_SKILL_LIVE_ROOT": str(tmp_path)}) == (

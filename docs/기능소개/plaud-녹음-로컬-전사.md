@@ -60,6 +60,12 @@ whisper.cpp + sherpa-onnx 화자 분리를 그대로 써서, 결과 전사본(.m
 시작하지 않고 세지 않은 채 다음 틱으로 넘긴다. 마감이 없는 실행(손으로 돌린 `run_transcribe_step`)은 예전처럼
 `PLAUD_SYNC_TRANSCRIBE_TIMEOUT` 만 따른다.
 
+**끝난 전사본은 다시 만들지 않는다(2026-11-20)**: 같은 날 23시간 녹음은 전사를 끝낸 뒤 필드 추출이 모델 시간 초과로
+막혔고, 추출 실패는 세지 않고 다음 틱에 다시 하는 환경 실패라 다음 틱이 녹음 전체를 처음부터 다시 전사했다(창 캐시는
+성공한 전사 뒤에 비워진다). 이제 CLI 가 끝낸 전사본은 `transcripts/.kept/<노트 이름>.json` 이 가리키고, 레코드가
+`transcribing` 을 떠날 때(`planned`·폴백·폐기 commit)까지 다음 시도가 CLI 없이 그 전사본을 쓴다
+(stderr `PLAUD-TRANSCRIPT-REUSED`). 가리키는 파일만 지우고 전사본 파일은 지우지 않는다.
+
 **2026-09-16 · `.ogg` 사고**: Plaud `get_file` 이 전날 15:31 UTC 부터 presigned URL 을 `.ogg` 로 주기 시작했고
 (그 전 녹음은 전부 `.mp3`), speechtotext 의 형식 게이트 `stt_audio.SUPPORTED_SUFFIXES` 에 `.ogg` 가 없어
 **ffmpeg 가 돌기도 전에** rc=5「지원하지 않는 형식입니다」로 거부됐다 — 녹음 실패로 세어져 3건이 `transcribing`
