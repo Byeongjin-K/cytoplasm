@@ -5,6 +5,7 @@ import fcntl
 import io
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -161,3 +162,21 @@ def test_relay_logs_only_metadata_and_uses_empty_private_cwd(tmp_path, monkeypat
     assert "private prompt" not in raw and "private answer" not in raw
     assert set(json.loads(raw)) == {"at", "caller", "rc", "seconds", "model", "in_bytes", "out_bytes"}
     assert log.stat().st_mode & 0o777 == 0o600
+
+
+def test_runner_delivers_a_prompt_larger_than_the_pipe_buffer_after_the_first_poll(tmp_path):
+    # 2026-11-20: a 120 KB Plaud extraction prompt never got an answer (rc 130 after 120 s and 280 s)
+    # while 60 KB answered in 6 s. After the first 0.5 s poll timed out, complete() retried with
+    # input=None, and CPython only keeps writing stdin when input is passed again, so omo got the
+    # first 64 KB, never saw EOF and waited until the deadline.
+    from automation.omo_relay import runner
+
+    reader = ("import sys, time; time.sleep(1); data = sys.stdin.read(); print(len(data))",)
+    text = "가" * 100_000
+
+    result = runner.complete(
+        (sys.executable, "-c", *reader), text=text, cwd=str(tmp_path), timeout=15, output=io.StringIO(),
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(len(text))

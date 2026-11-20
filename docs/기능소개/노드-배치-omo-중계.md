@@ -55,6 +55,7 @@ command="env PATH=<omo-bin-dir>:/usr/bin:/bin <relay-script-absolute-path>",rest
   `agent_end.messages` 또는 `message_end.message`의 마지막 assistant에서 텍스트와
   실제 provider/model을 읽어 `{text, provider, model}` JSON 하나만 돌려준다.
 - 256 KiB 초과는 rc 2, 동시 두 슬롯이 차면 rc 75, 실행 300초 초과는 rc 124다.
+- 프롬프트는 omo 에 따로 연 파이프와 쓰기 스레드로 넘긴다(디스크에 안 남음). 예전에는 0.5초 폴이 한 번 지나면 `communicate()` 재호출이 표준입력 쓰기를 멈춰, 파이프 버퍼 64 KiB 를 넘는 프롬프트는 반만 가고 끝(EOF)이 안 와서 omo 가 300초를 다 기다렸다(2026-11-20, 120 KB Plaud 필드 추출: 60 KB 는 6초, 70 KB 넘으면 매번 rc 130).
   노드 쪽 호출자가 끊거나 죽으면(예: 유돌이 recall 을 포기) 노드 ssh 가 함께 죽고, 이 PC 러너는 그 연결이
   끊긴 것을 보고 omo 와 그 자식까지 멈춘 뒤 rc 130 을 남긴다. 시간 초과도 자식까지 함께 멈춘다(2026-11-01 Q433).
   접속 실패·시간 초과·busy·429는 30초 뒤 한 번만 재시도한 뒤

@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -87,6 +88,15 @@ def _stop(process: subprocess.Popen[str]) -> None:
             continue
 
 
+def _feed(fd: int, data: bytes) -> None:
+    """Write the whole prompt and close, so omo sees EOF; a stopped omo just ends the write."""
+    with os.fdopen(fd, "wb") as pipe:
+        try:
+            _ = pipe.write(data)
+        except BrokenPipeError:
+            return
+
+
 def complete(argv: tuple[str, ...], *, text: str, cwd: str, timeout: float,
              output: TextIO) -> subprocess.CompletedProcess[str]:
     """Run omo in its own process group; stop the whole group on timeout or caller hang-up.
@@ -97,16 +107,28 @@ def complete(argv: tuple[str, ...], *, text: str, cwd: str, timeout: float,
     """
     hung_up = _hangup_probe(output)
     deadline = time.monotonic() + timeout
-    pending: str | None = text
-    with subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          text=True, cwd=cwd, start_new_session=True) as process:
+    # The prompt goes through its own pipe and writer thread, not communicate(input): a retried
+    # communicate() stops writing stdin unless input is passed again, and passing it again is
+    # refused, so a prompt over the 64 KB pipe buffer stayed half-sent with no EOF and omo waited
+    # out the deadline (a 120 KB Plaud extraction prompt, 2026-11-20). Nothing touches the disk.
+    read_end, write_end = os.pipe()
+    writer = threading.Thread(target=_feed, args=(write_end, text.encode("utf-8")), daemon=True)
+    try:
+        process = subprocess.Popen(argv, stdin=read_end, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, cwd=cwd, start_new_session=True)
+    except BaseException:
+        os.close(write_end)
+        raise
+    finally:
+        os.close(read_end)
+    writer.start()
+    with process:
         try:
             while True:
                 try:
-                    stdout, stderr = process.communicate(pending, timeout=_POLL_SECONDS)
+                    stdout, stderr = process.communicate(timeout=_POLL_SECONDS)
                     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
                 except subprocess.TimeoutExpired:
-                    pending = None
                     if hung_up():
                         raise Cancelled from None
                     if time.monotonic() >= deadline:
