@@ -50,6 +50,22 @@ whisper.cpp + sherpa-onnx 화자 분리를 그대로 써서, 결과 전사본(.m
 | 녹음 | rc≠0(빈 전사·잘림·미지원 형식), 시간 초과, 오디오 상한 초과 | `transcribe_attempts`+1; 상한(기본 2) 도달 시 **클라우드 전사로 폴백**해 `planned`, 노트 출처 줄에 `PLAUD 클라우드 전사(로컬 전사 N회 실패: …)`; 클라우드도 요약·전사가 없으면 `planned` 로 올리지 않고 `transcribing` 에 보류한 뒤 1·2·4·8·16·24시간 상한 백오프로 로컬 재시도한다. 클라우드는 매 틱 확인하고, 총 실패 상한(기본 5)에도 비어 있으면 `abandoned`로 닫는다. 대기 건은 전사 슬롯을 쓰지 않는다 |
 | stale | commit 시점에 레코드가 바뀌어 있음 | 아무것도 덮어쓰지 않는다 |
 
+**잡 상한 안에서 끝내기(2026-11-20)**: 워처는 정기 작업 상한(3600초) 안에서 돈다. 전사 CLI 상한은 그보다 길어서(기본
+21600초) 23시간짜리 녹음이 상한에 걸리면 CLI 가 아니라 작업 전체가 끊겼다 — 시간 초과가 시도로 세어지지 않아 그 녹음이
+매 틱 대기열 맨 앞(시도 0·가장 오래됨)에 남고, 그 뒤 녹음은 전사를 시작하지 못했다. 이제 워처가 작업 시작 시각+상한을
+전사 단계에 마감으로 넘기고, CLI 는 그 마감에서 뒤처리 몫(600초: 요약·필드 추출·교정·commit)을 뺀 시간 안에 끝난다.
+넘기면 CLI 와 그 아래 whisper·화자 분리 프로세스를 프로세스 묶음째 멈추고 **녹음 실패로 센다**(위 표의 시간 초과).
+세어진 녹음은 대기열에서 시도 0 녹음 뒤로 가므로 다음 틱은 뒤 녹음부터 전사한다. whisper 창은 speechtotext 창 캐시에
+남아 다음 시도가 이어서 하고, 상한(기본 2회)에 닿으면 클라우드 전사로 폴백한다. 남은 시간이 60초도 안 되면 CLI 를
+시작하지 않고 세지 않은 채 다음 틱으로 넘긴다. 마감이 없는 실행(손으로 돌린 `run_transcribe_step`)은 예전처럼
+`PLAUD_SYNC_TRANSCRIBE_TIMEOUT` 만 따른다.
+
+**끝난 전사본은 다시 만들지 않는다(2026-11-20)**: 같은 날 23시간 녹음은 전사를 끝낸 뒤 필드 추출이 모델 시간 초과로
+막혔고, 추출 실패는 세지 않고 다음 틱에 다시 하는 환경 실패라 다음 틱이 녹음 전체를 처음부터 다시 전사했다(창 캐시는
+성공한 전사 뒤에 비워진다). 이제 CLI 가 끝낸 전사본은 `transcripts/.kept/<노트 이름>.json` 이 가리키고, 레코드가
+`transcribing` 을 떠날 때(`planned`·폴백·폐기 commit)까지 다음 시도가 CLI 없이 그 전사본을 쓴다
+(stderr `PLAUD-TRANSCRIPT-REUSED`). 가리키는 파일만 지우고 전사본 파일은 지우지 않는다.
+
 **2026-09-16 · `.ogg` 사고**: Plaud `get_file` 이 전날 15:31 UTC 부터 presigned URL 을 `.ogg` 로 주기 시작했고
 (그 전 녹음은 전부 `.mp3`), speechtotext 의 형식 게이트 `stt_audio.SUPPORTED_SUFFIXES` 에 `.ogg` 가 없어
 **ffmpeg 가 돌기도 전에** rc=5「지원하지 않는 형식입니다」로 거부됐다 — 녹음 실패로 세어져 3건이 `transcribing`
@@ -99,10 +115,10 @@ whisper.cpp + sherpa-onnx 화자 분리를 그대로 써서, 결과 전사본(.m
 - 코드: `automation/plaud_sync/audio.py`(URL·다운로드) · `transcribe.py`(순수 스텝·실패 분류·폴백) ·
   `transcribe_live.py`(MCP·S3·subprocess·잠금·commit) · `cron/plaud_sync_watch.py`(lock 해제 순서) ·
   `model.py`(`transcribing`, `transcribe_attempts`, `next_transcribe_at`) · `skills/plaud`(status 1.1.1)
-- 테스트: `tests/unit/test_plaud_sync_{audio,transcribe,transcribe_live,transcribing_status}.py`
+- 테스트: `tests/unit/test_plaud_sync_{audio,transcribe,transcribe_live,transcribing_status,policy_live,watch_transcribe}.py`
 - env(노드의 기존 환경 설정 경로): `PLAUD_SYNC_TRANSCRIBE`(1) · `PLAUD_SYNC_TRANSCRIBE_PER_TICK`(1) ·
   `PLAUD_SYNC_TRANSCRIBE_ATTEMPTS`(2) · `PLAUD_SYNC_TRANSCRIBE_GIVE_UP`(5) · `PLAUD_SYNC_MIN_DURATION_MS`(5000) ·
-  `PLAUD_SYNC_TRANSCRIBE_TIMEOUT`(21600) · `PLAUD_SYNC_MAX_AUDIO_BYTES`(1 GiB);
+  `PLAUD_SYNC_TRANSCRIBE_TIMEOUT`(21600, 워처에서는 잡 상한−600초로 깎임) · `PLAUD_SYNC_MAX_AUDIO_BYTES`(1 GiB);
   CLI 경로 주입은 `SPEECHTOTEXT_CLI` / `SPEECHTOTEXT_SCRIPTS`
 - 규약: `automation/pipeline_lock.py`(규약 (n) — plaud 도 같은 lock), [plaud lifelog 동기화](plaud-lifelog-동기화.md),
   [음성 녹취 → 전사본 → 회의록](음성-녹취-회의록-자동화.md)

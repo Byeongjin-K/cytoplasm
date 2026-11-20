@@ -6,10 +6,14 @@ filesystem, subprocess, and locking implementation of ``LiveEffects``.
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import json
+import os
+import signal
 import subprocess
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import tzinfo
@@ -39,15 +43,23 @@ from .lifelog_model import ExtractionOutcome, LifelogRecording
 from .mcp_client import PlaudMcpClient, PlaudMcpError, text_content
 from .mcp_transport import JsonValue
 from .model import PlaudSyncRecord, PlaudSyncState
-from .store import load_note_body, load_state, save_note_body, save_state, save_transcript
+from .store import (keep_transcript, kept_transcript, load_note_body, load_state,
+                    release_kept_transcript, save_note_body, save_state, save_transcript)
 from .terms import glossary as lifelog_glossary
 from .terms import record as record_note_corrections
 from .transcribe import CliResult, TranscribeError
+from .transcribe_text import transcript_stem
 from .transcript_corrector import CommandCorrector, Corrector
 
 CLI_ENV: Final = "SPEECHTOTEXT_CLI"
 SCRIPTS_ENV: Final = "SPEECHTOTEXT_SCRIPTS"
 DEFAULT_CLI_TIMEOUT: Final = 21600.0
+#: What a tick still needs after the CLI returns: cloud summary, field extraction (120 s), the
+#: opt-in transcript corrector (300 s) and the commit. The CLI stops this long before the job's own
+#: deadline, so the timeout is recorded as a counted attempt instead of the job being killed mid-run.
+JOB_RESERVE_SECONDS: Final = 600.0
+#: Below this the CLI is not started at all: too little time to finish a window is not an attempt.
+MIN_CLI_SECONDS: Final = 60.0
 _CHILD_OVERRIDES: Final = {
     "SPEECHTOTEXT_BACKEND": "local",
     "SPEECHTOTEXT_ALLOW_INCOMPLETE": "1",
@@ -125,6 +137,22 @@ def _cli_result(completed: subprocess.CompletedProcess[str]) -> CliResult:
     return CliResult(0, Path(cast(str, summary["transcript_path"])), model if isinstance(model, str) else "", "")
 
 
+def _run_group(argv: Sequence[str], env: Mapping[str, str], timeout: float) -> subprocess.CompletedProcess[str]:
+    # Own process group: subprocess.run(timeout=) kills only the CLI, and its whisper.cpp child would
+    # keep the GPU after the attempt was given up. Windows already saved stay in the CLI's cache.
+    with subprocess.Popen(  # noqa: S603 - resolved interpreter and governed CLI
+        argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            _ = process.communicate()
+            raise
+        return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+
+
 @dataclass(frozen=True, slots=True)
 class LiveEffects:
     """Concrete side effects for the pure local-transcription step."""
@@ -133,6 +161,8 @@ class LiveEffects:
     lock_path: Path
     env: Mapping[str, str]
     opener: Opener = open_url
+    # time.monotonic() by which the cron job running this tick is killed; None = no job ceiling.
+    deadline: float | None = None
 
     @property
     def state_path(self) -> Path:
@@ -205,16 +235,20 @@ class LiveEffects:
         cli = cli_path(self.env)
         if not cli.is_file():
             raise TranscribeError(f"speechtotext CLI 미마운트: {cli}", counted=False)
+        kept = kept_transcript(self.state_dir, label)
+        if kept is not None:
+            # The CLI already finished this recording and only the promotion after it failed
+            # (2026-11-20: a 23-hour transcript, then extraction timed out): never decode it again.
+            print("PLAUD-TRANSCRIPT-REUSED", file=sys.stderr)
+            return CliResult(0, kept[0], kept[1], "")
         work = self.state_dir / "transcripts" / ".work"
         child = {**self.env, **_CHILD_OVERRIDES, "SPEECHTOTEXT_TRANSCRIPT_DIR": str(work)}
         argv = [sys.executable, str(cli), "transcribe", "--file", str(audio), "--label", label]
+        timeout = self._cli_timeout()
         try:
-            completed = subprocess.run(  # noqa: S603 - resolved interpreter and governed CLI
-                argv, env=child, capture_output=True, text=True, check=False,
-                timeout=_env_float(self.env, "PLAUD_SYNC_TRANSCRIBE_TIMEOUT", DEFAULT_CLI_TIMEOUT),
-            )
+            completed = _run_group(argv, child, timeout)
         except subprocess.TimeoutExpired as error:
-            raise TranscribeError("로컬 전사가 시간 제한을 넘겼다", counted=True) from error
+            raise TranscribeError(f"로컬 전사가 시간 제한({timeout:.0f}초)을 넘겼다", counted=True) from error
         except OSError as error:
             raise TranscribeError(f"CLI 실행 실패: {type(error).__name__}", counted=False) from error
         for line in completed.stderr.splitlines():
@@ -223,7 +257,18 @@ class LiveEffects:
         result = _cli_result(completed)
         if result.transcript_path is not None:
             _ = move_snapshot(result.transcript_path, self.env)
+            keep_transcript(self.state_dir, label, result.transcript_path, result.model)
         return result
+
+    def _cli_timeout(self) -> float:
+        # The configured CLI limit, cut to what the job has left after the post-CLI reserve.
+        configured = _env_float(self.env, "PLAUD_SYNC_TRANSCRIBE_TIMEOUT", DEFAULT_CLI_TIMEOUT)
+        if self.deadline is None:
+            return configured
+        left = self.deadline - time.monotonic() - JOB_RESERVE_SECONDS
+        if left < MIN_CLI_SECONDS:
+            raise TranscribeError("이번 실행에 남은 시간이 모자라 다음 실행에서 전사한다", counted=False)
+        return min(configured, left)
 
     def read_transcript(self, path: Path) -> str:
         try:
@@ -245,6 +290,8 @@ class LiveEffects:
             records = dict(state.records)
             records[after.recording_id] = after
             self._save_state(PlaudSyncState(state.version, state.last_poll_at, records))
+        if after.status != "transcribing":
+            release_kept_transcript(self.state_dir, transcript_stem(before))
         return True
 
     def archive_audio(self, path: Path, source: AudioSource, stem: str) -> None:

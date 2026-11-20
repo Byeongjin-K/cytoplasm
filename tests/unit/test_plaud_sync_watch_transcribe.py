@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import importlib.util
 import sys
+import time
 from types import ModuleType
 from pathlib import Path
 import pytest
+from automation.cron_timer import SCRIPT_TIMEOUT
 from automation.plaud_sync import transcribe_live
 from automation.plaud_sync.model import PlaudSyncState
 from automation.plaud_sync.note import LifelogRecording, split_lifelog_body
@@ -40,9 +42,11 @@ def test_cron_main_releases_the_watch_lock_before_transcribing_and_posts_right_a
     watch = _load_watch(monkeypatch, tmp_path)
     _state_dir(tmp_path, _RECORD)
     observed: list[bool] = []
+    deadlines: list[float | None] = []
 
-    def fake_step(*, state_dir: Path, lock_path: Path, env: object) -> StepSummary:
+    def fake_step(*, state_dir: Path, lock_path: Path, env: object, deadline: float | None) -> StepSummary:
         observed.append(_flock_is_free(lock_path))
+        deadlines.append(deadline)
         return StepSummary(line="plaud-sync: transcribed=1 fallback=0 retry=0 stale=0", promoted=1)
 
     monkeypatch.setattr(transcribe_live, "run_transcribe_step", fake_step)
@@ -56,6 +60,8 @@ def test_cron_main_releases_the_watch_lock_before_transcribing_and_posts_right_a
     assert watch.main([]) == 0
 
     assert observed == [True], "the transcribe step must run with watch.lock released"
+    # The step gets the cron ceiling as a deadline, so its CLI ends before the job is killed.
+    assert deadlines[0] is not None and 0 < deadlines[0] - time.monotonic() <= SCRIPT_TIMEOUT
     out = capsys.readouterr().out.splitlines()
     assert out == [
         "plaud-sync: posted=0 written=0 abandoned=0",

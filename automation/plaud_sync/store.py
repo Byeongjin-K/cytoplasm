@@ -118,6 +118,32 @@ def save_transcript(state_dir: Path, stem: str, markdown: str) -> Path:
     return path
 
 
+def _kept_path(state_dir: Path, stem: str) -> Path:
+    return state_dir / _TRANSCRIPTS_DIRNAME / ".kept" / f"{stem}.json"
+
+
+def keep_transcript(state_dir: Path, stem: str, path: Path, model: str) -> None:
+    """Point the next attempt at a transcript the CLI already finished (the transcript stays put)."""
+    _atomic_write(_kept_path(state_dir, stem), json.dumps({"transcript_path": str(path), "model": model}))
+
+
+def kept_transcript(state_dir: Path, stem: str) -> tuple[Path, str] | None:
+    try:
+        raw: JsonValue = json.loads(_kept_path(state_dir, stem).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    path = raw.get("transcript_path") if isinstance(raw, dict) else None
+    if not isinstance(path, str) or not Path(path).is_file():
+        return None
+    model = raw.get("model") if isinstance(raw, dict) else None
+    return Path(path), model if isinstance(model, str) else ""
+
+
+def release_kept_transcript(state_dir: Path, stem: str) -> None:
+    """Drop only the pointer once the record left transcribing; the transcript file is never removed."""
+    _kept_path(state_dir, stem).unlink(missing_ok=True)
+
+
 def load_note_body(state_dir: Path, recording_id: str) -> str | None:
     try:
         return _note_path(state_dir, recording_id).read_text(encoding="utf-8")
