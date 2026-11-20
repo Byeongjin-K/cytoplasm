@@ -12,8 +12,11 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import os
+import select
 import stat
 import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +25,7 @@ from typing import Final
 import pytest
 
 from automation import pipeline_lock
-from automation.plaud_sync import transcribe_live
+from automation.plaud_sync import transcribe_live, transcribe_live_effects
 from automation.plaud_sync.audio import AudioSource
 from automation.plaud_sync.model import PlaudSyncRecord, PlaudSyncState
 from automation.plaud_sync.store import load_note_body, load_state, save_note_body, save_state
@@ -245,6 +248,68 @@ def test_transcribe_effect_when_cli_is_not_mounted_then_environment_failure(tmp_
         effects.transcribe(tmp_path / "rec-001.mp3", "x")
     assert caught.value.counted is False
     assert "미마운트" in caught.value.reason
+
+
+
+_SLOW_CLI: Final = """#!/usr/bin/env python3
+import os, subprocess, sys, time
+from pathlib import Path
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+Path(os.environ["FAKE_CLI_CHILD"]).write_text(str(child.pid), encoding="utf-8")
+time.sleep(60)
+"""
+
+
+def _exits_within(pid: int, seconds: float) -> bool:
+    """True once the process has terminated: a pidfd turns readable on exit (no polling)."""
+    try:
+        handle = os.pidfd_open(pid)
+    except ProcessLookupError:
+        return True
+    try:
+        readable, _, _ = select.select([handle], [], [], seconds)
+        return bool(readable)
+    finally:
+        os.close(handle)
+
+
+def test_transcribe_effect_stops_inside_the_jobs_own_deadline_and_counts_the_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 2026-11-20: a 23-hour recording ran under the cron job's 3600 s ceiling while the CLI limit was
+    # 21600 s, so the job was killed first, the attempt was never counted and the record kept the
+    # head of the queue. The CLI must now end before the job does, and its whole process group with it.
+    fake = tmp_path / "slow_cli.py"
+    fake.write_text(_SLOW_CLI, encoding="utf-8")
+    child = tmp_path / "child.pid"
+    monkeypatch.setattr(transcribe_live_effects, "MIN_CLI_SECONDS", 1.0)
+    deadline = time.monotonic() + transcribe_live_effects.JOB_RESERVE_SECONDS + 2
+    effects = replace(
+        _effects(tmp_path, SPEECHTOTEXT_CLI=str(fake), FAKE_CLI_CHILD=str(child)), deadline=deadline
+    )
+
+    with pytest.raises(TranscribeError) as caught:
+        effects.transcribe(tmp_path / "rec-001.mp3", "x")
+
+    assert caught.value.counted is True
+    assert time.monotonic() < deadline - transcribe_live_effects.JOB_RESERVE_SECONDS + 10
+    assert _exits_within(int(child.read_text(encoding="utf-8")), 5.0)
+
+
+def test_transcribe_effect_when_the_job_has_no_time_left_then_waits_without_counting(tmp_path: Path) -> None:
+    fake = tmp_path / "fake_cli.py"
+    fake.write_text(_FAKE_CLI, encoding="utf-8")
+    log = tmp_path / "cli.json"
+    effects = replace(
+        _effects(tmp_path, SPEECHTOTEXT_CLI=str(fake), FAKE_CLI_LOG=str(log)),
+        deadline=time.monotonic() + transcribe_live_effects.JOB_RESERVE_SECONDS,
+    )
+
+    with pytest.raises(TranscribeError) as caught:
+        effects.transcribe(tmp_path / "rec-001.mp3", "x")
+
+    assert caught.value.counted is False
+    assert not log.exists()
 
 
 def test_cli_path_prefers_the_override_then_the_governed_live_mount(tmp_path: Path) -> None:

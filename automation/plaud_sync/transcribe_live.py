@@ -59,8 +59,9 @@ def _env_int(env: Mapping[str, str], name: str, default: int) -> int:
 
 def run_transcribe_step(
     *, state_dir: Path, lock_path: Path, env: Mapping[str, str],
-    now: Callable[[], datetime] = utc_now,
+    now: Callable[[], datetime] = utc_now, deadline: float | None = None,
 ) -> StepSummary | None:
+    """One transcription slot; deadline is the monotonic instant the job running it is killed."""
     if not enabled(env):
         return None
     state_path = state_dir / "state.json"
@@ -72,7 +73,7 @@ def run_transcribe_step(
             return None
         outcomes = run_step(
             state,
-            effects=LiveEffects(state_dir=state_dir, lock_path=lock_path, env=env),
+            effects=LiveEffects(state_dir=state_dir, lock_path=lock_path, env=env, deadline=deadline),
             limit=limit if acquired else 0,
             max_attempts=_env_int(env, "PLAUD_SYNC_TRANSCRIBE_ATTEMPTS", DEFAULT_MAX_ATTEMPTS),
             give_up=_env_int(env, "PLAUD_SYNC_TRANSCRIBE_GIVE_UP", DEFAULT_GIVE_UP),

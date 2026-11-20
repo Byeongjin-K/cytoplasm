@@ -13,10 +13,14 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+#: Taken before anything else runs: the cron wrapper's ceiling counts from this process's start.
+_STARTED = time.monotonic()
 
 
 def _runtime_root() -> Path:
@@ -31,6 +35,7 @@ _REPO_ROOT = _runtime_root()
 if (_REPO_ROOT / "automation").is_dir() and str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from automation.cron_timer import SCRIPT_TIMEOUT  # noqa: E402
 from automation.interop.approval_surface import POLICY_VERSION  # noqa: E402
 from automation.plaud_sync.duration import DEFAULT_MIN_DURATION_MS  # noqa: E402
 from automation.plaud_sync.lifelog_extract_live import build_extractor  # noqa: E402
@@ -171,8 +176,11 @@ def run_once(now: datetime) -> ResolveResult:
 
 def _transcribe() -> transcribe_live.StepSummary | None:
     try:
+        # The CLI must stop inside the job's own ceiling: a job killed mid-CLI leaves the attempt
+        # uncounted, so one recording longer than the ceiling held the queue head every tick (2026-11-20).
         return transcribe_live.run_transcribe_step(
-            state_dir=STATE_DIR, lock_path=LOCK_PATH, env=os.environ
+            state_dir=STATE_DIR, lock_path=LOCK_PATH, env=os.environ,
+            deadline=_STARTED + SCRIPT_TIMEOUT,
         )
     except Exception as error:  # noqa: BLE001 - best-effort like discovery; this tick's approvals already ran
         print(f"plaud-sync transcribe error: {_masked_error(error)}", file=sys.stderr)

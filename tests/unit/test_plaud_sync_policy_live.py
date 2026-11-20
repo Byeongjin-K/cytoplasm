@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import time
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
 from automation import pipeline_lock
-from automation.plaud_sync import transcribe_live
+from automation.plaud_sync import transcribe_live, transcribe_live_effects
 from automation.plaud_sync.audio import AudioSource
 from automation.plaud_sync.fetch import CloudTranscript
 from automation.plaud_sync.lifelog_model import ExtractionOutcome, ExtractionSkipped, LifelogRecording
@@ -130,3 +131,60 @@ def test_cloud_is_rechecked_when_pipeline_is_busy(tmp_path: Path, monkeypatch: p
         transcribe_live.run_transcribe_step(state_dir=tmp_path, lock_path=tmp_path / "watch.lock", env=env, now=lambda: NOW)
     # Then
     assert calls == [record.recording_id]
+
+
+_PER_FILE_CLI = """#!/usr/bin/env python3
+import json, os, sys, time
+from pathlib import Path
+audio = sys.argv[sys.argv.index("--file") + 1]
+if "long" in Path(audio).name:
+    time.sleep(60)
+out = Path(os.environ["SPEECHTOTEXT_TRANSCRIPT_DIR"])
+out.mkdir(parents=True, exist_ok=True)
+target = out / (Path(audio).stem + ".md")
+target.write_text("# x 전사본\\n\\n---\\n\\n[00:00:01] 화자1\\n안녕하세요.\\n", encoding="utf-8")
+print(json.dumps({"transcript_path": str(target), "model": "local:test-model"}))
+"""
+
+
+def test_a_recording_longer_than_the_job_times_out_counted_and_the_next_one_goes_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: 2026-11-20, a 23-hour recording sat at the head of the queue (oldest, never counted)
+    # while the job ceiling killed every tick, so the recording made after it never started.
+    class RealCli(OfflineEffects):
+        transcribe = transcribe_live.LiveEffects.transcribe
+
+        def download(self, source: AudioSource) -> Path:
+            return self.state_dir / f"{source.recording_id}.mp3"
+
+    long, new = (
+        replace(_RECORD, recording_id="rec-long", recorded_at="2026-09-01T07:00:00"),
+        replace(_RECORD, recording_id="rec-new", recorded_at="2026-09-02T07:00:00"),
+    )
+    save_state(tmp_path / "state.json", PlaudSyncState(1, None, {long.recording_id: long, new.recording_id: new}))
+    for record in (long, new):
+        save_note_body(tmp_path, record.recording_id, EMPTY_DRAFT)
+    cli = tmp_path / "cli.py"
+    cli.write_text(_PER_FILE_CLI, encoding="utf-8")
+    env = {"HOME": str(tmp_path), "SPEECHTOTEXT_CLI": str(cli)}
+    monkeypatch.setattr(transcribe_live, "LiveEffects", RealCli)
+    monkeypatch.setattr(transcribe_live_effects, "MIN_CLI_SECONDS", 1.0)
+
+    # When: one tick with two seconds of CLI time left, then a fresh tick
+    first = transcribe_live.run_transcribe_step(
+        state_dir=tmp_path, lock_path=tmp_path / "watch.lock", env=env, now=lambda: NOW,
+        deadline=time.monotonic() + transcribe_live_effects.JOB_RESERVE_SECONDS + 2,
+    )
+    second = transcribe_live.run_transcribe_step(
+        state_dir=tmp_path, lock_path=tmp_path / "watch.lock", env=env, now=lambda: NOW,
+        deadline=time.monotonic() + 3600,
+    )
+
+    # Then
+    records = load_state(tmp_path / "state.json").records
+    assert first is not None and "transcribed=0 fallback=0 retry=1" in (first.line or "")
+    assert records["rec-long"].transcribe_attempts == 1
+    assert "시간 제한" in (records["rec-long"].last_block_reason or "")
+    assert second is not None and "transcribed=1 fallback=0 retry=0" in (second.line or "")
+    assert records["rec-new"].status == "planned"
