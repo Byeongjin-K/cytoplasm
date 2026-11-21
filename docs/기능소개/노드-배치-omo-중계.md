@@ -37,6 +37,8 @@ command="env PATH=<omo-bin-dir>:/usr/bin:/bin <relay-script-absolute-path>",rest
 
 강제명령은 로그인 셸 없이 최소 PATH(`/usr/bin:/bin`)로 돌기 때문에, `omo`가 설치된 디렉터리(예: bun 전역 bin)를 위처럼 `env PATH=…`로 앞에 둔다. 빠지면 노드의 모든 호출이 `omo` 를 찾지 못해 실패한다(2026-10-18 실측).
 
+릴리스 호스트 계정이 아닌 이 PC의 다른 계정 omo 로그인으로 답하게 하려면(예: 노드 정기 작업을 그 일을 맡은 계정 몫으로 돌리고 싶을 때, 또는 한 계정의 사용량이 다 찼을 때) 노드 설정은 그대로 두고 같은 줄의 강제명령만 `sudo -n -u <계정> -H env PATH=<그 계정 omo-bin-dir>:/usr/bin:/bin … SSH_CONNECTION=\"$SSH_CONNECTION\" <relay-script-absolute-path>`로 바꾼다. 그 계정이 바깥에 프록시로만 나가면 프록시 변수(`HTTPS_PROXY`·`NO_PROXY` 등, Node 는 `NODE_USE_ENV_PROXY=1`)도 `env` 에 함께 둔다. sudo 는 환경을 비우므로 `SSH_CONNECTION` 을 넘기지 않으면 기록의 접속 출발지가 `local` 로 남는다. 러너는 그 계정 홈에서 돌므로 슬롯 잠금과 `calls.jsonl` 도 그 계정 `~/.dori/omo-relay/` 에 생긴다. 릴리스 호스트 계정이 그 계정으로 암호 없이 sudo 할 수 있어야 하고, 스크립트 경로는 그 계정이 읽을 수 있어야 한다. 되돌리기는 강제명령을 위의 `env PATH=…` 형태로 되돌리는 것뿐이다.
+
 노드는 처음 접속에서도 호스트 키를 추측하지 않는다. 릴리스 호스트가 곧 중계 대상이므로
 배포기가 릴리스 호스트의 `/etc/ssh/ssh_host_ed25519_key.pub`를 대상 호스트 이름과 함께
 한 줄로 만들어 승인 지문에 묶고, 노드에는 전용 `~/.config/autophagy/omo-relay/known_hosts`(0600)로만 깐다.
