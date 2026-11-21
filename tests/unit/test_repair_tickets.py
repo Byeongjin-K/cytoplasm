@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import errno
+import io
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -10,7 +13,7 @@ import pytest
 
 from automation.repair import repair_cli
 from automation.repair.repair_cli import HermesKanban
-from automation.repair.repair_core import RepairEvent, RepairRegistry, RepairService
+from automation.repair.repair_core import RepairEvent, RepairRegistry, RepairService, RepairStateError
 
 
 _CARD_JSON: Final = '{"task":{"id":"t_repair01"}}'
@@ -301,3 +304,83 @@ def test_the_same_manual_request_still_thickens_one_card(
 
     assert kanban.created == ["t_card1"]
     assert "Repair occurrence: 2" in kanban.comments[1][1]
+
+
+def _fill_disk_on_write(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    """Every write under `root` (or to a raw descriptor) fails like a full disk, after open already truncated."""
+    real_open = io.open
+
+    class _FullDisk:
+        def __init__(self, stream: io.IOBase) -> None:
+            self._stream = stream
+
+        def write(self, _data: object) -> int:
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def __enter__(self) -> _FullDisk:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            self._stream.close()
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._stream, name)
+
+    def full_open(file: object, mode: str = "r", *args: object, **kwargs: object) -> object:
+        stream = real_open(file, mode, *args, **kwargs)
+        target = isinstance(file, int) or Path(os.fspath(file)).is_relative_to(root)
+        return _FullDisk(stream) if target and any(flag in mode for flag in "wax+") else stream
+
+    monkeypatch.setattr(io, "open", full_open)
+
+
+def test_a_full_disk_during_save_keeps_the_previous_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-19 디스크가 꽉 찼을 때 저장이 파일을 0바이트로 남겨 다음 수리 요청이 전부 막혔다."""
+    state = tmp_path / "repair-state.json"
+    registry = RepairRegistry(state)
+    registry.claim("signature", lambda _superseded: "t_kept")
+    before = state.read_bytes()
+
+    _fill_disk_on_write(monkeypatch, tmp_path)
+    with pytest.raises(OSError):
+        registry.claim("signature", lambda _superseded: "t_never")
+    monkeypatch.undo()
+
+    assert state.read_bytes() == before
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["repair-state.json", "repair-state.lock"]
+    assert oct(state.stat().st_mode & 0o777) == "0o600"
+    assert registry.claim("signature", lambda _superseded: "t_never").occurrence == 2
+
+
+def test_an_empty_registry_stops_without_minting_a_duplicate_card(tmp_path: Path) -> None:
+    """빈 기록을 조용히 {}로 읽으면 닫힌 카드의 재발이 옛 카드로 돌아가고 횟수가 1로 돌아간다 — 막고 사람에게 넘긴다."""
+    state = tmp_path / "repair-state.json"
+    state.write_text("", encoding="utf-8")
+    minted: list[str | None] = []
+
+    with pytest.raises(RepairStateError):
+        RepairRegistry(state).claim("signature", lambda superseded: minted.append(superseded) or "t_duplicate")
+
+    assert minted == []
+    assert state.read_bytes() == b""
+
+
+def test_cli_reports_an_unreadable_registry_as_one_masked_line(tmp_path: Path) -> None:
+    """수리 기록을 못 읽으면 CLI 는 traceback 대신 `repair error:` 한 줄을 남긴다(워처가 그 줄을 옮긴다)."""
+    state = tmp_path / "repair-tickets.json"
+    state.write_text("", encoding="utf-8")
+
+    done = subprocess.run(
+        [sys.executable, "-I", repair_cli.__file__, "manual", "!repair 메일 다이제스트 점검: 분류 실패"],
+        env={**os.environ, "REPAIR_STATE_FILE": str(state)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert done.returncode == 1
+    assert "Traceback" not in done.stderr
+    assert done.stderr.strip().splitlines()[-1].startswith("repair error: repair state is not valid JSON")

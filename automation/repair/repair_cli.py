@@ -19,7 +19,14 @@ if __package__ in {None, ""}:
 from automation.ledger.switch import command_prefix, serialized
 from automation.repair.repair_command import manual_location, parse_repair_command
 from automation.repair.repair_capability import publish
-from automation.repair.repair_core import KanbanPort, PrivateLogPort, RepairEvent, RepairRegistry, RepairService
+from automation.repair.repair_core import (
+    KanbanPort,
+    PrivateLogPort,
+    RepairEvent,
+    RepairRegistry,
+    RepairService,
+    RepairStateError,
+)
 from automation.repair.repair_redaction import redact
 
 
@@ -184,6 +191,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, RepairCliError, subprocess.SubprocessError) as error:
+    except (OSError, RepairCliError, RepairStateError, subprocess.SubprocessError) as error:
         print(f"repair error: {redact(str(error))[:300]}", file=sys.stderr)
         raise SystemExit(1)

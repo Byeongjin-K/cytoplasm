@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from automation.credential_rotation.files import atomic_write
 from automation.repair.repair_redaction import digest, excerpt
 
 
@@ -102,11 +103,15 @@ class RepairRegistry:
 
     def _load(self) -> dict[str, dict[str, str | int]]:
         try:
-            payload = json.loads(self._state_file.read_text(encoding="utf-8"))
+            raw = self._state_file.read_bytes()
         except FileNotFoundError:
             return {}
+        try:
+            payload = json.loads(raw)
         except json.JSONDecodeError as error:
-            raise RepairStateError("repair state is not valid JSON") from error
+            # Fail closed instead of starting over: a forgotten signature re-creates its card with the
+            # first dedup key, which the board answers with the old card even when it is done.
+            raise RepairStateError(f"repair state is not valid JSON ({len(raw)} bytes)") from error
         if not isinstance(payload, dict):
             raise RepairStateError("repair state is not an object")
         parsed: dict[str, dict[str, str | int]] = {}
@@ -120,8 +125,8 @@ class RepairRegistry:
         return parsed
 
     def _save(self, tickets: dict[str, dict[str, str | int]]) -> None:
-        self._state_file.write_text(json.dumps(tickets, sort_keys=True) + "\n", encoding="utf-8")
-        self._state_file.chmod(0o600)
+        # A full disk must leave the previous registry, not a truncated one (2026-11-19: 0 bytes).
+        atomic_write(self._state_file, (json.dumps(tickets, sort_keys=True) + "\n").encode("utf-8"))
 
 
 class RepairService:
