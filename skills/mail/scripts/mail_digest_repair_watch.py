@@ -14,6 +14,8 @@
 개수·메일 내용·주소는 넣지 않는다 — 같은 종류가 다시 나면 수리 쪽 서명이 같은 카드의 재발로 센다.
 자동 수리는 하지 않는다. 지난번 위치(`~/.hermes/mail-triage/repair-daily.json`)는 모든 티켓 등록이 성공한
 뒤에만 전진한다(상태 마킹은 성공 이후). 출력은 `등록 N건 / occurrence 갱신 M건` 또는 `없음` 한 줄.
+실패하면 stderr 에 `MAIL-DIGEST-REPAIR-FAIL <예외>: <이유>` 한 줄 — `repair_cli` 가 실패했으면 그 CLI 가
+가려 남긴 `repair error: …` 줄을 싣고, 그런 줄이 없으면(traceback 등) 예외 이름만 싣는다.
 """
 from __future__ import annotations
 
@@ -34,6 +36,8 @@ DIGEST_JOB: Final = "mail-daily-digest"
 TRIAGE_WATCH: Final = "mail-triage-watch"
 _MARKER: Final = re.compile(r"DIGEST-FAIL stage=([a-z_-]+) retry_safe=\w+ code=([A-Za-z0-9_.-]+)")
 _DEFAULT_CLI: Final = "/srv/autophagy-agent-current/automation/repair/repair_cli.py"
+_CLI_ERROR: Final = "repair error: "
+_EXCEPTION_NAME: Final = re.compile(r"[A-Za-z_][\w.]*")
 
 FileTicket = Callable[[str], dict[str, object]]
 
@@ -119,13 +123,24 @@ def symptom(kind: str) -> str:
     return f"!repair 메일 다이제스트 점검: {label}"
 
 
+def cli_failure_reason(stderr: str) -> str:
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if line.startswith(_CLI_ERROR):
+            return line[:400]
+    if not lines:
+        return "stderr 없음"
+    name = lines[-1].split(":", 1)[0]
+    return name[:120] if _EXCEPTION_NAME.fullmatch(name) else "알 수 없는 stderr"
+
+
 def repair_cli_ticket(message: str) -> dict[str, object]:
     cli = os.environ.get("REPAIR_CLI") or _DEFAULT_CLI
     env = {**os.environ, "PATH": f"{Path.home() / '.local' / 'bin'}:{os.environ.get('PATH', '/usr/bin:/bin')}"}
     done = subprocess.run([sys.executable, "-I", cli, "manual", message], capture_output=True,
                           text=True, env=env, timeout=300, check=False)
     if done.returncode != 0:
-        raise RuntimeError(f"repair_cli manual exit {done.returncode}")
+        raise RuntimeError(f"repair_cli manual exit {done.returncode}: {cli_failure_reason(done.stderr)}")
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
@@ -168,7 +183,7 @@ def main() -> int:
     try:
         rc, line = run(home, datetime.now(UTC), repair_cli_ticket)
     except (OSError, RuntimeError, ValueError, sqlite3.Error, subprocess.TimeoutExpired) as error:
-        print(f"MAIL-DIGEST-REPAIR-FAIL {type(error).__name__}", file=sys.stderr)
+        print(f"MAIL-DIGEST-REPAIR-FAIL {type(error).__name__}: {str(error)[:500]}", file=sys.stderr)
         return 1
     print(line)
     return rc

@@ -100,3 +100,39 @@ def test_a_failed_ticket_leaves_the_position_for_the_next_run(home: Path) -> Non
     assert not (home / ".hermes" / "mail-triage" / "repair-daily.json").exists()
     sent, file_ticket = _tickets()
     assert watch.run(home, NOW, file_ticket)[1] == "등록 1건 / occurrence 갱신 0건"
+
+
+def _failing_cli(home: Path, monkeypatch: pytest.MonkeyPatch, stderr: str) -> None:
+    cli = home / "repair_cli.py"
+    cli.write_text(f"import sys\nsys.stderr.write({stderr!r})\nraise SystemExit(1)\n", encoding="utf-8")
+    monkeypatch.setenv("REPAIR_CLI", str(cli))
+    monkeypatch.setenv("HOME", str(home))
+    (home / ".hermes/cron-timers").mkdir()
+    (home / ".hermes/cron-timers/mail-triage-watch.json").write_text(json.dumps(
+        {"failure_streak": 1, "last_status": "error", "last_run_at": datetime.now(UTC).isoformat()}))
+
+
+def test_a_failed_repair_cli_leaves_its_reason_in_the_failure_line(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """2026-11-21 실패 줄이 `RuntimeError` 뿐이라 원인(빈 수리 기록)을 노드에서 다시 찾아야 했다."""
+    _failing_cli(home, monkeypatch, "repair error: repair state is not valid JSON (0 bytes)\n")
+
+    assert watch.main() == 1
+    assert capsys.readouterr().err.strip() == (
+        "MAIL-DIGEST-REPAIR-FAIL RuntimeError: repair_cli manual exit 1: "
+        "repair error: repair state is not valid JSON (0 bytes)"
+    )
+    assert not (home / ".hermes" / "mail-triage" / "repair-daily.json").exists()
+
+
+def test_a_crashed_repair_cli_passes_on_only_the_exception_name(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """가리지 않은 traceback 글은 옮기지 않는다 — 예외 이름만."""
+    _failing_cli(home, monkeypatch, "Traceback (most recent call last):\n  File \"x\"\nValueError: 비밀 제목 그대로\n")
+
+    assert watch.main() == 1
+    err = capsys.readouterr().err.strip()
+    assert err == "MAIL-DIGEST-REPAIR-FAIL RuntimeError: repair_cli manual exit 1: ValueError"
+    assert "비밀" not in err

@@ -536,3 +536,8 @@ v1.9.2 배포 영수증이 proposal 마운트 후 스모크 실패를 덮은 것
 - **macOS 에서 `systemctl` 자체가 없으면 도리 설치가 건너뛰기 분기로 가지 못할 수 있다** — `automation/install/dori_herdr.py` 는 `systemctl --user show-environment` 의 실패 종료값을 보고 서버·웹 유닛·리드를 건너뛰는데, `default_capture` 의 `subprocess.run` 은 명령이 없을 때 `FileNotFoundError` 를 그대로 던진다(코드 읽기로만 확인, macOS 실기 미측정) → `default_capture` 가 실행 파일 없음을 non-zero 로 돌려주게 하고 macOS 에서 한 줄 설치를 한 번 끝까지 재기. 영향: macOS 처음 설치가 리드 단계에서 멈출 수 있음 · 심각도 중.
 - **README 빠른 시작은 비개발자 역할 읽기 검토로만 검증했다** — 디스코드 개발자 포털 메뉴 이름, omo `/login` 화면, 첫 답장까지를 새 디스코드 봇·새 계정으로 실제로 따라가 보지 않았다 → 새 PC 한 대와 새 봇으로 README 만 보고 첫 답장까지 재고 다른 문구를 고치기. 영향: 화면 이름이 바뀌었으면 처음 설치자가 헤맴 · 심각도 낮음.
 - **우분투 22.04 는 기본 Python 이 3.10 이라 설치기가 `CYTO-LINUX-NEEDS` 로 멈춘다** — README 는 deadsnakes 로 `python3.12` 를 깔고 다시 실행하라고 안내만 한다 → 설치기가 그 경우 깔 명령을 직접 출력하거나 지원 우분투 버전을 설치기에서 먼저 알리기. 영향: 22.04 사용자가 한 단계 더 함 · 심각도 낮음.
+
+## 수리 기록 원자적 쓰기에서 남긴 것 (2026-11-21)
+
+- 수리 쪽 다른 상태 저장(`repair_lifecycle.RepairLifecycleStore.transition`·`repair_ops_pending` 저장)과 다이제스트 수리 워처의 위치 파일은 임시 파일 뒤 `os.replace` 라 디스크가 차도 원본은 남지만, fsync 가 없고 실패하면 임시 파일이 남는다 → 같은 공유 도우미 `credential_rotation.files.atomic_write` 로 옮기기. 영향: 전원이 끊기면 빈 기록이 될 수 있고 임시 파일이 쌓임, 낮음.
+- `repair_private_log.persist` 는 회차 원문 로그를 `write_text` 로 바로 쓴다 → 디스크가 차면 그 회차 원문이 잘린 채 남는다(다시 파싱하지 않아 수리 길은 막히지 않음). 원자적 쓰기로 옮기기. 영향: 그 회차 원문 일부 손실, 낮음.
