@@ -18,6 +18,8 @@ from .model import COMMAND, DRIVE_SAVE, EffectRequest, EffectRequestError, actio
 
 Publisher = Callable[..., object]
 FolderSaver = Callable[..., object]
+#: Builds the folder-tree writer for one tick (``drive_outputs.TreeWriter`` unless a test passes one).
+TreeWriterFactory = Callable[[], object]
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -105,8 +107,7 @@ def save_batch(record: EffectRequest, publisher: Publisher,
                folder_saver: FolderSaver | None = None) -> dict[str, object]:
     """Save each listed file once; files the stored receipt already holds as saved are skipped."""
     payload = record.payload
-    prior = (record.receipt or {}).get("files")
-    kept = {int(row["index"]): row for row in prior if isinstance(row, dict)} if isinstance(prior, list) else {}
+    kept = _kept_rows(record)
     rows: list[dict[str, object]] = []
     for index, item in enumerate(payload["files"], start=1):  # type: ignore[arg-type]
         before = kept.get(index)
@@ -138,6 +139,71 @@ def save_batch(record: EffectRequest, publisher: Publisher,
     return receipt
 
 
+def _kept_rows(record: EffectRequest) -> dict[int, dict[str, object]]:
+    prior = (record.receipt or {}).get("files")
+    return {int(row["index"]): row for row in prior if isinstance(row, dict)} if isinstance(prior, list) else {}
+
+
+def save_tree(record: EffectRequest, factory: TreeWriterFactory | None = None) -> dict[str, object]:
+    """Create the folders parents first, then every listed file once; nothing outside the list.
+
+    A same-name file with other bytes is never replaced: that file's result is final and the
+    owner approves an overwrite on its own card. Files already saved are skipped on a retry.
+    """
+    from automation.drive_outputs import TreeConflict, TreeWriter
+
+    payload = record.payload
+    writer = factory() if factory is not None else TreeWriter()
+    kept = _kept_rows(record)
+    files: list[dict[str, object]] = list(payload["files"])  # type: ignore[call-overload]
+    folder_id = str(payload["folder_id"])
+    ids: dict[str, str] = {"": folder_id}
+    try:
+        writer.parent(folder_id)  # type: ignore[attr-defined]
+        for folder in payload["folders"]:  # type: ignore[union-attr]
+            up, _, name = str(folder).rpartition("/")
+            ids[str(folder)] = writer.child_folder(ids[up], name, create=True)  # type: ignore[attr-defined]
+    except Exception as error:  # noqa: BLE001 - no file is tried before its folder exists
+        receipt = {**(record.receipt or {}), "saved": sum(1 for row in kept.values() if row.get("status") == "ok"),
+                   "total": len(files), "owner_only": True}
+        receipt.setdefault("files", list(kept.values()))
+        raise BatchIncomplete(f"폴더를 준비하지 못했다 — {type(error).__name__}: {mask(str(error))[:160]}",
+                              receipt, retryable=not isinstance(error, TreeConflict)) from error
+    rows: list[dict[str, object]] = []
+    for index, item in enumerate(files, start=1):
+        before = kept.get(index)
+        if before is not None and (before.get("status") == "ok" or before.get("retryable") is False):
+            rows.append(before)
+            continue
+        row: dict[str, object] = {"index": index, "name": item["path"], "sha256": item["sha256"]}
+        try:
+            result = writer.save_new(  # type: ignore[attr-defined]
+                _frozen_item(item), str(item["drive_name"]), ids[str(item["folder"])],
+                sha256=str(item["sha256"]), size=int(item["size"]),  # type: ignore[call-overload]
+            )
+        except EffectRequestError as error:
+            row.update(status="failed", error=str(error)[:200], retryable=False)
+        except TreeConflict:
+            row.update(status="failed", retryable=False,
+                       error="같은 이름의 다른 파일이 이미 있어 덮어쓰지 않았다 — 덮어쓰기는 따로 카드로 승인")
+        except Exception as error:  # noqa: BLE001 - every Drive failure is this file's retryable result
+            row.update(status="failed", error=f"{type(error).__name__}: {mask(str(error))[:160]}", retryable=True)
+        else:
+            row.update(status="ok", links=list(getattr(result, "links", ()) or ()),
+                       action=str(getattr(result, "action", "")))
+        rows.append(row)
+    failed = [row for row in rows if row["status"] != "ok"]
+    receipt: dict[str, object] = {
+        "files": rows, "folders": ids, "saved": len(rows) - len(failed), "total": len(rows), "owner_only": True,
+        "links": [link for row in rows if row["status"] == "ok" for link in row.get("links", ())],  # type: ignore[union-attr]
+    }
+    if failed:
+        reasons = "; ".join(f"{row['name']}: {row['error']}" for row in failed[:5])
+        raise BatchIncomplete(f"{len(rows)}개 중 {len(failed)}개 저장 실패 — {reasons}", receipt,
+                              retryable=any(row.get("retryable") for row in failed))
+    return receipt
+
+
 def run_command(record: EffectRequest, runner: Runner = subprocess.run) -> dict[str, object]:
     """Run the frozen argv once; a non-zero exit is a final failure, never re-run."""
     payload = record.payload
@@ -159,8 +225,11 @@ def run_command(record: EffectRequest, runner: Runner = subprocess.run) -> dict[
 
 
 def execute(record: EffectRequest, *, publisher: Publisher, runner: Runner = subprocess.run,
-            folder_saver: FolderSaver | None = None) -> dict[str, object]:
+            folder_saver: FolderSaver | None = None,
+            tree_writer: TreeWriterFactory | None = None) -> dict[str, object]:
     verify_binding(record)
+    if record.effect == DRIVE_SAVE and record.payload.get("version") == 3:
+        return save_tree(record, tree_writer)
     if record.effect == DRIVE_SAVE and record.payload.get("version") == 2:
         return save_batch(record, publisher, folder_saver)
     if record.effect == DRIVE_SAVE:

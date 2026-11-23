@@ -10,8 +10,12 @@ action or an effect with a dedicated path — the reason and the right command a
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import re
 import json
+import secrets
+import shlex
 import sys
 import unicodedata
 from collections.abc import Sequence
@@ -21,7 +25,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from automation.interop.approval_lifecycle import Outcome
+from automation.interop.approval_lifecycle import ApprovalSurfaceError, Outcome
 
 from automation.effect_request.gate import discord_runtime, owner_id_from_config, request_approval
 from .model import (
@@ -32,8 +36,10 @@ from .model import (
     EffectRequestError,
     EffectRequestStore,
     action_hash,
+    canonical,
     file_sha256,
 )
+from . import render
 from .policy import refusal
 
 if TYPE_CHECKING:
@@ -58,7 +64,7 @@ def _summary(raw: str) -> str:
 
 def _sources(args: argparse.Namespace) -> tuple[list[Path], list[str | None]]:
     # The parser appends; a caller that builds the namespace itself may still pass one value.
-    raw_files = [args.file] if isinstance(args.file, str) else list(args.file)
+    raw_files = [args.file] if isinstance(args.file, str) else list(args.file or [])
     raw_titles = [args.title] if isinstance(args.title, str) else list(args.title or [])
     files = [Path(item).expanduser() for item in raw_files]
     titles: list[str | None] = list(raw_titles)
@@ -169,6 +175,102 @@ def _batch_payload(
     return {"version": 2, **place, "files": items, "sharing": "owner-only"}
 
 
+#: Characters the YooDori gate refuses in a raw SSH command (``yoodori_read_gate._SHELL``) plus quotes.
+_GATE_REFUSED: Final = re.compile(r"[;&|`$<>\\'\"]")
+#: Statuses a repeated tree request answers with instead of a new card: pending, saved, or cancelled.
+_TREE_KEPT: Final = LIVE_STATUSES | {"done", "cancelled"}
+
+
+def _tree_record(args: argparse.Namespace, store: EffectRequestStore, summary: str) -> EffectRequest:
+    """``drive-save --manifest``: one job (owner message + parent folder + file list) is one card.
+
+    The key is the origin, the folder and the manifest digest, so a retry of the same job
+    finds its card (or its result) instead of raising another; a changed list is a new job.
+    """
+    from automation.drive_outputs import TreeWriter
+
+    from .tree import folders_of, manifest_digest, read_manifest
+
+    if args.file or args.title or args.project or args.on or args.kind != DEFAULT_KIND:
+        raise EffectRequestError("--manifest 는 --folder 와 --summary 만 함께 받는다(파일은 매니페스트에)")
+    if not getattr(args, "folder", ""):
+        raise EffectRequestError("--manifest 는 --folder <부모 폴더 id> 가 필요하다")
+    entries = read_manifest(Path(args.manifest).expanduser())
+    digest = manifest_digest(entries)
+    key_basis = canonical({"effect": DRIVE_SAVE, "folder": args.folder, "manifest": digest,
+                           "origin": [args.origin_channel_id, args.origin_message_id]})
+    key = "effect:tree:" + hashlib.sha256(key_basis.encode("utf-8")).hexdigest()[:24]
+    earlier = [existing for existing in store.all() if existing.key == key]
+    for existing in earlier:
+        if existing.status in _TREE_KEPT:
+            return existing
+    # The id follows the key (and how many earlier tries failed), so two copies of the same
+    # request that both got here race for one id and the store keeps the first: one card.
+    request_id = hashlib.sha256(f"{key}#{len(earlier)}".encode()).hexdigest()[:16]
+    writer = TreeWriter()
+    try:
+        target = writer.parent(args.folder)
+        scan = writer.scan(target.folder_id, folders_of(entries),
+                           [(entry.path, entry.sha256, entry.size) for entry in entries])
+    except Exception as error:  # noqa: BLE001 - any lookup or permission doubt refuses the request
+        raise EffectRequestError(
+            f"Drive 폴더를 쓸 수 없다(형만 볼 수 있는 폴더여야 한다): {type(error).__name__}: {error}"[:300]
+        ) from error
+    skipped = set(scan.unchanged) | {path for path, _ in scan.overwrite}
+    todo = tuple(entry for entry in entries if entry.path not in skipped)
+    by_path = {entry.path: entry for entry in entries}
+    overwrite = [{"path": path, "folder_id": folder_id, "staged": by_path[path].source.name,
+                  "title": Path(by_path[path].name).stem} for path, folder_id in scan.overwrite]
+    if not todo:
+        lines = "; ".join(f"{item['path']} → {overwrite_command(item)}" for item in overwrite)
+        raise EffectRequestError(
+            f"올릴 파일이 없다 — 같은 내용으로 있음 {len(scan.unchanged)}개, 덮어쓸 파일 {len(overwrite)}개"
+            + (f"(덮어쓸 파일은 하나씩 카드로: {lines})" if lines else ""))
+    seed = f"{request_id}-{secrets.token_hex(4)}"
+    folders = folders_of(todo)
+    items: list[dict[str, object]] = []
+    try:
+        for index, entry in enumerate(todo, start=1):
+            frozen = store.freeze_file(f"{seed}/{index}", entry.source)
+            if file_sha256(frozen) != (entry.sha256, entry.size):
+                raise EffectRequestError(f"sha256 이 매니페스트와 다르다: {entry.path} — 카드를 올리지 않았다")
+            items.append({"path": entry.path, "folder": entry.folder, "drive_name": entry.name,
+                          "frozen_path": str(frozen), "sha256": entry.sha256, "size": entry.size})
+        payload: dict[str, object] = {
+            "version": 3, "mode": "tree", "folder_id": target.folder_id, "folder_name": target.name,
+            "folder_path": list(target.path), "manifest_sha256": digest, "folders": list(folders),
+            "existing_folders": [folder for folder in folders if folder in scan.existing],
+            "files": items, "unchanged": sorted(scan.unchanged), "overwrite": overwrite, "sharing": "owner-only",
+        }
+        record = EffectRequest(
+            request_id=request_id, key=key, effect=DRIVE_SAVE, summary=summary, payload=payload,
+            action_hash=action_hash(DRIVE_SAVE, summary, payload),
+            created_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            origin_channel_id=args.origin_channel_id, origin_message_id=args.origin_message_id,
+        )
+        _postable(record)
+        if len(render.render_effect_list(record)) > render.MAX_LIST_MESSAGES:
+            raise EffectRequestError(
+                f"목록 글이 {render.MAX_LIST_MESSAGES}개를 넘는다 — 나눠서 요청한다(카드는 올리지 않았다)")
+    except EffectRequestError:
+        shutil.rmtree(store.frozen_dir(seed), ignore_errors=True)
+        raise
+    kept = store.create_if_absent(record)
+    if kept is not record:
+        shutil.rmtree(store.frozen_dir(seed), ignore_errors=True)
+    return kept
+
+
+def overwrite_command(item: dict[str, object]) -> str:
+    """The gate request that asks for a same-name file's overwrite on its own card, keeping its tree name."""
+    title = str(item["title"])
+    # The YooDori gate refuses these characters in the raw command; its --title-b64 carries them.
+    named = (["--title-b64", base64.b64encode(title.encode("utf-8")).decode("ascii")]
+             if _GATE_REFUSED.search(title) else ["--title", title])
+    return shlex.join(["drive-save", "--card", "--folder", str(item["folder_id"]), "--file", str(item["staged"]),
+                       *named])
+
+
 def _command_payload(args: argparse.Namespace) -> dict[str, object]:
     argv = [str(item) for item in args.argv]
     if argv and argv[0] == "--":
@@ -202,6 +304,8 @@ def _postable(record: EffectRequest) -> None:
 def _new_record(args: argparse.Namespace, store: EffectRequestStore, *, reuse_live: bool = True) -> EffectRequest:
     summary = _summary(args.summary)
     effect = args.effect
+    if effect == DRIVE_SAVE and getattr(args, "manifest", ""):
+        return _tree_record(args, store, summary)
     seed = hashlib.sha256(f"{effect}\0{summary}\0{datetime.now(UTC).isoformat()}".encode()).hexdigest()[:16]
     payload = _drive_payload(args, seed, store) if effect == DRIVE_SAVE else _command_payload(args)
     digest = action_hash(effect, summary, payload)
@@ -247,8 +351,22 @@ def cmd_request(args: argparse.Namespace) -> int:
             return EXIT_REFUSED
     store = EffectRequestStore()
     record = _new_record(args, store)
+    for item in record.payload.get("overwrite", ()):  # type: ignore[union-attr]
+        print(f"DRIVE-SAVE-OVERWRITE-NEEDS-CARD path={item['path']} folder={item['folder_id']} "
+              f"request: {overwrite_command(item)}")
+    if record.status not in LIVE_STATUSES:
+        return _already(record)
     runtime = discord_runtime(resolve_token(), owner_id_from_config(), store)
-    verdict = request_approval(record, store, runtime)
+    try:
+        verdict = request_approval(record, store, runtime)
+    except ApprovalSurfaceError:
+        settled = store.get(record.request_id) or record
+        if settled.status in LIVE_STATUSES:
+            raise
+        return _already(settled)
+    settled = store.get(record.request_id) or record
+    if verdict.outcome is not Outcome.POSTED and settled.status not in LIVE_STATUSES:
+        return _already(settled)
     if verdict.outcome not in {Outcome.POSTED, Outcome.PENDING}:
         reason = "unknown" if verdict.reason is None else verdict.reason.value
         print(f"EFFECT-REQUEST-NOT-POSTED request={record.request_id} reason={reason}", file=sys.stderr)
@@ -259,10 +377,17 @@ def cmd_request(args: argparse.Namespace) -> int:
     return 0
 
 
+def _already(record: EffectRequest) -> int:
+    """The same tree job again (a retry, or one that overlapped): its result, never a second card."""
+    print(f"EFFECT-REQUEST-ALREADY request={record.request_id} status={record.status}")
+    _print_thread_line(record)
+    return 0 if record.status == "done" else EXIT_REFUSED
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     chosen = [r for r in EffectRequestStore().all() if not args.request or r.request_id == args.request]
     for record in sorted(chosen, key=lambda item: item.created_at):
-        rows = (record.receipt or {}).get("files") if record.payload.get("version") == 2 else None
+        rows = (record.receipt or {}).get("files") if record.payload.get("version") in (2, 3) else None
         saved = ""
         if isinstance(rows, list):
             ok = sum(1 for row in rows if isinstance(row, dict) and row.get("status") == "ok")
@@ -284,6 +409,11 @@ def cmd_save_now(args: argparse.Namespace) -> int:
     refused = refusal(args.summary)
     if refused is not None:
         print(f"EFFECT-REQUEST-REFUSED code={refused.code} reason={refused.reason}", file=sys.stderr)
+        return EXIT_REFUSED
+    if getattr(args, "manifest", ""):
+        # Owner 2026-11-23 "건별로 파일들 묶어서 승인 받도록": a folder tree is always one approval card.
+        print("EFFECT-REQUEST-REFUSED code=tree-needs-card reason=폴더 트리 저장은 카드 한 장으로만 한다 "
+              "— request drive-save --manifest 를 쓴다", file=sys.stderr)
         return EXIT_REFUSED
     store = EffectRequestStore()
     record = _new_record(args, store, reuse_live=False)
@@ -366,8 +496,10 @@ def build_parser() -> argparse.ArgumentParser:
         if immediate:
             sub.set_defaults(effect=DRIVE_SAVE)
         if name == DRIVE_SAVE or immediate:
-            sub.add_argument("--file", required=True, action="append",
+            sub.add_argument("--file", default=None, action="append",
                              help=f"저장할 파일 — 여러 개면 반복(최대 {MAX_FILES}개, 카드 하나·승인 한 번)")
+            sub.add_argument("--manifest", default="",
+                             help="폴더 트리 매니페스트(JSON) — --folder <부모 폴더 id> 와 함께, 카드 한 장")
             sub.add_argument("--title", default=None, action="append",
                              help="Drive 파일 제목(기본: 파일 이름) — 여러 파일이면 --file 마다 하나씩")
             sub.add_argument("--kind", default=DEFAULT_KIND, help="Drive 카테고리(기본 doctype=문서)")

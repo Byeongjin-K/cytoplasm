@@ -402,6 +402,107 @@ def save_to_folder(
     return PublishResult((result["webViewLink"],), result["action"], folder_id)
 
 
+class TreeConflict(ValueError):
+    """Another file already holds that name: a folder-tree save never replaces it."""
+
+
+@dataclass(frozen=True, slots=True)
+class TreeScan:
+    existing: tuple[str, ...]
+    unchanged: tuple[str, ...]
+    overwrite: tuple[tuple[str, str], ...]
+
+
+class TreeWriter:
+    """Folder-tree saves below one owner-only parent (``drive-save --manifest``, owner 2026-11-23).
+
+    Folders are found or created under their parent and checked owner-only; a file is only
+    ever created. A same-name file with the approved bytes counts as saved, one with other
+    bytes is a :class:`TreeConflict` (overwriting needs its own card). Listings are cached for
+    the life of one writer, which is one request or one watcher tick.
+    """
+
+    def __init__(self, client: DriveClient | None = None) -> None:
+        self.drive = client or client_from_environment()
+        self._children: dict[str, dict[str, dict[str, str]]] = {}
+
+    def parent(self, folder_id: str) -> FolderTarget:
+        return folder_target(folder_id, client=self.drive)
+
+    def _listing(self, folder_id: str) -> dict[str, dict[str, str]]:
+        if folder_id not in self._children:
+            self._children[folder_id] = {
+                _nfc(str(row.get("name", ""))): {"id": str(row.get("id", "")),
+                                                 "mimeType": str(row.get("mimeType", ""))}
+                for row in self.drive.list_children(folder_id)
+            }
+        return self._children[folder_id]
+
+    def child_folder(self, parent_id: str, name: str, *, create: bool) -> str | None:
+        row = self._listing(parent_id).get(_nfc(name))
+        if row is not None:
+            if row["mimeType"] != _FOLDER_MIME:
+                raise TreeConflict(f"폴더 자리에 같은 이름의 파일이 있다: {name}")
+            folder_id = row["id"]
+        elif not create:
+            return None
+        else:
+            folder_id = self.drive.create_folder(_nfc(name), parent_id)
+            self._children[parent_id][_nfc(name)] = {"id": folder_id, "mimeType": _FOLDER_MIME}
+            self._children[folder_id] = {}
+        self.drive.verify_owner_only(folder_id)
+        return folder_id
+
+    def _same_file(self, folder_id: str, name: str, sha256: str, size: int) -> str | None:
+        """The id of an existing same-name file holding exactly these bytes; TreeConflict for any other."""
+        row = self._listing(folder_id).get(_nfc(name))
+        if row is None:
+            return None
+        if row["mimeType"] != _FOLDER_MIME and _same_bytes(self.drive, row["id"], sha256, size):
+            return row["id"]
+        raise TreeConflict(f"같은 이름의 다른 파일이 이미 있다: {name}")
+
+    def scan(self, parent_id: str, folders: Sequence[str],
+             files: Sequence[tuple[str, str, int]]) -> TreeScan:
+        """Read only: which folders exist, which files are already there unchanged, which would be replaced."""
+        ids: dict[str, str | None] = {"": parent_id}
+        for folder in folders:
+            up, _, name = folder.rpartition("/")
+            above = ids.get(up)
+            try:
+                ids[folder] = self.child_folder(above, name, create=False) if above else None
+            except TreeConflict:
+                ids[folder] = None
+        unchanged: list[str] = []
+        overwrite: list[tuple[str, str]] = []
+        for path, sha256, size in files:
+            up, _, name = path.rpartition("/")
+            folder_id = ids.get(up)
+            if not folder_id:
+                continue
+            try:
+                if self._same_file(folder_id, name, sha256, size):
+                    unchanged.append(path)
+            except TreeConflict:
+                overwrite.append((path, folder_id))
+        existing = tuple(folder for folder in folders if ids.get(folder))
+        return TreeScan(existing, tuple(unchanged), tuple(overwrite))
+
+    def save_new(self, local: Path, name: str, folder_id: str, *, sha256: str, size: int) -> PublishResult:
+        if _local_digest(local) != (sha256, size):
+            raise ValueError("the approved file changed before upload")
+        file_id = self._same_file(folder_id, name, sha256, size)
+        action = "unchanged"
+        if file_id is None:
+            file_id = self.drive.upload_new(local, _nfc(name), folder_id)
+            self._children[folder_id][_nfc(name)] = {"id": file_id, "mimeType": ""}
+            action = "created"
+        # A file found in place (an earlier try's upload) is checked exactly like a new one.
+        self.drive.verify_owner_only(file_id)
+        _ = self.drive.download_and_verify(file_id, local)
+        return PublishResult((self.drive.web_view_link(file_id),), action, folder_id)
+
+
 def publish_state_file(
     parts: Sequence[str],
     name: str,

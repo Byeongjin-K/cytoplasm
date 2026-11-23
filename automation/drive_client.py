@@ -208,6 +208,14 @@ class DriveClient:
         """The id of the untrashed file ``name`` directly under ``parent_id``, if any."""
         return self._find_file(name, parent_id)
 
+    def create_folder(self, name: str, parent_id: str) -> str:
+        """A new folder ``name`` directly under ``parent_id`` (a folder-tree save; no cache)."""
+        return self._create_folder(name, parent_id)
+
+    def upload_new(self, local: Path, name: str, parent_id: str) -> str:
+        """Upload ``local`` as a new file; never looks for or replaces a file of the same name."""
+        return self._upload_new(local, name, parent_id)
+
     def _web_view_link(self, file_id: str) -> str:
         result = self._run(
             [self.gws_bin, "drive", "files", "get", "--params",

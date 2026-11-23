@@ -17,7 +17,7 @@ from automation.interop import origin_notice
 from automation.interop.approval_lifecycle import ApprovalRequest, ApprovalSurfaceError, Probe
 from automation.interop.discord_transport import DiscordTransport as NoticeSender
 
-from .execute import BatchIncomplete, FolderSaver, Publisher, Runner, execute
+from .execute import BatchIncomplete, FolderSaver, Publisher, Runner, TreeWriterFactory, execute
 from .model import COMMAND, EffectRequest, EffectRequestError, EffectRequestStore
 from .gate import DiscordRuntime, EffectApprovalGate
 from .render import drive_location
@@ -45,6 +45,7 @@ def run_tick(
     publisher: Publisher,
     runner: Runner | None = None,
     folder_saver: FolderSaver | None = None,
+    tree_writer: TreeWriterFactory | None = None,
 ) -> TickResult:
     done: list[str] = []
     cancelled: list[str] = []
@@ -61,7 +62,7 @@ def run_tick(
                 cancelled.append(record.request_id)
                 _notify(record, runtime, token, "cancelled")
         if record.status == "approved":
-            record = _execute(record, store, now, publisher, runner, folder_saver)
+            record = _execute(record, store, now, publisher, runner, folder_saver, tree_writer)
             if record.status == "done":
                 done.append(record.request_id)
                 _notify(record, runtime, token, "done")
@@ -105,13 +106,14 @@ def _execute(
     publisher: Publisher,
     runner: Runner | None,
     folder_saver: FolderSaver | None = None,
+    tree_writer: TreeWriterFactory | None = None,
 ) -> EffectRequest:
     attempts = record.attempts + 1
     if record.effect == COMMAND:
         record = replace(record, status="running", attempts=attempts)
         store.update(record)
     try:
-        receipt = execute(record, publisher=publisher, folder_saver=folder_saver,
+        receipt = execute(record, publisher=publisher, folder_saver=folder_saver, tree_writer=tree_writer,
                           **({"runner": runner} if runner else {}))
     except EffectRequestError as error:
         final = record.effect == COMMAND or not error.retryable or attempts >= MAX_ATTEMPTS
@@ -134,6 +136,21 @@ def notice_text(record: EffectRequest, outcome: str) -> str:
     match outcome:
         case "done" if record.effect == COMMAND:
             return f"✅ 외부 작업 실행 완료: {what}\n종료 코드 0 · 출력 끝부분: {receipt.get('tail') or '(없음)'}"
+        case "done" if record.payload.get("version") == 3:
+            folders = (record.payload.get("folders") or ())
+            return (
+                f"✅ Drive 폴더 저장 완료(비공개): {what} — 파일 {receipt.get('saved')}개, "
+                f"폴더 {len(folders)}개(새로 만든 것 포함) · {drive_location(record.payload)}\n"  # type: ignore[arg-type]
+                f"파일마다 다시 내려받은 sha256 이 승인한 목록과 같다. 폴더: "
+                f"https://drive.google.com/drive/folders/{record.payload.get('folder_id')}"
+            )
+        case "failed" if record.payload.get("version") == 3 and receipt.get("files"):
+            return (
+                f"❌ 일부만 저장됨: {what} — {receipt.get('total')}개 중 {receipt.get('saved')}개 저장 "
+                f"(시도 {record.attempts}회). 저장하지 못한 파일:\n"
+                + _file_lines({"files": [row for row in receipt.get("files", ())  # type: ignore[union-attr]
+                                         if row.get("status") != "ok"][:30]})
+            )
         case "done" if record.payload.get("version") == 2:
             return f"✅ Drive 저장 완료(비공개) {receipt.get('saved')}개: {drive_location(record.payload)}\n" + _file_lines(receipt)
         case "failed" if record.payload.get("version") == 2 and receipt.get("files"):

@@ -63,6 +63,8 @@ class EffectRequest:
     last_error: str = ""
     receipt: dict[str, object] | None = None
     finished_at: str = ""
+    #: The plain messages under a folder-tree card that carry its full list (2026-11-23).
+    list_message_ids: tuple[str, ...] = ()
 
 
 def state_root() -> Path:
@@ -118,7 +120,9 @@ class EffectRequestStore:
             raise EffectRequestError("effect request store is unreadable") from error
         names = {field.name for field in fields(EffectRequest)}
         return {
-            raw["request_id"]: EffectRequest(**{k: v for k, v in raw.items() if k in names})
+            raw["request_id"]: EffectRequest(**{
+                k: tuple(v) if k == "list_message_ids" else v for k, v in raw.items() if k in names
+            })
             for raw in payload.get("requests", [])
         }
 
@@ -148,18 +152,32 @@ class EffectRequestStore:
             records[record.request_id] = record
             self._write(records)
 
-    def update(self, record: EffectRequest) -> None:
+    def create_if_absent(self, record: EffectRequest) -> EffectRequest:
+        """Store ``record`` unless its id is already stored; the stored one wins (first writer)."""
+        with self._locked():
+            records = self._read()
+            if record.request_id in records:
+                return records[record.request_id]
+            records[record.request_id] = record
+            self._write(records)
+            return record
+
+    def update(self, record: EffectRequest, *, expect: str | None = None) -> None:
+        """Replace the stored record; with ``expect``, only while its status is still the one read."""
         with self._locked():
             records = self._read()
             current = records.get(record.request_id)
             if current is None or current.action_hash != record.action_hash:
                 raise EffectRequestError("effect request record is absent or stale")
+            if expect is not None and current.status != expect:
+                raise EffectRequestError(f"effect request moved from {expect} to {current.status}")
             if current.message_id not in {None, record.message_id}:
                 raise EffectRequestError("effect request message binding is immutable")
             records[record.request_id] = record
             self._write(records)
 
-    def set_message(self, request_id: str, message_id: str, channel_id: str, version: str | None) -> None:
+    def set_message(self, request_id: str, message_id: str, channel_id: str, version: str | None,
+                    list_ids: tuple[str, ...] = ()) -> None:
         with self._locked():
             records = self._read()
             current = records.get(request_id)
@@ -172,6 +190,7 @@ class EffectRequestStore:
             records[request_id] = replace(
                 current, message_id=message_id, channel_id=channel_id, status="posted",
                 render_version=version or current.render_version,
+                list_message_ids=tuple(list_ids) or tuple(current.list_message_ids),
             )
             self._write(records)
 
@@ -179,7 +198,9 @@ class EffectRequestStore:
         with self._locked():
             records = self._read()
             for request_id, record in records.items():
-                if (record.key, record.action_hash, record.message_id) == (key, digest, message_id):
+                # Only a card still waiting is dropped: a decided or finished record keeps its state.
+                if (record.key, record.action_hash, record.message_id) == (key, digest, message_id) \
+                        and record.status == "posted":
                     records[request_id] = replace(record, message_id=None, status="superseded")
             self._write(records)
 

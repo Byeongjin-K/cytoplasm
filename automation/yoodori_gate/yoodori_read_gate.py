@@ -87,7 +87,7 @@ _FLAGS = {
     "calendar-request": {"--text": "text", "--summary": "short"},
     "todo-request": {"--title": "short", "--notes": "body", "--due": "date"},
     "drive-save": {"--file": "file", "--summary": "short", "--title": "short",
-                   "--project": "short", "--kind": "short", "--folder": "short"},
+                   "--project": "short", "--kind": "short", "--folder": "short", "--manifest": "file"},
     "command-request": {"--summary": "short", "--target": "short", "--argv-b64": "argv"},
     "obsidian-request": {"--relpath": "relpath", "--body-file": "file", "--body": "body", "--title": "short"},
 }
@@ -96,7 +96,7 @@ _REQUIRED = {
     "mail-draft": ("--instruction",),
     "calendar-request": ("--text",),
     "todo-request": ("--title",),
-    "drive-save": ("--file", "--summary"),
+    "drive-save": ("--summary",),
     "command-request": ("--summary", "--target", "--argv-b64"),
     "obsidian-request": ("--relpath",),
 }
@@ -185,6 +185,15 @@ USAGE = ("YooDori gate: calendar <days 1-31> [query...], mail-list <n 1-50>,\n"
          "  drive-save --file <staged> [--file <staged> ...] [--title <t> per file] [--kind <category>]\n"
          "  [--project <p> | --folder <Drive folder id, owner-only>]: one card, one approval for all files;\n"
          "  a received attachment keeps its own name.\n"
+         "  drive-save --manifest <staged json> --folder <parent folder id> --summary <s>: a folder tree (up to\n"
+         "  500 files) on one card, its full list under it; stage each file, then a manifest\n"
+         "  {\"version\": 1, \"files\": [{\"path\": \"<folder>/<name>\", \"staged\": \"<staged name, same extension>\",\n"
+         "  \"sha256\": \"<hex>\", \"size\": <bytes>}]}; never cardless, a repeat finds the same card,\n"
+         "  a same-name file with other bytes is left out (DRIVE-SAVE-OVERWRITE-NEEDS-CARD) for its own card:\n"
+         "  drive-save --card --folder <that folder id> --file <staged> --title <its name without extension>\n"
+         "  (or --title-b64 when the name has characters this gate refuses),\n"
+         "  printed whole on that line (--card keeps the card even when\n"
+         "  the node's cardless drive-save switch is on, so an overwrite is always approved on its own).\n"
          "  calendar-request --card: post the event card even for the owner's own message\n"
          "  (without --card his own event is written at once when the node switch is on).\n"
          "Owner-command jobs (origin = the owner's own message or his tap on a question card, checked on the node):\n"
@@ -291,6 +300,11 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         raise Refused("missing required request flag or owner message coordinates")
     if gmail_reply and set(values) - {"--reply-gmail", "--body", "--cc", *_ORIGIN}:
         raise Refused("--reply-gmail takes only --body and --cc (recipient and subject come from the original)")
+    if name == "drive-save" and ("--file" in values) == ("--manifest" in values):
+        raise Refused("drive-save takes --file <staged> (repeatable) or --manifest <staged json>, exactly one")
+    if name == "drive-save" and "--manifest" in values and (
+            "--folder" not in values or {"--title", "--kind", "--project"} & set(values)):
+        raise Refused("drive-save --manifest needs --folder <parent folder id> and takes no --title, --kind or --project")
     if name == "obsidian-request" and sum(flag in values for flag in ("--body", "--body-file")) != 1:
         raise Refused("choose exactly one of --body-file or --body-b64")
     if name == "mail-compose" and sum(f in values for f in ("--forward", "--forward-gmail", "--in-reply-to")) > 1:
@@ -302,7 +316,7 @@ def _card(name: str, args: list[str]) -> tuple[str, list[str], Path]:
         received = original_name(STAGING, values["--drive-share"])
         if received:
             values["--drive-name"] = _value(received, "short")
-    if name == "drive-save" and "--title" not in values:
+    if name == "drive-save" and "--file" in values and "--title" not in values:
         # A received attachment is saved under its own name, not the staging name mail-<uid>-<n>.
         files = [values["--file"], *(value for flag, value in repeats if flag == "--file")]
         received = [original_name(STAGING, path) for path in files]
@@ -423,11 +437,14 @@ def note_path(relpath: str) -> Path:
 
 
 def card_choice(words: list[str]) -> tuple[list[str], bool]:
-    """``calendar-request --card``: the owner asked for a card, so Q233's cardless write is skipped.
+    """``calendar-request --card`` / ``drive-save --card``: a card is wanted, so Q233's cardless write is skipped.
+
+    ``drive-save --card`` is how a same-name file a folder tree left out (an overwrite) gets
+    its own approval card on a node whose cardless drive-save switch is on (2026-11-23).
 
     Only a flag position counts, so a value that reads "--card" stays a value.
     """
-    if not words or words[0] != "calendar-request":
+    if not words or words[0] not in {"calendar-request", "drive-save"}:
         return words, False
     rest, kept, chosen, index = words[1:], [words[0]], False, 0
     while index < len(rest):
@@ -977,7 +994,8 @@ def main() -> int:
         else:
             words, card = card_choice(words)
             name, argv, cwd = build(words)
-            if name in CARDLESS and not card and _switched(CARDLESS[name]):
+            # Owner 2026-11-23: a folder tree (drive-save --manifest) is always one approval card.
+            if name in CARDLESS and not card and "--manifest" not in argv and _switched(CARDLESS[name]):
                 if name == "obsidian-request":
                     argv = stage_body(argv, STAGING)
                 job = cardless_job(name, argv)
